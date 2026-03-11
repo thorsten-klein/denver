@@ -1,0 +1,29 @@
+version: 1.0
+command: bash
+hooks:
+  env: null
+  post-pip: null
+  pre-cmd: null
+  pre-pip: null
+stages:
+- pip
+pip:
+  provider: pip
+  description: null
+  disabled: false
+  scripts: null
+  append-mode: false
+  find-links: null
+  freeze-to: null
+  install-args: null
+  link-mode: copy
+  no-index: false
+  overrides: null
+  python: 3.12.3
+  requirements:
+  - requirements.txt
+  skip-if: []
+  uv: /usr/bin/uv
+  venv: null
+  venv-patcher: null
+

@@ -1,0 +1,92 @@
+# conan provider
+
+A `conan` stage provisions native, non-Python tools (compilers, `cmake`,
+`ninja`, ...) via [Conan](https://conan.io) and puts them on `PATH`.
+
+```yaml
+my-conan-stage:
+  provider: conan
+  recipe-dirs:
+  - path/to/recipes
+  conanfiles:
+  - conanfile.py
+```
+
+(`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
+see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything else is specific to `conan`.)
+
+## Key reference
+
+- **`exe`** (default: `conan` on `PATH`) — the conan executable.
+- **`recipes-exporter`** / **`deployer`** (default: denver's own bundled
+  tools) — the scripts that generate/export recipe references and deploy
+  installed packages onto `PATH`. Overriding these is an escape hatch for
+  an unusual setup; most environments never set them.
+- **`base-classes`** — optional; a directory of shared conanfile base
+  classes recipes can inherit from. May itself live in a base env, resolved
+  the normal way (falling back to an imported base env's own directory).
+- **`recipe-dirs`** — directories directly containing recipes. Never
+  guessed from the directory layout (see "Explicit over implicit" in
+  [`../philosophy.md`](../philosophy.md)) — each dir must be listed. Appends across `import:`
+  layers like any other list (see [`../architecture.md`](../architecture.md)'s "Merge rules"), so a
+  derived env only needs to list its *own* recipe dirs, not repeat a base
+  env's.
+- **`conanfiles`** — conanfiles installed in order.
+- **`build`** (default `"missing"`) — passed as `--build=<value>` (a
+  string or a list) to `conan install`.
+- **`install-args`** — extra literal `conan install` arguments.
+- **`no-auth`** (default `false`) — when `true`, `conan install` runs with
+  `--no-remote`.
+- **`profiles`** — `host`/`build`, each a list; every entry becomes its own
+  `-pr:h=<value>` / `-pr:b=<value>` flag, in list order. Empty by default
+  (no explicit profile flags).
+- **`config`** — optional; a list of directories, each installed via `conan
+  config install <dir>`, in order, before profile detection. Whatever
+  conan's own `config install` understands inside them (profiles,
+  `remotes.json`, `credentials.json`, `source_credentials.json`,
+  `settings.yml`, ...) is installed into the conan cache by conan itself —
+  denver never opens or interprets any file inside a `config:` directory,
+  it only invokes the command.
+- **`remotes`** — optional; a project-owned, *exhaustive* list of the conan
+  remotes this env wants. Each entry: `url`, `verify_ssl` (default `true`),
+  `enabled` (default `true`). When the prepare stage runs, the recipes-exporter
+  adds/renames/enables exactly these remotes and disables every *other*
+  remote already present in the conan home — so `remotes:` should list
+  every remote the env needs, not just ones being newly added. A remote's
+  own login (if reachable) runs as part of the same stage.
+  `CONAN_REMOTE_ENABLE_<NAME>` (an env var, `ON`/`OFF`) overrides a given
+  remote's `enabled:` at run time.
+- **`cleanup-remotes`** (default `true`) — makes `remotes:` exhaustive even
+  when it's left unset/empty: the prepare stage then disables *every*
+  remote already present in the conan home, so each env's remote
+  configuration is fully self-contained regardless of what an earlier run
+  of a *different* env left behind. Set to `false` to opt out instead: with
+  no `remotes:` of its own, the env then leaves the conan home's existing
+  remote configuration alone entirely. `cleanup-remotes` is automatically
+  skipped (regardless of its own value) whenever `remotes:` is left
+  unset/empty *and* the env also has a `config:` — its `conan config
+  install <dir>` may itself have installed a `remotes.json`, and
+  reconciling an empty `remotes:` to "exhaustive" would otherwise silently
+  disable everything `config:` just set up. An explicit (non-empty)
+  `remotes:` still reconciles as normal regardless of `config:`.
+- **`user`** (default `"denver"`) / **`channel`** (default `"snapshot"`) —
+  become the user/channel half of every reference the recipes-exporter
+  generates while exporting recipes (`name/version@user/channel`).
+
+## Design notes
+
+- **Monorepo pattern.** Recipes commonly live in the same repository as the
+  project using them, not a separate recipes repo — see "Monorepo" in
+  [`../philosophy.md`](../philosophy.md). `recipe-dirs:` just points at wherever they actually
+  are; there's no requirement they live in any particular place relative to
+  the `denver.yml`.
+- **Works with or without remotes.** An env with no `remotes:` and no
+  `config:` at all is a fully offline/local-cache setup — nothing gets
+  reconciled, conan just uses whatever's already in its local cache/home.
+  Add `remotes:` (or a `config:` that installs its own remote config) only
+  once real remote access is actually needed.
+- **`--fast`** activates the already-generated `conanbuildenv.sh` instead
+  of re-running `conan install`; dies with a clear message if it doesn't
+  exist yet.
+- **`--force`** recreates the conan/workspace setup steps' own on-disk
+  state unconditionally.

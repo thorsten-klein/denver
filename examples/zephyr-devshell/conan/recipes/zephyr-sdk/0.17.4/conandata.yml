@@ -1,0 +1,13 @@
+sources:
+  toolchain_linux-x86_64_arm-zephyr-eabi.tar.xz:
+    md5: 68ae71edc0106c3093055b97aaa47017
+    url: https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_arm-zephyr-eabi.tar.xz
+  toolchain_linux-x86_64_riscv64-zephyr-elf.tar.xz:
+    md5: afc1120b6b3cf0a2e9196aea76b3f734
+    url: https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_riscv64-zephyr-elf.tar.xz
+  toolchain_linux-x86_64_x86_64-zephyr-elf.tar.xz:
+    md5: aee015389a3c4a2ecc23834d1e5601a5
+    url: https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_x86_64-zephyr-elf.tar.xz
+  zephyr-sdk-0.17.4_linux-x86_64_minimal.tar.xz:
+    md5: c62ad59d0b92fd2ede022b774c770102
+    url: https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/zephyr-sdk-0.17.4_linux-x86_64_minimal.tar.xz

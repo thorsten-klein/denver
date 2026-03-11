@@ -1,0 +1,4 @@
+sources:
+  LLVM-21.1.4-Linux-X64.tar.xz:
+    md5: bc42e986dbe585461fb837542769bc7a
+    url: https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.4/LLVM-21.1.4-Linux-X64.tar.xz

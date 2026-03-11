@@ -1,0 +1,34 @@
+version: "1.0"
+
+# Dummy example: stage-to-stage env propagation via the custom provider's
+# 'source:' key -- scoped to the 'set-vars' stage's own section, not the
+# global hooks: mechanism (see src/providers/custom.py's module docstring
+# for 'source:', and src/denver.py's own module docstring for 'hooks:').
+#
+# Why not just 'cmd:' on 'set-vars': a 'provider: custom' stage's own 'cmd:'
+# runs via ctx.run() as an isolated subprocess -- any 'export FOO=1' it does
+# dies with that subprocess, denver never sees it. 'source:' is different:
+# denver *sources* that script (ctx.source()), folding whatever it exports
+# back into ctx.env -- that's what makes MYVAR/FOO/BAR visible to
+# 'print-vars-after' below (and the final command).
+
+stages:
+- print-vars-before
+- set-vars
+- print-vars-after
+
+print-vars-before:
+  provider: custom
+  cmd: |
+    echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
+
+set-vars:
+  provider: custom
+  cmd: |
+    echo "[set-vars] sourcing custom.sh..."
+  source: custom.sh
+
+print-vars-after:
+  provider: custom
+  cmd: |
+    echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"

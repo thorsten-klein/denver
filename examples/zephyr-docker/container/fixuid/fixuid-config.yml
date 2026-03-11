@@ -1,0 +1,6 @@
+# fixuid remaps the in-container ubuntu:ubuntu uid/gid to the host user's on
+# first process start, so bind-mounted files stay owned by the host user.
+user: ubuntu
+group: ubuntu
+paths:
+  - /home/ubuntu

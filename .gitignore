@@ -1,0 +1,18 @@
+bak
+.conan
+.envs
+*.pyc
+
+# personal, per-user hook overrides (see src/denver.py's module docstring
+# for 'hooks:' -- e.g. a hooks/env.user.sh explicitly listed there)
+*.user.sh
+
+# python build artifacts
+dist/
+build/
+*.egg-info
+.venv
+.coverage
+coverage.xml
+htmlcov/
+junit.xml

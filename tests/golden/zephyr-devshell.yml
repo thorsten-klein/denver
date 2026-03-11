@@ -1,0 +1,121 @@
+version: 1.0
+hooks:
+  env:
+  - <REPO>/examples/zephyr-devshell/hooks/env.sh
+  post-conan: null
+  post-docker: null
+  post-pip: null
+  post-pip-zephyr: null
+  post-zephyr: null
+  pre-cmd: null
+  pre-conan: null
+  pre-docker: null
+  pre-pip: null
+  pre-pip-zephyr: null
+  pre-zephyr: null
+runnable: false
+stages:
+- docker
+- conan
+- pip
+- zephyr
+- pip-zephyr
+docker:
+  provider: docker
+  description: null
+  disabled: false
+  scripts:
+    setup:
+    - setup/install_host_tools.sh
+  compose:
+    args: null
+    build: true
+    file: docker-compose.yml
+    service: dev
+  default-cmd: fish
+  env-scripts:
+  - create-env.sh
+  exe: docker
+  image: null
+  registries: null
+  run-args:
+  - --rm
+conan:
+  provider: conan
+  description: null
+  disabled: false
+  scripts: null
+  base-classes: <REPO>/examples/zephyr-devshell/conan/base_classes
+  build: missing
+  channel: snapshot
+  cleanup-remotes: true
+  conanfile: null
+  conanfiles: []
+  config: null
+  deployer: <REPO>/src/providers/conan_scripts/extensions/symlink.py
+  exe: /usr/bin/conan
+  install-args: null
+  no-auth: false
+  profiles:
+    build: []
+    host: []
+  recipe-dirs:
+  - <REPO>/examples/zephyr-devshell/conan/recipes
+  recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
+  remotes: {}
+  user: denver
+pip:
+  provider: pip
+  description: null
+  disabled: false
+  scripts: null
+  append-mode: false
+  find-links: null
+  freeze-to: null
+  install-args: null
+  link-mode: copy
+  no-index: false
+  overrides: null
+  python: 3.12.3
+  requirements: null
+  skip-if: []
+  uv: /usr/bin/uv
+  venv: null
+  venv-patcher: null
+zephyr:
+  provider: zephyr
+  description: null
+  disabled: false
+  scripts:
+    setup:
+    - setup/install_jlink_udev_rules.sh
+  base: /fake-west-topdir/zephyr-rtos
+  blobs-cache: null
+  blobs-fetch-args:
+  - --auto-accept
+  patch-committer:
+    GIT_COMMITTER_DATE: '2000-01-01T00:00:00'
+    GIT_COMMITTER_EMAIL: denver@denver
+    GIT_COMMITTER_NAME: denver
+  update-args: null
+  west-config: null
+  west-yml: /fake-west-topdir/west.yml
+pip-zephyr:
+  provider: pip
+  description: null
+  disabled: false
+  scripts: null
+  append-mode: false
+  find-links: null
+  freeze-to: null
+  install-args: null
+  link-mode: copy
+  no-index: false
+  overrides: null
+  python: 3.12.3
+  requirements: null
+  skip-if: []
+  uv: /usr/bin/uv
+  venv: null
+  venv-patcher: null
+

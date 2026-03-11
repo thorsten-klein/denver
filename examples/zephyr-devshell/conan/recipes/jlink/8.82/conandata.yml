@@ -1,0 +1,5 @@
+sources:
+  JLink_Linux_V882_x86_64.tgz:
+    custom: curl -d "accept_license_agreement=accepted&submit=Download+software" -X
+      POST -O https://www.segger.com/downloads/jlink/JLink_Linux_V882_x86_64.tgz
+    md5: 1691b1c79764bf1caade424cc39c2e0c

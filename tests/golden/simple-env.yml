@@ -1,0 +1,45 @@
+version: '1.0'
+hooks:
+  env: null
+  post-print-vars-after: null
+  post-print-vars-before: null
+  post-set-vars: null
+  pre-cmd: null
+  pre-print-vars-after: null
+  pre-print-vars-before: null
+  pre-set-vars: null
+stages:
+- print-vars-before
+- set-vars
+- print-vars-after
+print-vars-before:
+  provider: custom
+  description: null
+  disabled: false
+  scripts: null
+  cmd: 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
+
+    '
+  launcher: null
+  source: null
+set-vars:
+  provider: custom
+  description: null
+  disabled: false
+  scripts: null
+  cmd: 'echo "[set-vars] sourcing custom.sh..."
+
+    '
+  launcher: null
+  source: custom.sh
+print-vars-after:
+  provider: custom
+  description: null
+  disabled: false
+  scripts: null
+  cmd: 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
+
+    '
+  launcher: null
+  source: null
+

@@ -1,0 +1,56 @@
+
+patches:
+  ########################################################
+  # zephyr
+  ########################################################
+  - module: zephyr-rtos
+    path: zephyr/99681.patch
+    sha256sum: de7e48c90f26abfcaab844326779012dca9e1eb6a6a4b1f386de619426bd49d2
+    upstreamable: True
+    merge-pr: https://github.com/zephyrproject-rtos/zephyr/pull/99681
+    merge-status: True
+    author: Thorsten Klein
+    email: thorsten.klein@bshg.com
+    apply-command: echo git am
+    date: 2025-12-10
+    comments: |
+      Added support for west blobs cache
+  - module: zephyr-rtos
+    path: zephyr/101457.patch
+    sha256sum: d2a3ad0878ddc599585433c85d2d26b7c3c99fc945fd1720d28ca35a1a1f3471
+    upstreamable: True
+    merge-pr: https://github.com/zephyrproject-rtos/zephyr/pull/101457
+    merge-status: False
+    author: Thorsten Klein
+    email: thorsten.klein@bshg.com
+    apply-command: git am
+    date: 2025-12-23
+    comments: |
+      Added support for --cmake-opt
+  - module: zephyr-rtos
+    path: zephyr/0001-twister-live-log.patch
+    sha256sum: ed963676945692552d339c549307d27420febdd0e43bfc94c8b310aa5cb97515
+    author: Thorsten Klein
+    email: thorsten.klein@bshg.com
+    apply-command: git am
+    date: 2026-03-26
+    comments: |
+      Show twister live log additionally (always capture to log file) if -i/--inline-logs is specified
+  - module: zephyr-rtos
+    path: zephyr/0001-twister-avoid-Re-running-cmake.patch
+    sha256sum: d22cc6b08f30ffced48607ee3be353bfad47746d1a603dc57de0924ce83cd3b9
+    author: Thorsten Klein
+    email: thorsten.klein@bshg.com
+    apply-command: git am
+    date: 2026-04-08
+    comments: |
+      Avoid re-running cmake in twister if -n (--no-clean) is used
+  - module: zephyr-rtos
+    path: zephyr/0001-west-blobs-cache-env-var.patch
+    sha256sum: 44f53e3dfbaa5f5c63fe0413418e58637b484137abedeb7142f221a7453b1a8a
+    author: Thorsten Klein
+    email: thorsten.klein@bshg.com
+    apply-command: git am
+    date: 2026-05-04
+    comments: |
+      west blobs cache dir can be specified via env variable WEST_BLOBS_CACHE_DIRS

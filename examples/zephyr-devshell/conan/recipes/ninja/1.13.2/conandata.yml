@@ -1,0 +1,4 @@
+sources:
+  ninja-linux.zip:
+    md5: 54a25b8d5b5bed15c1bf051a629b42bb
+    url: https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip

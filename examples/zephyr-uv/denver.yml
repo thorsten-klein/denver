@@ -1,0 +1,16 @@
+version: 1.0
+
+# A lightweight, uv-managed virtualenv -- the "system venv" (no conan, zephyr or
+# docker). Replaces system_venv.sh / system_venv_activate.sh: the pip provider
+# creates the venv, installs the requirements and drops into a shell with it
+# activated.
+stages:
+- pip
+
+# drop into a shell with the venv on PATH when no command is given
+command: bash
+
+pip:
+  provider: pip
+  requirements:
+  - requirements.txt

@@ -1,0 +1,5 @@
+name: denver-zephyr-4.3.1
+package-managers:
+  pip:
+    requirement-files:
+      - conan/recipes/python-cache/denver/requirements.txt

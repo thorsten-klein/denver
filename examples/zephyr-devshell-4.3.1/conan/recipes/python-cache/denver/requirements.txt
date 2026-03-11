@@ -1,0 +1,49 @@
+# General
+west==1.5.99
+conan==2.23.0
+uv==0.9.13
+pip==25.3
+
+# List packages from requirements-from-git.txt here
+ctcache==1.2.1.dev14+g0c7fee26e
+git-nested==1.0.2
+venv-patcher==0.0.1
+
+virtualenv==20.35.4
+jsonschema==4.25.1
+crc==7.1.0
+cstruct==6.1
+codechecker==6.26.2
+pipdeptree==2.30.0
+
+# protobuf
+protobuf==6.33.2
+grpcio-tools==1.76.0
+proto-schema-parser==1.6.0
+networkx==3.4.2
+
+# workaround since some packages are not contained in pip freeze on Ubuntu 24
+wheel==0.45.1
+poetry-core==2.2.1
+
+# Sphinx
+sphinx==8.1.3
+sphinxcontrib-plantuml==0.31
+sphinxcontrib-spelling==8.0.1
+sphinx-rtd-theme==3.0.2
+docutils==0.21.2
+breathe==4.36.0
+Pillow==12.0.0
+myst-parser==4.0.1
+
+# Test
+pytest==9.0.1
+pytest-xdist==3.8.0
+parameterized==0.9.0
+pylint==4.0.3
+flake8==7.3.0
+gcovr==8.4
+ruff==0.14.2
+Sphinx==8.1.3
+pre-commit==4.0.1
+pyopenssl==26.2.0

@@ -1,0 +1,362 @@
+"""Tests for providers.context."""
+
+import os
+import subprocess
+
+import pytest
+
+import providers.context as ctxmod
+from providers.context import (
+    banner,
+    die,
+    find_in_parents,
+    find_outermost_in_parents,
+    info,
+    interpolate,
+    set_quiet,
+    sha256_of_files,
+    skip_banner,
+)
+
+
+# ---- logging helpers ------------------------------------------------------ #
+def test_info(caplog):
+    caplog.set_level("INFO")
+    info("hello")
+    assert "hello" in caplog.text
+
+
+def test_banner_has_no_level_prefix(make_context, capsys):
+    banner(make_context(), "mystage", "message")
+    err = capsys.readouterr().err
+    assert "mystage" in err
+    assert "message" in err
+    assert "INFO:" not in err
+
+
+def test_banner_includes_stage_id(make_context, capsys):
+    # so two same-provider-type stages (e.g. two 'pip' stages) are
+    # distinguishable by which one's banner is currently showing
+    banner(make_context(), "pip-zephyr", "install")
+    err = capsys.readouterr().err
+    assert "pip-zephyr" in err and "install" in err
+
+
+def test_banner_includes_stage_progress(make_context, capsys):
+    ctx = make_context()
+    ctx.stage_index, ctx.stage_count = 1, 7
+    banner(ctx, "conan", "install")
+    err = capsys.readouterr().err
+    assert "[1/7] conan - install" in err
+
+
+def test_skip_banner_shows_stage_and_reason(make_context, capsys):
+    ctx = make_context()
+    ctx.stage_index, ctx.stage_count = 5, 5
+    skip_banner(ctx, "pip-zephyr", "skipped by --skip")
+    err = capsys.readouterr().err
+    assert "[5/5] stage 'pip-zephyr' skipped by --skip" in err
+
+
+def test_skip_banner_hidden_at_quiet_level_2(make_context, capsys):
+    ctx = make_context()
+    set_quiet(2)
+    skip_banner(ctx, "pip-zephyr", "skipped by --skip")
+    assert capsys.readouterr().err == ""
+    set_quiet(0)
+
+
+def test_die(caplog):
+    caplog.set_level("INFO")
+    with pytest.raises(SystemExit) as exc:
+        die("boom")
+    assert exc.value.code == 1
+    assert "boom" in caplog.text
+
+
+# ---- parent search -------------------------------------------------------- #
+def test_find_in_parents(tmp_path):
+    (tmp_path / "a" / "b").mkdir(parents=True)
+    (tmp_path / "marker").mkdir()
+    (tmp_path / "a" / "marker").mkdir()
+    found = list(find_in_parents(tmp_path / "a" / "b", "marker"))
+    assert (tmp_path / "a") in found
+    assert tmp_path in found
+    # nearest-first
+    assert found[0] == tmp_path / "a"
+
+
+def test_find_outermost_and_none(tmp_path):
+    assert find_outermost_in_parents(tmp_path, "nope") is None
+    (tmp_path / "marker").mkdir()
+    (tmp_path / "sub").mkdir()
+    assert find_outermost_in_parents(tmp_path / "sub", "marker") == tmp_path
+
+
+# ---- interpolation -------------------------------------------------------- #
+def test_interpolate_variants():
+    variables = {"A": "x", "B": None}
+    assert interpolate("${A}", variables) == "x"
+    assert interpolate("${MISSING}", variables) == ""
+    assert interpolate("${MISSING:-def}", variables) == "def"
+    assert interpolate("${B:-fallback}", variables) == "fallback"
+    assert interpolate(["${A}", 1], variables) == ["x", 1]
+    assert interpolate({"k": "${A}"}, variables) == {"k": "x"}
+    assert interpolate(42, variables) == 42
+
+
+# ---- Context basics ------------------------------------------------------- #
+def test_builtins_host(make_context):
+    ctx = make_context(in_docker=False)
+    assert ctx.env["DENVER_ENV_NAME"] == "myenv"
+    assert ctx.venv_dir.name.endswith(".venv.host")
+
+
+def test_builtins_docker_venv(make_context):
+    ctx = make_context(in_docker=True)
+    assert ctx.venv_dir.name == ".venv"
+
+
+def test_denver_builtin_always_overrides_real_env(make_context):
+    # DENVER_-prefixed built-ins always reflect the current run, even if a
+    # stale value of the same name was already in the process environment
+    ctx = make_context(env={"DENVER_ENV_NAME": "stale"})
+    assert ctx.env["DENVER_ENV_NAME"] == "myenv"
+
+
+def test_variables_property(make_context):
+    ctx = make_context()
+    assert ctx.variables is ctx.env
+
+
+# ---- config section ------------------------------------------------------- #
+def test_section_interpolated(make_context):
+    ctx = make_context(config={"pip": {"python": "${DENVER_ENV_NAME}"}})
+    assert ctx.section("pip") == {"python": "myenv"}
+    assert ctx.section("missing") == {}
+
+
+# ---- path resolution ------------------------------------------------------ #
+def test_resolve_path_absolute(make_context, tmp_path):
+    ctx = make_context()
+    assert ctx.resolve_path(str(tmp_path)) == tmp_path
+
+
+def test_resolve_path_env_dir(make_context):
+    ctx = make_context()
+    (ctx.env_dir / "file.txt").write_text("x")
+    assert ctx.resolve_path("file.txt") == ctx.env_dir / "file.txt"
+
+
+def test_resolve_path_import_dir(make_context, tmp_path):
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "shared.txt").write_text("x")
+    ctx = make_context(import_dirs=[base])
+    assert ctx.resolve_path("shared.txt") == base / "shared.txt"
+
+
+def test_resolve_path_missing_defaults_to_env_dir(make_context):
+    ctx = make_context()
+    assert ctx.resolve_path("nope.txt") == ctx.env_dir / "nope.txt"
+
+
+def test_resolve_path_custom_base(make_context, tmp_path):
+    ctx = make_context()
+    (tmp_path / "b.txt").write_text("x")
+    assert ctx.resolve_path("b.txt", base=tmp_path) == tmp_path / "b.txt"
+
+
+# ---- env manipulation ----------------------------------------------------- #
+def test_set_setdefault(make_context):
+    ctx = make_context()
+    ctx.set("K", None)
+    assert ctx.env["K"] == ""
+    ctx.setdefault("K", "v")  # empty -> replaced
+    assert ctx.env["K"] == "v"
+    ctx.setdefault("K", "other")  # non-empty -> kept
+    assert ctx.env["K"] == "v"
+
+
+def test_prepend_path(make_context):
+    ctx = make_context()
+    ctx.env.pop("PATH", None)
+    ctx.prepend_path("/a")
+    assert ctx.env["PATH"] == "/a"
+    ctx.prepend_path("/b")
+    assert ctx.env["PATH"] == f"/b{os.pathsep}/a"
+
+
+def test_append_path_var(make_context):
+    ctx = make_context()
+    ctx.env.pop("X", None)
+    ctx.append_path_var("X", "1")
+    ctx.append_path_var("X", "2")
+    assert ctx.env["X"] == f"1{os.pathsep}2"
+
+
+def test_apply_env_map(make_context):
+    ctx = make_context()
+    ctx.apply_env_map({"GREETING": "hi ${DENVER_ENV_NAME}"})
+    assert ctx.env["GREETING"] == "hi myenv"
+    ctx.apply_env_map(None)  # no-op
+
+
+# ---- stage toggles -------------------------------------------------------- #
+def test_toggles(make_context):
+    # force/ci are plain constructor-set flags -- never read back out of a
+    # real environment variable, so setting ctx.env["FORCE"]/["CI"] has no
+    # effect on them.
+    ctx = make_context()
+    assert not ctx.force
+    assert not ctx.ci
+    ctx.env["FORCE"] = "ON"
+    ctx.env["CI"] = "ON"
+    assert not ctx.force
+    assert not ctx.ci
+
+    ctx = make_context(force=True, ci=True)
+    assert ctx.force
+    assert ctx.ci
+
+
+# ---- run / which ---------------------------------------------------------- #
+def test_run_forwards_args(make_context, run_recorder):
+    ctx = make_context()
+    ctx.run(["echo", "hi"], cwd="/tmp", check=False, capture=True, extra_env={"E": "1"})
+    call = run_recorder.calls[-1]
+    assert call.kwargs["cwd"] == "/tmp"
+    assert call.kwargs["check"] is False
+    assert call.kwargs["capture_output"] is True
+    assert call.kwargs["env"]["E"] == "1"
+
+
+def test_run_echo(make_context, run_recorder, capsys):
+    ctx = make_context()
+    ctx.run(["true"], echo=True)
+    assert "+ true" in capsys.readouterr().err
+
+
+def test_run_step_prints_banner_before_echo(make_context, run_recorder, capsys):
+    ctx = make_context()
+    ctx.stage_id = "mystage"
+    ctx.run(["true"], step="do the thing")
+    err = capsys.readouterr().err
+    assert "mystage - do the thing" in err
+    assert err.index("do the thing") < err.index("+ true")
+
+
+def test_run_without_step_prints_no_banner(make_context, run_recorder, capsys):
+    ctx = make_context()
+    ctx.stage_id = "mystage"
+    ctx.run(["true"])
+    err = capsys.readouterr().err
+    assert "mystage" not in err
+
+
+def test_run_quiet_suppresses_echo_and_output(make_context, run_recorder, capsys):
+    ctx = make_context(quiet=True)
+    ctx.run(["true"], echo=True)
+    out, err = capsys.readouterr()
+    assert out == "" and err == ""
+    call = run_recorder.calls[-1]
+    assert call.kwargs["stdout"] == subprocess.DEVNULL
+    assert call.kwargs["stderr"] == subprocess.DEVNULL
+
+
+def test_run_quiet_does_not_override_explicit_capture(make_context, run_recorder):
+    ctx = make_context(quiet=True)
+    ctx.run(["true"], capture=True)
+    call = run_recorder.calls[-1]
+    assert call.kwargs["capture_output"] is True
+    assert "stdout" not in call.kwargs and "stderr" not in call.kwargs
+
+
+def test_quiet_level_1_hides_info_but_collapses_banner_to_one_line(make_context, capsys, caplog):
+    caplog.set_level("INFO")
+    ctx = make_context(quiet=1)
+    info("hidden-info")
+    banner(ctx, "mystage", "still-shown")
+    assert "hidden-info" not in caplog.text
+    err = capsys.readouterr().err
+    assert "-- [1/1] mystage - still-shown" in err
+    assert err.count("\n") == 1  # single line, no box
+    # a later non-quiet Context resets the shared logger/flag for other tests
+    make_context(quiet=0)
+
+
+def test_quiet_level_2_hides_info_and_banner(make_context, capsys, caplog):
+    caplog.set_level("INFO")
+    ctx = make_context(quiet=2)
+    info("hidden-info")
+    banner(ctx, "mystage", "hidden-banner")
+    assert "hidden-info" not in caplog.text
+    assert capsys.readouterr().err == ""
+    # a later non-quiet Context resets the shared logger/flag for other tests
+    make_context(quiet=0)
+
+
+def test_banner_normal_mode_shows_a_boxed_frame(make_context, capsys):
+    ctx = make_context()
+    banner(ctx, "mystage", "message")
+    err = capsys.readouterr().err
+    assert err.count("\n") == 3  # top border, text line, bottom border
+    assert "| [1/1] mystage - message |" in err
+
+
+def test_which(make_context, which):
+    ctx = make_context()
+    which["conan"] = "/opt/conan"
+    assert ctx.which("conan") == "/opt/conan"
+
+
+# ---- source --------------------------------------------------------------- #
+def test_source_noop_for_missing(make_context):
+    ctx = make_context()
+    before = dict(ctx.env)
+    ctx.source(ctx.env_dir / "does-not-exist.sh")
+    assert ctx.env == before
+
+
+def test_source_folds_exports(make_context):
+    ctx = make_context()
+    script = ctx.env_dir / "hook.sh"
+    script.write_text("export FROM_SOURCE=yes\n")
+    ctx.source(script)
+    assert ctx.env["FROM_SOURCE"] == "yes"
+
+
+def test_source_failure_dies(make_context):
+    ctx = make_context()
+    script = ctx.env_dir / "bad.sh"
+    script.write_text("exit 3\n")
+    with pytest.raises(SystemExit):
+        ctx.source(script)
+
+
+# ---- exec ----------------------------------------------------------------- #
+def test_exec_calls_execvpe(make_context, exec_recorder):
+    ctx = make_context()
+    ctx.exec(["fish", "-l"])
+    assert exec_recorder["file"] == "fish"
+    assert exec_recorder["args"] == ["fish", "-l"]
+
+
+def test_exec_oserror_dies(make_context, monkeypatch):
+    ctx = make_context()
+
+    def boom(*a, **k):
+        raise OSError("nope")
+
+    monkeypatch.setattr(ctxmod.os, "execvpe", boom)
+    with pytest.raises(SystemExit):
+        ctx.exec(["missing-binary"])
+
+
+# ---- checksums ------------------------------------------------------------ #
+def test_sha256_of_files(tmp_path):
+    f = tmp_path / "a.txt"
+    f.write_text("hello")
+    block = sha256_of_files([f, tmp_path / "missing.txt"])
+    assert str(f) in block
+    assert "0" * 64 in block  # missing file placeholder

@@ -1,0 +1,62 @@
+services:
+  dev:
+    image: "zephyr-docker:20260311"
+    build:
+      context: container
+      dockerfile: Dockerfile
+    develop:
+      watch:
+        - action: rebuild
+          path: ./container/init_system_for_zephyr.sh
+    #network_mode: host # for DISPLAY
+    env_file:
+      - .env
+    user: ${HOST_UID:-1000}:${HOST_GID:-1000}
+    privileged: true
+    volumes:
+      # host passthrough: display, TLS trust store, device hotplug
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /etc/ssl/certs:/etc/ssl/certs:ro
+      - /dev:/dev
+
+      # build caches, kept outside the container lifecycle so a rebuild
+      # doesn't cost a full re-fetch
+      - $VAR_TMP_WEST_MOUNT:/var/tmp/west          # west module/blob cache
+      - $VAR_TMP_ZEPHYR_MOUNT:/var/tmp/zephyr      # twister/zephyr cache
+      - $CCACHE_READONLY_DIRS:$CCACHE_READONLY_DIRS  # read-only ccache seed from Artifactory
+
+      # the workspace itself, plus the host home and denver's own env dir at
+      # matching paths so absolute paths resolve the same inside/outside
+      - $WORKSPACE_DIR/:$WORKSPACE_DIR
+      - $HOST_HOME/:$HOST_HOME
+      - $DENVER_GLOBAL_ENV_DIR:$DENVER_GLOBAL_ENV_DIR
+
+      # per-tool state that should survive a container recreation
+      - $DENVER_GLOBAL_ENV_DIR/.cache:$DOCKER_HOME/.cache            # Jetbrains system/log dirs, ...
+      - $DENVER_GLOBAL_ENV_DIR/.config:$DOCKER_HOME/.config          # Jetbrains/VSCode/fish config
+      - $DENVER_GLOBAL_ENV_DIR/.java:$DOCKER_HOME/.java              # accepted EULAs, Java prefs
+      - $DENVER_GLOBAL_ENV_DIR/.local/share:$DOCKER_HOME/.local/share  # Jetbrains plugins, fish data
+      - $DENVER_GLOBAL_ENV_DIR/.vscode-server:$DOCKER_HOME/.vscode-server
+
+      # AI coding assistants: keep their auth/config across rebuilds
+      - $DENVER_GLOBAL_ENV_DIR/.copilot:$DOCKER_HOME/.copilot
+      - $DENVER_GLOBAL_ENV_DIR/.claude:$DOCKER_HOME/.claude
+      - $DENVER_GLOBAL_ENV_DIR/.gemini:$DOCKER_HOME/.gemini
+
+      # git identity/credentials: host system config as the base, denver's
+      # own overrides layered as user config; the credentials file itself
+      # can't be mounted directly (git rewrites it in place rather than
+      # editing it, which a bind mount can't satisfy), so it's copied in by
+      # create-env.sh instead and only its parent dir is mounted here
+      - $HOST_HOME/.gitconfig:/etc/gitconfig
+      - ./configs/.gitconfig:$DOCKER_HOME/.config/git/config
+      - $DENVER_GLOBAL_ENV_DIR/.git-data:$DOCKER_HOME/.git-data
+
+      # shell configs/history
+      - ./configs/config.fish:$DOCKER_HOME/.config/fish/config.fish
+      - ./configs/.bash_aliases:$DOCKER_HOME/.bash_aliases
+      - $DENVER_GLOBAL_ENV_DIR/.bash_history:$DOCKER_HOME/.bash_history
+      - ./configs/.zshrc:$DOCKER_HOME/.zshrc
+volumes:
+  var_tmp_west:
+  var_tmp_zephyr:

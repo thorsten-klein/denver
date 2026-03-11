@@ -1,0 +1,60 @@
+From 9c82936527f63959b22ff30261284eefe00c332c Mon Sep 17 00:00:00 2001
+Message-Id: <9c82936527f63959b22ff30261284eefe00c332c.1783501939.git.thorsten.klein@bshg.com>
+From: Thorsten Klein <thorsten.klein@bshg.com>
+Date: Wed, 8 Jul 2026 11:12:12 +0200
+Subject: [PATCH] support anchor path
+
+---
+ manifest-schema.yml |  5 +++++
+ manifest.py         | 19 ++++++++++++++++++-
+ 2 files changed, 23 insertions(+), 1 deletion(-)
+
+diff --git a/manifest-schema.yml b/manifest-schema.yml
+index 8fc0249..845e58e 100644
+--- a/manifest-schema.yml
++++ b/manifest-schema.yml
+@@ -131,6 +131,11 @@ mapping:
+           path:
+             required: false
+             type: str
++          # Anchor path, relative to the current manifest file's directory.
++          # If specified, it is prefixed to the path.
++          anchor:
++            required: false
++            type: str
+           # Submodules to checkout within the project
+           submodules:
+             required: false
+diff --git a/manifest.py b/manifest.py
+index 0e04044..e627831 100644
+--- a/manifest.py
++++ b/manifest.py
+@@ -2517,7 +2517,24 @@ class Manifest:
+         # to POSIX style in all circumstances. If this breaks
+         # anything, we can always revisit, maybe adding a 'nativepath'
+         # attribute or something like that.
+-        path = (self._ctx.path_prefix / pfx / pd.get('path', name)).as_posix()
++        #
++        # Support for 'anchor' field: if specified, the anchor is resolved
++        # relative to the current manifest file's directory and prefixed to the path.
++        anchor = pd.get('anchor', '')
++        if anchor and self._ctx.current_abspath:
++            # Resolve anchor relative to the manifest file's directory
++            manifest_dir = self._ctx.current_abspath.parent
++            anchor_path = manifest_dir / anchor
++            # Make anchor_path relative to topdir if we have one
++            if self.topdir:
++                try:
++                    anchor_path = anchor_path.relative_to(Path(self.topdir))
++                except ValueError:
++                    # anchor_path is not under topdir, keep it as-is
++                    pass
++            path = (self._ctx.path_prefix / pfx / anchor_path / pd.get('path', name)).as_posix()
++        else:
++            path = (self._ctx.path_prefix / pfx / pd.get('path', name)).as_posix()
+ 
+         raw_groups = pd.get('groups')
+         if raw_groups:
+-- 
+2.34.1
+

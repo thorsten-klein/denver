@@ -1,0 +1,6 @@
+sources:
+  ccache-4.13.tar.gz:
+    md5: 951e3df056cfde26128529001da31f63
+    url: https://github.com/ccache/ccache/archive/refs/tags/v4.13.tar.gz
+  0001-feat-Add-read-only-fallback-cache-directories.patch:
+    md5: efefd10b9f1d8390ff5400c5a646bfb7

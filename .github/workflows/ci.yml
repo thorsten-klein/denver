@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches:
+    - develop
+  pull_request:
+    types:
+    - opened
+    - synchronize
+    - reopened
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --group lint
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run poe mypy
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # the floor denver declares support for (pyproject.toml's
+        # requires-python) and the newest available, so a change that only
+        # works on one end doesn't slip through.
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --group dev --python ${{ matrix.python-version }}
+      - run: uv run poe test
+      - name: Upload coverage reports to Codecov
+        if: matrix.python-version == '3.13'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          report_type: test_results
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv build
+      # Installed-mode smoke test: denver's providers must actually be
+      # importable and --help must work from the built wheel, in a venv that
+      # (unlike this checkout) has no sibling src/ layout -- exactly the gap
+      # that let the installed-mode DENVER_DIR bug through (see denver.py's
+      # _default_denver_dir() docstring). --show-config resolves the env by
+      # path and bakes in every provider's defaults, so it's what actually
+      # exercises provider importability here.
+      - run: |
+          python3 -m venv /tmp/denver-smoke-test
+          /tmp/denver-smoke-test/bin/pip install dist/*.whl
+          /tmp/denver-smoke-test/bin/denver --help
+          /tmp/denver-smoke-test/bin/denver "$(pwd)/examples/simple-env" --show-config

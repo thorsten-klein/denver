@@ -1,0 +1,145 @@
+[build-system]
+requires = ["setuptools>=61", "setuptools-scm<7", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "denver-tool"
+dynamic = ["version"]
+description = "Development Environments as code -- reproducible, flexible, simple and fast"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["pyyaml"]
+
+[project.urls]
+Homepage = "https://github.com/thorsten-klein/denver"
+Documentation = "https://github.com/thorsten-klein/denver/blob/main/doc/README.md"
+Repository = "https://github.com/thorsten-klein/denver"
+Issues = "https://github.com/thorsten-klein/denver/issues"
+Changelog = "https://github.com/thorsten-klein/denver/releases"
+
+[project.scripts]
+# After installation, 'denver <env>' works the same as 'src/denver.py <env>'.
+denver = "denver:main"
+
+[dependency-groups]
+lint = [
+    "mypy~=1.14",
+    "pre-commit>=4.3.0",
+    "ruff~=0.13",
+    "types-pyyaml>=6.0.12.20250915",
+]
+test = [
+    "coverage>=7.10",
+    "pytest>=8.4,<10.0",
+    "pytest-xdist>=3.0.0",
+    "pytest-cov>=7.0",
+    "pytest-mock>=3.6.1",
+    "pytest-flakefinder>=1.1.0",
+]
+dev = [
+    "poethepoet~=0.37",
+    {include-group = "lint"},
+    {include-group = "test"},
+    {include-group = "conan-tools"},
+]
+# conan/colorama are not denver's own runtime dependencies: the
+# conan_scripts run inside the env's own venv, where the env's pip stage
+# installs them (see src/providers/conan.py's module docstring). They're
+# pulled in here only so denver's own test suite can import and exercise
+# conan_scripts/*.py.
+conan-tools = [
+    "colorama>=0.4.6",
+    "conan>=2.31.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+py-modules = ["denver"]
+
+# ship the generic provider engines alongside the denver module, plus the
+# non-code assets/ dir (logo.svg/logo.txt -- see denver.print_logo)
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["providers*", "assets*"]
+
+[tool.setuptools.package-data]
+assets = ["*"]
+
+# version is derived from git tags (setuptools-scm); fallback when no tag/git
+[tool.setuptools_scm]
+fallback_version = "1.0.0"
+
+[tool.coverage.run]
+source = ["denver", "providers"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+]
+
+[tool.ruff]
+line-length = 120
+indent-width = 4
+# examples/**/*.py and bak/ are project-specific conan recipes and legacy
+# scratch, not denver's own package -- linting/formatting them is out of
+# scope here. .envs is denver's own runtime state dir (venvs, conan caches).
+extend-exclude = ["examples", "bak", ".envs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "PTH", "RET", "ARG", "C4", "RUF", "D"]
+ignore = [
+    "E501", # line length is enforced by the formatter, not the linter
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# unused fixture/mock-callback arguments are idiomatic pytest, not a smell;
+# a test's own name is its documentation, so docstrings aren't required.
+"tests/*" = ["ARG001", "ARG002", "ARG005", "D"]
+
+[tool.ruff.format]
+quote-style = "preserve"
+line-ending = "lf"
+# Enable preview mode for Github Annotations added in 0.13.3
+preview = true
+
+[tool.mypy]
+python_version = "3.9"
+files = ["src"]
+# conan_scripts run standalone (see catalog.py's docstring): their
+# sibling-module imports (get_rrev, DenverConanFile) only resolve via each
+# script's own sys.path[0] trick at real-run time, not under mypy's
+# package-based module resolution.
+[[tool.mypy.overrides]]
+module = ["get_rrev", "DenverConanFile"]
+ignore_missing_imports = true
+
+# conan/colorama ship no type stubs (see the conan-tools dependency group
+# above: they're denver's test-only, not a real runtime dependency).
+[[tool.mypy.overrides]]
+module = ["conan.*", "colorama.*"]
+ignore_missing_imports = true
+
+[tool.poe.tasks]
+all = ["lint", "format", "mypy", "test"]
+format = "ruff format ."
+lint = "ruff check ."
+mypy = "mypy"
+test = {cmd = "pytest -v -n=auto --cov-config=pyproject.toml --cov=denver --cov=providers --junitxml=junit.xml -o junit_family=legacy --cov-report=term-missing --cov-report=html --cov-report=xml --cov-fail-under=100", env = {PYTHONIOENCODING = "utf-8"}}
+
+clean = "rm -rf dist/ build/ *.egg-info src/*.egg-info htmlcov/ .coverage coverage.xml"
+build = ["clean", {cmd = "uv build"}]

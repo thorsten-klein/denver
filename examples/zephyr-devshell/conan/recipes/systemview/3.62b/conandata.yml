@@ -1,0 +1,5 @@
+sources:
+  SystemView_Linux_V362b_x86_64.tgz:
+    custom: curl -d "accept_license_agreement=accepted&submit=Download+software" -X
+      POST -O https://www.segger.com/downloads/jlink/SystemView_Linux_V362b_x86_64.tgz
+    md5: c4e790c320566ec0bac903edf714af2f

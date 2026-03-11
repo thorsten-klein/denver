@@ -1,0 +1,4 @@
+sources:
+  protoc-33.2-linux-x86_64.zip:
+    md5: 6c39e1779a3b830f583214b691b4b7d4
+    url: https://github.com/protocolbuffers/protobuf/releases/download/v33.2/protoc-33.2-linux-x86_64.zip

@@ -1,0 +1,4 @@
+sources:
+  doxygen-1.15.0.linux.bin.tar.gz:
+    md5: 72f0b4d9b5280f28be54745a815d8a74
+    url: https://github.com/doxygen/doxygen/releases/download/Release_1_15_0/doxygen-1.15.0.linux.bin.tar.gz

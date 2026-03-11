@@ -1,0 +1,560 @@
+From a7b79fdbd6fdf3e671e982d77b5cfb664cd804f6 Mon Sep 17 00:00:00 2001
+Message-Id: <a7b79fdbd6fdf3e671e982d77b5cfb664cd804f6.1782842988.git.thorsten.klein@bshg.com>
+From: Thorsten Klein <thorsten.klein@bshg.com>
+Date: Tue, 30 Jun 2026 14:26:28 +0200
+Subject: [PATCH] feat: Add read-only fallback cache directories
+
+Add the read_only_dirs (CCACHE_READONLY_DIRS) config option for
+specifying one or more additional local cache directories to use as
+read-only fallback caches.
+
+When a result is not found in the local cache_dir, the read-only
+directories are searched in order. A hit is promoted (copied) into the
+local cache, including any associated raw files, so subsequent lookups
+are served locally. The read-only directories are never written to or
+cleaned up.
+
+This is useful in CI environments where an ephemeral writable cache can
+be combined with one or more pre-populated caches, for example built
+from the main or development branch.
+---
+ doc/manual.adoc                           |  23 +++++
+ doc/news.adoc                             |   7 ++
+ src/ccache/config.cpp                     |  20 ++++
+ src/ccache/config.hpp                     |   9 ++
+ src/ccache/storage/local/localstorage.cpp |  94 +++++++++++++++++-
+ src/ccache/storage/local/localstorage.hpp |  28 ++++++
+ src/ccache/storage/storage.cpp            |  17 ++++
+ test/CMakeLists.txt                       |   1 +
+ test/suites/readonly_dirs.bash            | 115 ++++++++++++++++++++++
+ unittest/test_config.cpp                  |   4 +
+ 10 files changed, 317 insertions(+), 1 deletion(-)
+
+diff --git a/doc/manual.adoc b/doc/manual.adoc
+index 47720f49..cd997d36 100644
+--- a/doc/manual.adoc
++++ b/doc/manual.adoc
+@@ -1031,6 +1031,29 @@ temporary files otherwise. You may also want to set <<config_stats,*stats*>> to
+     preprocessor mode. See documentation for <<config_read_only,*read_only*>>
+     regarding using a read-only ccache directory.
+ 
++[#config_read_only_dirs]
++*read_only_dirs* (*CCACHE_READONLY_DIRS*)::
++
++    This option specifies one or more additional local cache directories
++    (separated by `;` on Windows and `:` on other systems) to use as read-only
++    fallback caches. When a result is not found in the local
++    <<config_cache_dir,*cache_dir*>>, the read-only directories are searched in
++    order. A hit in a read-only directory is promoted (copied) into the local
++    cache directory so that subsequent lookups are served locally, unless
++    <<config_remote_only,*remote_only*>> is true.
+++
++The directories must have the same on-disk layout as a normal ccache directory
++(they are typically populated by pointing *cache_dir* at them in another build).
++ccache never writes to or cleans up the read-only directories.
+++
++This is useful in CI environments where an ephemeral, writable local cache can
++be combined with one or more pre-populated caches, for example built from the
++main or development branch:
+++
++----
++read_only_dirs = /ci/caches/main:/ci/caches/develop
++----
++
+ [#config_recache]
+ *recache* (*CCACHE_RECACHE* or *CCACHE_NORECACHE*, see _<<Boolean values>>_ above)::
+ 
+diff --git a/doc/news.adoc b/doc/news.adoc
+index c0b3ccc6..39095731 100644
+--- a/doc/news.adoc
++++ b/doc/news.adoc
+@@ -42,6 +42,13 @@ Release date: 2026-03-05
+   cache-specific config file. +
+   [small]#_[contributed by Joel Rosdahl]_#
+ 
++- Added the `read_only_dirs` (`CCACHE_READONLY_DIRS`) config option for
++  specifying one or more read-only fallback cache directories. Results not found
++  in the local cache are looked up in the read-only directories and promoted
++  into the local cache on a hit. This is useful in CI environments for combining
++  an ephemeral writable cache with pre-populated caches. +
++  [small]#_[contributed by Thorsten Klein]_#
++
+ - Added `msvc_utf8` config option to allow disabling `/utf-8` for MSVC when
+   using the fallback method of parsing preprocessed output. +
+   [small]#_[contributed by Max Winkler]_#
+diff --git a/src/ccache/config.cpp b/src/ccache/config.cpp
+index 55fbbd27..aad7d442 100644
+--- a/src/ccache/config.cpp
++++ b/src/ccache/config.cpp
+@@ -143,6 +143,7 @@ enum class ConfigItem : uint8_t {
+   prefix_command_cpp,
+   read_only,
+   read_only_direct,
++  read_only_dirs,
+   recache,
+   remote_only,
+   remote_storage,
+@@ -213,6 +214,7 @@ const std::unordered_map<std::string_view, ConfigKeyTableEntry>
+     {"prefix_command_cpp",         {C::prefix_command_cpp,         DCP::unsafe}},
+     {"read_only",                  {C::read_only,                  DCP::allow}},
+     {"read_only_direct",           {C::read_only_direct,           DCP::allow}},
++    {"read_only_dirs",             {C::read_only_dirs,             DCP::reject}},
+     {"recache",                    {C::recache,                    DCP::allow}},
+     {"remote_only",                {C::remote_only,                DCP::allow}},
+     {"remote_storage",             {C::remote_storage,             DCP::unsafe}},
+@@ -269,6 +271,7 @@ const std::unordered_map<std::string_view, std::string_view>
+     {"PREFIX_CPP",           "prefix_command_cpp"        },
+     {"READONLY",             "read_only"                 },
+     {"READONLY_DIRECT",      "read_only_direct"          },
++    {"READONLY_DIRS",        "read_only_dirs"            },
+     {"RECACHE",              "recache"                   },
+     {"REMOTE_ONLY",          "remote_only"               },
+     {"REMOTE_STORAGE",       "remote_storage"            },
+@@ -593,6 +596,16 @@ Config::set_ceiling_dirs(const std::vector<std::filesystem::path>& value)
+   }
+ }
+ 
++void
++Config::set_read_only_dirs(const std::vector<std::filesystem::path>& value)
++{
++  m_read_only_dirs.clear();
++  for (const auto& path : value) {
++    verify_absolute_path(path);
++    m_read_only_dirs.push_back(util::lexically_normal(path));
++  }
++}
++
+ void
+ Config::set_safe_dirs(const std::vector<std::filesystem::path>& value)
+ {
+@@ -1131,6 +1144,9 @@ Config::get_string_value(const std::string& key) const
+   case ConfigItem::read_only_direct:
+     return format_bool(m_read_only_direct);
+ 
++  case ConfigItem::read_only_dirs:
++    return util::join_path_list(m_read_only_dirs);
++
+   case ConfigItem::recache:
+     return format_bool(m_recache);
+ 
+@@ -1434,6 +1450,10 @@ Config::set_item(const std::string_view& key,
+     m_read_only_direct = parse_bool(value, env_var_key, negate);
+     break;
+ 
++  case ConfigItem::read_only_dirs:
++    set_read_only_dirs(util::split_path_list(value));
++    break;
++
+   case ConfigItem::recache:
+     m_recache = parse_bool(value, env_var_key, negate);
+     break;
+diff --git a/src/ccache/config.hpp b/src/ccache/config.hpp
+index 0951b92b..557e81b2 100644
+--- a/src/ccache/config.hpp
++++ b/src/ccache/config.hpp
+@@ -97,6 +97,7 @@ public:
+   const std::string& prefix_command_cpp() const;
+   bool read_only() const;
+   bool read_only_direct() const;
++  const std::vector<std::filesystem::path>& read_only_dirs() const;
+   bool recache() const;
+   bool remote_only() const;
+   const std::string& remote_storage() const;
+@@ -137,6 +138,7 @@ public:
+   void set_inode_cache(bool value);
+   void set_max_files(uint64_t value);
+   void set_msvc_dep_prefix(const std::string& value);
++  void set_read_only_dirs(const std::vector<std::filesystem::path>& value);
+   void set_safe_dirs(const std::vector<std::filesystem::path>& value);
+   void set_msvc_utf8(bool value);
+   void set_temporary_dir(const std::filesystem::path& value);
+@@ -230,6 +232,7 @@ private:
+   std::string m_prefix_command_cpp;
+   bool m_read_only = false;
+   bool m_read_only_direct = false;
++  std::vector<std::filesystem::path> m_read_only_dirs;
+   bool m_recache = false;
+   bool m_reshare = false;
+   bool m_remote_only = false;
+@@ -504,6 +507,12 @@ Config::read_only_direct() const
+   return m_read_only_direct;
+ }
+ 
++inline const std::vector<std::filesystem::path>&
++Config::read_only_dirs() const
++{
++  return m_read_only_dirs;
++}
++
+ inline bool
+ Config::recache() const
+ {
+diff --git a/src/ccache/storage/local/localstorage.cpp b/src/ccache/storage/local/localstorage.cpp
+index e4f7bf4b..b34eb58d 100644
+--- a/src/ccache/storage/local/localstorage.cpp
++++ b/src/ccache/storage/local/localstorage.cpp
+@@ -514,6 +514,57 @@ LocalStorage::get(const Hash::Digest& key, const core::CacheEntryType type)
+   return return_value;
+ }
+ 
++std::optional<util::Bytes>
++LocalStorage::get_from_directory(const fs::path& cache_dir,
++                                 const Hash::Digest& key,
++                                 const core::CacheEntryType type) const
++{
++  const auto path = look_up_existing_cache_file(cache_dir, key, type);
++  if (!path) {
++    LOG("No {} in read-only cache directory {}",
++        util::format_base16(key),
++        cache_dir);
++    return std::nullopt;
++  }
++
++  const auto value = util::read_file<util::Bytes>(*path);
++  if (!value) {
++    LOG("Failed to read {}: {}", *path, value.error());
++    return std::nullopt;
++  }
++
++  LOG("Retrieved {} from read-only cache directory ({})",
++      util::format_base16(key),
++      *path);
++  return *value;
++}
++
++std::vector<core::result::Serializer::RawFile>
++LocalStorage::get_raw_files_in_directory(const fs::path& cache_dir,
++                                         const Hash::Digest& key) const
++{
++  std::vector<core::result::Serializer::RawFile> raw_files;
++
++  const auto result_path =
++    look_up_existing_cache_file(cache_dir, key, core::CacheEntryType::result);
++  if (!result_path) {
++    return raw_files;
++  }
++
++  // Raw files are stored as sibling files named "<result_path>_<NN>" with file
++  // numbers assigned sequentially starting from 0, so stop at the first gap.
++  for (int i = 0; i <= UINT8_MAX; ++i) {
++    const auto file_number = static_cast<uint8_t>(i);
++    auto raw_path = get_raw_file_path(*result_path, file_number);
++    if (!DirEntry(raw_path).is_regular_file()) {
++      break;
++    }
++    raw_files.push_back({file_number, std::move(raw_path)});
++  }
++
++  return raw_files;
++}
++
+ void
+ LocalStorage::put(const Hash::Digest& key,
+                   const core::CacheEntryType type,
+@@ -1102,6 +1153,39 @@ LocalStorage::look_up_cache_file(const Hash::Digest& key,
+   return {shallowest_path, DirEntry(), k_min_cache_levels};
+ }
+ 
++std::optional<fs::path>
++LocalStorage::look_up_existing_cache_file(const fs::path& cache_dir,
++                                          const Hash::Digest& key,
++                                          const core::CacheEntryType type)
++{
++  // Try new format first: base16 without suffix.
++  const auto key_string = util::format_base16(key);
++  for (uint8_t level = k_min_cache_levels; level <= k_max_cache_levels;
++       ++level) {
++    const auto path = get_path_in_cache(cache_dir, level, key_string);
++    if (DirEntry(path).is_regular_file()) {
++      return path;
++    }
++  }
++
++  // Try old format with R/M suffix. Unlike look_up_cache_file, no migration is
++  // performed since the directory is treated as read-only.
++  const auto old_key_string = util::format_legacy_digest(key);
++  const std::string old_suffix =
++    type == core::CacheEntryType::manifest ? "M" : "R";
++  const auto old_key_string_with_suffix = old_key_string + old_suffix;
++  for (uint8_t level = k_min_cache_levels; level <= k_max_cache_levels;
++       ++level) {
++    const auto path =
++      get_path_in_cache(cache_dir, level, old_key_string_with_suffix);
++    if (DirEntry(path).is_regular_file()) {
++      return path;
++    }
++  }
++
++  return std::nullopt;
++}
++
+ StatsFile
+ LocalStorage::get_stats_file(uint8_t l1_index) const
+ {
+@@ -1538,11 +1622,19 @@ LocalStorage::clean_internal_tempdir()
+ fs::path
+ LocalStorage::get_path_in_cache(const uint8_t level,
+                                 const std::string_view name) const
++{
++  return get_path_in_cache(m_config.cache_dir(), level, name);
++}
++
++fs::path
++LocalStorage::get_path_in_cache(const fs::path& cache_dir,
++                                const uint8_t level,
++                                const std::string_view name)
+ {
+   ASSERT(level >= 1 && level <= 8);
+   ASSERT(name.length() >= level);
+ 
+-  fs::path path(m_config.cache_dir());
++  fs::path path(cache_dir);
+   for (uint8_t i = 0; i < level; ++i) {
+     path /= std::string(1, name.at(i));
+   }
+diff --git a/src/ccache/storage/local/localstorage.hpp b/src/ccache/storage/local/localstorage.hpp
+index 76b5f2e4..ca21e360 100644
+--- a/src/ccache/storage/local/localstorage.hpp
++++ b/src/ccache/storage/local/localstorage.hpp
+@@ -71,6 +71,22 @@ public:
+   std::optional<util::Bytes> get(const Hash::Digest& key,
+                                  core::CacheEntryType type);
+ 
++  // Read-only lookup of `key`/`type` in an arbitrary cache directory (e.g. a
++  // read-only fallback cache). Unlike `get`, this does not update statistics,
++  // does not refresh timestamps and does not migrate legacy entries. Returns
++  // the entry value if found, otherwise `std::nullopt`.
++  std::optional<util::Bytes>
++  get_from_directory(const std::filesystem::path& cache_dir,
++                     const Hash::Digest& key,
++                     core::CacheEntryType type) const;
++
++  // Return the raw files belonging to result entry `key` in an arbitrary cache
++  // directory. Used to promote raw files when a result is served from a
++  // read-only fallback cache.
++  std::vector<core::result::Serializer::RawFile>
++  get_raw_files_in_directory(const std::filesystem::path& cache_dir,
++                             const Hash::Digest& key) const;
++
+   void put(const Hash::Digest& key,
+            core::CacheEntryType type,
+            std::span<const uint8_t> value,
+@@ -155,6 +171,14 @@ private:
+   LookUpCacheFileResult look_up_cache_file(const Hash::Digest& key,
+                                            core::CacheEntryType type) const;
+ 
++  // Look up an existing cache file for `key`/`type` in `cache_dir` without
++  // migrating legacy entries. Returns the path of the first regular file found,
++  // otherwise `std::nullopt`.
++  static std::optional<std::filesystem::path>
++  look_up_existing_cache_file(const std::filesystem::path& cache_dir,
++                              const Hash::Digest& key,
++                              core::CacheEntryType type);
++
+   std::filesystem::path get_subdir(uint8_t l1_index) const;
+   std::filesystem::path get_subdir(uint8_t l1_index, uint8_t l2_index) const;
+ 
+@@ -201,6 +225,10 @@ private:
+   // split from the beginning of `name` before joining them all.
+   std::filesystem::path get_path_in_cache(uint8_t level,
+                                           std::string_view name) const;
++  static std::filesystem::path
++  get_path_in_cache(const std::filesystem::path& cache_dir,
++                    uint8_t level,
++                    std::string_view name);
+ 
+   std::filesystem::path get_lock_path(const std::string& name) const;
+ 
+diff --git a/src/ccache/storage/storage.cpp b/src/ccache/storage/storage.cpp
+index cc3186a8..a0ab8927 100644
+--- a/src/ccache/storage/storage.cpp
++++ b/src/ccache/storage/storage.cpp
+@@ -439,6 +439,23 @@ Storage::get(const Hash::Hash::Digest& key,
+ {
+   if (!m_config.remote_only()) {
+     auto value = local.get(key, type);
++    if (!value) {
++      // Fall back to read-only cache directories (e.g. pre-populated caches in
++      // CI), promoting hits into the local cache.
++      for (const auto& dir : m_config.read_only_dirs()) {
++        value = local.get_from_directory(dir, key, type);
++        if (value) {
++          local.put(key, type, *value, Overwrite::no);
++          if (type == core::CacheEntryType::result) {
++            const auto raw_files = local.get_raw_files_in_directory(dir, key);
++            if (!raw_files.empty()) {
++              local.put_raw_files(key, raw_files);
++            }
++          }
++          break;
++        }
++      }
++    }
+     if (value) {
+       if (m_config.reshare()) {
+         put_in_remote_storage(key, *value, Overwrite::no);
+diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
+index d624a97b..b6406192 100644
+--- a/test/CMakeLists.txt
++++ b/test/CMakeLists.txt
+@@ -58,6 +58,7 @@ addtest(profiling_gcc_10+)
+ addtest(profiling_hip_clang)
+ addtest(readonly)
+ addtest(readonly_direct)
++addtest(readonly_dirs)
+ addtest(remote_file)
+ addtest(remote_helper)
+ if(HTTP_STORAGE_BACKEND)
+diff --git a/test/suites/readonly_dirs.bash b/test/suites/readonly_dirs.bash
+new file mode 100644
+index 00000000..c0cb4ac9
+--- /dev/null
++++ b/test/suites/readonly_dirs.bash
+@@ -0,0 +1,115 @@
++SUITE_readonly_dirs_SETUP() {
++    generate_code 1 test.c
++}
++
++SUITE_readonly_dirs() {
++    # -------------------------------------------------------------------------
++    TEST "Cache hit from read-only directory (preprocessed mode)"
++
++    # Populate a separate cache directory.
++    CCACHE_DIR=$PWD/fallback $CCACHE_COMPILE -c test.c
++    rm test.o
++
++    # The local cache is empty, so the result must come from the read-only
++    # directory and be promoted into the local cache.
++    CCACHE_READONLY_DIRS=$PWD/fallback $CCACHE_COMPILE -c test.c
++    expect_stat preprocessed_cache_hit 1
++    expect_stat cache_miss 0
++    expect_stat local_storage_read_hit 0
++    expect_stat local_storage_read_miss 1
++    expect_stat local_storage_write 1 # promoted result
++    expect_stat files_in_cache 1
++    expect_exists test.o
++
++    # The promoted result is now served from the local cache without any
++    # read-only directory configured.
++    $CCACHE_COMPILE -c test.c
++    expect_stat preprocessed_cache_hit 2
++    expect_stat cache_miss 0
++
++    # -------------------------------------------------------------------------
++    TEST "Cache hit from read-only directory (direct mode)"
++
++    unset CCACHE_NODIRECT
++
++    # Populate a separate cache directory (manifest + result).
++    CCACHE_DIR=$PWD/fallback $CCACHE_COMPILE -c test.c
++    rm test.o
++
++    CCACHE_READONLY_DIRS=$PWD/fallback $CCACHE_COMPILE -c test.c
++    expect_stat direct_cache_hit 1
++    expect_stat cache_miss 0
++    expect_stat local_storage_write 2 # promoted manifest + result
++    expect_stat files_in_cache 2
++    expect_exists test.o
++
++    $CCACHE_COMPILE -c test.c
++    expect_stat direct_cache_hit 2
++    expect_stat cache_miss 0
++
++    # -------------------------------------------------------------------------
++    TEST "Cache miss falls back to compiler"
++
++    # The read-only directory does not contain a matching result.
++    CCACHE_READONLY_DIRS=$PWD/empty $CCACHE_COMPILE -c test.c
++    expect_stat preprocessed_cache_hit 0
++    expect_stat cache_miss 1
++    expect_exists test.o
++
++    # -------------------------------------------------------------------------
++    TEST "Multiple read-only directories"
++
++    generate_code 2 test2.c
++
++    CCACHE_DIR=$PWD/fallback1 $CCACHE_COMPILE -c test.c
++    CCACHE_DIR=$PWD/fallback2 $CCACHE_COMPILE -c test2.c
++    rm test.o test2.o
++
++    CCACHE_READONLY_DIRS="$PWD/fallback1:$PWD/fallback2" $CCACHE_COMPILE -c test.c
++    expect_stat preprocessed_cache_hit 1
++    expect_stat cache_miss 0
++    expect_exists test.o
++
++    CCACHE_READONLY_DIRS="$PWD/fallback1:$PWD/fallback2" $CCACHE_COMPILE -c test2.c
++    expect_stat preprocessed_cache_hit 2
++    expect_stat cache_miss 0
++    expect_exists test2.o
++
++    # -------------------------------------------------------------------------
++    TEST "Raw files are promoted (hard link mode)"
++
++    # With hard_link enabled the object file is stored as a separate raw file
++    # alongside the result entry. Promotion must copy the raw file too,
++    # otherwise retrieval from the local cache would fail.
++    CCACHE_HARDLINK=1 CCACHE_DIR=$PWD/fallback $CCACHE_COMPILE -c test.c
++    rm test.o
++
++    CCACHE_HARDLINK=1 CCACHE_READONLY_DIRS=$PWD/fallback $CCACHE_COMPILE -c test.c
++    expect_stat preprocessed_cache_hit 1
++    expect_stat cache_miss 0
++    expect_stat files_in_cache 2 # promoted result + raw file
++    expect_exists test.o
++
++    # The promoted entry (including the raw file) is served from the local
++    # cache without any read-only directory configured.
++    rm test.o
++    CCACHE_HARDLINK=1 $CCACHE_COMPILE -c test.c
++    expect_stat preprocessed_cache_hit 2
++    expect_stat cache_miss 0
++    expect_exists test.o
++
++    # -------------------------------------------------------------------------
++    TEST "Read-only directory is not modified"
++
++    CCACHE_DIR=$PWD/fallback $CCACHE_COMPILE -c test.c
++    rm test.o
++    files_before=$(find $PWD/fallback -type f | wc -l)
++
++    CCACHE_READONLY_DIRS=$PWD/fallback $CCACHE_COMPILE -c test.c
++    expect_stat preprocessed_cache_hit 1
++    files_after=$(find $PWD/fallback -type f | wc -l)
++
++    if [ "$files_after" -ne "$files_before" ]; then
++        test_failed "Read-only directory was modified ($files_before -> $files_after files)"
++    fi
++}
+diff --git a/unittest/test_config.cpp b/unittest/test_config.cpp
+index 21c460cd..3410fc00 100644
+--- a/unittest/test_config.cpp
++++ b/unittest/test_config.cpp
+@@ -79,6 +79,7 @@ TEST_CASE("Config: default values")
+   CHECK(config.prefix_command_cpp().empty());
+   CHECK_FALSE(config.read_only());
+   CHECK_FALSE(config.read_only_direct());
++  CHECK(config.read_only_dirs().empty());
+   CHECK_FALSE(config.recache());
+   CHECK_FALSE(config.remote_only());
+   CHECK(config.remote_storage().empty());
+@@ -633,6 +634,8 @@ TEST_CASE("Config::visit_items")
+     "prefix_command_cpp = pcc\n"
+     "read_only = true\n"
+     "read_only_direct = true\n"
++    "read_only_dirs = " ROOT_DIR
++    "rod\n"
+     "recache = true\n"
+     "remote_only = true\n"
+     "remote_storage = rs\n"
+@@ -697,6 +700,7 @@ TEST_CASE("Config::visit_items")
+     "(test.conf) prefix_command_cpp = pcc",
+     "(test.conf) read_only = true",
+     "(test.conf) read_only_direct = true",
++    "(test.conf) read_only_dirs = " ROOT_DIR "rod",
+     "(test.conf) recache = true",
+     "(test.conf) remote_only = true",
+     "(test.conf) remote_storage = rs",
+-- 
+2.34.1
+
