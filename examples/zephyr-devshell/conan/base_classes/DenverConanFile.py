@@ -52,7 +52,11 @@ class DenverConanFile(ConanFile):
 
     def system_requirements(self):
         self.global_system_requirements = True
-        package_manager.Apt(self).install(self.system_tools_requires, check=True)
+        # update=True only kicks in when 'check' found something missing *and*
+        # the mode is 'install' -- i.e. right before the apt-get install that
+        # would otherwise fail on a machine whose package lists are stale or
+        # were never fetched (a fresh CI runner or container).
+        package_manager.Apt(self).install(self.system_tools_requires, check=True, update=True)
 
     def requirements(self):
         self._add_requires(self.requires, "requires", "requires_latest")
