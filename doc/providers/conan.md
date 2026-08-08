@@ -15,6 +15,15 @@ my-conan-stage:
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
 see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything else is specific to `conan`.)
 
+## Requires
+
+**`conan` must be available** wherever this stage runs — denver never
+installs it. In practice an earlier `pip` stage does, by listing `conan` in
+its `requirements:`, which puts it on `PATH` via that stage's venv; a
+host-wide or in-image install works just as well, and `exe:` can point at a
+specific one. A stage with no conan available fails with `conan provider
+needs 'conan' on PATH`.
+
 ## Key reference
 
 - **`exe`** (default: `conan` on `PATH`) — the conan executable.

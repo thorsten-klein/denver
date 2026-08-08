@@ -88,6 +88,11 @@ simply unset/empty unless the `denver.yml` says otherwise, and a path that
 exports and installs is always exactly what the config names, and an env
 that inherits a base's recipes says so explicitly.
 
+conan itself must already be available wherever this stage runs -- denver
+never installs it: in practice an earlier pip stage does, by listing
+``conan`` in its ``requirements:``, but a host-wide or in-image install
+works just as well (and ``exe:`` can name a specific one).
+
 Full key reference, worked examples and design notes: ``doc/providers/conan.md``.
 """
 

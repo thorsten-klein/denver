@@ -93,6 +93,11 @@ Whatever ``image:`` resolves to (empty string if unset) is exported as
 can say ``image: "${DENVER_DOCKER_IMAGE}"`` instead of hard-coding the same
 tag a second time.
 
+``docker`` with the Compose plugin (every command here is a ``docker
+compose ...`` one, v2 -- not the standalone ``docker-compose`` script) must
+already be available, with a reachable daemon, on the machine this stage
+runs on -- denver never installs it.
+
 Full key reference, worked examples and design notes: ``doc/providers/docker.md``.
 """
 

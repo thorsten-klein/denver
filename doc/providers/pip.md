@@ -14,6 +14,15 @@ my-pip-stage:
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
 see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `pip`.)
 
+## Requires
+
+**`uv` must already be installed** wherever this stage runs — denver never
+installs it. That's the host for a plain run, or the container when a
+`docker` stage relocated the pipeline first (see "Wrapper / relocation" in
+[`../architecture.md`](../architecture.md)), in which case the image needs
+it. Install it per [uv's own instructions](https://docs.astral.sh/uv/getting-started/installation/);
+a stage with no `uv` on `PATH` fails with `pip provider needs 'uv' on PATH`.
+
 ## Key reference
 
 - **`python`** (default `"3.12.3"`) — the interpreter version the venv is
