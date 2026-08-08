@@ -8,7 +8,7 @@
 [![codecov](https://codecov.io/gh/thorsten-klein/denver/branch/develop/graph/badge.svg)](https://codecov.io/gh/thorsten-klein/denver)
 [![PyPI](https://img.shields.io/pypi/v/denver-tool.svg)](https://pypi.org/project/denver-tool/)
 [![Python versions](https://img.shields.io/pypi/pyversions/denver-tool.svg)](https://pypi.org/project/denver-tool/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/thorsten-klein/denver/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/thorsten-klein/denver/blob/develop/LICENSE)
 
 **D**evelopment **Env**ironment Launch**er** — declares dev environments in a
 `denver.yml`: reproducible and layerable to fit your project's needs.
@@ -46,7 +46,7 @@ inherit another's entire layer stack as a base and add/override its own
 layers on top — e.g. every project-specific env importing a shared
 `zephyr-devshell` base instead of redefining the same `docker`/`conan`/`pip`
 layers again. Run `denver --help` for every flag, see
-[`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/main/doc/architecture.md) for the full
+[`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md) for the full
 `stages:`/`import:`/`-c` schema, or look at any `examples/*/denver.yml` for a
 working example.
 
@@ -54,12 +54,12 @@ working example.
 
 | Document | What's in it |
 |---|---|
-| [`doc/README.md`](https://github.com/thorsten-klein/denver/blob/main/doc/README.md) | Documentation index — start here |
-| [`doc/glossary.md`](https://github.com/thorsten-klein/denver/blob/main/doc/glossary.md) | Every term denver uses, defined once |
-| [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/main/doc/architecture.md) | The `denver.yml` schema and how the system works |
-| [`doc/philosophy.md`](https://github.com/thorsten-klein/denver/blob/main/doc/philosophy.md) | The design principles behind it |
-| [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/main/doc/providers/) | One key reference per provider: [pip](https://github.com/thorsten-klein/denver/blob/main/doc/providers/pip.md), [conan](https://github.com/thorsten-klein/denver/blob/main/doc/providers/conan.md), [docker](https://github.com/thorsten-klein/denver/blob/main/doc/providers/docker.md), [zephyr](https://github.com/thorsten-klein/denver/blob/main/doc/providers/zephyr.md), [custom](https://github.com/thorsten-klein/denver/blob/main/doc/providers/custom.md) |
-| [`doc/development.md`](https://github.com/thorsten-klein/denver/blob/main/doc/development.md) | Contributing: tests, coverage, adding a provider, releasing |
+| [`doc/README.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/README.md) | Documentation index — start here |
+| [`doc/glossary.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/glossary.md) | Every term denver uses, defined once |
+| [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md) | The `denver.yml` schema and how the system works |
+| [`doc/philosophy.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/philosophy.md) | The design principles behind it |
+| [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) | One key reference per provider: [pip](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/pip.md), [conan](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/conan.md), [docker](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md), [zephyr](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/zephyr.md), [custom](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/custom.md) |
+| [`doc/development.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/development.md) | Contributing: tests, coverage, adding a provider, releasing |
 
 ## Install denver
 
@@ -273,11 +273,11 @@ not a meal.)
 
 - Curious what a *minimal* environment looks like? `examples/zephyr-uv/` is
   nothing but a Python venv, and `examples/simple-env/` just runs a shell script.
-- Want to write your own `denver.yml`? [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/main/doc/architecture.md)
+- Want to write your own `denver.yml`? [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)
   documents every key of the schema; or copy the closest `examples/*/denver.yml`.
 - Want details on one stage type's config keys? Each provider has its own
-  reference under [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/main/doc/providers/) — e.g.
-  [`doc/providers/docker.md`](https://github.com/thorsten-klein/denver/blob/main/doc/providers/docker.md) for every `docker:` key —
+  reference under [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) — e.g.
+  [`doc/providers/docker.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md) for every `docker:` key —
   and a terser lookup table in its module docstring next to the code
   (`src/providers/docker.py`).
 
@@ -299,7 +299,7 @@ never inherited from a same-named real environment variable — see `denver
 denver also *exports* a handful of built-in variables into the environment
 it builds (`DENVER_ENV_DIR`, `DENVER_ENV_NAME`, ...), usable in `${...}`
 interpolation inside a `denver.yml` — see "Variable interpolation" in
-[`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/main/doc/architecture.md).
+[`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md).
 
 ## Full flag reference
 
@@ -338,7 +338,7 @@ behavior isn't obvious from a one-line description.
   terminal. Errors are always reported.
 - **`--fast`** skips every provider's (re-)build step and only activates
   what a previous full run already built (each provider's own page under
-  [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/main/doc/providers/) documents exactly what that means for
+  [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) documents exactly what that means for
   it). Run once without `--fast` first — a provider dies with a clear
   message if what it needs isn't there yet.
 - **`--force`** forces a provider to redo expensive work it would otherwise
@@ -382,9 +382,9 @@ denver examples/zephyr-devshell-4.3.1 --skip docker
 ## Contributing
 
 Bug reports, feature requests and pull requests are welcome — see
-[`doc/development.md`](https://github.com/thorsten-klein/denver/blob/main/doc/development.md) for the workflow (`uv run poe all`
+[`doc/development.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/development.md) for the workflow (`uv run poe all`
 runs lint, format, mypy and the test suite; denver keeps 100% coverage).
 
 ## License
 
-MIT — see [`LICENSE`](https://github.com/thorsten-klein/denver/blob/main/LICENSE).
+MIT — see [`LICENSE`](https://github.com/thorsten-klein/denver/blob/develop/LICENSE).
