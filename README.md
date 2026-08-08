@@ -96,6 +96,34 @@ With that approach nothing needs installing — just call `src/denver.py`
 (or the vendored copy's equivalent path) directly, as in the quick start
 below.
 
+## Pre-conditions
+
+denver itself only needs Python — it never installs the tools its providers
+drive. Each provider expects its tool to already be available wherever that
+stage runs (on the host, or inside the container once a `docker` stage
+relocated into it):
+
+| Provider | Needs |
+|---|---|
+| `docker` | `docker` with the Compose plugin (v2, `docker compose ...`), daemon reachable for your user |
+| `pip` | [`uv`](https://docs.astral.sh/uv/getting-started/installation/) |
+| `conan` | `conan` — usually installed by an earlier `pip` stage |
+| `zephyr` | `west` — usually installed by an earlier `pip` stage |
+| `custom` | whatever your own script calls |
+
+A stage whose tool is missing fails up front with a clear message. Each
+provider's page under [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/)
+has the details, including how to point at a specific binary via `exe:`.
+Anything that must be installed on the *host* (docker itself, `udev` rules,
+...) typically lives in an env's `scripts: setup:`, so an env can bring its
+own host tools along — run those once with:
+
+```bash
+denver <env> --run setup
+```
+
+See [One-time host setup](#one-time-host-setup).
+
 ## Getting started with a bundled example environment
 
 This chapter assumes you have never seen denver before. It walks through one
