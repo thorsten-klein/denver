@@ -106,11 +106,42 @@ name is already exported:
 - **`DENVER_ENV_NAME`** — that directory's name.
 - **`DENVER_ENV_WORKDIR`** — denver's own working area for this environment
   (`<DENVER_DIR>/.envs/<env>`): venvs, caches, logs, `performance.jsonl`.
+- **`SHELL_PROMPT_PREFIX`** — `(<env>) `: the text marking a shell as
+  running inside this environment, so a prompt reads
+  `(raspberry-pico) dev@host:~/ws$`. fish reads this natively from **fish
+  4.8.0** onwards (see below).
 
 These are exported into the environment too, so scripts, compose files and
 the final command can read them as ordinary variables. `DENVER_STATE_DIR` —
 the one variable denver *reads* rather than sets — is documented in the
 top-level [`../README.md`](../README.md).
+
+### The prompt marker
+
+denver marks the shell it starts by writing the prompt variables **the
+shells themselves define** — it contributes to them, it does not own them:
+
+| Variable | Shell | denver writes |
+| --- | --- | --- |
+| `PROMPT_COMMAND` | bash | its snippet, appended after whatever was there |
+| `PROMPT` | zsh | `(<env>) %m%#` — short host, then `%` (or `#` for root) |
+| `SHELL_PROMPT_PREFIX` | fish ≥ 4.8.0 | `(<env>) ` |
+
+**`PS1` is deliberately not set.** An interactive bash re-reads its rc files
+after denver execs it and assigns `PS1` outright, so anything denver put
+there would be discarded before the user ever saw it. `PROMPT_COMMAND` is
+bash's answer to exactly that — it runs after those rc files, before every
+prompt — so that is where the marker goes for bash instead.
+
+The `PROMPT_COMMAND` snippet is idempotent: it re-applies the prefix only if
+it isn't already present (bash would otherwise grow `PS1` by one copy per
+prompt), and a wrapper provider re-invoking denver inside a container never
+appends a second copy.
+
+One ordering subtlety, handled in `Context._prefix_prompt`: in zsh `PROMPT`
+and `PS1` are the *same* parameter, so an inherited `PS1` would win over
+denver's `PROMPT` if it happened to come later in `environ`. `PROMPT` is
+therefore always written last, so zsh keeps the zsh-syntax value.
 
 ## Config resolution
 

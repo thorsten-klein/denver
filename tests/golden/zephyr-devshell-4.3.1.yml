@@ -44,13 +44,18 @@ conan:
   description: null
   disabled: false
   scripts: null
-  base-classes: <REPO>/examples/zephyr-devshell/conan/base_classes
+  base-classes:
+  - <REPO>/examples/zephyr-devshell/conan/base_classes
   build: missing
   channel: snapshot
   cleanup-remotes: true
-  conanfile: null
   conanfiles:
-  - <REPO>/examples/zephyr-devshell-4.3.1/conan/conanfile.py
+  - catalog: <REPO>/examples/zephyr-devshell-4.3.1/conan/catalog.yml
+    path: <REPO>/examples/zephyr-devshell-4.3.1/conan/conanfile.py
+    recipe-dirs:
+    - <REPO>/examples/zephyr-devshell/conan/recipes
+    - <REPO>/examples/zephyr-devshell-4.3.1/conan/recipes
+    recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
   config: null
   deployer: <REPO>/src/providers/conan_scripts/extensions/symlink.py
   exe: /usr/bin/conan
@@ -59,9 +64,6 @@ conan:
   profiles:
     build: []
     host: []
-  recipe-dirs:
-  - <REPO>/examples/zephyr-devshell/conan/recipes
-  - <REPO>/examples/zephyr-devshell-4.3.1/conan/recipes
   recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
   remotes: {}
   user: denver

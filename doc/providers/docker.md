@@ -14,6 +14,15 @@ my-docker-stage:
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
 see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `docker`.)
 
+## Requires
+
+**`docker` with the Compose plugin must be available** on the machine this
+stage runs on — denver never installs it, and every command it issues is a
+`docker compose ...` one (v2, the plugin — not the standalone
+`docker-compose` script). The daemon has to be reachable for the invoking
+user, too. Point `exe:` at a specific docker binary if the one on `PATH`
+isn't the right one.
+
 ## Key reference
 
 - **`exe`** (default: `docker` on `PATH`) — the docker executable.

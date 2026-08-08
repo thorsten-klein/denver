@@ -1,9 +1,0 @@
-ccache/4.13: ccache/4.13@denver/snapshot#a9ddf3958bada8cc2373ed1b299ea2f9
-clang/21.1.4: clang/21.1.4@denver/snapshot#77b3144145026ae498d6008c3a4a4d1f
-cmake/3.31.9: cmake/3.31.9@denver/snapshot#14bfb0ad38de00e3895b6ff55bd5aeeb
-doxygen/1.15.0: doxygen/1.15.0@denver/snapshot#a7f70087cdecbb23f7ff24999cb0b940
-jlink/8.82: jlink/8.82@denver/snapshot#0a8c88ac3ce3a5ca5a605b36f211b925
-ninja/1.13.2: ninja/1.13.2@denver/snapshot#de54417a1d7bd20863032610ff479567
-protoc/33.2: protoc/33.2@denver/snapshot#31dd8b75f301c5b452f70f45df3f259b
-systemview/3.62b: systemview/3.62b@denver/snapshot#55b4b7fe00f7e85a6aa8fe87a177b7e7
-zephyr-sdk/0.17.4: zephyr-sdk/0.17.4@denver/snapshot#b42d0a62dad67c3522ccf886e4051e66

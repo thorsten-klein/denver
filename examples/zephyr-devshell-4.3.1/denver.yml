@@ -29,13 +29,18 @@ pip:
     patches: pip/venv-patcher/patches.yml
 
 conan:
+  # one unit: the conanfile plus every recipe dir it installs from. The
+  # shared base declares no unit of its own (it has no conanfile), so its
+  # recipes are listed here explicitly, base first.
   conanfiles:
-  - conan/conanfile.py
-  # the shared base's own recipe-dirs (../zephyr-devshell/conan/recipes) are
-  # kept automatically -- a list appends onto a lower layer's, it doesn't
-  # replace it -- so only this version's own addition needs listing here.
-  recipe-dirs:
-  - conan/recipes
+  - path: conan/conanfile.py
+    recipe-dirs:
+    - ../zephyr-devshell/conan/recipes
+    - conan/recipes
+    # write this unit's catalog (every recipe pinned as
+    # name/version@user/channel#rrev) so the pins are reviewable in a diff.
+    # Drop this line and the catalog is built in memory only.
+    catalog: conan/catalog.yml
 
 zephyr:
   # auto-generated list of west blobs to pre-cache

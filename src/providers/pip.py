@@ -67,6 +67,10 @@ there is no skip check, and the venv patcher runs only when a
 ``venv-patcher:`` section names its ``patches:`` file explicitly (an
 unreadable or missing one is an error, not a silent no-op).
 
+``uv`` itself must already be installed wherever this stage runs -- denver
+never installs it: the host for a plain run, or the image when a ``docker``
+stage relocated the pipeline first.
+
 Full key reference, worked examples and design notes: ``doc/providers/pip.md``.
 """
 

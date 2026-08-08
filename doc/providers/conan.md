@@ -6,14 +6,24 @@ A `conan` stage provisions native, non-Python tools (compilers, `cmake`,
 ```yaml
 my-conan-stage:
   provider: conan
-  recipe-dirs:
-  - path/to/recipes
   conanfiles:
-  - conanfile.py
+  - path: conanfile.py
+    recipe-dirs:
+    - path/to/recipes
+    catalog: catalog.yml   # optional
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
 see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything else is specific to `conan`.)
+
+## Requires
+
+**`conan` must be available** wherever this stage runs — denver never
+installs it. In practice an earlier `pip` stage does, by listing `conan` in
+its `requirements:`, which puts it on `PATH` via that stage's venv; a
+host-wide or in-image install works just as well, and `exe:` can point at a
+specific one. A stage with no conan available fails with `conan provider
+needs 'conan' on PATH`.
 
 ## Key reference
 
@@ -22,16 +32,41 @@ see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everythi
   tools) — the scripts that generate/export recipe references and deploy
   installed packages onto `PATH`. Overriding these is an escape hatch for
   an unusual setup; most environments never set them.
-- **`base-classes`** — optional; a directory of shared conanfile base
-  classes recipes can inherit from. May itself live in a base env, resolved
-  the normal way (falling back to an imported base env's own directory).
-- **`recipe-dirs`** — directories directly containing recipes. Never
-  guessed from the directory layout (see "Explicit over implicit" in
-  [`../philosophy.md`](../philosophy.md)) — each dir must be listed. Appends across `import:`
-  layers like any other list (see [`../architecture.md`](../architecture.md)'s "Merge rules"), so a
-  derived env only needs to list its *own* recipe dirs, not repeat a base
-  env's.
-- **`conanfiles`** — conanfiles installed in order.
+- **`base-classes`** — optional; a list of directories of shared conanfile
+  base classes recipes can inherit from. Each is put on the
+  recipes-exporter's `PYTHONPATH`, in list order (earlier entries win), and
+  may itself live in a base env, resolved the normal way (falling back to an
+  imported base env's own directory). A listed dir must exist (it's an error
+  if it doesn't). Appends across `import:` layers like any other list (see
+  [`../architecture.md`](../architecture.md)'s "Merge rules"), so a derived
+  env only needs to list the base-classes dirs it adds itself.
+- **`conanfiles`** — a list of *units*, installed in order. A unit is a
+  conanfile together with the recipes it is installed from, so an env that
+  stacks on another appends whole units rather than merging several parallel
+  lists. Appends across `import:` layers like any other list (see
+  [`../architecture.md`](../architecture.md)'s "Merge rules"). Each entry is a
+  mapping — a bare path string is rejected — with these keys:
+  - **`path`** (required) — the conanfile to install.
+  - **`recipe-dirs`** — optional; directories containing recipes to export
+    before installing. Never guessed from the directory layout (see
+    "Explicit over implicit" in [`../philosophy.md`](../philosophy.md)) —
+    each dir must be listed, and must exist. An entry may be a whole recipe
+    tree or a single recipe directory; recipes are found by their
+    `conandata.yml`, wherever it sits.
+  - **`catalog`** — optional; a path to write this unit's catalog to (every
+    one of its recipes pinned as `name/version@user/channel#rrev`). Unset,
+    the catalog is built in memory, handed straight to the export step and
+    never written — so a run leaves no generated file behind. Set it when the
+    pins should be reviewable/committed, or when the unit's own conanfile
+    reads them back (see
+    [`../../examples/raspberry-pico/conan/conanfile.py`](../../examples/raspberry-pico/conan/conanfile.py)).
+  - **`recipes-exporter`** — optional; overrides the env-wide default for
+    this unit only.
+
+  A unit's `recipe-dirs:` are resolved as **one** catalog, so recipes in one
+  dir may require recipes in another dir of the same unit — and a unit's
+  catalog content follows from that unit's membership. Put recipes in their
+  own unit to keep their catalog independent of what another unit does.
 - **`build`** (default `"missing"`) — passed as `--build=<value>` (a
   string or a list) to `conan install`.
 - **`install-args`** — extra literal `conan install` arguments.
@@ -77,9 +112,15 @@ see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everythi
 
 - **Monorepo pattern.** Recipes commonly live in the same repository as the
   project using them, not a separate recipes repo — see "Monorepo" in
-  [`../philosophy.md`](../philosophy.md). `recipe-dirs:` just points at wherever they actually
-  are; there's no requirement they live in any particular place relative to
-  the `denver.yml`.
+  [`../philosophy.md`](../philosophy.md). A unit's `recipe-dirs:` just points at wherever they
+  actually are; there's no requirement they live in any particular place
+  relative to the `denver.yml`.
+- **A base env with recipes but no conanfile.** Since `recipe-dirs:` live
+  inside a unit, a shared base env that ships recipes without a conanfile of
+  its own has no unit to put them in; each env that installs those recipes
+  lists the base's dir in its own unit instead (see
+  [`../../examples/zephyr-devshell`](../../examples/zephyr-devshell) and the
+  envs that import it).
 - **Works with or without remotes.** An env with no `remotes:` and no
   `config:` at all is a fully offline/local-cache setup — nothing gets
   reconciled, conan just uses whatever's already in its local cache/home.

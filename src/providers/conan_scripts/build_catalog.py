@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
-"""Generates catalog.yml from a tree of conan recipes.
+"""Builds a recipe catalog from a tree of conan recipes.
 
 Walks a recipes directory for conandata.yml files, resolves each recipe's
 requires/tool_requires against the others, computes each one's RREV (see
 get_rrev.py) and propagates a changed RREV to every recipe that depends on
-it, then writes the resulting name -> full_reference mapping to catalog.yml.
-Invoked by recipes.py's generate_catalog() as a subprocess.
+it, producing a name -> full_reference mapping.
+
+That mapping is a return value, not a file: recipes.py's generate_catalog()
+imports build() and hands ``Catalog.get_references()`` straight to its export
+step. A catalog.yml is only ever written when something explicitly asks for
+one -- ``--output`` here, ``--export-catalog`` in recipes.py, denver.yml's
+``conan.export-catalog:`` -- so running a build never leaves a generated
+file behind in the recipe tree.
 """
 
 import argparse
@@ -284,10 +290,19 @@ class Catalog:
             json_dict[f"{recipe.name}/{recipe.version}"] = recipe.get_json()
         return OrderedDict(sorted(json_dict.items()))
 
+    def get_references(self):
+        """The catalog itself: every recipe's 'name/version' -> full reference, sorted.
+
+        This -- not a file on disk -- is what a catalog *is* to every caller
+        (see the module docstring); write_catalog() below just serializes it
+        for the callers that asked for a file.
+        """
+        return {key: val["full_reference"] for key, val in self.get_json().items()}
+
     def write_catalog(self, output_file_path):
         """Write every recipe's full_reference to ``output_file_path``."""
         catalog = ConfigFile(output_file_path)
-        catalog.data = {key: val["full_reference"] for key, val in self.get_json().items()}
+        catalog.data = self.get_references()
         print(catalog.get_data())
         catalog.save_file()
         print("----------------------------------------------")
@@ -295,19 +310,42 @@ class Catalog:
         print("----------------------------------------------")
 
 
+def build(recipes_dirs, *, user=DEFAULT_CONAN_USER, channel=DEFAULT_CONAN_CHANNEL):
+    """Return a fully resolved Catalog of every recipe found under ``recipes_dirs``.
+
+    The whole pipeline (discover -> load -> resolve dependencies -> update
+    RREVs) with nothing written out: recipes.py calls this directly and uses
+    the returned Catalog's get_references(), main() below calls it and then
+    decides what to do with the result.
+
+    All the dirs are resolved as *one* catalog (that's what a denver
+    ``conanfiles:`` unit is), so a recipe in one dir may require a recipe in
+    another -- which also means the result depends on which dirs are passed
+    together.
+    """
+    recipes = [p.parent for d in recipes_dirs for p in Path(d).glob("**/conandata.yml")]
+    catalog = Catalog(user=user, channel=channel)
+    catalog.add_recipe_dirs(sorted(recipes))
+    catalog.resolve_all_dependencies()
+    catalog.update_all_rrevs()
+    return catalog
+
+
 def main():
-    """CLI entry point: build a Catalog from --recipes-dir, resolve/update it, and write --output."""
+    """CLI entry point: build a Catalog from --recipes-dir, then write --output (or print it)."""
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-o",
         "--output",
         type=str,
-        help="Output catalog file (YAML format)",
+        help="Write the catalog to this file (YAML). Without it the catalog is printed, not written.",
     )
     parser.add_argument(
         "--recipes-dir",
         type=str,
-        help="Path to conan recipes",
+        action="append",
+        default=[],
+        help="Path to conan recipes (repeatable -- all dirs form one catalog)",
     )
     parser.add_argument(
         "--user",
@@ -323,16 +361,15 @@ def main():
     )
     args = parser.parse_args()
 
-    recipes_dir = Path(args.recipes_dir or workdir / "recipes").resolve()
-    recipes = [p.parent for p in recipes_dir.glob("**/conandata.yml")]
+    recipes_dirs = [Path(d).resolve() for d in args.recipes_dir] or [(workdir / "recipes").resolve()]
+    catalog = build(recipes_dirs, user=args.user, channel=args.channel)
 
-    catalog = Catalog(user=args.user, channel=args.channel)
-    catalog.add_recipe_dirs(sorted(recipes))
-    catalog.resolve_all_dependencies()
-    catalog.update_all_rrevs()
-
-    catalog_yml = args.output or workdir / "catalog.yml"
-    catalog.write_catalog(catalog_yml)
+    # no --output: print the catalog instead of writing a catalog.yml nobody
+    # asked for (this used to default to workdir/catalog.yml).
+    if not args.output:
+        print(yaml.safe_dump(catalog.get_references(), default_flow_style=False))
+        return
+    catalog.write_catalog(args.output)
 
 
 if __name__ == "__main__":

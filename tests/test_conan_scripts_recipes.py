@@ -11,6 +11,7 @@ recipes._real_conan_api's docstring for why that matters).
 from __future__ import annotations
 
 import json
+import os
 import sys
 import types
 from pathlib import Path
@@ -116,37 +117,38 @@ def test_get_cache_path_propagates_other_errors(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# catalog.yml / recipe resolution
+# catalog / recipe resolution
 # --------------------------------------------------------------------------- #
-def test_get_recipes_from_catalog_skips_dotted_keys(tmp_path):
-    catalog_yml = tmp_path / "catalog.yml"
-    catalog_yml.write_text(
-        yaml.safe_dump({
-            ".version": "1.2.3",
-            "foo/1.0": "foo/1.0@denver/snapshot",
-        })
-    )
-    recipes_ref = recipes.get_recipes_from_catalog(tmp_path, catalog_yml)
+def test_get_recipes_from_entries_skips_dotted_keys(tmp_path):
+    entries = {
+        ".version": "1.2.3",
+        "foo/1.0": "foo/1.0@denver/snapshot",
+    }
+    recipes_ref = recipes.get_recipes_from_entries([tmp_path], entries)
     assert len(recipes_ref) == 1
     (path, ref) = next(iter(recipes_ref.items()))
     assert path == (tmp_path / "foo" / "1.0" / "conanfile.py").absolute()
     assert ref.name == "foo"
 
 
-def test_handle_args_recipe_by_dir(tmp_path):
+def test_read_catalog_loads_yaml_from_disk(tmp_path):
     catalog_yml = tmp_path / "catalog.yml"
     catalog_yml.write_text(yaml.safe_dump({"foo/1.0": "foo/1.0@denver/snapshot"}))
+    assert recipes.read_catalog(catalog_yml) == {"foo/1.0": "foo/1.0@denver/snapshot"}
+
+
+def test_handle_args_recipe_by_dir(tmp_path):
+    all_recipes = recipes.get_recipes_from_entries([tmp_path], {"foo/1.0": "foo/1.0@denver/snapshot"})
     recipe_dir = tmp_path / "foo" / "1.0"
     recipe_dir.mkdir(parents=True)
-    filtered = recipes.handle_args_recipe(tmp_path, catalog_yml, [str(recipe_dir)])
+    filtered = recipes.handle_args_recipe(all_recipes, [str(recipe_dir)])
     assert len(filtered) == 1
 
 
 def test_handle_args_recipe_unknown_dies(tmp_path):
-    catalog_yml = tmp_path / "catalog.yml"
-    catalog_yml.write_text(yaml.safe_dump({"foo/1.0": "foo/1.0@denver/snapshot"}))
+    all_recipes = recipes.get_recipes_from_entries([tmp_path], {"foo/1.0": "foo/1.0@denver/snapshot"})
     with pytest.raises(recipes.CatalogError):
-        recipes.handle_args_recipe(tmp_path, catalog_yml, ["bar/2.0"])
+        recipes.handle_args_recipe(all_recipes, ["bar/2.0"])
 
 
 # --------------------------------------------------------------------------- #
@@ -587,36 +589,64 @@ def test_prepare_passes_force_to_login(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# generate_catalog: invoked via sys.executable, not the script's exec bit
+# generate_catalog: built in memory; a file only when --export-catalog says so
 # --------------------------------------------------------------------------- #
-def test_generate_catalog_invokes_via_interpreter(monkeypatch, tmp_path):
-    captured = {}
+def _stub_build_catalog(monkeypatch, references=None):
+    """Stand in for build_catalog.build(), recording its args and what got written."""
+    seen = {"written": []}
 
-    def fake_run(cmd, check):
-        captured["cmd"] = cmd
-        captured["check"] = check
+    class FakeCatalog:
+        def get_references(self):
+            return references if references is not None else {"foo/1.0": "foo/1.0@denver/snapshot"}
 
-    monkeypatch.setattr(recipes.subprocess, "run", fake_run)
-    recipes.generate_catalog(tmp_path / "recipes", tmp_path / "catalog.yml")
+        def write_catalog(self, output_file_path):
+            seen["written"].append(output_file_path)
 
-    assert captured["cmd"][0] == sys.executable
-    assert captured["cmd"][1].endswith("build_catalog.py")
-    assert captured["check"] is True
-    assert "--user=denver" in captured["cmd"]
-    assert "--channel=snapshot" in captured["cmd"]
+    def fake_build(recipes_dirs, *, user, channel):
+        seen.update(recipes_dirs=recipes_dirs, user=user, channel=channel)
+        return FakeCatalog()
+
+    monkeypatch.setattr(
+        recipes,
+        "_import_build_catalog",
+        lambda: types.SimpleNamespace(build=fake_build),
+    )
+    return seen
+
+
+def test_generate_catalog_returns_references_without_writing(monkeypatch, tmp_path):
+    seen = _stub_build_catalog(monkeypatch)
+
+    entries = recipes.generate_catalog([tmp_path / "recipes"])
+
+    assert entries == {"foo/1.0": "foo/1.0@denver/snapshot"}
+    assert seen["written"] == []  # no --export-catalog -> no catalog.yml anywhere
+    assert seen["user"] == "denver"
+    assert seen["channel"] == "snapshot"
+
+
+def test_generate_catalog_writes_only_when_export_to_given(monkeypatch, tmp_path):
+    seen = _stub_build_catalog(monkeypatch)
+    export_to = tmp_path / "recipes" / "catalog.yml"
+
+    recipes.generate_catalog([tmp_path / "recipes"], export_to=export_to)
+
+    assert seen["written"] == [export_to]
 
 
 def test_generate_catalog_passes_custom_user_channel(monkeypatch, tmp_path):
-    captured = {}
+    seen = _stub_build_catalog(monkeypatch)
 
-    def fake_run(cmd, check):
-        captured["cmd"] = cmd
+    recipes.generate_catalog([tmp_path / "recipes"], user="acme", channel="stable")
 
-    monkeypatch.setattr(recipes.subprocess, "run", fake_run)
-    recipes.generate_catalog(tmp_path / "recipes", tmp_path / "catalog.yml", user="acme", channel="stable")
+    assert seen["user"] == "acme"
+    assert seen["channel"] == "stable"
 
-    assert "--user=acme" in captured["cmd"]
-    assert "--channel=stable" in captured["cmd"]
+
+def test_import_build_catalog_resolves_the_real_module():
+    # both spellings are tried (script vs. package import) -- whichever wins,
+    # it must be the real build_catalog with build() on it.
+    assert callable(recipes._import_build_catalog().build)
 
 
 # --------------------------------------------------------------------------- #
@@ -765,8 +795,9 @@ def _stub_pipeline(monkeypatch):
     """Neutralise everything main() calls beyond argument handling +
     prepare(), so these tests exercise CLI/config wiring only."""
     monkeypatch.setattr(recipes, "prepare", lambda remotes, cleanup=False, force=False: None)
-    monkeypatch.setattr(recipes, "generate_catalog", lambda *a, **k: None)
-    monkeypatch.setattr(recipes, "get_recipes_from_catalog", lambda *a: {})
+    monkeypatch.setattr(recipes, "generate_catalog", lambda *a, **k: {})
+    monkeypatch.setattr(recipes, "read_catalog", lambda *a: {})
+    monkeypatch.setattr(recipes, "get_recipes_from_entries", lambda *a: {})
     monkeypatch.setattr(recipes, "handle_args_recipe", lambda *a: {})
     monkeypatch.setattr(recipes, "get_recipes_prefs", lambda *a: {})
 
@@ -787,7 +818,7 @@ def test_main_upload_without_remote_errors(monkeypatch):
 def test_main_prepare_only_returns_before_generate(monkeypatch, tmp_path):
     _stub_pipeline(monkeypatch)
     generate_called = []
-    monkeypatch.setattr(recipes, "generate_catalog", lambda *a, **k: generate_called.append(a))
+    monkeypatch.setattr(recipes, "generate_catalog", lambda *a, **k: generate_called.append(a) or {})
     monkeypatch.setattr(sys, "argv", ["recipes.py", "--prepare"])
     recipes.main()
     assert generate_called == []
@@ -817,39 +848,61 @@ def test_main_no_remotes_json_passes_empty_dict(monkeypatch):
 def test_main_export_pipeline_default_catalog(monkeypatch, tmp_path):
     _stub_pipeline(monkeypatch)
     ref = RecipeReference.loads("foo/1.0@denver/snapshot")
-    monkeypatch.setattr(recipes, "get_recipes_from_catalog", lambda *a: {Path("/r"): ref})
+    monkeypatch.setattr(recipes, "get_recipes_from_entries", lambda *a: {Path("/r"): ref})
     monkeypatch.setattr(recipes, "needs_export", lambda r: True)
     exported = []
     monkeypatch.setattr(recipes, "export", lambda recipe_path, r: exported.append((recipe_path, r)))
     monkeypatch.setattr(recipes, "get_recipes_prefs", lambda refs: {})
 
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["recipes.py", "--export", f"--recipes-dir={tmp_path}", f"--catalog-yml={tmp_path / 'catalog.yml'}"],
-    )
+    monkeypatch.setattr(sys, "argv", ["recipes.py", "--export", f"--recipes-dir={tmp_path}"])
     recipes.main()
 
     assert exported == [(Path("/r"), ref)]
 
 
-def test_main_recipes_positional_uses_handle_args_recipe(monkeypatch, tmp_path):
+def test_main_without_export_catalog_writes_nothing(monkeypatch, tmp_path):
+    # the default: the catalog is built in memory and handed straight to the
+    # export step -- no catalog.yml is written into the recipe dir.
     _stub_pipeline(monkeypatch)
-    handled = []
-    monkeypatch.setattr(recipes, "handle_args_recipe", lambda d, c, recipes: handled.append(recipes) or {})
+    seen = {}
+    monkeypatch.setattr(recipes, "generate_catalog", lambda d, **k: seen.update(k) or {})
+    monkeypatch.setattr(sys, "argv", ["recipes.py", "--export", f"--recipes-dir={tmp_path}"])
+    recipes.main()
+
+    assert seen["export_to"] is None
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_main_export_catalog_is_passed_through(monkeypatch, tmp_path):
+    _stub_pipeline(monkeypatch)
+    seen = {}
+    monkeypatch.setattr(recipes, "generate_catalog", lambda d, **k: seen.update(k) or {})
+    export_to = tmp_path / "catalog.yml"
     monkeypatch.setattr(
         sys,
         "argv",
-        ["recipes.py", f"--recipes-dir={tmp_path}", f"--catalog-yml={tmp_path / 'catalog.yml'}", "foo/1.0"],
+        ["recipes.py", "--export", f"--recipes-dir={tmp_path}", f"--export-catalog={export_to}"],
     )
+    recipes.main()
+
+    assert seen["export_to"] == export_to
+
+
+def test_main_recipes_positional_uses_handle_args_recipe(monkeypatch, tmp_path):
+    _stub_pipeline(monkeypatch)
+    handled = []
+    monkeypatch.setattr(recipes, "handle_args_recipe", lambda all_recipes, recipes: handled.append(recipes) or {})
+    monkeypatch.setattr(sys, "argv", ["recipes.py", f"--recipes-dir={tmp_path}", "foo/1.0"])
     recipes.main()
     assert handled == [["foo/1.0"]]
 
 
-def test_main_no_generate_skips_catalog_generation(monkeypatch, tmp_path):
+def test_main_no_generate_reads_catalog_instead_of_generating(monkeypatch, tmp_path):
     _stub_pipeline(monkeypatch)
-    generated = []
-    monkeypatch.setattr(recipes, "generate_catalog", lambda *a, **k: generated.append(a))
+    generated, read = [], []
+    monkeypatch.setattr(recipes, "generate_catalog", lambda *a, **k: generated.append(a) or {})
+    monkeypatch.setattr(recipes, "read_catalog", lambda p: read.append(p) or {})
+    catalog_yml = tmp_path / "catalog.yml"
     monkeypatch.setattr(
         sys,
         "argv",
@@ -857,32 +910,46 @@ def test_main_no_generate_skips_catalog_generation(monkeypatch, tmp_path):
             "recipes.py",
             "--no-generate",
             f"--recipes-dir={tmp_path}",
-            f"--catalog-yml={tmp_path / 'catalog.yml'}",
+            f"--catalog-yml={catalog_yml}",
         ],
     )
     recipes.main()
     assert generated == []
+    assert read == [catalog_yml.resolve()]
 
 
-def test_main_requires_recipes_dir_and_catalog_yml_without_prepare(monkeypatch, capsys):
+def test_main_requires_recipes_dir_without_prepare(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["recipes.py"])
     with pytest.raises(SystemExit):
         recipes.main()
     assert "--recipes-dir" in capsys.readouterr().err
 
 
-def test_main_requires_catalog_yml_even_with_recipes_dir(monkeypatch, tmp_path, capsys):
-    monkeypatch.setattr(sys, "argv", ["recipes.py", f"--recipes-dir={tmp_path}"])
+def test_main_no_generate_requires_catalog_yml(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(sys, "argv", ["recipes.py", "--no-generate", f"--recipes-dir={tmp_path}"])
     with pytest.raises(SystemExit):
         recipes.main()
-    assert "--recipes-dir" in capsys.readouterr().err
+    assert "--no-generate needs --catalog-yml" in capsys.readouterr().err
+
+
+def test_main_catalog_yml_without_no_generate_errors(monkeypatch, tmp_path, capsys):
+    # --catalog-yml is an *input* now; writing the generated one is
+    # --export-catalog's job, so mixing them up is rejected outright.
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["recipes.py", f"--recipes-dir={tmp_path}", f"--catalog-yml={tmp_path / 'catalog.yml'}"],
+    )
+    with pytest.raises(SystemExit):
+        recipes.main()
+    assert "--export-catalog" in capsys.readouterr().err
 
 
 def test_main_ci_and_upload_flow(monkeypatch, tmp_path):
     _stub_pipeline(monkeypatch)
     ref = RecipeReference.loads("foo/1.0@denver/snapshot")
     pref = PkgReference(ref, "id", "rev")
-    monkeypatch.setattr(recipes, "get_recipes_from_catalog", lambda *a: {Path("/r"): ref})
+    monkeypatch.setattr(recipes, "get_recipes_from_entries", lambda *a: {Path("/r"): ref})
     monkeypatch.setattr(recipes, "get_recipes_prefs", lambda refs: {Path("/r"): pref})
     ci_calls, upload_calls, create_calls = [], [], []
     monkeypatch.setattr(recipes, "run_ci", lambda recipe_path, p, remotes: ci_calls.append((recipe_path, p, remotes)))
@@ -899,7 +966,6 @@ def test_main_ci_and_upload_flow(monkeypatch, tmp_path):
             "--upload",
             "--remote=sdd",
             f"--recipes-dir={tmp_path}",
-            f"--catalog-yml={tmp_path / 'catalog.yml'}",
         ],
     )
     recipes.main()
@@ -924,3 +990,54 @@ def test_main_base_classes_dir_explicit(monkeypatch, tmp_path):
     )
     recipes.main()
     assert str(base_classes.resolve()) in sys.path
+
+
+def test_main_base_classes_dir_repeatable(monkeypatch, tmp_path):
+    # --base-classes-dir is repeatable (denver.yml's 'base-classes:' is a
+    # list): every dir lands on sys.path/PYTHONPATH, first one first.
+    _stub_pipeline(monkeypatch)
+    first = tmp_path / "bc-own"
+    second = tmp_path / "bc-shared"
+    first.mkdir()
+    second.mkdir()
+    monkeypatch.setenv("PYTHONPATH", "/pre-existing")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "recipes.py",
+            "--prepare",
+            f"--base-classes-dir={first}",
+            f"--base-classes-dir={second}",
+        ],
+    )
+    recipes.main()
+    assert sys.path[:2] == [str(first.resolve()), str(second.resolve())]
+    assert os.environ["PYTHONPATH"] == f"/pre-existing:{first.resolve()}:{second.resolve()}"
+
+
+def test_get_recipes_from_entries_finds_recipes_wherever_they_live(tmp_path):
+    # a recipe-dirs entry may be a whole tree or a single recipe -- both are
+    # located by their conandata.yml, not by assuming <dir>/<name>/<version>.
+    tree = tmp_path / "recipes"
+    single = tmp_path / "shared" / "recipes" / "cmake"
+    for recipe_dir in (tree / "foo" / "1.0", single / "3.31.0"):
+        recipe_dir.mkdir(parents=True)
+        (recipe_dir / "conandata.yml").write_text("{}")
+
+    recipes_ref = recipes.get_recipes_from_entries(
+        [tree, single],
+        {"foo/1.0": "foo/1.0@denver/snapshot", "cmake/3.31.0": "cmake/3.31.0@denver/snapshot"},
+    )
+
+    assert set(recipes_ref) == {
+        (tree / "foo" / "1.0" / "conanfile.py").absolute(),
+        (single / "3.31.0" / "conanfile.py").absolute(),
+    }
+
+
+def test_get_recipes_from_entries_falls_back_for_unknown_recipe(tmp_path):
+    # a stale checked-in catalog (--no-generate) names something no dir holds:
+    # the path still points somewhere concrete, for the error further down.
+    recipes_ref = recipes.get_recipes_from_entries([tmp_path], {"gone/9.9": "gone/9.9@denver/snapshot"})
+    assert next(iter(recipes_ref)) == (tmp_path / "gone" / "9.9" / "conanfile.py").absolute()

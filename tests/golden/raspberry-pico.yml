@@ -1,0 +1,61 @@
+version: 1.0
+hooks:
+  env: null
+  post-conan: null
+  post-pip: null
+  pre-cmd: null
+  pre-conan: null
+  pre-pip: null
+stages:
+- pip
+- conan
+pip:
+  provider: pip
+  description: null
+  disabled: false
+  scripts: null
+  append-mode: false
+  find-links: null
+  freeze-to: null
+  install-args: null
+  link-mode: copy
+  no-index: false
+  overrides: null
+  python: 3.12.3
+  requirements:
+  - requirements.txt
+  skip-if: []
+  uv: /usr/bin/uv
+  venv: null
+  venv-patcher: null
+conan:
+  provider: conan
+  description: null
+  disabled: false
+  scripts: null
+  base-classes:
+  - <REPO>/examples/zephyr-devshell/conan/base_classes
+  build: missing
+  channel: snapshot
+  cleanup-remotes: true
+  conanfiles:
+  - catalog: <REPO>/examples/raspberry-pico/conan/catalog.yml
+    path: <REPO>/examples/raspberry-pico/conan/conanfile.py
+    recipe-dirs:
+    - <REPO>/examples/raspberry-pico/conan/recipes
+    - <REPO>/examples/zephyr-devshell/conan/recipes/cmake
+    recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
+  config: null
+  deployer: <REPO>/src/providers/conan_scripts/extensions/symlink.py
+  exe: /usr/bin/conan
+  install-args:
+  - -c=tools.system.package_manager:mode=install
+  - -c=tools.system.package_manager:sudo=True
+  no-auth: false
+  profiles:
+    build: []
+    host: []
+  recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
+  remotes: {}
+  user: denver
+

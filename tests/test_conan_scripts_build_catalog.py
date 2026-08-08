@@ -365,9 +365,69 @@ def test_main_user_channel_flags_set_reference(tmp_path, monkeypatch):
     # DEFAULT_CONAN_USER/DEFAULT_CONAN_CHANNEL).
 
 
-def test_main_default_recipes_dir_and_output(tmp_path, monkeypatch):
+def test_main_without_output_prints_and_writes_nothing(tmp_path, monkeypatch, capsys):
+    # no -o: the catalog is printed, never written -- this used to drop a
+    # catalog.yml into workdir that nobody asked for.
+    recipes_dir = tmp_path / "recipes"
+    recipe_dir = recipes_dir / "foo" / "1.0"
+    recipe_dir.mkdir(parents=True)
+    (recipe_dir / "conanfile.py").write_text("x")
+    (recipe_dir / "conandata.yml").write_text("{}")
+
+    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("foo", "1.0", "rev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "inspect", lambda path, attrs: {"name": "foo", "version": "1.0"})
     monkeypatch.setattr(build_catalog, "workdir", tmp_path)
-    (tmp_path / "recipes").mkdir()
     monkeypatch.setattr(sys, "argv", ["build_catalog.py"])
+
     build_catalog.main()
-    assert (tmp_path / "catalog.yml").is_file()
+
+    assert "foo/1.0: foo/1.0@denver/snapshot#rev" in capsys.readouterr().out
+    assert not (tmp_path / "catalog.yml").exists()
+    assert not (recipes_dir / "catalog.yml").exists()
+
+
+def test_build_returns_resolved_catalog(tmp_path, monkeypatch):
+    recipes_dir = tmp_path / "recipes"
+    recipe_dir = recipes_dir / "foo" / "1.0"
+    recipe_dir.mkdir(parents=True)
+    (recipe_dir / "conanfile.py").write_text("x")
+    (recipe_dir / "conandata.yml").write_text("{}")
+
+    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("foo", "1.0", "rev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "inspect", lambda path, attrs: {"name": "foo", "version": "1.0"})
+
+    catalog = build_catalog.build([recipes_dir], user="acme", channel="stable")
+
+    assert catalog.get_references() == {"foo/1.0": "foo/1.0@acme/stable#rev"}
+    assert list(recipes_dir.glob("**/catalog.yml")) == []
+
+
+def _make_recipe_tree(root, name, monkeypatch=None):
+    """Create <root>/<name>/1.0/{conanfile.py,conandata.yml}."""
+    recipe_dir = root / name / "1.0"
+    recipe_dir.mkdir(parents=True)
+    (recipe_dir / "conanfile.py").write_text("x")
+    (recipe_dir / "conandata.yml").write_text("{}")
+    return recipe_dir
+
+
+def test_build_covers_every_dir_it_is_given(tmp_path, monkeypatch):
+    # a unit's recipe-dirs resolve as ONE catalog (see build()'s docstring),
+    # so what a catalog contains follows from which dirs are passed together.
+    base = tmp_path / "base" / "recipes"
+    layer = tmp_path / "layer" / "recipes"
+    _make_recipe_tree(base, "foo")
+    _make_recipe_tree(layer, "bar")
+
+    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: (Path(d).parents[0].name, "1.0", "rev"))
+    monkeypatch.setattr(
+        build_catalog.get_rrev,
+        "inspect",
+        lambda path, attrs: {"name": Path(path).parents[1].name, "version": "1.0"},
+    )
+
+    assert build_catalog.build([base]).get_references() == {"foo/1.0": "foo/1.0@denver/snapshot#rev"}
+    assert build_catalog.build([base, layer]).get_references() == {
+        "bar/1.0": "bar/1.0@denver/snapshot#rev",
+        "foo/1.0": "foo/1.0@denver/snapshot#rev",
+    }

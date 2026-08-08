@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
-"""Catalog tool: prepares conan remotes, then exports/creates/uploads recipes from catalog.yml.
+"""Catalog tool: prepares conan remotes, then exports/creates/uploads recipes from a recipe catalog.
 
 Invoked by providers.conan.ConanProvider as a subprocess -- see
 ConanProvider's module docstring for the denver.yml keys that route to
 --prepare/--export/--create/--upload/--ci here. Also runnable standalone for
 maintaining a recipe catalog outside of a denver run (--recipes/--remote).
+
+One invocation handles one denver ``conanfiles:`` unit: every
+``--recipes-dir`` given (repeatable) is resolved into a *single* catalog, so
+recipes in one dir may require recipes in another.
+
+The catalog is built in memory (build_catalog.build()) and consumed straight
+from there; it is only written to disk when ``--export-catalog PATH`` says
+where (the unit's ``catalog:`` in denver.yml). ``--no-generate`` is the
+mirror image: skip the build and read an existing catalog.yml given with
+``--catalog-yml``.
 """
 
 from __future__ import annotations
@@ -190,17 +200,51 @@ def get_pref_from_ref(recipe_path, reference: RecipeReference) -> PkgReference:
     return PkgReference(reference, deps_graph.root.pref.package_id, deps_graph.root.pref.revision)
 
 
-def get_recipes_from_catalog(recipes_dir, catalog_yml_path) -> dict[Path, PkgReference]:
-    """Parse catalog.yml into {conanfile_path: RecipeReference}, skipping dotted metadata keys (e.g. .version)."""
-    entries = yaml.safe_load(load(catalog_yml_path))
+def index_recipe_dirs(recipes_dirs) -> dict[tuple[str, str], Path]:
+    """Map every recipe found under ``recipes_dirs`` to its directory, keyed by (name, version).
+
+    Recipes are discovered the same way build_catalog does -- by their
+    conandata.yml, wherever it sits -- rather than by assuming
+    ``<recipes-dir>/<name>/<version>/``. So a ``recipe-dirs:`` entry may be a
+    whole recipe tree *or* a single recipe (`.../recipes/cmake`), and a
+    unit's dirs can be laid out differently from one another. The
+    ``<name>/<version>/`` directory layout itself is still enforced, by
+    build_catalog's Recipe.check().
+    """
+    index: dict[tuple[str, str], Path] = {}
+    for recipes_dir in recipes_dirs:
+        for conandata in sorted(Path(recipes_dir).glob("**/conandata.yml")):
+            recipe_dir = conandata.parent
+            index.setdefault((recipe_dir.parent.name, recipe_dir.name), recipe_dir)
+    return index
+
+
+def get_recipes_from_entries(recipes_dirs, entries) -> dict[Path, PkgReference]:
+    """Turn a catalog ({'name/version': reference}) into {conanfile_path: RecipeReference}.
+
+    A catalog covers every dir of its unit at once, so a reference on its own
+    doesn't say which dir it came from -- index_recipe_dirs() locates each
+    one. Dotted metadata keys (e.g. ``.version``) are skipped: they describe
+    the catalog itself, not a recipe.
+    """
+    recipes_dirs = [Path(d) for d in recipes_dirs]
+    index = index_recipe_dirs(recipes_dirs)
     recipes_ref = {}
     for key, ref_str in entries.items():
         if key.startswith('.'):
             continue
         ref = RecipeReference.loads(ref_str)
-        conanfile = recipes_dir / ref.name / str(ref.version) / 'conanfile.py'
-        recipes_ref[conanfile.absolute()] = ref
+        # not found (a stale checked-in catalog, --no-generate): fall back to
+        # the conventional layout under the first dir, so whatever fails next
+        # fails against a concrete path instead of a None.
+        recipe_dir = index.get((ref.name, str(ref.version))) or recipes_dirs[0] / ref.name / str(ref.version)
+        recipes_ref[(recipe_dir / 'conanfile.py').absolute()] = ref
     return recipes_ref
+
+
+def read_catalog(catalog_yml_path) -> dict:
+    """Load a catalog.yml from disk into {'name/version': reference} -- --no-generate's checked-in catalog."""
+    return yaml.safe_load(load(catalog_yml_path))
 
 
 def get_recipes_prefs(recipes_ref):
@@ -216,9 +260,8 @@ def _resolve_recipe_arg(recipe):
     return path.resolve()
 
 
-def handle_args_recipe(recipes_dir, catalog_yml, recipes: list[str]) -> dict[Path, PkgReference]:
-    """Filter the catalog down to just the recipe paths/names given on the command line."""
-    all_recipes = get_recipes_from_catalog(recipes_dir, catalog_yml)
+def handle_args_recipe(all_recipes, recipes: list[str]) -> dict[Path, PkgReference]:
+    """Filter ``all_recipes`` down to just the recipe paths/names given on the command line."""
     filtered = {}
     for recipe in recipes:
         recipe_path = _resolve_recipe_arg(recipe)
@@ -262,30 +305,42 @@ def get_cache_path(ref_or_pref):
     return None
 
 
-def generate_catalog(recipes_dir, catalog, *, user='denver', channel='snapshot'):
-    """Regenerate ``catalog`` (a catalog.yml) from every recipe found under ``recipes_dir``, via build_catalog.py.
+def _import_build_catalog():
+    """Import build_catalog late -- it must not be imported at module import time.
+
+    build_catalog imports get_rrev, which does ``import DenverConanFile`` at
+    *its* own import time; that only resolves once main() has put
+    --base-classes-dir on sys.path, so importing this chain from the top of
+    this module would silently leave DenverConanFile as None. Both spellings
+    are tried for the same reason build_catalog itself tries both: this file
+    runs as a script (sys.path[0] is its own directory) *and* is imported as
+    providers.conan_scripts.recipes by denver's own tests.
+    """
+    try:
+        import build_catalog  # type: ignore[import-not-found]
+    except ImportError:
+        from . import build_catalog
+    return build_catalog
+
+
+def generate_catalog(recipes_dirs, *, user='denver', channel='snapshot', export_to=None):
+    """Build one catalog covering every dir in ``recipes_dirs``, as {'name/version': reference}.
+
+    Nothing is written to disk unless ``export_to`` is given (--export-catalog,
+    i.e. denver.yml's ``conan.export-catalog:``): the caller consumes the
+    returned mapping directly, so a catalog.yml only ever appears where an env
+    explicitly asked for one instead of turning up in the recipe tree as a
+    side effect of every run.
 
     ``user``/``channel`` (denver.yml's ``conan.user:``/``conan.channel:``,
     threaded down from this script's own ``--user``/``--channel``, see
     main()) become every generated reference's user/channel.
     """
-    print_banner(f"Generate: {catalog} from {recipes_dir}")
-    # build_catalog.py is in the same directory as recipes.py;
-    # invoked via the current interpreter (not its own shebang/exec bit),
-    # which also works for an installed package -- pip/wheel builds don't
-    # preserve the exec bit on data files.
-    generate_script = Path(__file__).parent / 'build_catalog.py'
-    subprocess.run(
-        [
-            sys.executable,
-            str(generate_script),
-            f'--recipes-dir={recipes_dir}',
-            f'-o={catalog}',
-            f'--user={user}',
-            f'--channel={channel}',
-        ],
-        check=True,
-    )
+    print_banner("Generate catalog from " + ", ".join(str(d) for d in recipes_dirs))
+    catalog = _import_build_catalog().build(recipes_dirs, user=user, channel=channel)
+    if export_to:
+        catalog.write_catalog(export_to)
+    return catalog.get_references()
 
 
 def export(recipe_path, ref):
@@ -494,15 +549,21 @@ def prepare(remotes: dict[str, dict[str, str | bool]], *, cleanup: bool = False,
     conan_login(remotes, force=force)
 
 
-def _process_catalog(recipes_dir, catalog_yml, args):
+def _process_catalog(recipes_dirs, args):
     """Run one catalog's generate/export/create/ci/upload pipeline, as selected by ``args``."""
-    if not args.no_generate:
-        generate_catalog(recipes_dir, catalog_yml, user=args.user, channel=args.channel)
-
-    if args.recipes:
-        recipes_ref = handle_args_recipe(recipes_dir, catalog_yml, args.recipes)
+    if args.no_generate:
+        entries = read_catalog(args.catalog_yml.resolve())
     else:
-        recipes_ref = get_recipes_from_catalog(recipes_dir, catalog_yml)
+        entries = generate_catalog(
+            recipes_dirs,
+            user=args.user,
+            channel=args.channel,
+            export_to=args.export_catalog,
+        )
+
+    recipes_ref = get_recipes_from_entries(recipes_dirs, entries)
+    if args.recipes:
+        recipes_ref = handle_args_recipe(recipes_ref, args.recipes)
 
     if args.export:
         for recipe_path, ref in recipes_ref.items():
@@ -523,7 +584,11 @@ def _build_arg_parser():
     """Build recipes.py's argparse.ArgumentParser -- split out of main() so its shape is easy to scan."""
     parser = argparse.ArgumentParser()
     parser.add_argument('--prepare', action='store_true', help='prepare to work with conan remotes')
-    parser.add_argument('--no-generate', action='store_true', help='run "conan export"')
+    parser.add_argument(
+        '--no-generate',
+        action='store_true',
+        help='do not build the catalog; read an existing one from --catalog-yml instead',
+    )
     parser.add_argument('--export', action='store_true', help='run "conan export"')
     parser.add_argument('--create', action='store_true', help='run "conan create"')
     parser.add_argument('--upload', action='store_true', help='run "conan upload"')
@@ -561,9 +626,37 @@ def _build_arg_parser():
         default='snapshot',
         help='conan channel for each generated reference -- denver.yml\'s conan.channel: (default "snapshot")',
     )
-    parser.add_argument('-d', '--recipes-dir', type=Path, help='Path to directory which is searched for conan recipes')
-    parser.add_argument('-b', '--base-classes-dir', type=Path, help='Path to denver directory')
-    parser.add_argument('-c', '--catalog-yml', type=Path, help='Output path for generated catalog.yml')
+    parser.add_argument(
+        '-d',
+        '--recipes-dir',
+        type=Path,
+        action='append',
+        default=[],
+        help='Directory searched for conan recipes (repeatable -- every dir given forms one catalog, '
+        "denver.yml's per-unit conan.conanfiles[].recipe-dirs:)",
+    )
+    parser.add_argument(
+        '-b',
+        '--base-classes-dir',
+        type=Path,
+        action='append',
+        default=[],
+        help='Directory of shared conanfile base classes to put on PYTHONPATH (repeatable, in order)',
+    )
+    parser.add_argument(
+        '-c',
+        '--catalog-yml',
+        type=Path,
+        help='Existing catalog.yml to read instead of building one (only with --no-generate)',
+    )
+    parser.add_argument(
+        '-e',
+        '--export-catalog',
+        type=Path,
+        default=None,
+        help="Write the generated catalog to this path -- denver.yml's conan.export-catalog:. "
+        'Without it, the catalog is built in memory only and no catalog.yml is written.',
+    )
     parser.add_argument('recipes', nargs='*', help='Recipe folder names (one or more)')
     return parser
 
@@ -577,21 +670,26 @@ def main():
         parser.error('--ci/--upload need --remote (no default remote is assumed)')
 
     # prepend conan helpers to PYTHONPATH, if given (not needed for a
-    # --prepare-only invocation with no recipe-dirs, e.g. remotes-only setup)
+    # --prepare-only invocation with no recipe-dirs, e.g. remotes-only setup);
+    # --base-classes-dir is repeatable, and earlier dirs win over later ones.
     if args.base_classes_dir:
-        conan_pythonpath = os.fspath(args.base_classes_dir.resolve())
-        sys.path.insert(0, conan_pythonpath)
-        os.environ['PYTHONPATH'] = os.getenv('PYTHONPATH', "") + f':{conan_pythonpath}'
+        conan_pythonpath = [os.fspath(d.resolve()) for d in args.base_classes_dir]
+        sys.path[0:0] = conan_pythonpath
+        os.environ['PYTHONPATH'] = ':'.join([os.getenv('PYTHONPATH', ""), *conan_pythonpath])
 
     custom_remotes = json.loads(args.remotes_json.read_text()) if args.remotes_json else {}
     prepare(custom_remotes, cleanup=args.cleanup_remotes, force=args.force)
     if args.prepare:
         return
 
-    if not (args.recipes_dir and args.catalog_yml):
-        parser.error('--recipes-dir and --catalog-yml are both required (unless --prepare)')
+    if not args.recipes_dir:
+        parser.error('--recipes-dir is required (unless --prepare)')
+    if args.no_generate and not args.catalog_yml:
+        parser.error('--no-generate needs --catalog-yml (the existing catalog to read instead)')
+    if args.catalog_yml and not args.no_generate:
+        parser.error('--catalog-yml only applies with --no-generate; --export-catalog writes the generated one')
 
-    _process_catalog(args.recipes_dir.resolve(), args.catalog_yml.resolve(), args)
+    _process_catalog([d.resolve() for d in args.recipes_dir], args)
     print_banner("Done!")
 
 

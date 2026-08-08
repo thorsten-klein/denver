@@ -227,13 +227,13 @@ def test_expand_section_imports_direct_file_ref(tmp_path):
 def test_expand_section_imports_explicit_section_ref(tmp_path):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.yml").write_text("conan:\n  base-classes: conan/base_classes\n")
+    (src_env / "denver.yml").write_text("conan:\n  base-classes:\n  - conan/base_classes\n")
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
     config = {"conan": {"import": ["../src/denver.yml:conan"]}}
     expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
-    assert expanded["conan"] == {"base-classes": "conan/base_classes"}
+    assert expanded["conan"] == {"base-classes": ["conan/base_classes"]}
     assert extra_dirs == [src_env]
 
 

@@ -39,6 +39,10 @@ provider's setup() runs, its config section already has every default
 filled in (see ``denver.resolve_provider_defaults``), so nothing here ever
 falls back to a conventional path or a PATH lookup itself.
 
+``west`` must already be installed wherever this stage runs (in practice by
+an earlier pip stage listing it in ``requirements:``) -- denver never
+installs it, and always uses the first one on PATH (see above).
+
 Full key reference, worked examples and design notes: ``doc/providers/zephyr.md``.
 """
 

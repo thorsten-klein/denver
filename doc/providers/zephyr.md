@@ -11,6 +11,13 @@ my-zephyr-stage:
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
 see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `zephyr`.)
 
+## Requires
+
+**`west` must be installed** wherever this stage runs — denver never
+installs it, and unlike the other providers there is no key to point at a
+particular one: it always uses the first `west` on `PATH`. In practice an
+earlier `pip` stage provides it, by listing `west` in its `requirements:`.
+
 ## Key reference
 
 - **`west-yml`** (default: `<WEST_TOPDIR>/west.yml`) — the manifest.
