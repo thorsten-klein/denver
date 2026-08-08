@@ -39,10 +39,10 @@ conan:
   channel: snapshot
   cleanup-remotes: true
   conanfiles:
-  - catalog: <REPO>/examples/raspi-pico/conan/catalog.yml
-    path: <REPO>/examples/raspi-pico/conan/conanfile.py
+  - catalog: <REPO>/examples/raspberry-pico/conan/catalog.yml
+    path: <REPO>/examples/raspberry-pico/conan/conanfile.py
     recipe-dirs:
-    - <REPO>/examples/raspi-pico/conan/recipes
+    - <REPO>/examples/raspberry-pico/conan/recipes
     - <REPO>/examples/zephyr-devshell/conan/recipes/cmake
     recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
   config: null

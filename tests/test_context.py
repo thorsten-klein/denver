@@ -1,6 +1,7 @@
 """Tests for providers.context."""
 
 import os
+import shutil
 import subprocess
 
 import pytest
@@ -176,6 +177,7 @@ def test_zsh_prompt_written_after_ps1(make_context):
     assert ctx.env["PROMPT"] == "(myenv) %m%#"
 
 
+@pytest.mark.skipif(not shutil.which("zsh"), reason="zsh not installed")
 def test_zsh_prompt_wins_in_real_zsh(make_context):
     # the ordering above is only worth anything if zsh actually resolves it
     # this way -- so assert against zsh itself, not just our own dict order.

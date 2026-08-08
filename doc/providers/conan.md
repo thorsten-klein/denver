@@ -59,7 +59,7 @@ needs 'conan' on PATH`.
     never written — so a run leaves no generated file behind. Set it when the
     pins should be reviewable/committed, or when the unit's own conanfile
     reads them back (see
-    [`../../examples/raspi-pico/conan/conanfile.py`](../../examples/raspi-pico/conan/conanfile.py)).
+    [`../../examples/raspberry-pico/conan/conanfile.py`](../../examples/raspberry-pico/conan/conanfile.py)).
   - **`recipes-exporter`** — optional; overrides the env-wide default for
     this unit only.
 

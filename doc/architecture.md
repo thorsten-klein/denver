@@ -108,7 +108,7 @@ name is already exported:
   (`<DENVER_DIR>/.envs/<env>`): venvs, caches, logs, `performance.jsonl`.
 - **`SHELL_PROMPT_PREFIX`** — `(<env>) `: the text marking a shell as
   running inside this environment, so a prompt reads
-  `(raspi-pico) dev@host:~/ws$`. fish reads this natively from **fish
+  `(raspberry-pico) dev@host:~/ws$`. fish reads this natively from **fish
   4.8.0** onwards (see below).
 
 These are exported into the environment too, so scripts, compose files and
