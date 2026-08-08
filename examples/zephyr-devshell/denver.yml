@@ -42,18 +42,18 @@ hooks:
   - hooks/env.sh
 
 # Conan: base classes + shared recipes live here; version envs add the
-# conanfile and their own recipes. 'recipe-dirs' is never guessed from the
-# directory layout -- each dir to export is listed explicitly. A version env
-# that adds its own recipe dir doesn't need to repeat this one -- a list
-# appends onto a lower layer's, it doesn't replace it.
+# conanfile and their own recipes. 'base-classes' is env-wide, so it is
+# declared once here for everything that imports this env.
+#
+# The shared recipes under conan/recipes/ have no unit of their own here:
+# recipe-dirs live inside a 'conanfiles:' unit (a conanfile plus the recipes
+# it installs from), and this base has no conanfile. Each version env lists
+# '../zephyr-devshell/conan/recipes' in its own unit instead -- see
+# ../zephyr-devshell-4.3.1/denver.yml.
 conan:
   provider: conan
   base-classes:
   - conan/base_classes
-  recipe-dirs:
-  # spelled out via the base env's own path (not a bare 'conan/recipes',
-  # which would resolve to the importing env's copy instead)
-  - ../zephyr-devshell/conan/recipes
 
 # pip/zephyr/pip-zephyr are fully configured by the version-specific env
 # that imports this base; only their provider type is declared here.

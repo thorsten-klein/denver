@@ -17,19 +17,21 @@ def run_conan(config, ctx, stage="conan"):
     return ctx
 
 
-def _ensure_default_conanfile(ctx, config):
-    """Create *and explicitly configure* conan/conanfile.py unless the test names its own.
+def _ensure_default_conanfile(ctx, config, unit=None):
+    """Create *and explicitly configure* a conan/conanfile.py unit unless the test names its own.
 
-    a test that wants `conan install` to run has to name a conanfile.
+    a test that wants `conan install` to run has to name a conanfile. ``unit``
+    adds the rest of the unit's keys (recipe-dirs:/catalog:/recipes-exporter:)
+    spelled exactly as denver.yml spells them.
     """
     conan_cfg = config.setdefault("conan", {})
-    if conan_cfg.get("conanfiles") or conan_cfg.get("conanfile"):
+    if conan_cfg.get("conanfiles"):
         return
     (ctx.env_dir / "conan").mkdir(parents=True, exist_ok=True)
     conanfile = ctx.env_dir / "conan" / "conanfile.py"
     if not conanfile.exists():
         conanfile.write_text("x\n")
-    conan_cfg["conanfiles"] = ["conan/conanfile.py"]
+    conan_cfg["conanfiles"] = [{"path": "conan/conanfile.py", **(unit or {})}]
 
 
 def default_profile_ok(run_recorder, home="/home/dev/.conan2"):
@@ -165,22 +167,131 @@ def test_base_classes_missing_dir_dies(make_context, which, tmp_path):
         run_conan(config, ctx)
 
 
-# ---- recipe-dirs resolution -----------------------------------------------------#
+# ---- unit recipe-dirs resolution ------------------------------------------------#
 def test_recipe_dirs_configured_explicit(make_context, run_recorder, which, tmp_path):
     default_profile_ok(run_recorder)
-    config = {"conan": {"recipe-dirs": ["conanA"]}}
+    config = {"conan": {}}
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
-    _ensure_default_conanfile(ctx, config)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"]})
 
     run_conan(config, ctx)
     argvs = run_recorder.argvs()
-    prepare_argv = next(a for a in argvs if "--prepare" in a)
-    assert prepare_argv[prepare_argv.index("--recipes-dir") + 1] == str(ctx.env_dir / "conanA")
     export_argv = next(a for a in argvs if "--export" in a)
     assert export_argv[export_argv.index("--recipes-dir") + 1] == str(ctx.env_dir / "conanA")
-    # catalog.yml is generated inside the recipe-dir itself
-    assert export_argv[export_argv.index("--catalog-yml") + 1] == str(ctx.env_dir / "conanA" / "catalog.yml")
+    # --prepare is remotes-only; it takes no recipe dir of its own
+    prepare_argv = next(a for a in argvs if "--prepare" in a)
+    assert "--recipes-dir" not in prepare_argv
+    # no 'catalog:' -> the catalog stays in memory, nothing is written
+    assert "--export-catalog" not in export_argv
+    assert "--catalog-yml" not in export_argv
+
+
+def test_unit_recipe_dirs_all_passed_to_one_invocation(make_context, run_recorder, which, tmp_path):
+    # a unit's dirs form ONE catalog, so they go to a single --export run --
+    # not one run per dir.
+    default_profile_ok(run_recorder)
+    base_dir = tmp_path / "base"
+    (base_dir / "conan" / "recipes").mkdir(parents=True)
+
+    config = {"conan": {}}
+    ctx = make_context(config=config, import_dirs=[base_dir])
+    (ctx.env_dir / "conan" / "recipes").mkdir(parents=True)
+    _ensure_default_conanfile(
+        ctx,
+        config,
+        {"recipe-dirs": [str(base_dir / "conan" / "recipes"), "conan/recipes"]},
+    )
+
+    run_conan(config, ctx)
+    export_argvs = [a for a in run_recorder.argvs() if "--export" in a]
+    assert len(export_argvs) == 1
+    passed = [a for i, a in enumerate(export_argvs[0]) if export_argvs[0][i - 1] == "--recipes-dir"]
+    assert passed == [str(base_dir / "conan" / "recipes"), str(ctx.env_dir / "conan" / "recipes")]
+
+
+def test_units_are_exported_in_order(make_context, run_recorder, which):
+    # each unit gets its own --export run, in config order
+    default_profile_ok(run_recorder)
+    config = {
+        "conan": {
+            "conanfiles": [
+                {"path": "a/conanfile.py", "recipe-dirs": ["a/recipes"]},
+                {"path": "b/conanfile.py", "recipe-dirs": ["b/recipes"]},
+            ]
+        }
+    }
+    ctx = make_context(config=config)
+    for name in ("a", "b"):
+        (ctx.env_dir / name / "recipes").mkdir(parents=True)
+        (ctx.env_dir / name / "conanfile.py").write_text("x\n")
+
+    run_conan(config, ctx)
+    export_argvs = [a for a in run_recorder.argvs() if "--export" in a]
+    assert [a[a.index("--recipes-dir") + 1] for a in export_argvs] == [
+        str(ctx.env_dir / "a" / "recipes"),
+        str(ctx.env_dir / "b" / "recipes"),
+    ]
+
+
+# ---- unit catalog: ---------------------------------------------------------------#
+def test_catalog_written_where_the_unit_names_it(make_context, run_recorder, which):
+    default_profile_ok(run_recorder)
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conanA").mkdir(parents=True)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"], "catalog": "conan/catalog.yml"})
+
+    run_conan(config, ctx)
+    export_argv = next(a for a in run_recorder.argvs() if "--export" in a)
+    assert export_argv[export_argv.index("--export-catalog") + 1] == str(ctx.env_dir / "conan" / "catalog.yml")
+
+
+def test_catalog_without_recipe_dirs_dies(make_context, which):
+    # a catalog with nothing to build it from is a config mistake, not an
+    # empty file to write.
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    _ensure_default_conanfile(ctx, config, {"catalog": "conan/catalog.yml"})
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
+
+
+def test_catalog_list_dies(make_context, which):
+    # 'catalog:' is a single output path, not a list -- one unit builds one
+    # catalog, so a list has no meaning to fall back on.
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conanA").mkdir(parents=True)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"], "catalog": ["conan/catalog.yml"]})
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
+
+
+def test_unit_recipes_exporter_missing_dies(make_context, which):
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conanA").mkdir(parents=True)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"], "recipes-exporter": "no-such-exporter.py"})
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
+
+
+def test_unit_recipes_exporter_overrides_the_default(make_context, run_recorder, which):
+    default_profile_ok(run_recorder)
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conanA").mkdir(parents=True)
+    own = ctx.env_dir / "my-exporter.py"
+    own.write_text("x\n")
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"], "recipes-exporter": "my-exporter.py"})
+
+    run_conan(config, ctx)
+    export_argv = next(a for a in run_recorder.argvs() if "--export" in a)
+    assert str(own) in export_argv
+    # --prepare still uses the env-wide exporter
+    prepare_argv = next(a for a in run_recorder.argvs() if "--prepare" in a)
+    assert str(own) not in prepare_argv
 
 
 @pytest.mark.parametrize(
@@ -190,10 +301,10 @@ def test_recipe_dirs_configured_explicit(make_context, run_recorder, which, tmp_
 )
 def test_export_user_channel(make_context, run_recorder, which, user_channel_cfg, expected_user, expected_channel):
     default_profile_ok(run_recorder)
-    config = {"conan": {"recipe-dirs": ["conanA"], **user_channel_cfg}}
+    config = {"conan": {**user_channel_cfg}}
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
-    _ensure_default_conanfile(ctx, config)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"]})
 
     run_conan(config, ctx)
     export_argv = next(a for a in run_recorder.argvs() if "--export" in a)
@@ -203,7 +314,7 @@ def test_export_user_channel(make_context, run_recorder, which, user_channel_cfg
 
 def test_recipe_dirs_not_guessed_from_directory_layout(make_context, run_recorder, which, tmp_path):
     # a conan/recipes dir in an imported base AND in the env itself: neither
-    # is exported, because 'recipe-dirs:' doesn't name them. Nothing is
+    # is exported, because no unit's 'recipe-dirs:' names them. Nothing is
     # discovered off the directory layout any more.
     default_profile_ok(run_recorder)
     base_dir = tmp_path / "base"
@@ -219,31 +330,13 @@ def test_recipe_dirs_not_guessed_from_directory_layout(make_context, run_recorde
     assert [c for c in commands if "--export" in c] == []
 
 
-def test_recipe_dirs_explicit_are_exported_in_order(make_context, run_recorder, which, tmp_path):
-    default_profile_ok(run_recorder)
-    base_dir = tmp_path / "base"
-    (base_dir / "conan" / "recipes").mkdir(parents=True)
-
-    config = {"conan": {"recipe-dirs": [str(base_dir / "conan" / "recipes"), "conan/recipes"]}}
-    ctx = make_context(config=config, import_dirs=[base_dir])
-    (ctx.env_dir / "conan" / "recipes").mkdir(parents=True)
-    _ensure_default_conanfile(ctx, config)
-
-    run_conan(config, ctx)
-    commands = run_recorder.commands()
-    export_cmds = [c for c in commands if "--export" in c]
-    assert len(export_cmds) == 2  # base dir + env dir, both exported
-    prepare_cmds = [c for c in commands if "--prepare" in c]
-    assert len(prepare_cmds) == 1  # only the first (shared) recipe-dir is prepared
-
-
 def test_recipe_dir_missing_dies(make_context, run_recorder, which, tmp_path):
     # an explicitly listed recipe dir that isn't there is a config error --
     # silently filtering it out would let a stale entry go unnoticed.
     default_profile_ok(run_recorder)
-    config = {"conan": {"recipe-dirs": [str(tmp_path / "does-not-exist")]}}
+    config = {"conan": {}}
     ctx = make_context(config=config)
-    _ensure_default_conanfile(ctx, config)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": [str(tmp_path / "does-not-exist")]})
 
     with pytest.raises(SystemExit):
         run_conan(config, ctx)
@@ -275,7 +368,7 @@ def test_no_recipe_dirs_no_remotes_skips_prepare_entirely_when_cleanup_remotes_o
 # ---- conanfiles resolution ------------------------------------------------------#
 def test_conanfiles_list_configured(make_context, run_recorder, which):
     default_profile_ok(run_recorder)
-    config = {"conan": {"conanfiles": ["a/conanfile.py", "b/conanfile.py"]}}
+    config = {"conan": {"conanfiles": [{"path": "a/conanfile.py"}, {"path": "b/conanfile.py"}]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "a").mkdir(parents=True)
     (ctx.env_dir / "a" / "conanfile.py").write_text("x\n")
@@ -286,19 +379,38 @@ def test_conanfiles_list_configured(make_context, run_recorder, which):
     assert len(install_cmds) == 2
 
 
-def test_conanfile_singular_fallback(make_context, run_recorder, which):
-    default_profile_ok(run_recorder)
-    config = {"conan": {"conanfile": "single/conanfile.py"}}
+def test_conanfiles_bare_string_entry_dies(make_context, which):
+    # a unit says what it is: a bare path string can't carry recipe-dirs: or
+    # catalog:, so it is rejected rather than silently accepted as {path:}.
+    config = {"conan": {"conanfiles": ["single/conanfile.py"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "single").mkdir(parents=True)
     (ctx.env_dir / "single" / "conanfile.py").write_text("x\n")
-    run_conan(config, ctx)
-    assert any("conan install" in c and "single" in c for c in run_recorder.commands())
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
+
+
+def test_conanfiles_entry_without_path_dies(make_context, which):
+    config = {"conan": {"conanfiles": [{"recipe-dirs": ["conanA"]}]}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conanA").mkdir(parents=True)
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
+
+
+def test_conanfiles_entry_with_unknown_key_dies(make_context, which):
+    # a typo'd unit key would otherwise be silently ignored
+    config = {"conan": {"conanfiles": [{"path": "conan/conanfile.py", "recipe-dir": ["conanA"]}]}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conan").mkdir(parents=True)
+    (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
 
 
 def test_conanfile_explicit_path(make_context, run_recorder, which):
     default_profile_ok(run_recorder)
-    config = {"conan": {"conanfiles": ["conan/conanfile.py"]}}
+    config = {"conan": {"conanfiles": [{"path": "conan/conanfile.py"}]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "conan").mkdir(parents=True)
     (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
@@ -322,7 +434,7 @@ def test_conanfile_missing_dies(make_context, run_recorder, which):
     # an explicitly named conanfile that isn't there: the central resolver
     # (ConanProvider.resolve_defaults) dies before the provider ever runs.
     default_profile_ok(run_recorder)
-    config = {"conan": {"conanfiles": ["conan/conanfile.py"]}}
+    config = {"conan": {"conanfiles": [{"path": "conan/conanfile.py"}]}}
     ctx = make_context(config=config)
     with pytest.raises(SystemExit):
         run_conan(config, ctx)
@@ -392,7 +504,7 @@ def test_install_extra_args(make_context, run_recorder, which):
 
 def test_install_aggregates_buildenv_and_activates(make_context, run_recorder, which):
     default_profile_ok(run_recorder)
-    config = {"conan": {"conanfiles": ["a/conanfile.py", "b/conanfile.py"]}}
+    config = {"conan": {"conanfiles": [{"path": "a/conanfile.py"}, {"path": "b/conanfile.py"}]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "a").mkdir(parents=True)
     (ctx.env_dir / "a" / "conanfile.py").write_text("x\n")
@@ -630,11 +742,11 @@ def test_base_classes_passed_to_prepare_and_export(make_context, run_recorder, w
     # 'base-classes:' is optional; when set it is handed to the catalog tool
     # for both the shared --prepare and every --export.
     default_profile_ok(run_recorder)
-    config = {"conan": {"recipe-dirs": ["conanA"], "base-classes": ["conan/base_classes"]}}
+    config = {"conan": {"base-classes": ["conan/base_classes"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
     (ctx.env_dir / "conan" / "base_classes").mkdir(parents=True)
-    _ensure_default_conanfile(ctx, config)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"]})
 
     run_conan(config, ctx)
     argvs = run_recorder.argvs()
@@ -649,11 +761,11 @@ def test_multiple_base_classes_passed_in_order(make_context, run_recorder, which
     # every listed dir becomes its own --base-classes-dir flag, in list order,
     # on both --prepare and every --export.
     default_profile_ok(run_recorder)
-    config = {"conan": {"recipe-dirs": ["conanA"], "base-classes": ["bc-own", "bc-shared"]}}
+    config = {"conan": {"base-classes": ["bc-own", "bc-shared"]}}
     ctx = make_context(config=config)
     for name in ("conanA", "bc-own", "bc-shared"):
         (ctx.env_dir / name).mkdir(parents=True)
-    _ensure_default_conanfile(ctx, config)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"]})
 
     run_conan(config, ctx)
     expected = [str(ctx.env_dir / "bc-own"), str(ctx.env_dir / "bc-shared")]
@@ -666,10 +778,10 @@ def test_multiple_base_classes_passed_in_order(make_context, run_recorder, which
 
 def test_base_classes_omitted_when_unset(make_context, run_recorder, which):
     default_profile_ok(run_recorder)
-    config = {"conan": {"recipe-dirs": ["conanA"]}}
+    config = {"conan": {}}
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
-    _ensure_default_conanfile(ctx, config)
+    _ensure_default_conanfile(ctx, config, {"recipe-dirs": ["conanA"]})
 
     run_conan(config, ctx)
     assert not any("--base-classes-dir" in c for c in run_recorder.commands())

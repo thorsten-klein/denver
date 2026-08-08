@@ -1,2 +1,3 @@
 arm-none-eabi/15.3: arm-none-eabi/15.3@denver/snapshot#a89c5b3f245b0f79967ddb5333e6b153
+cmake/3.31.9: cmake/3.31.9@denver/snapshot#14bfb0ad38de00e3895b6ff55bd5aeeb
 pico-sdk/2.3.0: pico-sdk/2.3.0@denver/snapshot#98957aa6e11f275037e5861699860480

@@ -13,15 +13,17 @@ conan:
   provider: conan
   base-classes:
   - ../zephyr-devshell/conan/base_classes # reuse conan base classes
-  recipe-dirs:
-  - conan/recipes
-  - ../zephyr-devshell/conan/recipes # reuse other conan recipes
+  # one unit: the conanfile plus every recipe dir it installs from, and the
+  # one catalog covering them all -- conanfile.py reads its pinned references
+  # back out of exactly this file.
   conanfiles:
-  - conan/conanfile.py
+  - path: conan/conanfile.py
+    recipe-dirs:
+    - conan/recipes
+    - ../zephyr-devshell/conan/recipes/cmake # reuse some other conan recipes
+    catalog: conan/catalog.yml
   # let conan apt-install a recipe's system_tools_requires (pico-sdk needs
   # cmake to build picotool) instead of only checking that it's there
   install-args:
-  - -c
-  - tools.system.package_manager:mode=install
-  - -c
-  - tools.system.package_manager:sudo=True
+  - -c=tools.system.package_manager:mode=install
+  - -c=tools.system.package_manager:sudo=True

@@ -50,7 +50,6 @@ conan:
   build: missing
   channel: snapshot
   cleanup-remotes: true
-  conanfile: null
   conanfiles: []
   config: null
   deployer: <REPO>/src/providers/conan_scripts/extensions/symlink.py
@@ -60,8 +59,6 @@ conan:
   profiles:
     build: []
     host: []
-  recipe-dirs:
-  - <REPO>/examples/zephyr-devshell/conan/recipes
   recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
   remotes: {}
   user: denver
