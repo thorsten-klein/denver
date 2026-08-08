@@ -1,0 +1,46 @@
+name: Examples
+
+# Runs every example env end-to-end. Kept out of ci.yml on purpose: these are
+# the slow, network- and docker-heavy runs (conan remotes, west update, image
+# builds), so they guard the develop branch rather than every push/PR.
+on:
+  push:
+    branches:
+    - develop
+  # on-demand: 'Run workflow' in the Actions tab, or `gh workflow run examples.yml`
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        # note zephyr-devshell is not startable at all: it declares
+        # 'runnable: false' -- it is the shared base the versioned devshells
+        # 'import:', and denver rejects starting it directly.
+        example:
+        - simple-env
+        - raspberry-pico
+        - zephyr-devshell-4.3.1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # denver derives its own version from the checkout's git tags (see
+          # denver.py's scm_version), and the default shallow, tagless
+          # checkout has none -- leaving it to answer 0.1.dev1, which no
+          # example's 'denver-version:' pin is satisfied by.
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --group dev
+      # '-- echo ...' instead of a bare run: the pipeline is executed in full,
+      # but the env's 'default-cmd' (an interactive shell for several of these)
+      # is replaced by a command that terminates.
+      - name: Run examples/${{ matrix.example }}
+        run: uv run denver examples/${{ matrix.example }} -- echo "${{ matrix.example }} ok"
