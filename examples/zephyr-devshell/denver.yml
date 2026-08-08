@@ -48,7 +48,8 @@ hooks:
 # appends onto a lower layer's, it doesn't replace it.
 conan:
   provider: conan
-  base-classes: conan/base_classes
+  base-classes:
+  - conan/base_classes
   recipe-dirs:
   # spelled out via the base env's own path (not a bare 'conan/recipes',
   # which would resolve to the importing env's copy instead)

@@ -1,0 +1,22 @@
+sources:
+  btstack-075a0780f0fad7ff67d58ac19f46e8953656a752.tar.gz:
+    md5: d0578fb79efa061fcabd5446267824d2
+    url: https://github.com/bluekitchen/btstack/archive/075a0780f0fad7ff67d58ac19f46e8953656a752.tar.gz
+  cyw43-driver-055d64274b014dd7b1c2fc94d26e8a18face7124.tar.gz:
+    md5: 2ccb18856f34fe485a2ed44b28c7367d
+    url: https://github.com/georgerobotics/cyw43-driver/archive/055d64274b014dd7b1c2fc94d26e8a18face7124.tar.gz
+  lwip-77dcd25a72509eb83f72b033d219b1d40cd8eb95.tar.gz:
+    md5: 320ce658c71a447affd6923fb7e8c313
+    url: https://github.com/lwip-tcpip/lwip/archive/77dcd25a72509eb83f72b033d219b1d40cd8eb95.tar.gz
+  mbedtls-0bebf8b8c7f07abe3571ded48a11aa907a1ffb20.tar.gz:
+    md5: 593e1a4eee7c96bc380e1fb84c07f51d
+    url: https://github.com/Mbed-TLS/mbedtls/archive/0bebf8b8c7f07abe3571ded48a11aa907a1ffb20.tar.gz
+  pico-sdk-2.3.0.tar.gz:
+    md5: b3de4752719ae541718c8be4cc8c8228
+    url: https://github.com/raspberrypi/pico-sdk/releases/download/2.3.0/pico-sdk-2.3.0.tar.gz
+  picotool-2.3.0.tar.gz:
+    md5: 85e600db46966aab8447ad7aab5fb94a
+    url: https://github.com/raspberrypi/picotool/releases/download/2.3.0/picotool-2.3.0.tar.gz
+  tinyusb-86ad6e56c1700e85f1c5678607a762cfe3aa2f47.tar.gz:
+    md5: 2caec45c142af942bcd3ece038320726
+    url: https://github.com/hathach/tinyusb/archive/86ad6e56c1700e85f1c5678607a762cfe3aa2f47.tar.gz
