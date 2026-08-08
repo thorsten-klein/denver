@@ -6,7 +6,9 @@ Configured from denver.yml -> ``conan:``:
       exe: conan                                # conan executable (default: PATH)
       recipes-exporter: path/to/recipes.py      # default: bundled conan_scripts/recipes.py
       deployer:     path/to/symlink.py          # default: bundled conan_scripts/extensions/symlink.py
-      base-classes: conan/base_classes          # optional; resolved (may live in base env)
+      base-classes:                             # optional; dirs of shared
+      - conan/base_classes                      #  conanfile base classes, each
+      - ../other-env/conan/base_classes         #  resolved (may live in a base env)
       recipe-dirs:                              # dirs directly containing recipes
       - path/to/recipes                         # (optional, but never guessed:
       - path/to/more-recipes                    #  each dir must be listed here)
@@ -145,7 +147,19 @@ class ConanProvider(Provider):
         resolved["deployer"] = str(
             ctx.resolve_path(cfg.get("deployer") or CONAN_SCRIPTS_DIR / "extensions" / "symlink.py")
         )
-        resolved["base-classes"] = str(ctx.resolve_path(cfg["base-classes"])) if cfg.get("base-classes") else None
+        configured_base_classes = cfg.get("base-classes")
+        if isinstance(configured_base_classes, str):
+            die(
+                "conan: 'base-classes:' must be a list of directories, not a single string "
+                f"(got {configured_base_classes!r} -- write it as a one-entry list)"
+            )
+        base_classes = []
+        for entry in configured_base_classes or []:
+            d = ctx.resolve_path(entry)
+            if not d.is_dir():
+                die(f"conan: base-classes dir not found: {d}")
+            base_classes.append(str(d))
+        resolved["base-classes"] = base_classes
 
         recipe_dirs = []
         for entry in cfg.get("recipe-dirs") or []:
@@ -235,7 +249,8 @@ class ConanProvider(Provider):
 
         recipes_exporter = Path(cfg["recipes-exporter"])
         deployer = Path(cfg["deployer"])
-        base_classes = Path(cfg["base-classes"]) if cfg.get("base-classes") else None
+        # each dir becomes its own --base-classes-dir flag, in list order
+        base_classes_args = [arg for d in cfg.get("base-classes") or [] for arg in ("--base-classes-dir", d)]
         conanfiles = [Path(p) for p in cfg["conanfiles"]]
 
         # config install/profile detection always run (cheap, and every later
@@ -256,8 +271,7 @@ class ConanProvider(Provider):
                     "--catalog-yml",
                     str(shared / "catalog.yml"),
                 ]
-                if base_classes:
-                    prepare_cmd += ["--base-classes-dir", str(base_classes)]
+                prepare_cmd += base_classes_args
             if reconcile_remotes:
                 prepare_cmd += ["--remotes-json", str(self._write_remotes_json(ctx, remotes))]
             if cleanup_remotes:
@@ -283,8 +297,7 @@ class ConanProvider(Provider):
                 "--channel",
                 cfg["channel"],
             ]
-            if base_classes:
-                export_cmd += ["--base-classes-dir", str(base_classes)]
+            export_cmd += base_classes_args
             ctx.run(export_cmd)
 
         # `conan install` every conanfile in order, each aggregating its own

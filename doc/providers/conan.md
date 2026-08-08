@@ -31,9 +31,14 @@ needs 'conan' on PATH`.
   tools) — the scripts that generate/export recipe references and deploy
   installed packages onto `PATH`. Overriding these is an escape hatch for
   an unusual setup; most environments never set them.
-- **`base-classes`** — optional; a directory of shared conanfile base
-  classes recipes can inherit from. May itself live in a base env, resolved
-  the normal way (falling back to an imported base env's own directory).
+- **`base-classes`** — optional; a list of directories of shared conanfile
+  base classes recipes can inherit from. Each is put on the
+  recipes-exporter's `PYTHONPATH`, in list order (earlier entries win), and
+  may itself live in a base env, resolved the normal way (falling back to an
+  imported base env's own directory). A listed dir must exist (it's an error
+  if it doesn't). Appends across `import:` layers like any other list (see
+  [`../architecture.md`](../architecture.md)'s "Merge rules"), so a derived
+  env only needs to list the base-classes dirs it adds itself.
 - **`recipe-dirs`** — directories directly containing recipes. Never
   guessed from the directory layout (see "Explicit over implicit" in
   [`../philosophy.md`](../philosophy.md)) — each dir must be listed. Appends across `import:`

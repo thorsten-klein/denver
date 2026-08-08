@@ -11,6 +11,7 @@ recipes._real_conan_api's docstring for why that matters).
 from __future__ import annotations
 
 import json
+import os
 import sys
 import types
 from pathlib import Path
@@ -924,3 +925,27 @@ def test_main_base_classes_dir_explicit(monkeypatch, tmp_path):
     )
     recipes.main()
     assert str(base_classes.resolve()) in sys.path
+
+
+def test_main_base_classes_dir_repeatable(monkeypatch, tmp_path):
+    # --base-classes-dir is repeatable (denver.yml's 'base-classes:' is a
+    # list): every dir lands on sys.path/PYTHONPATH, first one first.
+    _stub_pipeline(monkeypatch)
+    first = tmp_path / "bc-own"
+    second = tmp_path / "bc-shared"
+    first.mkdir()
+    second.mkdir()
+    monkeypatch.setenv("PYTHONPATH", "/pre-existing")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "recipes.py",
+            "--prepare",
+            f"--base-classes-dir={first}",
+            f"--base-classes-dir={second}",
+        ],
+    )
+    recipes.main()
+    assert sys.path[:2] == [str(first.resolve()), str(second.resolve())]
+    assert os.environ["PYTHONPATH"] == f"/pre-existing:{first.resolve()}:{second.resolve()}"

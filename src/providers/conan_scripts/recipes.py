@@ -562,7 +562,14 @@ def _build_arg_parser():
         help='conan channel for each generated reference -- denver.yml\'s conan.channel: (default "snapshot")',
     )
     parser.add_argument('-d', '--recipes-dir', type=Path, help='Path to directory which is searched for conan recipes')
-    parser.add_argument('-b', '--base-classes-dir', type=Path, help='Path to denver directory')
+    parser.add_argument(
+        '-b',
+        '--base-classes-dir',
+        type=Path,
+        action='append',
+        default=[],
+        help='Directory of shared conanfile base classes to put on PYTHONPATH (repeatable, in order)',
+    )
     parser.add_argument('-c', '--catalog-yml', type=Path, help='Output path for generated catalog.yml')
     parser.add_argument('recipes', nargs='*', help='Recipe folder names (one or more)')
     return parser
@@ -577,11 +584,12 @@ def main():
         parser.error('--ci/--upload need --remote (no default remote is assumed)')
 
     # prepend conan helpers to PYTHONPATH, if given (not needed for a
-    # --prepare-only invocation with no recipe-dirs, e.g. remotes-only setup)
+    # --prepare-only invocation with no recipe-dirs, e.g. remotes-only setup);
+    # --base-classes-dir is repeatable, and earlier dirs win over later ones.
     if args.base_classes_dir:
-        conan_pythonpath = os.fspath(args.base_classes_dir.resolve())
-        sys.path.insert(0, conan_pythonpath)
-        os.environ['PYTHONPATH'] = os.getenv('PYTHONPATH', "") + f':{conan_pythonpath}'
+        conan_pythonpath = [os.fspath(d.resolve()) for d in args.base_classes_dir]
+        sys.path[0:0] = conan_pythonpath
+        os.environ['PYTHONPATH'] = ':'.join([os.getenv('PYTHONPATH', ""), *conan_pythonpath])
 
     custom_remotes = json.loads(args.remotes_json.read_text()) if args.remotes_json else {}
     prepare(custom_remotes, cleanup=args.cleanup_remotes, force=args.force)

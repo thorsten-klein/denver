@@ -45,7 +45,8 @@ conan:
   description: null
   disabled: false
   scripts: null
-  base-classes: <REPO>/examples/zephyr-devshell/conan/base_classes
+  base-classes:
+  - <REPO>/examples/zephyr-devshell/conan/base_classes
   build: missing
   channel: snapshot
   cleanup-remotes: true

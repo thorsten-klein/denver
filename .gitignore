@@ -16,3 +16,8 @@ build/
 coverage.xml
 htmlcov/
 junit.xml
+
+*.tar.gz
+*.tar.xz
+*.tgz
+*.zip

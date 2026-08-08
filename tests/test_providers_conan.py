@@ -126,7 +126,7 @@ def test_profile_detect_skipped_when_present(make_context, run_recorder, which, 
 # ---- base classes --------------------------------------------------------------#
 def test_base_classes_configured(make_context, run_recorder, which, tmp_path):
     default_profile_ok(run_recorder)
-    config = {"conan": {"base-classes": "custom/bc"}}
+    config = {"conan": {"base-classes": ["custom/bc"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "custom" / "bc").mkdir(parents=True)
     _ensure_default_conanfile(ctx, config)
@@ -139,7 +139,30 @@ def test_base_classes_default(make_context, run_recorder, which):
     config = {"conan": {}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
-    run_conan(config, ctx)  # default path, may not exist -- fine
+    run_conan(config, ctx)
+    assert config["conan"]["base-classes"] == []
+
+
+def test_base_classes_string_dies(make_context, which):
+    # 'base-classes:' is a list like recipe-dirs/conanfiles: a bare string
+    # would silently iterate its characters, and wouldn't append across
+    # 'import:' layers the way the list form does.
+    config = {"conan": {"base-classes": "conan/base_classes"}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conan" / "base_classes").mkdir(parents=True)
+    _ensure_default_conanfile(ctx, config)
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
+
+
+def test_base_classes_missing_dir_dies(make_context, which, tmp_path):
+    # like recipe-dirs: an explicitly listed dir that isn't there is a config
+    # error, not something to silently drop.
+    config = {"conan": {"base-classes": [str(tmp_path / "does-not-exist")]}}
+    ctx = make_context(config=config)
+    _ensure_default_conanfile(ctx, config)
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
 
 
 # ---- recipe-dirs resolution -----------------------------------------------------#
@@ -607,7 +630,7 @@ def test_base_classes_passed_to_prepare_and_export(make_context, run_recorder, w
     # 'base-classes:' is optional; when set it is handed to the catalog tool
     # for both the shared --prepare and every --export.
     default_profile_ok(run_recorder)
-    config = {"conan": {"recipe-dirs": ["conanA"], "base-classes": "conan/base_classes"}}
+    config = {"conan": {"recipe-dirs": ["conanA"], "base-classes": ["conan/base_classes"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
     (ctx.env_dir / "conan" / "base_classes").mkdir(parents=True)
@@ -620,6 +643,25 @@ def test_base_classes_passed_to_prepare_and_export(make_context, run_recorder, w
     assert prepare_argv[prepare_argv.index("--base-classes-dir") + 1] == expected
     export_argv = next(a for a in argvs if "--export" in a)
     assert export_argv[export_argv.index("--base-classes-dir") + 1] == expected
+
+
+def test_multiple_base_classes_passed_in_order(make_context, run_recorder, which):
+    # every listed dir becomes its own --base-classes-dir flag, in list order,
+    # on both --prepare and every --export.
+    default_profile_ok(run_recorder)
+    config = {"conan": {"recipe-dirs": ["conanA"], "base-classes": ["bc-own", "bc-shared"]}}
+    ctx = make_context(config=config)
+    for name in ("conanA", "bc-own", "bc-shared"):
+        (ctx.env_dir / name).mkdir(parents=True)
+    _ensure_default_conanfile(ctx, config)
+
+    run_conan(config, ctx)
+    expected = [str(ctx.env_dir / "bc-own"), str(ctx.env_dir / "bc-shared")]
+    for argv in (
+        next(a for a in run_recorder.argvs() if "--prepare" in a),
+        next(a for a in run_recorder.argvs() if "--export" in a),
+    ):
+        assert [argv[i + 1] for i, word in enumerate(argv) if word == "--base-classes-dir"] == expected
 
 
 def test_base_classes_omitted_when_unset(make_context, run_recorder, which):
