@@ -1,4 +1,6 @@
 version: "1.0"
+# minimum denver (the tool) this env needs -- see doc/architecture.md
+denver-version: ">=1.0.3"
 
 # Dummy example: stage-to-stage env propagation via the custom provider's
 # 'source:' key -- scoped to the 'set-vars' stage's own section, not the

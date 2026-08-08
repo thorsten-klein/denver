@@ -34,6 +34,8 @@ import importlib.metadata
 import json
 import logging
 import os
+import re
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -65,23 +67,37 @@ CONAN_SCRIPTS_DIR = DENVER_PKG_DIR / "providers" / "conan_scripts"
 LOGO_PATH = DENVER_PKG_DIR / "assets" / "logo.txt"
 
 
-def _default_denver_dir():
-    """Where denver stores per-env state (venvs, conan caches, performance.jsonl).
+def checkout_root():
+    """The source checkout denver itself is running out of, or None.
 
-    When running from a source checkout -- DENVER_PKG_DIR is
-    ``<checkout>/src`` -- the checkout root is used, matching every example
-    in README.md: "no install required to run" is a deliberate constraint,
-    not an oversight. That also covers an editable install (``uv pip install
-    -e .``), which keeps DENVER_PKG_DIR pointing into the checkout's ``src/``.
-
-    Installed any other way (e.g. a built wheel), DENVER_PKG_DIR isn't
-    inside a checkout at all -- it's wherever the package manager put it
-    (site-packages), which is no place to write a venv. DENVER_STATE_DIR
-    (default: ~/.denver) is used instead; set it explicitly to control where
-    denver keeps its state when running installed.
+    True whenever DENVER_PKG_DIR is a ``<checkout>/src`` holding
+    ``providers/`` -- i.e. both when running the script directly
+    (``src/denver.py``) and under an editable install (``uv pip install
+    -e .``), which keeps DENVER_PKG_DIR pointing into the checkout's
+    ``src/``. Installed any other way (e.g. a built wheel), DENVER_PKG_DIR is
+    wherever the package manager put it (site-packages) and this is None.
     """
     if DENVER_PKG_DIR.name == "src" and (DENVER_PKG_DIR / "providers").is_dir():
         return DENVER_PKG_DIR.parent
+    return None
+
+
+def _default_denver_dir():
+    """Where denver stores per-env state (venvs, conan caches, performance.jsonl).
+
+    When running from a source checkout, the checkout root is used, matching
+    every example in README.md: "no install required to run" is a deliberate
+    constraint, not an oversight.
+
+    Installed any other way, there's no checkout at all -- DENVER_PKG_DIR is
+    wherever the package manager put it (site-packages), which is no place
+    to write a venv. DENVER_STATE_DIR (default: ~/.denver) is used instead;
+    set it explicitly to control where denver keeps its state when running
+    installed.
+    """
+    root = checkout_root()
+    if root is not None:
+        return root
     return Path(os.environ.get("DENVER_STATE_DIR", "~/.denver")).expanduser()
 
 
@@ -126,6 +142,76 @@ def print_logo():
     """
     if LOGO_PATH.is_file():
         print(LOGO_PATH.read_text(), file=sys.stderr)
+
+
+# --------------------------------------------------------------------------- #
+# denver's own version
+#
+# Needed twice: for `--version`, and to check a denver.yml's
+# 'denver-version:' requirement (see validate_denver_version). Both must
+# report the *running* denver in every supported way of running it -- an
+# installed wheel, an editable install, or the plain script out of a
+# checkout -- so neither source below is enough on its own.
+# --------------------------------------------------------------------------- #
+# the distribution name on PyPI (the import name is 'denver', the project is
+# 'denver-tool' -- see pyproject.toml's [project] name).
+DISTRIBUTION_NAME = "denver-tool"
+
+# what `--version` prints when neither source below can answer (e.g. a
+# source copy with no git history and no install of any kind).
+UNKNOWN_VERSION = "unknown (not installed)"
+
+
+def scm_version():
+    """Version of the denver running, derived from its checkout's git tags, or None.
+
+    The authoritative source whenever denver runs out of a checkout, because
+    the packaging metadata isn't: running ``src/denver.py`` directly there is
+    no metadata at all, and an editable install has metadata frozen at
+    install time (setuptools-scm resolves the version once, so it still
+    claims whatever the tags said back then -- or the ``fallback_version``,
+    if installed from a tarball with no git history). ``git describe`` reads
+    the tags *now*, which is what a version requirement must be judged
+    against.
+
+    Returns None whenever that can't be answered -- not a checkout, no git
+    binary, no tags (e.g. a shallow clone) -- leaving package_version()'s
+    metadata fallback to answer instead.
+    """
+    root = checkout_root()
+    if root is None:
+        return None
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "describe", "--tags", "--match", "*.*.*"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    return completed.stdout.strip() or None
+
+
+def package_version():
+    """The running denver's version string, or None if it can't be determined.
+
+    The checkout's git tags first (see scm_version), then the installed
+    distribution's metadata via importlib.metadata -- which is what answers
+    for a normally installed wheel, where there's no checkout to describe.
+    setuptools-scm derives that metadata from git tags at build time -- see
+    pyproject.toml's [tool.setuptools_scm].
+    """
+    version = scm_version()
+    if version is not None:
+        return version
+    try:
+        return importlib.metadata.version(DISTRIBUTION_NAME)
+    except importlib.metadata.PackageNotFoundError:
+        return None
 
 
 # --------------------------------------------------------------------------- #
@@ -338,6 +424,7 @@ def apply_config_overrides(config, specs):
 # Top-level denver.yml keys that aren't a stage's own config section.
 KNOWN_TOP_LEVEL_KEYS = {
     "version",
+    "denver-version",
     "import",
     "stages",
     "command",
@@ -383,6 +470,130 @@ def validate_config_version(config):
         die(
             f"denver.yml: unsupported 'version: {version}' -- "
             f"this denver understands version {SUPPORTED_CONFIG_VERSION}."
+        )
+
+
+# A version is compared as (release-numbers, rank): 1.0.3 -> ((1, 0, 3), 0).
+# 'rank' orders the three kinds of suffix a release number can carry, so
+# every version string denver can be handed sorts sensibly against a plain
+# release: a pre-release (1.1.0rc1, or setuptools-scm's 1.1.0.dev3+g1234567
+# for an untagged commit) sorts *before* 1.1.0, anything else (git
+# describe's 1.0.3-2-gabc1234, i.e. two commits past the 1.0.3 tag) *after*
+# the release it builds on. No PEP 440 library is used -- denver's only
+# runtime dependency is pyyaml, and this ordering is all a 'denver-version:'
+# requirement needs.
+_VERSION_RE = re.compile(r"v?(\d+(?:\.\d+)*)(.*)", re.DOTALL)
+_PRERELEASE_RE = re.compile(r"[.\-_]?(a|b|c|rc|alpha|beta|dev|pre)\d*", re.IGNORECASE)
+
+# each specifier in a 'denver-version:' value: an optional operator (bare
+# means '>=' -- the overwhelmingly common "at least this version" case)
+# followed by a version.
+_SPEC_RE = re.compile(r"\s*(>=|<=|==|!=|>|<)?\s*(\S+)\s*")
+_SPEC_OPERATORS = {
+    ">=": lambda order: order >= 0,
+    ">": lambda order: order > 0,
+    "<=": lambda order: order <= 0,
+    "<": lambda order: order < 0,
+    "==": lambda order: order == 0,
+    "!=": lambda order: order != 0,
+}
+
+
+def parse_version(text):
+    """Parse a version string into a comparable (release, rank) key, or None if it isn't one."""
+    match = _VERSION_RE.fullmatch(str(text).strip())
+    if not match:
+        return None
+    release = tuple(int(part) for part in match.group(1).split("."))
+    suffix = match.group(2)
+    if not suffix:
+        rank = 0
+    elif _PRERELEASE_RE.match(suffix):
+        rank = -1
+    else:
+        rank = 1
+    return release, rank
+
+
+def compare_versions(left, right):
+    """Three-way compare two parse_version() keys (-1 / 0 / 1).
+
+    The release tuples are zero-padded to the same length first, so 1.0 and
+    1.0.0 compare equal rather than by length.
+    """
+    (left_release, left_rank), (right_release, right_rank) = left, right
+    width = max(len(left_release), len(right_release))
+    left_key = (left_release + (0,) * (width - len(left_release)), left_rank)
+    right_key = (right_release + (0,) * (width - len(right_release)), right_rank)
+    return (left_key > right_key) - (left_key < right_key)
+
+
+def parse_version_spec(spec):
+    """Parse a 'denver-version:' value into [(operator, parsed_version, text)], or die.
+
+    Comma-separated specifiers are ANDed (``">=1.0.3, <2"``). A specifier
+    with no operator means ">=".
+    """
+    requirements = []
+    for part in str(spec).split(","):
+        match = _SPEC_RE.fullmatch(part)
+        wanted = parse_version(match.group(2)) if match else None
+        if wanted is None:
+            die(
+                f"denver.yml: invalid 'denver-version: {spec}' -- {part.strip()!r} is not a version requirement "
+                f"(expected e.g. \">=1.0.3\", \"1.0.3\" or \">=1.0.3, <2\")."
+            )
+        requirements.append((match.group(1) or ">=", wanted, f"{match.group(1) or '>='}{match.group(2)}"))
+    return requirements
+
+
+def validate_denver_version(config):
+    """Die if 'denver-version:' isn't satisfied by the denver actually running.
+
+    A denver.yml using a key or behaviour only a newer denver knows would
+    otherwise fail somewhere deep in a stage (or, worse, quietly do
+    something else); this states the requirement up front, in the file that
+    has it, and reports it as exactly that.
+
+    Distinct from 'version:', which pins the *schema* denver.yml is written
+    against (bumped only on a breaking schema change, see
+    SUPPORTED_CONFIG_VERSION). This one pins the *tool*: a purely additive
+    feature -- a new provider key, say -- never changes the schema version,
+    but a file relying on it still needs a denver new enough to have it.
+
+    Checked against the merged config (imports applied), like every other
+    top-level key: a file inheriting a base's requirement is subject to it,
+    and two stacked layers stating a different requirement is deep_merge's
+    usual conflicting-strings error unless one is deliberately '!'-marked.
+
+    If the running denver's own version can't be determined at all (see
+    package_version), the requirement is reported as unverifiable rather
+    than failed: that's an unusual install, not a reason to refuse to run an
+    env that may well be fine.
+    """
+    spec = config.get("denver-version")
+    if spec is None:
+        return
+    requirements = parse_version_spec(spec)
+
+    running = package_version()
+    parsed = parse_version(running) if running is not None else None
+    if parsed is None:
+        logger.warning(
+            f"denver.yml requires 'denver-version: {spec}', but this denver's own version is "
+            f"{running or 'unknown'} -- cannot verify the requirement, continuing."
+        )
+        return
+
+    unmet = [
+        text
+        for operator, wanted, text in requirements
+        if not _SPEC_OPERATORS[operator](compare_versions(parsed, wanted))
+    ]
+    if unmet:
+        die(
+            f"denver.yml requires 'denver-version: {spec}', but this denver is {running} "
+            f"(unmet: {', '.join(unmet)}) -- upgrade it, e.g. `pip install --upgrade {DISTRIBUTION_NAME}`."
         )
 
 
@@ -1195,9 +1406,10 @@ def show_config(env_dir, config, config_path, until_stage=None, skip_stages=()):
     that run would actually use.
 
     Printed in four groups, each internally in its own order (not a single
-    alphabetical sweep over every top-level key): 'version:' first (if set
-    at all -- the schema version a reader would want to know before
-    anything else); then the rest of the generic (non-stage) keys,
+    alphabetical sweep over every top-level key): 'version:' then
+    'denver-version:' first (whichever are set at all -- the schema version
+    and the denver version this file needs, what a reader wants to know
+    before anything else); then the rest of the generic (non-stage) keys,
     alphabetically; then 'stages:' itself; then each stage's own section, in
     pipeline order (the order it appears in 'stages:'), not alphabetically
     -- so scanning top to bottom mirrors the order stages actually run in.
@@ -1213,10 +1425,12 @@ def show_config(env_dir, config, config_path, until_stage=None, skip_stages=()):
     resolved["stages"] = stage_ids
     resolved["hooks"] = resolve_hooks(ctx, config_path, stage_ids)
 
-    generic_keys = sorted(k for k in resolved if k not in ("stages", "version") and k not in stage_ids)
+    pinned_keys = ("version", "denver-version")
+    generic_keys = sorted(k for k in resolved if k not in ("stages", *pinned_keys) and k not in stage_ids)
     ordered = {}
-    if "version" in resolved:
-        ordered["version"] = _sorted_nested(resolved["version"])
+    for key in pinned_keys:
+        if key in resolved:
+            ordered[key] = _sorted_nested(resolved[key])
     ordered.update((k, _sorted_nested(resolved[k])) for k in generic_keys)
     ordered["stages"] = resolved["stages"]
     for stage_id in stage_ids:
@@ -1228,20 +1442,6 @@ def show_config(env_dir, config, config_path, until_stage=None, skip_stages=()):
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
-def package_version():
-    """The installed 'denver' distribution's version, via importlib.metadata.
-
-    setuptools-scm derives it from git tags at build time -- see
-    pyproject.toml's [tool.setuptools_scm]. Falls back to a fixed string
-    when denver isn't installed as a package at all (e.g. run directly from
-    a checkout via src/denver.py, with no `pip install` of any kind).
-    """
-    try:
-        return importlib.metadata.version("denver")
-    except importlib.metadata.PackageNotFoundError:
-        return "unknown (not installed)"
-
-
 def build_arg_parser():
     """The argparse.ArgumentParser for every denver-own flag (not the forwarded command).
 
@@ -1361,7 +1561,7 @@ def main(argv=None):
         return 0
 
     if args.version:
-        print(f"denver {package_version()}")
+        print(f"denver {package_version() or UNKNOWN_VERSION}")
         return 0
 
     if args.env is None:
@@ -1372,8 +1572,12 @@ def main(argv=None):
     for config_file in args.config_file:
         config = deep_merge(config, load_config(Path(config_file)))
     config = apply_config_overrides(config, args.config)
-    validate_top_level_keys(config)
+    # both version gates run before validate_top_level_keys: a file written
+    # for a newer denver may well use a key this one doesn't know, and
+    # "upgrade denver" explains that far better than "unknown top-level key".
     validate_config_version(config)
+    validate_denver_version(config)
+    validate_top_level_keys(config)
     validate_stage_filters(config, args.until, args.skip)
 
     if args.show_config:

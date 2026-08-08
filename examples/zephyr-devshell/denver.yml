@@ -1,4 +1,6 @@
 version: 1.0
+# minimum denver (the tool) this env needs -- see doc/architecture.md
+denver-version: ">=1.0.3"
 
 # Shared base for all zephyr-devshell-<version> environments.
 #

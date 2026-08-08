@@ -1,4 +1,6 @@
 version: 1.0
+# minimum denver (the tool) this env needs -- see doc/architecture.md
+denver-version: ">=1.0.3"
 
 # Runs the command inside a docker compose service. The 'docker' provider
 # (src/providers/docker.py) runs env-scripts, builds the image and runs the

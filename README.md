@@ -349,7 +349,12 @@ behavior isn't obvious from a one-line description.
 - **`--ci`** swaps in narrower/faster args a provider judges appropriate
   for a CI runner (currently just zephyr's `west update`, adding a shallow-clone
   strategy on top of whatever `update-args:` already configures).
-- **`--version`** prints the installed denver version and exits.
+- **`--version`** prints the running denver's version and exits — derived
+  from the checkout's git tags when denver runs from a checkout (script or
+  editable install), otherwise from the installed package's metadata. A
+  `denver.yml` can require a minimum with `denver-version: ">=1.0.3"`, and
+  is rejected up front by a denver older than that (see
+  [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)).
 
 Each stage's runtime is also appended to
 `<DENVER_DIR>/.envs/<env>/performance.jsonl` as JSON Lines of Chrome Trace

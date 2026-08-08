@@ -8,10 +8,11 @@ through the whole resolver, and checks the result against a known-good
 snapshot -- so a resolver regression in a real env's config only shows up by
 manually diffing --show-config output. These tests catch that automatically.
 
-Only shutil.which (via the shared ``which`` fixture) and the zephyr
-provider's workspace-root lookups (WEST_TOPDIR, and the outermost-``.git``
-walk its 'west-yml:' fallback uses independently of WEST_TOPDIR) are faked,
-for determinism across machines/CI -- everything else (recipe-dirs,
+Only shutil.which (via the shared ``which`` fixture), the zephyr provider's
+workspace-root lookups (WEST_TOPDIR, and the outermost-``.git`` walk its
+'west-yml:' fallback uses independently of WEST_TOPDIR) and the running
+denver's own version (which the envs' 'denver-version:' pins are checked
+against) are faked, for determinism across machines/CI -- everything else (recipe-dirs,
 conanfiles, patches files, ...) is resolved against the real examples/ tree,
 so a real "file not found" in an env's own config still fails here.
 """
@@ -29,6 +30,8 @@ import providers.zephyr as zephyr_provider
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_DIR = Path(__file__).resolve().parent / "golden"
 FAKE_WEST_TOPDIR = "/fake-west-topdir"
+# newer than any 'denver-version:' an example can plausibly pin
+FAKE_DENVER_VERSION = "999.0.0"
 
 
 def _tracked_env_names():
@@ -53,6 +56,13 @@ def test_show_config_matches_golden(env_name, capsys, monkeypatch, which, tmp_pa
     # itself be nested inside another .git, e.g. via git-nested), so it's
     # faked directly rather than left to depend on the surrounding filesystem.
     monkeypatch.setattr(zephyr_provider, "find_outermost_in_parents", lambda start, name: Path(FAKE_WEST_TOPDIR))
+    # the running denver's version, which the envs' 'denver-version:' pins are
+    # checked against, comes from this checkout's git tags -- absent in a
+    # shallow clone or a tarball (CI's default checkout has no tags at all).
+    # It's also legitimately *behind* an example's pin between the pin bump
+    # and the release it anticipates. Neither says anything about whether
+    # --show-config still resolves the env correctly, so it's faked.
+    monkeypatch.setattr(denver, "package_version", lambda: FAKE_DENVER_VERSION)
 
     env_dir = REPO_ROOT / "examples" / env_name
     assert denver.main([str(env_dir), "--show-config"]) == 0

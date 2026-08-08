@@ -1,10 +1,20 @@
 """Tests for denver.py's main() CLI dispatch."""
 
 import stat
+import types
 
 import pytest
 
 import denver
+
+
+def _raise(error):
+    """A subprocess.run stand-in that raises ``error`` instead of running anything."""
+
+    def run(*args, **kwargs):
+        raise error
+
+    return run
 
 
 def test_main_no_args_prints_help(capsys):
@@ -40,7 +50,16 @@ def test_main_version_flag(capsys):
     assert capsys.readouterr().out.startswith("denver ")
 
 
+def test_package_version_from_checkout_tags(monkeypatch):
+    # running out of a checkout (the plain script, or an editable install):
+    # the tags win over whatever install-time metadata might also exist.
+    monkeypatch.setattr(denver, "scm_version", lambda: "1.2.3-4-gabc1234")
+    monkeypatch.setattr(denver.importlib.metadata, "version", lambda name: "0.0.1")
+    assert denver.package_version() == "1.2.3-4-gabc1234"
+
+
 def test_package_version_installed(monkeypatch):
+    monkeypatch.setattr(denver, "scm_version", lambda: None)
     monkeypatch.setattr(denver.importlib.metadata, "version", lambda name: "1.2.3")
     assert denver.package_version() == "1.2.3"
 
@@ -49,8 +68,45 @@ def test_package_version_not_installed(monkeypatch):
     def raise_not_found(name):
         raise denver.importlib.metadata.PackageNotFoundError(name)
 
+    monkeypatch.setattr(denver, "scm_version", lambda: None)
     monkeypatch.setattr(denver.importlib.metadata, "version", raise_not_found)
-    assert denver.package_version() == "unknown (not installed)"
+    assert denver.package_version() is None
+
+
+def test_main_version_flag_without_any_version_source(monkeypatch, capsys):
+    monkeypatch.setattr(denver, "package_version", lambda: None)
+    assert denver.main(["--version"]) == 0
+    assert capsys.readouterr().out.strip() == f"denver {denver.UNKNOWN_VERSION}"
+
+
+def test_scm_version_outside_a_checkout(monkeypatch):
+    monkeypatch.setattr(denver, "checkout_root", lambda: None)
+    assert denver.scm_version() is None
+
+
+def test_scm_version_reads_git_describe(monkeypatch, tmp_path):
+    monkeypatch.setattr(denver, "checkout_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        denver.subprocess,
+        "run",
+        lambda *a, **kw: types.SimpleNamespace(returncode=0, stdout="1.0.3-2-gabc1234\n"),
+    )
+    assert denver.scm_version() == "1.0.3-2-gabc1234"
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        lambda *a, **kw: types.SimpleNamespace(returncode=128, stdout=""),  # no tags (e.g. shallow clone)
+        lambda *a, **kw: types.SimpleNamespace(returncode=0, stdout="\n"),
+        _raise(FileNotFoundError("git")),  # no git binary at all
+    ],
+    ids=["no-tags", "empty-output", "no-git"],
+)
+def test_scm_version_falls_back_to_none(monkeypatch, tmp_path, outcome):
+    monkeypatch.setattr(denver, "checkout_root", lambda: tmp_path)
+    monkeypatch.setattr(denver.subprocess, "run", outcome)
+    assert denver.scm_version() is None
 
 
 def test_main_no_env_given_dies():
@@ -59,6 +115,20 @@ def test_main_no_env_given_dies():
     # message rather than proceeding with env=None.
     with pytest.raises(SystemExit):
         denver.main(["--fast"])
+
+
+def test_main_denver_version_error_wins_over_unknown_key(tmp_path, monkeypatch, caplog):
+    # a file written for a newer denver may well also use a key this denver
+    # doesn't know yet -- the version requirement is the message that
+    # actually explains that, so it must be the one reported.
+    monkeypatch.setattr(denver, "package_version", lambda: "1.0.3")
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text('denver-version: ">=99.0"\nfrom-the-future: true\nstages: [pip]\n')
+    with pytest.raises(SystemExit):
+        denver.main([str(env_dir), "--show-config"])
+    assert ">=99.0" in caplog.text
+    assert "unknown top-level key" not in caplog.text
 
 
 def test_main_dies_without_stages(tmp_path):
