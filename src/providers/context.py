@@ -306,8 +306,17 @@ class Context:
         Relative paths are resolved against ``base`` (default: the env dir).
         If not found under the env dir, imported (base) env dirs are tried, so
         an env can inherit files like conan/base_classes from its base.
+
+        A value that isn't a path at all (a list where a provider expects one
+        string, say) is a config mistake, and gets denver's own message
+        rather than a raw TypeError out of pathlib -- see "Fail loud" in
+        doc/philosophy.md. This is the last line of defence: a provider that
+        knows which key it is reading should say so itself first (see
+        ConanProvider.resolve_defaults' 'base-classes:' check).
         """
         value = interpolate(value, self.variables)
+        if not isinstance(value, (str, os.PathLike)):
+            die(f"expected a path in denver.yml, got a {type(value).__name__}: {value!r}")
         p = Path(value).expanduser()
         if p.is_absolute():
             return p
