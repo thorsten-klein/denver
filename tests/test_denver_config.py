@@ -237,6 +237,96 @@ def test_validate_top_level_keys_no_stages_only_known_keys_ok():
     denver.validate_top_level_keys(config)  # no error
 
 
+# ---- 'denver-version:' requirement -------------------------------------------#
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("1.0.3", ((1, 0, 3), 0)),
+        ("v1.0.3", ((1, 0, 3), 0)),
+        (" 1.0 ", ((1, 0), 0)),
+        (1.0, ((1, 0), 0)),  # YAML parses an unquoted 1.0 as a float
+        ("1.1.0rc1", ((1, 1, 0), -1)),
+        ("1.1.0.dev3+g1234567", ((1, 1, 0), -1)),  # setuptools-scm, untagged commit
+        ("1.0.3-2-gabc1234", ((1, 0, 3), 1)),  # git describe, 2 commits past the tag
+        ("not-a-version", None),
+        ("", None),
+    ],
+)
+def test_parse_version(text, expected):
+    assert denver.parse_version(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("left", "right", "expected"),
+    [
+        ("1.0.3", "1.0.3", 0),
+        ("1.0", "1.0.0", 0),  # zero-padded, not compared by length
+        ("1.0.4", "1.0.3", 1),
+        ("1.2", "1.10", -1),  # numeric, not lexicographic
+        ("1.1.0.dev3+g1234567", "1.1.0", -1),  # a pre-release precedes its release
+        ("1.0.3-2-gabc1234", "1.0.3", 1),  # ... a commit past the tag follows it
+        ("1.0.3-2-gabc1234", "1.0.4", -1),
+    ],
+)
+def test_compare_versions(left, right, expected):
+    assert denver.compare_versions(denver.parse_version(left), denver.parse_version(right)) == expected
+
+
+def test_parse_version_spec_bare_version_means_at_least():
+    assert denver.parse_version_spec("1.0.3") == [(">=", ((1, 0, 3), 0), ">=1.0.3")]
+
+
+def test_parse_version_spec_multiple_specifiers():
+    assert denver.parse_version_spec(">=1.0.3, <2") == [
+        (">=", ((1, 0, 3), 0), ">=1.0.3"),
+        ("<", ((2,), 0), "<2"),
+    ]
+
+
+@pytest.mark.parametrize("spec", ["", "~=1.0.3", ">=abc", ">=1.0.3, ", ">= 1.0.3 extra"])
+def test_parse_version_spec_invalid_dies(spec):
+    with pytest.raises(SystemExit):
+        denver.parse_version_spec(spec)
+
+
+def test_validate_denver_version_unset_never_looks_at_the_version(monkeypatch):
+    monkeypatch.setattr(denver, "package_version", lambda: pytest.fail("must not be called"))
+    denver.validate_denver_version({"stages": ["pip"]})  # no error
+
+
+@pytest.mark.parametrize("spec", [">=1.0.3", "1.0.3", "1.0", ">=1.0.3, <2", "==1.0.3", "!=1.0.2"])
+def test_validate_denver_version_satisfied(monkeypatch, spec):
+    monkeypatch.setattr(denver, "package_version", lambda: "1.0.3")
+    denver.validate_denver_version({"denver-version": spec})  # no error
+
+
+@pytest.mark.parametrize("spec", [">=1.0.4", "1.0.4", ">=1.0.3, <1.0.3", "==1.0.2", "!=1.0.3"])
+def test_validate_denver_version_unsatisfied_dies(monkeypatch, spec):
+    monkeypatch.setattr(denver, "package_version", lambda: "1.0.3")
+    with pytest.raises(SystemExit):
+        denver.validate_denver_version({"denver-version": spec})
+
+
+def test_validate_denver_version_message_names_both_versions(monkeypatch, caplog):
+    monkeypatch.setattr(denver, "package_version", lambda: "1.0.3")
+    with pytest.raises(SystemExit):
+        denver.validate_denver_version({"denver-version": ">=1.0.4"})
+    assert ">=1.0.4" in caplog.text and "1.0.3" in caplog.text
+
+
+def test_validate_denver_version_untagged_checkout_counts_as_newer(monkeypatch):
+    # a checkout 2 commits past the 1.0.3 tag has everything 1.0.3 has
+    monkeypatch.setattr(denver, "package_version", lambda: "1.0.3-2-gabc1234")
+    denver.validate_denver_version({"denver-version": ">=1.0.3"})  # no error
+
+
+@pytest.mark.parametrize("running", [None, "unknown (not installed)"])
+def test_validate_denver_version_undeterminable_warns_but_runs(monkeypatch, caplog, running):
+    monkeypatch.setattr(denver, "package_version", lambda: running)
+    denver.validate_denver_version({"denver-version": ">=1.0.4"})  # no error
+    assert "cannot verify" in caplog.text
+
+
 # ---- --config / -c overrides ------------------------------------------------#
 def test_parse_config_override_spec_plain_set():
     assert denver.parse_config_override_spec("pip.python=3.12.3") == (["pip", "python"], "=", "3.12.3")

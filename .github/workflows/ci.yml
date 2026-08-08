@@ -38,6 +38,12 @@ jobs:
         python-version: ["3.9", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # denver derives its own version from the checkout's git tags (see
+          # denver.py's scm_version), and the default shallow, tagless
+          # checkout has none -- leaving it to answer 0.1.dev1, which no
+          # example's 'denver-version:' pin is satisfied by.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
@@ -60,6 +66,11 @@ jobs:
     needs: [lint, test]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # setuptools-scm derives the wheel's version from the git tags, and
+          # the smoke test below runs an example whose 'denver-version:' pin
+          # that version has to satisfy.
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true

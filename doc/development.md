@@ -152,3 +152,10 @@ Before tagging: make sure CI is green on the commit being tagged, that
 `SUPPORTED_CONFIG_VERSION` in `src/denver.py` still matches the `denver.yml`
 schema — it must be bumped together with any breaking schema change, so an
 older denver rejects a newer file instead of misreading it.
+
+A `denver.yml` states which denver *tool* version it needs with
+`denver-version:` (see [`architecture.md`](architecture.md)), so a file
+using a brand-new feature names the release that first shipped it. When an
+example under `examples/` is changed to rely on something unreleased, its
+`denver-version:` must name the version about to be tagged — that pin is
+part of cutting the release, not an afterthought.

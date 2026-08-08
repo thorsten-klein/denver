@@ -1,4 +1,6 @@
 version: 1.0
+# minimum denver (the tool) this env needs -- see doc/architecture.md
+denver-version: ">=1.0.3"
 
 # A lightweight, uv-managed virtualenv -- the "system venv" (no conan, zephyr or
 # docker). Replaces system_venv.sh / system_venv_activate.sh: the pip provider

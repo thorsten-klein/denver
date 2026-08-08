@@ -37,7 +37,7 @@ different venvs) at different points of the pipeline.
 
 ### Top-level keys
 
-Exactly seven keys are recognised at the top level; everything else at that
+Exactly eight keys are recognised at the top level; everything else at that
 level must be a stage id declared in `stages:` (anything else is an error —
 see "Fail loud" in [`philosophy.md`](philosophy.md)).
 
@@ -48,6 +48,8 @@ see "Fail loud" in [`philosophy.md`](philosophy.md)).
   incompatible schema change can't quietly do the wrong thing to an old
   file. Compared as a string, so YAML parsing `1.0` as a float doesn't
   matter.
+- **`denver-version`** — the minimum denver *tool* version this file needs,
+  e.g. `denver-version: ">=1.0.4"`. See "Requiring a denver version" below.
 - **`import`** — a list of environments (or YAML files) whose configuration
   is inherited as a base, before this file's own content is applied on top.
   See "Layering" below.
@@ -67,6 +69,47 @@ see "Fail loud" in [`philosophy.md`](philosophy.md)).
   right after the `env` hook, before any stage runs.
 - **`hooks`** — scripts sourced at fixed points in the pipeline. See "Hooks"
   below.
+
+### Requiring a denver version
+
+`version:` pins the *schema*; `denver-version:` pins the *tool*. Those are
+two different questions, and only the second one has a good answer for the
+common case: a purely additive change — a new provider key, a new flag —
+never bumps the schema version, but a `denver.yml` relying on it still needs
+a denver new enough to have it. Without `denver-version:`, running such a
+file on an older denver fails somewhere deep inside a stage, or quietly does
+something subtly different; with it, denver says so up front:
+
+```yaml
+version: "1.0"
+denver-version: ">=1.0.4"   # directly below version:, always
+```
+
+- The value is a version requirement, quoted (an unquoted `>=…` is not
+  valid YAML). A bare version means "at least this one", so
+  `denver-version: "1.0.4"` and `">=1.0.4"` are the same requirement.
+- `>=`, `>`, `<=`, `<`, `==` and `!=` are all understood, and several
+  comma-separated specifiers are ANDed: `">=1.0.4, <2"`.
+- Requirements are checked against the *merged* config, like every other
+  top-level key: an env inherits its base's requirement through `import:`.
+  Two stacked layers stating a *different* requirement is the usual
+  conflicting-strings error — prefix the overriding one with `!` to mean it
+  (see "Layering" below).
+- The version denver compares against is the one it is really running:
+  from the checkout's git tags when denver runs out of a checkout (the
+  plain `src/denver.py` script *and* an editable install, whose packaging
+  metadata is frozen at install time and would go stale), otherwise from
+  the installed distribution's metadata. `denver --version` prints the
+  same value. In the rare case where neither can answer (a source copy with
+  no git history and no install at all), the requirement is reported as
+  unverifiable — a warning, not a failure.
+- A commit past a tag counts as newer than that tag (`1.0.3-2-gabc1234`
+  satisfies `">=1.0.3"`), and a pre-release counts as older than its
+  release (`1.1.0.dev3+g1234567` does not satisfy `">=1.1.0"`).
+
+A denver too old to know the key at all (before it was introduced) rejects
+the file with `unknown top-level key(s) denver-version` — different wording,
+same conclusion: that denver is too old for this `denver.yml`.
 
 ### Generic stage keys
 
