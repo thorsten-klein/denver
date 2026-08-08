@@ -7,6 +7,18 @@ bak
 # for 'hooks:' -- e.g. a hooks/env.user.sh explicitly listed there)
 *.user.sh
 
+# west workspace, when examples/zephyr-devshell-4.3.1 is run from a standalone
+# checkout: this repo is then the outermost .git, so it is also WEST_TOPDIR,
+# and `west update` clones the manifest's projects right here (anchored with a
+# leading '/' -- these are workspace roots, not any nested dir of the same
+# name). Inside a real super-repo the workspace lives there instead, and none
+# of this appears.
+/.west/
+/zephyr-rtos/
+/modules/
+/bootloader/
+/tools/
+
 # python build artifacts
 dist/
 build/

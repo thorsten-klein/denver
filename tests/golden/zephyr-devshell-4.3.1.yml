@@ -109,7 +109,7 @@ zephyr:
     GIT_COMMITTER_NAME: denver
   update-args: null
   west-config: null
-  west-yml: /fake-west-topdir/west.yml
+  west-yml: <REPO>/examples/zephyr-devshell-4.3.1/west.yml
 pip-zephyr:
   provider: pip
   description: null

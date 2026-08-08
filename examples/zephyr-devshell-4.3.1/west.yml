@@ -1,0 +1,38 @@
+---
+# West manifest for this example env.
+#
+# Pinned to the zephyr version this env is named for. The name-allowlist keeps
+# the workspace to the modules the env actually builds against -- importing
+# zephyr's full module set would multiply the clone for no added coverage.
+# Its hal_nordic/hal_nxp entries are also what
+# conan/recipes/west-blobs-cache/denver/blobs.txt was generated from, so
+# narrowing it further would shrink that (auto-generated) list on the next run.
+manifest:
+  remotes:
+  - name: zephyrproject-rtos
+    url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+  - name: zephyr
+    remote: zephyrproject-rtos
+    revision: v4.3.1
+    path: zephyr-rtos # rename path to avoid collision with zephyr/modules.yml
+    import:
+      name-allowlist:
+      - cmsis
+      - cmsis-dsp
+      - cmsis-nn
+      - cmsis_6
+      - hal_nordic
+      - hal_nxp
+      - hostap
+      - littlefs
+      - mbedtls
+      - mcuboot
+      - nanopb
+      - net-tools
+      - openthread
+      - picolibc
+      - segger
+      - trusted-firmware-m
+      - zcbor
