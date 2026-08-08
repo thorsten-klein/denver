@@ -7,7 +7,7 @@
 [![CI](https://github.com/thorsten-klein/denver/actions/workflows/ci.yml/badge.svg)](https://github.com/thorsten-klein/denver/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/thorsten-klein/denver/branch/develop/graph/badge.svg)](https://codecov.io/gh/thorsten-klein/denver)
 [![PyPI](https://img.shields.io/pypi/v/denver-tool.svg)](https://pypi.org/project/denver-tool/)
-[![Python versions](https://img.shields.io/pypi/pyversions/denver-tool.svg)](https://pypi.org/project/denver-tool/)
+[![Python versions](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fthorsten-klein%2Fdenver%2Fdevelop%2Fpyproject.toml)](https://pypi.org/project/denver-tool/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/thorsten-klein/denver/blob/develop/LICENSE)
 
 **D**evelopment **Env**ironment Launch**er** — declares dev environments in a
