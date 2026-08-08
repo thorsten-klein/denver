@@ -211,10 +211,77 @@ class Context:
             "DENVER_ENV_DIR": str(self.env_dir),
             "DENVER_ENV_NAME": self.env_name,
             "DENVER_ENV_WORKDIR": str(self.env_workdir),
+            "SHELL_PROMPT_PREFIX": self.prompt_prefix,
         }
         # denver-owned identifiers always reflect the current run, even over a
         # stale value of the same name already in the real environment
         self.env.update(builtins)
+        self._prefix_prompt()
+
+    @property
+    def prompt_prefix(self):
+        """The marker text saying a shell is running inside this env: ``'(<env>) '``.
+
+        Exported as denver's own ``SHELL_PROMPT_PREFIX``; nothing reads that
+        on its own, it carries the text for a shell's config to apply.
+        """
+        return f"({self.env_name}) "
+
+    @property
+    def prompt(self):
+        """Zsh's PROMPT for this env: ``'(<env>) %m%#'`` (short host, then % or # for root)."""
+        return f"{self.prompt_prefix}%m%#"
+
+    @property
+    def prompt_command(self):
+        """The snippet denver appends to PROMPT_COMMAND, re-applying ``prompt_prefix`` to PS1.
+
+        PROMPT_COMMAND is bash's own standard pre-prompt hook, not something
+        denver owns -- denver only adds to whatever is already in it. That
+        hook is what makes the marker survive at all: bash runs it before
+        drawing *every* prompt, i.e. after the rc files that would otherwise
+        have discarded an inherited PS1 (see _prefix_prompt).
+
+        The ``case`` guard is not decoration: without it this would re-prefix
+        on every single prompt, growing PS1 to '(env) (env) (env) ...' line
+        after line. ``case`` rather than a bash-only conditional so a
+        POSIX-ish shell sourcing it doesn't choke.
+        """
+        prefix = self.prompt_prefix
+        return f'case "$PS1" in "{prefix}"*) ;; *) export PS1="{prefix}$PS1";; esac'
+
+    def _prefix_prompt(self):
+        """Mark the shell denver execs with ``prompt_prefix``, via each shell's own prompt variable.
+
+        None of these belong to denver -- it writes the variables the shells
+        themselves define: PS1/PROMPT_COMMAND for bash, PROMPT for zsh, and
+        SHELL_PROMPT_PREFIX, which fish reads natively from 4.8.0 on.
+
+        PS1 is deliberately *not* set: an interactive bash re-reads its own
+        rc files after denver execs it and assigns PS1 outright, so anything
+        denver put there is discarded before the user ever sees it.
+        PROMPT_COMMAND is bash's answer to exactly that -- it runs after
+        those rc files, before every prompt -- so that is where the marker
+        goes instead.
+
+        Prefixing is idempotent: a wrapper provider re-invokes denver inside
+        the container (see denver.py's reinvoke_command) with this env
+        already applied, and the inner run must not stack a second copy.
+        """
+        snippet = self.prompt_command
+        # a trailing ';' on the inherited value would make '<existing>; <snippet>'
+        # a bash syntax error ('cmd; ; case ...'), so it's normalised away
+        existing = self.env.get("PROMPT_COMMAND", "").strip().rstrip(";").strip()
+        if snippet not in existing:
+            self.env["PROMPT_COMMAND"] = f"{existing}; {snippet}" if existing else snippet
+
+        # zsh's own prompt variable. PROMPT and PS1 are the *same* parameter
+        # in zsh, so an inherited PS1 (denver sets none of its own, see
+        # above) would win over this one if it happened to come later in
+        # environ -- re-inserting PROMPT last (pop + assign) makes this
+        # zsh-syntax value the one zsh keeps, whatever it inherited.
+        self.env.pop("PROMPT", None)
+        self.env["PROMPT"] = self.prompt
 
     @property
     def variables(self):

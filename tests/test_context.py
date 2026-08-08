@@ -124,6 +124,76 @@ def test_denver_builtin_always_overrides_real_env(make_context):
     assert ctx.env["DENVER_ENV_NAME"] == "myenv"
 
 
+def test_shell_prompt_prefix_exported(make_context):
+    ctx = make_context()
+    assert ctx.env["SHELL_PROMPT_PREFIX"] == "(myenv) "
+
+
+def test_ps1_left_alone(make_context):
+    # an interactive bash re-reads its rc files after denver execs it and
+    # assigns PS1 outright, so setting PS1 here would be discarded anyway --
+    # PROMPT_COMMAND carries the marker for bash instead.
+    ctx = make_context(env={"PS1": r"\u@\h:\w\$ "})
+    assert ctx.env["PS1"] == r"\u@\h:\w\$ "
+
+
+def test_prompt_command_set_when_none_inherited(make_context):
+    ctx = make_context()
+    assert ctx.env["PROMPT_COMMAND"] == ctx.prompt_command
+    assert "(myenv) " in ctx.env["PROMPT_COMMAND"]
+
+
+def test_prompt_command_appended_to_existing(make_context):
+    ctx = make_context(env={"PROMPT_COMMAND": "__set_title"})
+    assert ctx.env["PROMPT_COMMAND"] == f"__set_title; {ctx.prompt_command}"
+
+
+def test_prompt_command_trailing_semicolon_normalised(make_context):
+    # '<existing>; <snippet>' with a trailing ';' already on the inherited
+    # value would be a bash syntax error ('__set_title; ; case ...')
+    ctx = make_context(env={"PROMPT_COMMAND": "__set_title ; "})
+    assert ctx.env["PROMPT_COMMAND"] == f"__set_title; {ctx.prompt_command}"
+
+
+def test_prompt_command_not_appended_twice(make_context):
+    ctx = make_context(env={"PROMPT_COMMAND": "__set_title"})
+    again = make_context(env={"PROMPT_COMMAND": ctx.env["PROMPT_COMMAND"]})
+    assert again.env["PROMPT_COMMAND"] == ctx.env["PROMPT_COMMAND"]
+
+
+def test_zsh_prompt_set(make_context):
+    ctx = make_context()
+    assert ctx.env["PROMPT"] == "(myenv) %m%#"
+
+
+def test_zsh_prompt_written_after_ps1(make_context):
+    # PROMPT and PS1 are the same parameter in zsh, so of the two, whichever
+    # comes later in environ is the one zsh keeps -- PROMPT has to be last,
+    # whatever order the two arrived in.
+    ctx = make_context(env={"PROMPT": "stale", "PS1": "inherited"})
+    keys = list(ctx.env)
+    assert keys.index("PROMPT") > keys.index("PS1")
+    assert ctx.env["PROMPT"] == "(myenv) %m%#"
+
+
+def test_zsh_prompt_wins_in_real_zsh(make_context):
+    # the ordering above is only worth anything if zsh actually resolves it
+    # this way -- so assert against zsh itself, not just our own dict order.
+    ctx = make_context(env={"PS1": "inherited"})
+    env = {"PATH": os.environ["PATH"], **{k: ctx.env[k] for k in ("PS1", "PROMPT")}}
+    result = subprocess.run(["zsh", "-c", 'printf "%s" "$PS1"'], env=env, capture_output=True, text=True, check=True)
+    assert result.stdout == "(myenv) %m%#"
+
+
+def test_prompt_command_is_idempotent_per_prompt(make_context):
+    # bash runs PROMPT_COMMAND before *every* prompt: without the 'case'
+    # guard PS1 would grow '(myenv) (myenv) ...' line after line.
+    ctx = make_context()
+    script = f"PS1='$ '\n{ctx.prompt_command}\n{ctx.prompt_command}\n{ctx.prompt_command}\nprintf '%s' \"$PS1\""
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True)
+    assert result.stdout == "(myenv) $ "
+
+
 def test_variables_property(make_context):
     ctx = make_context()
     assert ctx.variables is ctx.env
