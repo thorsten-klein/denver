@@ -209,6 +209,15 @@ def test_section_interpolated(make_context):
 
 
 # ---- path resolution ------------------------------------------------------ #
+def test_resolve_path_non_path_value_dies(make_context, caplog):
+    # a wrong YAML type (a list where one path is expected) must give
+    # denver's own message, not a raw pathlib TypeError
+    ctx = make_context()
+    with pytest.raises(SystemExit):
+        ctx.resolve_path(["conan/base_classes"])
+    assert "expected a path in denver.yml" in caplog.text
+
+
 def test_resolve_path_absolute(make_context, tmp_path):
     ctx = make_context()
     assert ctx.resolve_path(str(tmp_path)) == tmp_path
