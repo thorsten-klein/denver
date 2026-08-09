@@ -44,3 +44,13 @@ jobs:
       # is replaced by a command that terminates.
       - name: Run examples/${{ matrix.example }}
         run: uv run denver examples/${{ matrix.example }} -- echo "${{ matrix.example }} ok"
+      # A run must leave the checkout exactly as it found it. There should be neither
+      # modified nor untracked files in git
+      - name: Check the run left the checkout clean
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "ERROR: examples/${{ matrix.example }} left modified or untracked files behind"
+            git status --porcelain
+            git --no-pager diff
+            exit 1
+          fi

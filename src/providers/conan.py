@@ -100,9 +100,9 @@ before the install pass, in unit order.
 built in memory, handed straight to the export step and never touches disk,
 which is the default: a run leaves no generated file behind in the recipe
 tree unless an env asks for one, e.g. to review/commit the pinned
-references, or to have the unit's own `conanfile.py` read its pins back (see
-`examples/raspberry-pico/conan/conanfile.py`). Nothing else changes either way
--- export/create/upload read the in-memory catalog regardless.
+references, or to have the unit's own `conanfile.py` read its pins back.
+Nothing else changes either way -- export/create/upload read the in-memory
+catalog regardless.
 
 A unit's catalog covers *all* of its `recipe-dirs:` together, so recipes in
 one dir may depend on recipes in another dir of the same unit, and so a
