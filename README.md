@@ -15,40 +15,156 @@
 
 ## What problem does this solve?
 
-Many projects end up with several different ways to set up their dev environment —
-some via `uv`, some via `conan`, some both, some by shelling into Docker.
-Keeping that reproducible over the years, and consistent across contributors'
-machines, gets hard fast.
+Every project needs *some* setup before you can build it — and how much
+varies enormously. So rather than one big answer, here is the problem built
+up one step at a time. **Each step below is a complete, working denver
+environment.** Stop at whichever one matches your project; there is no
+requirement to reach the last one.
 
-But actually, creating a dev environment usually just means to run several tools one
-after another — say, drop into a container, then let a package manager pull
-in native toolchains, then let another one install the Python packages that
-need them — each layer building on top of what the previous one just set
-up.
+An environment is described in the denver-world by a `denver.yml`.
 
-denver makes that sequence even more declarative and simple: a `denver.yml`'s
-`stages:` list is exactly that stack of layers. For example:
+### Step 1 — "first, run these commands"
+
+Almost every project starts here: a README section, or a `setup.sh`, listing
+what a newcomer has to do before anything works. The trouble is that a script
+in the repo is only a *suggestion*. Nobody re-runs it after a `git pull`,
+everyone's shell ends up in a slightly different state, and whatever happens
+to be installed on your machine silently covers for the steps you forgot to
+write down.
+
+The smallest useful denver environment is that script, declared rather than
+documented:
+
+```yaml
+# my-project/denver.yml
+stages:
+- setup
+
+setup:
+  provider: custom
+  source: setup.sh   # sourced, not executed, so what it exports stays in effect
+```
+
+```bash
+denver my-project           # apply setup.sh, then drop into a shell that has it
+denver my-project -- make   # ...or run a single command in that shell
+```
+
+One stage. No Docker, no Conan, no Python packaging. Everybody gets the same
+setup, applied the same way, every time — and the shell you land in is
+disposable: what the stage exported is gone again once you `exit`.
+
+### Step 2 — "...and a Python virtualenv with the right packages in it"
+
+Now the manual part is `python -m venv`, activate, `pip install -r`, and
+remembering to redo it whenever `requirements.txt` changes. A `pip` stage
+hands that whole job to denver:
 
 ```yaml
 stages:
-- docker       # layer 1: drop into a container (or --skip it to stay on the host)
-- conan        # layer 2: install additional native toolchains/tools
-- pip          # layer 3: create a venv and install Python packages
+- pip
+
+pip:
+  provider: pip
+  python: "3.12.3"      # a pinned interpreter, not "whatever python3 happens to be"
+  requirements:
+  - requirements.txt
 ```
 
-Most projects' dev environments boil down to exactly this stack, which is
-why `docker`, `conan` and `pip` ship as built-in providers — plus `zephyr`
-for west-based embedded workspaces, and `custom` as an escape hatch for
-anything else.
+`denver my-project` now gives you a shell with that venv active: created on
+the first run, reused afterwards, and re-installed only when
+`requirements.txt` actually changed. `examples/zephyr-uv/` is precisely this
+and nothing more.
 
-Layers also compose *across* environments: `import:` lets one `denver.yml`
-inherit another's entire layer stack as a base and add/override its own
-layers on top — e.g. every project-specific env importing a shared
-`zephyr-devshell` base instead of redefining the same `docker`/`conan`/`pip`
-layers again. Run `denver --help` for every flag, see
-[`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md) for the full
-`stages:`/`import:`/`-c` schema, or look at any `examples/*/denver.yml` for a
-working example.
+### Step 3 — "...but half our tools aren't Python at all"
+
+Compilers, `cmake`, `ninja`, a vendor SDK, a flashing tool. This is what
+"install these six things first, versions X.Y" READMEs are made of, and pip
+cannot help. If a package manager can fetch them, denver can drive it as a
+further stage — `conan` ships built in:
+
+```yaml
+stages:
+- pip     # provides the 'conan' executable itself, via requirements.txt
+- conan   # ...which then fetches the native tools
+
+pip:
+  provider: pip
+  requirements:
+  - requirements.txt
+
+conan:
+  provider: conan
+  conanfiles:
+  - path: conanfile.py
+```
+
+The order of `stages:` is the whole point: each stage leaves behind `PATH`
+entries, environment variables and files on disk that the *next* stage — and
+finally your shell — can use. Here that ordering is load-bearing in a way
+worth noticing: `conan` is itself a Python package, so the `pip` stage has to
+run first to put the `conan` binary on `PATH` for the stage named after it.
+`examples/raspberry-pico/` is exactly this two-stage stack.
+
+### Step 4 — "...and it only builds on Ubuntu 22.04"
+
+Some things cannot be papered over from inside a venv: glibc, system
+libraries, the distribution itself. A `docker` stage runs the stages after it
+*inside a container*, so the layers above stop depending on which laptop you
+are sitting at:
+
+```yaml
+stages:
+- docker   # everything below this line happens inside the container
+- conan
+- pip
+```
+
+`docker` is a **wrapper**: it installs nothing itself, it relocates the rest
+of the pipeline. Which is also why you can drop it whenever you like —
+`denver my-project --skip docker` runs the very same `conan`/`pip` stack
+straight on your host.
+
+### Step 5 — "...and five repositories need that same base"
+
+Copy-pasting a stack into every repository is how it rots. `import:` lets one
+env inherit another's entire stack and restate only what differs:
+
+```yaml
+import:
+- ../our-shared-base   # its stages, its docker config, its variables
+
+pip:                   # ...with only this project's packages layered on top
+  requirements:
+  - requirements.txt
+```
+
+A new project, or the next SDK version, then becomes a folder with a handful
+of lines in it instead of another copy of everything.
+
+### You only pay for the steps you need
+
+Nothing above is mandatory, and denver has no opinion about which tools you
+should use. A stage exists only because your `denver.yml` lists it:
+
+| If your project… | …you need |
+|---|---|
+| runs a setup script, or anything else denver has no provider for | `custom` |
+| has Python dependencies | `pip` (via [`uv`](https://docs.astral.sh/uv/)) |
+| has native tools/toolchains to fetch | `conan` |
+| needs a specific OS/system libraries | `docker` |
+| is a west-based [Zephyr RTOS](https://zephyrproject.org) workspace | `zephyr` |
+
+Those five built-in providers are the *code that knows how to run* a kind of
+stage; `custom` is the escape hatch for everything else, and a one-stage
+`custom` env is as legitimate as the five-stage one walked through below.
+
+Run `denver --help` for every flag, see
+[`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)
+for the full `stages:`/`import:`/`-c` schema, or browse
+[`examples/`](https://github.com/thorsten-klein/denver/tree/develop/examples/) —
+there is one worked environment per step above, each with a README of its own
+explaining what it does and why.
 
 ## Documentation
 
@@ -60,6 +176,7 @@ working example.
 | [`doc/philosophy.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/philosophy.md) | The design principles behind it |
 | [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) | One key reference per provider: [pip](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/pip.md), [conan](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/conan.md), [docker](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md), [zephyr](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/zephyr.md), [custom](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/custom.md) |
 | [`doc/development.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/development.md) | Contributing: tests, coverage, adding a provider, releasing |
+| [`examples/`](https://github.com/thorsten-klein/denver/tree/develop/examples/) | Six working environments, smallest to largest, each with its own README |
 
 ## Install denver
 
@@ -99,9 +216,10 @@ below.
 ## Pre-conditions
 
 denver itself only needs Python — it never installs the tools its providers
-drive. Each provider expects its tool to already be available wherever that
-stage runs (on the host, or inside the container once a `docker` stage
-relocated into it):
+drive. This table is a lookup, not a checklist: **only the rows for the
+providers your own `denver.yml` actually lists apply to you.** Each of those
+expects its tool to already be available wherever that stage runs (on the
+host, or inside the container once a `docker` stage relocated into it):
 
 | Provider | Needs |
 |---|---|
@@ -126,10 +244,19 @@ See [One-time host setup](#one-time-host-setup).
 
 ## Getting started with a bundled example environment
 
-This chapter assumes you have never seen denver before. It walks through one
-real environment — `examples/zephyr-devshell-4.3.1`, a complete
-[Zephyr RTOS](https://zephyrproject.org) 4.3.1 development setup — and
-explains what happens, step by step.
+The chapter above built an environment up from one stage. This one goes the
+other way and walks through the biggest bundled example end to end —
+`examples/zephyr-devshell-4.3.1`, a complete
+[Zephyr RTOS](https://zephyrproject.org) 4.3.1 development setup — to show
+what the same mechanism looks like at full size. It is deliberately the
+extreme case, not the typical one.
+
+If you would rather start from the small end, read
+`examples/zephyr-uv/denver.yml` (a venv, nothing else) or
+`examples/simple-env/denver.yml` (a couple of shell snippets) instead — both
+are a screenful, and the flags in
+[The handful of options you'll actually use](#the-handful-of-options-youll-actually-use)
+work identically for them.
 
 Note that every command below works as `denver <env> ...` or `src/denver.py <env> ...`.
 
@@ -154,33 +281,32 @@ You did not install a compiler. You did not create a virtualenv. You did not
 write a bootstrap script. denver did all of it, and it will do exactly the
 same on your colleague's machine.
 
-### What is an "environment"?
+### The vocabulary, in one place
 
-**An environment is simply a folder that contains a `denver.yml` file.**
+- An **environment** is a folder containing a `denver.yml`, and you point
+  denver at that folder. `denver.yml` is the recipe; denver is the cook that
+  follows it. If you want to know what an environment does, you read its
+  `denver.yml`.
+- A **stage** is one step of the setup, listed in `stages:`. Order matters:
+  each stage leaves behind `PATH` entries, environment variables and files
+  that the next stage — and finally your shell or command — can use. Think
+  of getting dressed: underwear before trousers before shoes.
+- A **provider** is the code that knows *how* to run a kind of stage. You
+  never write provider code; you configure it from `denver.yml`.
 
-That's the whole concept. `denver.yml` is the recipe; denver is the cook that
-follows it. You point denver at the folder:
+Every stage names its provider explicitly (`provider: pip`), so the stage id
+itself is just a label. That is what lets a single env run the same provider
+twice — this example has two `pip` stages, `pip` and `pip-zephyr`.
 
-```bash
-denver examples/zephyr-devshell-4.3.1
-#             ^^^^^^^^^^^^^^^^^^^^^^^^^^ just a folder path
-```
-
-`<env>` also accepts a path straight to a YAML file instead of a folder --
-handy if a folder holds several variants side by side (e.g.
+`<env>` also accepts a path straight to a YAML file instead of a folder —
+handy when a folder holds several variants side by side (e.g.
 `denver.debug.yml`, `denver.release.yml`):
 
 ```bash
 denver examples/zephyr-devshell-4.3.1/denver.debug.yml
 ```
 
-If you want to know what an environment does, you read its `denver.yml`.
-
-### What is a "stage"?
-
-Setting up a dev environment is really just *running a few tools in the right
-order*, where each tool builds on top of the previous one. denver calls each
-of those steps a **stage**, and a `denver.yml` lists them in order:
+### The 5 stages of this example
 
 ```yaml
 stages:
@@ -191,20 +317,10 @@ stages:
 - pip-zephyr  # 5. install the Python packages Zephyr itself asks for
 ```
 
-Think of it like getting dressed: underwear before trousers before shoes. 
-Each stage prepares something (`PATH` entries, environment variables, files on
-disk) that the next stage — and finally *your* shell or command — can use.
+Steps 1–3 are the same `docker`/`conan`/`pip` layers built up earlier; steps
+4 and 5 are what a Zephyr workspace adds on top. In plain words:
 
-The code that knows *how* to run each kind of stage is called a
-**provider**. denver ships five of them: `docker`, `conan`, `pip`, `zephyr`
-and `custom` (the "run my own script" escape hatch). You don't have to write
-provider code; you only configure it via `denver.yml`. Every stage names its
-provider explicitly (`provider: pip`), so a stage id is just a label — which
-is what lets one env have two `pip` stages, as `pip` and `pip-zephyr` above.
-
-### Walkthrough: what the 5 stages of `zephyr-devshell-4.3.1` do
-
-| # | Stage | In plain words |
+| # | Stage | What it does |
 |---|-------|----------------|
 | 1 | `docker` | Builds a Docker image and drops you **inside a container**, so everyone gets the same Linux, the same system libraries and the same tools — regardless of whether your laptop runs Ubuntu, Fedora or WSL. |
 | 2 | `conan` | Uses [Conan](https://conan.io) to fetch **native, non-Python tools** — the Zephyr SDK cross-compilers, `cmake`, `ninja`, `ccache`, `clang`, the J-Link tools — and puts them on `PATH`. These are prebuilt binaries, so nothing is compiled on your machine. |
@@ -301,6 +417,9 @@ not a meal.)
 
 - Curious what a *minimal* environment looks like? `examples/zephyr-uv/` is
   nothing but a Python venv, and `examples/simple-env/` just runs a shell script.
+- Writing your first own env? Start from
+  [Step 1](#step-1--first-run-these-commands) above and add a stage only when
+  you hit the problem it solves — most environments never need all five.
 - Want to write your own `denver.yml`? [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)
   documents every key of the schema; or copy the closest `examples/*/denver.yml`.
 - Want details on one stage type's config keys? Each provider has its own
