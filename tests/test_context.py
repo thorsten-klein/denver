@@ -18,6 +18,7 @@ from providers.context import (
     set_quiet,
     sha256_of_files,
     skip_banner,
+    warn,
 )
 
 
@@ -26,6 +27,20 @@ def test_info(caplog):
     caplog.set_level("INFO")
     info("hello")
     assert "hello" in caplog.text
+
+
+def test_warn(caplog):
+    caplog.set_level("INFO")
+    warn("careful")
+    assert "careful" in caplog.text
+
+
+def test_warn_hidden_at_quiet_level_1(caplog):
+    caplog.set_level("INFO")
+    set_quiet(1)
+    warn("careful")
+    set_quiet(0)
+    assert "careful" not in caplog.text
 
 
 def test_banner_has_no_level_prefix(make_context, capsys):

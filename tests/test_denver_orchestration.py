@@ -908,6 +908,82 @@ def test_run_stages_reresolves_stage_defaults_before_setup(tmp_path, run_recorde
     assert exec_recorder["args"] == ["echo", "hi"]
 
 
+def test_run_stages_reresolves_over_a_default_it_already_found(tmp_path, run_recorder, exec_recorder, monkeypatch):
+    """The upfront pass finding *something* must not freeze that answer.
+
+    The failure this guards against: the host has its own copy of a tool
+    (conan, west, uv), so the upfront resolve picks that up; an earlier
+    stage then installs the pinned one into the venv, and the later stage
+    goes on running the host's anyway -- silently unpinned. Re-resolving
+    the *resolved* section can't fix that (a resolver only fills unset
+    keys, so its own output reads as an explicit choice), which is why the
+    refresh starts from the raw section instead.
+    """
+    import providers.context as ctxmod
+
+    def fake_which(name, path=None):
+        if name != "uv":
+            return f"/usr/bin/{name}"
+        # the host's copy upfront; the venv's once an earlier stage
+        # activated it (venv_dir_for(None) outside docker -> '.venv.host')
+        return "/venv/bin/uv" if ".venv.host" in (path or "") else "/usr/bin/uv"
+
+    monkeypatch.setattr(ctxmod.shutil, "which", fake_which)
+
+    def create_venv_dir(cmd):
+        from pathlib import Path
+
+        Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
+        return run_recorder.default
+
+    run_recorder.responses["venv -p"] = create_venv_dir
+    run_recorder.responses["python3 --version"] = lambda cmd: type(
+        "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
+    )()
+
+    # two uv stages: the first activates the venv (putting it on PATH), so
+    # the second's own refresh must resolve to the venv's uv, not the host's
+    config = {
+        "stages": ["uv-first", "uv-second"],
+        "uv-first": {"provider": "uv"},
+        "uv-second": {"provider": "uv"},
+    }
+    env_dir, cfg_path = _env(tmp_path, config)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+    commands = run_recorder.commands()
+    assert any(c.startswith("/usr/bin/uv python install") for c in commands)  # stage 1: no venv yet
+    assert any(c.startswith("/venv/bin/uv python install") for c in commands)  # stage 2: refreshed
+    assert exec_recorder["args"] == ["echo", "hi"]
+
+
+def test_run_stages_refresh_keeps_an_explicit_value(tmp_path, run_recorder, exec_recorder, monkeypatch):
+    # the refresh re-runs the resolver, so what the author actually wrote
+    # has to survive it -- a PATH lookup must never overrule an explicit key
+    import providers.context as ctxmod
+
+    monkeypatch.setattr(ctxmod.shutil, "which", lambda name, path=None: f"/usr/bin/{name}")
+
+    def create_venv_dir(cmd):
+        from pathlib import Path
+
+        Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
+        return run_recorder.default
+
+    run_recorder.responses["venv -p"] = create_venv_dir
+    run_recorder.responses["python3 --version"] = lambda cmd: type(
+        "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
+    )()
+
+    config = {"stages": ["uv"], "uv": {"provider": "uv", "uv": "/opt/pinned/uv"}}
+    env_dir, cfg_path = _env(tmp_path, config)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+    commands = run_recorder.commands()
+    assert any(c.startswith("/opt/pinned/uv") for c in commands)
+    assert not any(c.startswith("/usr/bin/uv") for c in commands)
+
+
 def test_run_stages_stacking_used_by_stage(tmp_path, fake_providers, exec_recorder):
     src_env = tmp_path / "src"
     src_env.mkdir()
