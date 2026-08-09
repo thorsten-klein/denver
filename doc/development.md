@@ -183,3 +183,44 @@ not a claim to be the release). So:
   overstate a released one.
 - Sitting *exactly* on a tag is never re-based: that tree really is that
   release, whatever `DEV_VERSION` says.
+
+## Known limitations
+
+### `import yaml` must work wherever denver runs
+
+PyYAML is denver's only runtime dependency, and a `pip`/`uv` install brings
+it along — but that only settles the *host*. A wrapper provider re-invokes
+denver inside the environment it just entered (`reinvoke_command()` in
+`src/denver.py` builds `["python3", <this file>, ...]`, a bare command
+resolved against the container's `PATH`), so a docker-wrapped env imports
+PyYAML from the **image**, which no host-side install can influence. Every
+such image has to provide it — `python3-yaml` on Debian/Ubuntu, as both
+example images under `examples/` do.
+
+The `try: import yaml` guard at the top of `src/denver.py` exists for this
+case alone: it names the failing interpreter (`sys.executable`) and points
+at the Dockerfile, because the bare `ImportError` came from a process the
+user never invoked by name and reads as a denver bug. It carries
+`# pragma: no cover` — it is a property of the interpreter denver is running
+on, so the suite cannot reach it.
+
+### PyYAML's version is intentionally unconstrained
+
+The host copy and the image copy come from different package managers, and
+denver makes no attempt to keep them in lockstep — no pin forwarded into the
+container, no runtime version assertion. The tradeoff is deliberate and rests
+on how little of the library is used: **`yaml.safe_load` and
+`yaml.safe_dump`, nothing else**. Two functions whose behaviour has been
+stable across PyYAML releases for years, so importing whichever version
+happens to be present is a risk worth taking against the alternative —
+mandating one version and making every downstream image track denver's
+choice.
+
+`pyproject.toml` declares `pyyaml>=6`: a floor documenting the API denver
+codes against, not a pin, and one that binds only the host install.
+
+Keep it that way when contributing. Reaching for a third `yaml.*` function
+(or any second runtime dependency) is what would invalidate the reasoning
+above, and turns a documented limitation into a real compatibility matrix.
+Dependencies that are only needed for development or tests belong in a
+`[dependency-groups]` entry, where they never reach a user's environment.

@@ -10,7 +10,10 @@ readme = "README.md"
 requires-python = ">=3.9"
 license = "MIT"
 license-files = ["LICENSE"]
-dependencies = ["pyyaml"]
+# denver only ever calls yaml.safe_load/safe_dump, so the floor is just the
+# 6.x API -- it is not a pin: a docker-wrapped env re-invokes denver against
+# the image's python3, whose PyYAML this cannot constrain at all.
+dependencies = ["pyyaml>=6"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",

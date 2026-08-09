@@ -452,7 +452,7 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyyaml" }]
+requires-dist = [{ name = "pyyaml", specifier = ">=6" }]
 
 [package.metadata.requires-dev]
 conan-tools = [
