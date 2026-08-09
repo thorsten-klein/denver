@@ -200,7 +200,13 @@ every [release](https://github.com/thorsten-klein/denver/releases) instead — i
 bundles denver, its providers and a Python interpreter in one file:
 
 ```bash
-curl -sSL https://github.com/thorsten-klein/denver/releases/latest/download/denver_x64_Linux.tar.xz | tar -xJf -
+# Find Asset from latest release
+ASSET=$(curl -sSL https://api.github.com/repos/thorsten-klein/denver/releases/latest | grep -o 'https://[^"]*\.tar\.xz')
+
+# Download the Asset and untar it
+curl -sSL "$ASSET" | tar -xJf -
+
+# Run denver
 ./denver --version
 ```
 

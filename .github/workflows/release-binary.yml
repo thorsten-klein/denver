@@ -1,8 +1,8 @@
 name: Release binary
 
 # Builds the single-file 'denver' executable (see scripts/create-python-exe.sh)
-# and attaches denver_x64_Linux.tar.xz to the release, so denver can be used
-# on a machine that has no python -- and no pip, no uv -- at all.
+# and attaches denver-<version>-x64-linux.tar.xz to the release, so denver can
+# be used on a machine that has no python -- and no pip, no uv -- at all.
 #
 # Separate from publish.yml on purpose. That one is triggered by the tag push
 # and uploads to PyPI, while attaching an asset needs the GitHub *release* to
@@ -33,7 +33,6 @@ env:
   # produce an executable that misreports itself. Empty on a plain
   # workflow_dispatch -- then the triggering ref is built as-is.
   REF: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
-  ARCHIVE: denver_x64_Linux.tar.xz
 
 jobs:
   # the glibc floor and every other build decision live there, shared with
@@ -76,24 +75,31 @@ jobs:
         with:
           name: denver-binary
 
+      # Named denver-<version>-x64-linux.tar.xz -- resolved by glob since the
+      # version isn't known here.
       - name: Unpack
-        run: tar -xf "$ARCHIVE"
+        run: tar -xf denver-*-x64-linux.tar.xz
 
       # Unpacked on the runner and mounted in, so the distro images need
       # neither tar/xz nor anything else to take part -- the point is that
-      # only the binary is required. '-c denver-version=null' drops the
-      # example's own pin, which a workflow_dispatch build off an untagged
-      # commit cannot satisfy (see ci.yml's smoke test for the full why).
+      # only the binary is required. 'denver' is now a symlink to the
+      # versioned binary, so both have to be mounted together (into PATH)
+      # rather than just the single file -- a lone symlink mount would
+      # dangle, pointing at a sibling that was never brought along.
+      # '-c denver-version=null' drops the example's own pin, which a
+      # workflow_dispatch build off an untagged commit cannot satisfy (see
+      # ci.yml's smoke test for the full why).
       - name: Run on ${{ matrix.image }}
         run: |
           docker run --rm \
-            -v "$PWD/denver:/usr/local/bin/denver:ro" \
             -v "$PWD:/work" -w /work \
             ${{ matrix.image }} \
-            sh -c 'denver --version && denver /work/examples/simple-env -c denver-version=null -- echo "denver runs on ${{ matrix.image }}"'
+            sh -c 'export PATH="/work:$PATH"; denver --version && denver /work/examples/simple-env -c denver-version=null -- echo "denver runs on ${{ matrix.image }}"'
 
   upload:
-    needs: verify
+    # 'build' listed directly (not just transitively via 'verify') because a
+    # job's outputs are only visible to jobs that name it in 'needs'.
+    needs: [build, verify]
     # nothing to attach when workflow_dispatch ran without a tag
     if: github.event_name == 'release' || inputs.tag != ''
     runs-on: ubuntu-latest
@@ -105,9 +111,12 @@ jobs:
           name: denver-binary
 
       # --clobber so re-running against an already-attached release replaces
-      # the asset instead of failing halfway.
-      - name: Attach ${{ env.ARCHIVE }} to ${{ env.REF }}
+      # the asset instead of failing halfway. The filename is composed from
+      # 'build's version output -- this is the point that actually names the
+      # release asset, so it uses the real version rather than a glob.
+      - name: Attach denver-${{ needs.build.outputs.version }}-x64-linux.tar.xz to ${{ env.REF }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          ARCHIVE: denver-${{ needs.build.outputs.version }}-x64-linux.tar.xz
         run: gh release upload "$REF" "$ARCHIVE" --clobber
