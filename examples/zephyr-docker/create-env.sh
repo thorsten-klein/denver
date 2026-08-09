@@ -98,13 +98,7 @@ render_env_file() {
     done < <(env)
 
     if [ "${CI_BUILD:-}" = "true" ]; then
-        # named volumes are faster than bind mounts on CI runners
-        echo "VAR_TMP_WEST_MOUNT=var_tmp_west"
-        echo "VAR_TMP_ZEPHYR_MOUNT=var_tmp_zephyr"
         echo "CI=true"
-    else
-        echo "VAR_TMP_WEST_MOUNT=/var/tmp/west"
-        echo "VAR_TMP_ZEPHYR_MOUNT=/var/tmp/zephyr"
     fi
 
     echo "CONTAINER_IMAGE=$CONTAINER_IMAGE"

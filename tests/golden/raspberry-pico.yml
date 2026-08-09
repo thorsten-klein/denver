@@ -50,8 +50,8 @@ conan:
   deployer: <REPO>/src/providers/conan_scripts/extensions/symlink.py
   exe: /usr/bin/conan
   install-args:
-  - -c=tools.system.package_manager:mode=install
-  - -c=tools.system.package_manager:sudo=True
+  - -c:a=tools.system.package_manager:mode=install
+  - -c:a=tools.system.package_manager:sudo=True
   no-auth: false
   profiles:
     build: []

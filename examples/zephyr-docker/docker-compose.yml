@@ -20,10 +20,10 @@ services:
       - /dev:/dev
 
       # build caches, kept outside the container lifecycle so a rebuild
-      # doesn't cost a full re-fetch
-      - $VAR_TMP_WEST_MOUNT:/var/tmp/west          # west module/blob cache
-      - $VAR_TMP_ZEPHYR_MOUNT:/var/tmp/zephyr      # twister/zephyr cache
-      - $CCACHE_READONLY_DIRS:$CCACHE_READONLY_DIRS  # read-only ccache seed from Artifactory
+      # doesn't cost a full re-fetch.
+      - /var/tmp/west:/var/tmp/west                   # west module/blob cache
+      - /var/tmp/zephyr:/var/tmp/zephyr               # twister/zephyr cache
+      - $CCACHE_READONLY_DIRS:$CCACHE_READONLY_DIRS   # read-only ccache seed from Artifactory
 
       # the workspace itself, plus the host home and denver's own env dir at
       # matching paths so absolute paths resolve the same inside/outside
@@ -57,6 +57,3 @@ services:
       - ./configs/.bash_aliases:$DOCKER_HOME/.bash_aliases
       - $DENVER_GLOBAL_ENV_DIR/.bash_history:$DOCKER_HOME/.bash_history
       - ./configs/.zshrc:$DOCKER_HOME/.zshrc
-volumes:
-  var_tmp_west:
-  var_tmp_zephyr:

@@ -45,6 +45,12 @@ conan:
     catalog: conan/catalog.yml
 
 zephyr:
+  # Declared, not left to the default: 'west-yml:' otherwise resolves to
+  # <outermost .git>/west.yml -- the manifest of the super-repo a real project
+  # embeds this env in, which a standalone checkout of the denver repo (CI, or
+  # anyone cloning it to try the examples) does not have. The env ships its
+  # own manifest instead, so it runs anywhere; see the comments in west.yml.
+  west-yml: west.yml
   # auto-generated list of west blobs to pre-cache
   blobs-cache: conan/recipes/west-blobs-cache/denver/blobs.txt
 
