@@ -1,20 +1,20 @@
 version: '1.0'
-denver-version: '>=1.0.3'
+denver-version: '>=1.1.0'
 command: bash
 hooks:
   env: null
   post-best-practices: null
   post-docker-with-tools: null
-  post-pip-packages: null
   post-tools-from-internet: null
+  post-uv-packages: null
   pre-best-practices: null
   pre-cmd: null
   pre-docker-with-tools: null
-  pre-pip-packages: null
   pre-tools-from-internet: null
+  pre-uv-packages: null
 stages:
 - docker-with-tools
-- pip-packages
+- uv-packages
 - tools-from-internet
 - best-practices
 docker-with-tools:
@@ -39,8 +39,8 @@ docker-with-tools:
   registries: null
   run-args:
   - --rm
-pip-packages:
-  provider: pip
+uv-packages:
+  provider: uv
   description:
   - The python 3.12 virtualenv. 'conan' is in requirements.txt because the next stage
     needs it on PATH -- the conan provider never installs it.

@@ -78,7 +78,7 @@ denver's --fast is not consulted anywhere in this provider's setup() --
 ``compose.build:`` is read exactly as configured, so a real `docker compose
 build` still runs under --fast if the image wasn't found locally or on a
 registry. There is no "skip the rebuild, just activate" fast path here the
-way pip/conan/zephyr have one.
+way uv/conan/zephyr have one.
 
 A build (``compose.build: true``, the default) never actually runs without
 ``image:`` set, regardless of --fast/--force: with no tag to check next

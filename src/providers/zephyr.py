@@ -14,10 +14,10 @@ Configured from denver.yml -> ``zephyr:``:
       update-args: []            # extra `west update` args
 
 The west executable is never configured here -- always the first `west` on
-PATH (installed by an earlier pip stage). Installing `west packages pip`'s
-own requirements is likewise not this provider's job: give a *separate* pip
+PATH (installed by an earlier uv stage). Installing `west packages pip`'s
+own requirements is likewise not this provider's job: give a *separate* uv
 stage a ``requirements: [$(west packages pip)]`` entry instead (see
-providers/pip.py's own docstring), with its own ``overrides:``/
+providers/uv.py's own docstring), with its own ``overrides:``/
 ``freeze-to:`` for pinning them.
 
 ``WEST_CONFIG_SYSTEM`` (west's own base-config env var, e.g. the remotes/
@@ -40,7 +40,7 @@ filled in (see ``denver.resolve_provider_defaults``), so nothing here ever
 falls back to a conventional path or a PATH lookup itself.
 
 ``west`` must already be installed wherever this stage runs (in practice by
-an earlier pip stage listing it in ``requirements:``) -- denver never
+an earlier uv stage listing it in ``requirements:``) -- denver never
 installs it, and always uses the first one on PATH (see above).
 
 Full key reference, worked examples and design notes: ``doc/providers/zephyr.md``.
@@ -146,7 +146,7 @@ class ZephyrProvider(Provider):
 
         west = ctx.which("west")
         if not west:
-            die("zephyr provider needs 'west' on PATH (installed by the pip provider)")
+            die("zephyr provider needs 'west' on PATH (installed by the uv provider)")
 
         west_yml = Path(cfg["west-yml"])
         zephyr_base = Path(cfg["base"])

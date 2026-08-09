@@ -19,7 +19,7 @@ see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everythi
 ## Requires
 
 **`conan` must be available** wherever this stage runs — denver never
-installs it. In practice an earlier `pip` stage does, by listing `conan` in
+installs it. In practice an earlier `uv` stage does, by listing `conan` in
 its `requirements:`, which puts it on `PATH` via that stage's venv; a
 host-wide or in-image install works just as well, and `exe:` can point at a
 specific one. A stage with no conan available fails with `conan provider

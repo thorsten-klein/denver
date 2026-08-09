@@ -58,7 +58,7 @@ dev = [
     {include-group = "conan-tools"},
 ]
 # conan/colorama are not denver's own runtime dependencies: the
-# conan_scripts run inside the env's own venv, where the env's pip stage
+# conan_scripts run inside the env's own venv, where the env's uv stage
 # installs them (see src/providers/conan.py's module docstring). They're
 # pulled in here only so denver's own test suite can import and exercise
 # conan_scripts/*.py.

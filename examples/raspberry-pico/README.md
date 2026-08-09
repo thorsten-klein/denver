@@ -35,17 +35,17 @@ reflexively, just because the project is an embedded one.
 
 Three things are worth reading this env for.
 
-**1. Why `pip` runs before `conan`.** The stage order looks backwards until
+**1. Why `uv` runs before `conan`.** The stage order looks backwards until
 you notice what `requirements.txt` contains:
 
 ```yaml
 stages:
-- pip     # installs conan==2.31.2 and uv into a venv
+- uv      # installs conan==2.31.2 and uv into a venv
 - conan   # ...and now the 'conan' executable exists to be run
 ```
 
 Conan is itself a Python package. The `conan` provider expects a `conan`
-binary to already be on `PATH` wherever its stage runs, and the `pip` stage
+binary to already be on `PATH` wherever its stage runs, and the `uv` stage
 is what puts it there. This is the clearest illustration of the rule that a
 stage consumes what earlier stages left behind — including, here, the very
 tool it is named after.
@@ -90,7 +90,7 @@ denver does not model itself, you pass through literally.
 
 | Path | What it is |
 |---|---|
-| `denver.yml` | Two stages: `pip`, then `conan` |
+| `denver.yml` | Two stages: `uv`, then `conan` |
 | `requirements.txt` | `conan` and `uv` — the tools the next stage needs |
 | `conan/conanfile.py` | Declares the three `tool_requires`, read from the catalog |
 | `conan/catalog.yml` | Generated pin file: recipe → exact reference + revision |

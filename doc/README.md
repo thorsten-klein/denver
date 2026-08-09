@@ -40,7 +40,7 @@ flag list.
 
   | Provider | Purpose |
   |---|---|
-  | [`pip`](providers/pip.md) | Create/manage a Python virtualenv via `uv` |
+  | [`uv`](providers/uv.md) | Create/manage a Python virtualenv via `uv` |
   | [`conan`](providers/conan.md) | Provision native tools (compilers, cmake, ninja) via Conan |
   | [`docker`](providers/docker.md) | Wrapper: relocate the pipeline into a compose service |
   | [`zephyr`](providers/zephyr.md) | Manage a West (Zephyr RTOS) workspace |

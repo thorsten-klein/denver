@@ -57,15 +57,15 @@ disposable: what the stage exported is gone again once you `exit`.
 ### Step 2 — "...and a Python virtualenv with the right packages in it"
 
 Now the manual part is `python -m venv`, activate, `pip install -r`, and
-remembering to redo it whenever `requirements.txt` changes. A `pip` stage
+remembering to redo it whenever `requirements.txt` changes. A `uv` stage
 hands that whole job to denver:
 
 ```yaml
 stages:
-- pip
+- uv
 
-pip:
-  provider: pip
+uv:
+  provider: uv
   python: "3.12.3"      # a pinned interpreter, not "whatever python3 happens to be"
   requirements:
   - requirements.txt
@@ -79,17 +79,17 @@ and nothing more.
 ### Step 3 — "...but half our tools aren't Python at all"
 
 Compilers, `cmake`, `ninja`, a vendor SDK, a flashing tool. This is what
-"install these six things first, versions X.Y" READMEs are made of, and pip
-cannot help. If a package manager can fetch them, denver can drive it as a
-further stage — `conan` ships built in:
+"install these six things first, versions X.Y" READMEs are made of, and no
+Python virtualenv can help. If a package manager can fetch them, denver can
+drive it as a further stage — `conan` ships built in:
 
 ```yaml
 stages:
-- pip     # provides the 'conan' executable itself, via requirements.txt
+- uv      # provides the 'conan' executable itself, via requirements.txt
 - conan   # ...which then fetches the native tools
 
-pip:
-  provider: pip
+uv:
+  provider: uv
   requirements:
   - requirements.txt
 
@@ -102,7 +102,7 @@ conan:
 The order of `stages:` is the whole point: each stage leaves behind `PATH`
 entries, environment variables and files on disk that the *next* stage — and
 finally your shell — can use. Here that ordering is load-bearing in a way
-worth noticing: `conan` is itself a Python package, so the `pip` stage has to
+worth noticing: `conan` is itself a Python package, so the `uv` stage has to
 run first to put the `conan` binary on `PATH` for the stage named after it.
 `examples/raspberry-pico/` is exactly this two-stage stack.
 
@@ -117,12 +117,12 @@ are sitting at:
 stages:
 - docker   # everything below this line happens inside the container
 - conan
-- pip
+- uv
 ```
 
 `docker` is a **wrapper**: it installs nothing itself, it relocates the rest
 of the pipeline. Which is also why you can drop it whenever you like —
-`denver my-project --skip docker` runs the very same `conan`/`pip` stack
+`denver my-project --skip docker` runs the very same `conan`/`uv` stack
 straight on your host.
 
 ### Step 5 — "...and five repositories need that same base"
@@ -134,7 +134,7 @@ env inherit another's entire stack and restate only what differs:
 import:
 - ../our-shared-base   # its stages, its docker config, its variables
 
-pip:                   # ...with only this project's packages layered on top
+uv:                    # ...with only this project's packages layered on top
   requirements:
   - requirements.txt
 ```
@@ -150,7 +150,7 @@ should use. A stage exists only because your `denver.yml` lists it:
 | If your project… | …you need |
 |---|---|
 | runs a setup script, or anything else denver has no provider for | `custom` |
-| has Python dependencies | `pip` (via [`uv`](https://docs.astral.sh/uv/)) |
+| has Python dependencies | `uv` — a virtualenv managed by [`uv`](https://docs.astral.sh/uv/) |
 | has native tools/toolchains to fetch | `conan` |
 | needs a specific OS/system libraries | `docker` |
 | is a west-based [Zephyr RTOS](https://zephyrproject.org) workspace | `zephyr` |
@@ -175,7 +175,7 @@ explaining what it does and why.
 | [`doc/how-to.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/how-to.md) | Step-by-step: build your own environment, one stage at a time |
 | [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md) | The `denver.yml` schema and how the system works |
 | [`doc/philosophy.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/philosophy.md) | The design principles behind it |
-| [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) | One key reference per provider: [pip](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/pip.md), [conan](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/conan.md), [docker](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md), [zephyr](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/zephyr.md), [custom](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/custom.md) |
+| [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) | One key reference per provider: [uv](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/uv.md), [conan](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/conan.md), [docker](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md), [zephyr](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/zephyr.md), [custom](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/custom.md) |
 | [`doc/development.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/development.md) | Contributing: tests, coverage, adding a provider, releasing |
 | [`examples/`](https://github.com/thorsten-klein/denver/tree/develop/examples/) | Six working environments, smallest to largest, each with its own README |
 
@@ -225,9 +225,9 @@ host, or inside the container once a `docker` stage relocated into it):
 | Provider | Needs |
 |---|---|
 | `docker` | `docker` with the Compose plugin (v2, `docker compose ...`), daemon reachable for your user |
-| `pip` | [`uv`](https://docs.astral.sh/uv/getting-started/installation/) |
-| `conan` | `conan` — usually installed by an earlier `pip` stage |
-| `zephyr` | `west` — usually installed by an earlier `pip` stage |
+| `uv` | [`uv`](https://docs.astral.sh/uv/getting-started/installation/) |
+| `conan` | `conan` — usually installed by an earlier `uv` stage |
+| `zephyr` | `west` — usually installed by an earlier `uv` stage |
 | `custom` | whatever your own script calls |
 
 A stage whose tool is missing fails up front with a clear message. Each
@@ -295,9 +295,9 @@ same on your colleague's machine.
 - A **provider** is the code that knows *how* to run a kind of stage. You
   never write provider code; you configure it from `denver.yml`.
 
-Every stage names its provider explicitly (`provider: pip`), so the stage id
+Every stage names its provider explicitly (`provider: uv`), so the stage id
 itself is just a label. That is what lets a single env run the same provider
-twice — this example has two `pip` stages, `pip` and `pip-zephyr`.
+twice — this example has two `uv` stages, `uv` and `uv-zephyr`.
 
 `<env>` also accepts a path straight to a YAML file instead of a folder —
 handy when a folder holds several variants side by side (e.g.
@@ -313,21 +313,21 @@ denver examples/zephyr-devshell-4.3.1/denver.debug.yml
 stages:
 - docker      # 1. get into the right operating system
 - conan       # 2. install native tools (compilers, cmake, ninja, ...)
-- pip         # 3. install Python packages into a venv
+- uv          # 3. install Python packages into a venv
 - zephyr      # 4. download the Zephyr source repositories
-- pip-zephyr  # 5. install the Python packages Zephyr itself asks for
+- uv-zephyr   # 5. install the Python packages Zephyr itself asks for
 ```
 
-Steps 1–3 are the same `docker`/`conan`/`pip` layers built up earlier; steps
+Steps 1–3 are the same `docker`/`conan`/`uv` layers built up earlier; steps
 4 and 5 are what a Zephyr workspace adds on top. In plain words:
 
 | # | Stage | What it does |
 |---|-------|----------------|
 | 1 | `docker` | Builds a Docker image and drops you **inside a container**, so everyone gets the same Linux, the same system libraries and the same tools — regardless of whether your laptop runs Ubuntu, Fedora or WSL. |
 | 2 | `conan` | Uses [Conan](https://conan.io) to fetch **native, non-Python tools** — the Zephyr SDK cross-compilers, `cmake`, `ninja`, `ccache`, `clang`, the J-Link tools — and puts them on `PATH`. These are prebuilt binaries, so nothing is compiled on your machine. |
-| 3 | `pip` | Creates a **Python virtualenv** (with [uv](https://docs.astral.sh/uv/), which is a very fast `pip`) and installs the pinned Python packages listed in this env's `requirements.txt` — most importantly `west`, Zephyr's repo-management tool. From here on, `python` and `west` mean *this* venv's versions. |
+| 3 | `uv` | Creates a **Python virtualenv** (with [uv](https://docs.astral.sh/uv/), a very fast `pip` replacement) and installs the pinned Python packages listed in this env's `requirements.txt` — most importantly `west`, Zephyr's repo-management tool. From here on, `python` and `west` mean *this* venv's versions. |
 | 4 | `zephyr` | Runs `west update`, which **clones/updates the many git repositories** that make up a Zephyr workspace (the kernel, HALs, modules, ...) at exactly the revisions pinned for 4.3.1, applies the patches this env carries via `west patches`, fetches binary blobs via `west blobs`, etc... |
-| 5 | `pip-zephyr` | The Zephyr modules downloaded in step 4 declare Python dependencies of their own (`west packages pip`). This stage installs **those**, into the same venv from step 3. It has to run *after* step 4, because until then we didn't know what they were. |
+| 5 | `uv-zephyr` | The Zephyr modules downloaded in step 4 declare Python dependencies of their own (`west packages pip`). This stage installs **those**, into the same venv from step 3. It has to run *after* step 4, because until then we didn't know what they were. |
 
 At the end, denver hands control over to your shell — `fish`, in this
 environment — with everything from steps 1–5 active. When you type `exit`,
@@ -375,8 +375,8 @@ denver examples/zephyr-devshell-4.3.1 --skip docker
 
 # stop after a given stage: that stage and every stage before it runs.
 # (there is no "run just this one stage" -- a stage practically always
-# needs its predecessors: pip needs conan's tools, zephyr needs pip's west)
-denver examples/zephyr-devshell-4.3.1 --until pip
+# needs its predecessors: uv needs conan's tools, zephyr needs uv's west)
+denver examples/zephyr-devshell-4.3.1 --until uv
 
 # print the final, fully merged configuration and exit -- the best way to
 # understand what an environment really does, imports included
@@ -410,7 +410,7 @@ examples/zephyr-devshell-4.3.1/  ONLY the 4.3.1-specific bits:
 
 So a Zephyr 4.4.0 environment would be a new folder whose `denver.yml`
 imports the very same base and changes only the pinned versions — no
-copy-pasting of the docker/conan/pip setup. (The shared base sets
+copy-pasting of the docker/conan/uv setup. (The shared base sets
 `runnable: false`, so starting it directly is rejected: it is ingredients,
 not a meal.)
 
@@ -465,7 +465,7 @@ interpolation inside a `denver.yml` — see "Variable interpolation" in
 behavior isn't obvious from a one-line description.
 
 - **`-c`/`--config KEY.PATH=VALUE`** overrides a single value in the merged
-  `denver.yml` (e.g. `-c pip.python=3.13`); any missing parent section is
+  `denver.yml` (e.g. `-c uv.python=3.13`); any missing parent section is
   created as an empty mapping. `KEY.PATH+=VALUE` appends to an existing
   list/string/number instead of replacing it (behaves like `=` if the path
   doesn't exist yet). `VALUE` is parsed as YAML, so `"true"`/`"3"`/`"[a,
@@ -510,7 +510,7 @@ behavior isn't obvious from a one-line description.
 - **`--version`** prints the running denver's version and exits — derived
   from the checkout's git tags when denver runs from a checkout (script or
   editable install), otherwise from the installed package's metadata. A
-  `denver.yml` can require a minimum with `denver-version: ">=1.0.3"`, and
+  `denver.yml` can require a minimum with `denver-version: ">=1.1.0"`, and
   is rejected up front by a denver older than that (see
   [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)).
 

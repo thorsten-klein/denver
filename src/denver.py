@@ -3,7 +3,7 @@
 
 Launch a reproducible development environment described by a ``denver.yml``
 file: denver resolves it (following ``import:`` inheritance), then runs the
-generic *providers* its ``stages:`` list names (pip, conan, zephyr, docker,
+generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker,
 ...) to build/enter the environment purely from config.
 
 A command to run, if given, must be introduced with '--' (e.g.
@@ -262,10 +262,10 @@ def deep_merge(base, override, _path=""):
     A *string* value works the other way around: if a lower layer already
     set the same key to a different string, that's almost always an
     accidental divergent override (e.g. two stacked layers disagreeing on
-    ``pip.python``), so it's a hard error instead of a silent override.
+    ``uv.python``), so it's a hard error instead of a silent override.
     Prefix the overriding value with ``!`` to do it deliberately, e.g.::
 
-        pip:
+        uv:
           python: "!3.12.3"
 
     which discards whatever a lower layer set (the ``!`` is stripped from
@@ -653,7 +653,7 @@ def resolve_provider_defaults(config, ctx):
     """Bake every stage's provider defaults into ``config``, once, in 'stages:' order.
 
     A later stage's resolver (zephyr) can read an earlier one's
-    already-resolved section (pip) this way. Mutates and returns ``config``.
+    already-resolved section (uv) this way. Mutates and returns ``config``.
 
     'scripts:'/'disabled:' are filled in for every stage regardless of
     provider -- both are generic, provider-agnostic keys any stage's
@@ -722,7 +722,7 @@ def collect_import_dirs(config_path, _seen=None):
     Breadth-first: the env's own direct imports, then their imports, etc.
     This is the search order ``Context.resolve_path`` uses to fall back to a
     base env's file when the leaf doesn't have one -- e.g. a conventional
-    default like ``pip/skip-if.sh`` or ``conan/base_classes``. Walking the
+    default like ``uv/skip-if.sh`` or ``conan/base_classes``. Walking the
     whole chain (not just the direct imports) is what makes those
     conventions work through multiple levels of ``import:`` stacking: each
     layer, closest to the leaf first, is checked in turn, so a more-derived
@@ -956,7 +956,7 @@ def reinvoke_command(
     """Re-invoke denver (skipping ``wrapper_stage_ids``) so setup providers run in the wrapper.
 
     Used inside a wrapper (e.g. docker): the same denver runs again inside the
-    container, where the wrapper is inactive and pip/conan/zephyr build/enter
+    container, where the wrapper is inactive and uv/conan/zephyr build/enter
     the environment. denver's sources are available at the same path (the
     workspace is bind-mounted) -- ``Path(__file__).resolve()`` is this exact
     file's own absolute path, so this works unchanged whether denver runs
@@ -1155,7 +1155,7 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     # just once, upfront, in resolve_full_config(): a value like
     # zephyr.west (a PATH lookup) may only become resolvable after an
     # earlier stage's setup() has actually installed/activated it (e.g.
-    # the pip stage installing west into the venv). --show-config, which
+    # the uv stage installing west into the venv). --show-config, which
     # never runs any setup(), can't see that -- this is what makes the
     # real run more accurate than the upfront snapshot for such values.
     config[provider.stage] = type(provider).resolve_defaults(ctx, config.get(provider.stage) or {}, config)
@@ -1228,8 +1228,8 @@ def run_stages(
     ctx.apply_env_map(config.get("env"))
 
     # each entry in 'stages:' is a pipeline stage (a provider type + config
-    # id), run in order -- so an env can order conan before pip, have several
-    # pip stages, etc. Instantiated for *every* declared id (not just the
+    # id), run in order -- so an env can order conan before uv, have several
+    # uv stages, etc. Instantiated for *every* declared id (not just the
     # runnable ones) purely to learn each skipped stage's kind (wrapper vs.
     # setup) and declared position -- make_stage() itself does no I/O.
     all_stages = [make_stage(stage_id, config) for stage_id in all_stage_ids]

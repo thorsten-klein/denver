@@ -1,6 +1,6 @@
 """Base class for denver providers.
 
-A provider is a generic, reusable engine (pip, conan, zephyr, docker, ...).
+A provider is a generic, reusable engine (uv, conan, zephyr, docker, ...).
 It is configured entirely from the env's denver.yml -- a provider never
 hard-codes project specifics.
 
@@ -38,7 +38,7 @@ def fill_unset(resolved, keys):
 
 
 class Provider:
-    """Base class every denver provider (pip, conan, zephyr, docker, custom, ...) extends.
+    """Base class every denver provider (uv, conan, zephyr, docker, custom, ...) extends.
 
     Subclasses override ``name``/``kind``/``KEYS`` as class attributes, and
     ``resolve_defaults``/``setup``/``wrap`` as needed -- see each method's
@@ -61,7 +61,7 @@ class Provider:
         self.config = config or {}
         # the stage id: the key of this provider's config section and its
         # hook prefix. Defaults to the provider type, but multiple stages of
-        # the same type can each have a distinct id (e.g. two pip stages).
+        # the same type can each have a distinct id (e.g. two uv stages).
         self.stage = self.name
 
     @property
@@ -88,7 +88,7 @@ class Provider:
         ``cfg`` is this stage's own raw section; ``config`` is the whole
         (already section-stacked) config, available to resolvers that
         default from another stage's section (zephyr's overrides fall back
-        to pip's). Default: passthrough, with every key in ``KEYS`` shown
+        to uv's). Default: passthrough, with every key in ``KEYS`` shown
         (as null if unset).
         """
         return fill_unset(dict(cfg), cls.KEYS)

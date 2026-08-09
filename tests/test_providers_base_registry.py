@@ -8,9 +8,9 @@ from providers.base import Provider
 
 def test_provider_default_stage_is_name():
     n = Provider({"a": 1})
-    n.name = "pip"
+    n.name = "uv"
     n.stage = n.name
-    assert n.section_name == "pip"
+    assert n.section_name == "uv"
     assert n.config == {"a": 1}
 
 
@@ -20,10 +20,10 @@ def test_provider_config_defaults_to_empty_dict():
 
 def test_provider_config_section_reads_own_section(make_context):
     class Sub(Provider):
-        name = "pip"
+        name = "uv"
 
-    ctx = make_context(config={"pip": {"x": 1}})
-    sub = Sub({"pip": {"x": 1}})
+    ctx = make_context(config={"uv": {"x": 1}})
+    sub = Sub({"uv": {"x": 1}})
     assert sub.config_section(ctx) == {"x": 1}
 
 
@@ -35,28 +35,28 @@ def test_provider_setup_and_wrap_defaults(make_context):
 
 
 def test_make_stage_explicit_provider_key():
-    stage = providers.make_stage("pip", {"pip": {"provider": "pip", "python": "3.9"}})
-    assert isinstance(stage, providers.PROVIDERS["pip"])
-    assert stage.stage == "pip"
+    stage = providers.make_stage("uv", {"uv": {"provider": "uv", "python": "3.9"}})
+    assert isinstance(stage, providers.PROVIDERS["uv"])
+    assert stage.stage == "uv"
 
 
 def test_make_stage_type_key_alone_dies():
     with pytest.raises(SystemExit):
-        providers.make_stage("pip", {"pip": {"type": "pip", "python": "3.9"}})
+        providers.make_stage("uv", {"uv": {"type": "uv", "python": "3.9"}})
 
 
 def test_make_stage_custom_id_with_provider():
-    config = {"stages": ["pip-2"], "pip-2": {"provider": "pip", "venv": "second"}}
-    stage = providers.make_stage("pip-2", config)
-    assert isinstance(stage, providers.PROVIDERS["pip"])
-    assert stage.stage == "pip-2"
+    config = {"stages": ["uv-2"], "uv-2": {"provider": "uv", "venv": "second"}}
+    stage = providers.make_stage("uv-2", config)
+    assert isinstance(stage, providers.PROVIDERS["uv"])
+    assert stage.stage == "uv-2"
 
 
 def test_make_stage_missing_provider_dies():
     # a bare id matching a registered provider name is NOT enough -- it must
     # be declared explicitly.
     with pytest.raises(SystemExit):
-        providers.make_stage("pip", {"pip": {"python": "3.9"}})
+        providers.make_stage("uv", {"uv": {"python": "3.9"}})
 
 
 def test_make_stage_custom_provider():

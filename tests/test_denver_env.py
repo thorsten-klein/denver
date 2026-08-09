@@ -53,7 +53,7 @@ def test_resolve_env_dir_denver_yml_file(tmp_path):
     envd = tmp_path / "myenv"
     envd.mkdir()
     yml = envd / "denver.yml"
-    yml.write_text("stages: [pip]\n")
+    yml.write_text("stages: [uv]\n")
     assert denver.resolve_env_dir(str(yml)) == (envd.resolve(), yml.resolve())
 
 
@@ -64,7 +64,7 @@ def test_resolve_env_dir_custom_named_yml_file(tmp_path):
     envd = tmp_path / "myenv"
     envd.mkdir()
     yml = envd / "denver.debug.yml"
-    yml.write_text("stages: [pip]\n")
+    yml.write_text("stages: [uv]\n")
     assert denver.resolve_env_dir(str(yml)) == (envd.resolve(), yml.resolve())
 
 
@@ -76,17 +76,17 @@ def test_resolve_env_dir_not_found_dies(tmp_path):
 # ---- is_runnable_env -------------------------------------------------------#
 def test_is_runnable_env_true_by_default(tmp_path):
     yml = tmp_path / "denver.yml"
-    yml.write_text("stages: [pip]\n")
+    yml.write_text("stages: [uv]\n")
     assert denver.is_runnable_env(yml)
 
 
 def test_is_runnable_env_true_when_explicit(tmp_path):
     yml = tmp_path / "denver.yml"
-    yml.write_text("stages: [pip]\nrunnable: true\n")
+    yml.write_text("stages: [uv]\nrunnable: true\n")
     assert denver.is_runnable_env(yml)
 
 
 def test_is_runnable_env_false_when_explicit(tmp_path):
     yml = tmp_path / "denver.yml"
-    yml.write_text("stages: [pip]\nrunnable: false\n")
+    yml.write_text("stages: [uv]\nrunnable: false\n")
     assert not denver.is_runnable_env(yml)

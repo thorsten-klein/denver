@@ -129,22 +129,22 @@ def test_resolve_import_missing_dies(tmp_path):
 
 def test_load_config_no_import(tmp_path):
     p = tmp_path / "denver.yml"
-    p.write_text("stages: [pip]\n")
-    assert denver.load_config(p) == {"stages": ["pip"]}
+    p.write_text("stages: [uv]\n")
+    assert denver.load_config(p) == {"stages": ["uv"]}
 
 
 def test_load_config_with_import_merges_base_first(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("stages: [pip]\npip:\n  python: '3.9'\n")
+    (base_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  python: '3.9'\n")
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("import:\n- ../base\npip:\n  requirements: [r.txt]\n")
+    (env_dir / "denver.yml").write_text("import:\n- ../base\nuv:\n  requirements: [r.txt]\n")
 
     cfg = denver.load_config(env_dir / "denver.yml")
-    assert cfg["stages"] == ["pip"]
-    assert cfg["pip"] == {"python": "3.9", "requirements": ["r.txt"]}
+    assert cfg["stages"] == ["uv"]
+    assert cfg["uv"] == {"python": "3.9", "requirements": ["r.txt"]}
     assert "import" not in cfg
 
 
@@ -156,7 +156,7 @@ def test_load_config_runnable_false_does_not_leak_through_import(tmp_path):
     # reason -- see load_config()'s own comment).
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("runnable: false\nstages: [pip]\n")
+    (base_dir / "denver.yml").write_text("runnable: false\nstages: [uv]\n")
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
@@ -170,7 +170,7 @@ def test_load_config_runnable_own_value_still_applies(tmp_path):
     # unlike 'import', 'runnable' isn't dropped from the file that actually
     # sets it -- only from what an *importer* inherits from it.
     p = tmp_path / "denver.yml"
-    p.write_text("runnable: false\nstages: [pip]\n")
+    p.write_text("runnable: false\nstages: [uv]\n")
     cfg = denver.load_config(p)
     assert cfg["runnable"] is False
 
@@ -202,12 +202,12 @@ def test_load_config_conflicting_string_dies(tmp_path):
 def test_load_config_same_string_no_conflict(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("pip:\n  python: '3.12.3'\n")
+    (base_dir / "denver.yml").write_text("uv:\n  python: '3.12.3'\n")
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("import: [../base]\npip:\n  python: '3.12.3'\n")
+    (env_dir / "denver.yml").write_text("import: [../base]\nuv:\n  python: '3.12.3'\n")
     cfg = denver.load_config(env_dir / "denver.yml")
-    assert cfg["pip"]["python"] == "3.12.3"
+    assert cfg["uv"]["python"] == "3.12.3"
 
 
 def test_load_config_circular_import_dies(tmp_path):
@@ -222,12 +222,12 @@ def test_load_config_circular_import_dies(tmp_path):
 
 
 def test_validate_top_level_keys_known_keys_ok():
-    config = {"version": 1.0, "stages": ["pip"], "pip": {}, "command": "fish"}
+    config = {"version": 1.0, "stages": ["uv"], "uv": {}, "command": "fish"}
     denver.validate_top_level_keys(config)  # no error
 
 
 def test_validate_top_level_keys_unknown_section_dies():
-    config = {"stages": ["pip"], "pip": {}, "typo-section": {}}
+    config = {"stages": ["uv"], "uv": {}, "typo-section": {}}
     with pytest.raises(SystemExit):
         denver.validate_top_level_keys(config)
 
@@ -291,7 +291,7 @@ def test_parse_version_spec_invalid_dies(spec):
 
 def test_validate_denver_version_unset_never_looks_at_the_version(monkeypatch):
     monkeypatch.setattr(denver, "package_version", lambda: pytest.fail("must not be called"))
-    denver.validate_denver_version({"stages": ["pip"]})  # no error
+    denver.validate_denver_version({"stages": ["uv"]})  # no error
 
 
 @pytest.mark.parametrize("spec", [">=1.0.3", "1.0.3", "1.0", ">=1.0.3, <2", "==1.0.3", "!=1.0.2"])
@@ -329,12 +329,12 @@ def test_validate_denver_version_undeterminable_warns_but_runs(monkeypatch, capl
 
 # ---- --config / -c overrides ------------------------------------------------#
 def test_parse_config_override_spec_plain_set():
-    assert denver.parse_config_override_spec("pip.python=3.12.3") == (["pip", "python"], "=", "3.12.3")
+    assert denver.parse_config_override_spec("uv.python=3.12.3") == (["uv", "python"], "=", "3.12.3")
 
 
 def test_parse_config_override_spec_append():
-    assert denver.parse_config_override_spec("pip.requirements+=numpy") == (
-        ["pip", "requirements"],
+    assert denver.parse_config_override_spec("uv.requirements+=numpy") == (
+        ["uv", "requirements"],
         "+=",
         "numpy",
     )
@@ -342,7 +342,7 @@ def test_parse_config_override_spec_append():
 
 def test_parse_config_override_spec_no_operator_dies():
     with pytest.raises(SystemExit):
-        denver.parse_config_override_spec("pip.python")
+        denver.parse_config_override_spec("uv.python")
 
 
 def test_parse_config_override_spec_empty_path_dies():
@@ -356,36 +356,36 @@ def test_apply_config_override_sets_top_level_scalar():
 
 
 def test_apply_config_override_creates_missing_parent_dicts():
-    config = denver.apply_config_override({}, "pip.python=3.12.3")
-    assert config == {"pip": {"python": "3.12.3"}}
+    config = denver.apply_config_override({}, "uv.python=3.12.3")
+    assert config == {"uv": {"python": "3.12.3"}}
 
 
 def test_apply_config_override_overwrites_existing_value():
-    config = denver.apply_config_override({"pip": {"python": "3.9", "uv": True}}, "pip.python=3.12.3")
-    assert config == {"pip": {"python": "3.12.3", "uv": True}}
+    config = denver.apply_config_override({"uv": {"python": "3.9", "uv": True}}, "uv.python=3.12.3")
+    assert config == {"uv": {"python": "3.12.3", "uv": True}}
 
 
 def test_apply_config_override_parses_yaml_types():
-    config = denver.apply_config_override({}, "pip.uv=true")
-    assert config["pip"]["uv"] is True
-    config = denver.apply_config_override({}, "pip.requirements=[a, b]")
-    assert config["pip"]["requirements"] == ["a", "b"]
+    config = denver.apply_config_override({}, "uv.uv=true")
+    assert config["uv"]["uv"] is True
+    config = denver.apply_config_override({}, "uv.requirements=[a, b]")
+    assert config["uv"]["requirements"] == ["a", "b"]
 
 
 def test_apply_config_override_does_not_mutate_input():
-    base = {"pip": {"python": "3.9"}}
-    denver.apply_config_override(base, "pip.python=3.12.3")
-    assert base == {"pip": {"python": "3.9"}}
+    base = {"uv": {"python": "3.9"}}
+    denver.apply_config_override(base, "uv.python=3.12.3")
+    assert base == {"uv": {"python": "3.9"}}
 
 
 def test_apply_config_override_plus_equals_appends_to_list():
-    config = denver.apply_config_override({"pip": {"requirements": ["a"]}}, "pip.requirements+=b")
-    assert config["pip"]["requirements"] == ["a", "b"]
+    config = denver.apply_config_override({"uv": {"requirements": ["a"]}}, "uv.requirements+=b")
+    assert config["uv"]["requirements"] == ["a", "b"]
 
 
 def test_apply_config_override_plus_equals_on_unset_behaves_like_set():
-    config = denver.apply_config_override({}, "pip.requirements+=[a]")
-    assert config["pip"]["requirements"] == ["a"]
+    config = denver.apply_config_override({}, "uv.requirements+=[a]")
+    assert config["uv"]["requirements"] == ["a"]
 
 
 def test_apply_config_override_plus_equals_concatenates_strings():
@@ -400,7 +400,7 @@ def test_apply_config_override_plus_equals_adds_numbers():
 
 def test_apply_config_override_plus_equals_incompatible_types_dies():
     with pytest.raises(SystemExit):
-        denver.apply_config_override({"pip": {"python": "3.9"}}, "pip.python+=1")
+        denver.apply_config_override({"uv": {"python": "3.9"}}, "uv.python+=1")
 
 
 def test_apply_config_override_plus_equals_onto_bool_dies():
@@ -409,28 +409,28 @@ def test_apply_config_override_plus_equals_onto_bool_dies():
 
 
 def test_apply_config_overrides_applies_in_order_last_wins():
-    config = denver.apply_config_overrides({}, ["pip.python=3.9", "pip.python=3.12.3"])
-    assert config["pip"]["python"] == "3.12.3"
+    config = denver.apply_config_overrides({}, ["uv.python=3.9", "uv.python=3.12.3"])
+    assert config["uv"]["python"] == "3.12.3"
 
 
 # ---- --until / --skip stage-name validation --------------------------------#
 def test_validate_stage_filters_known_stages_ok():
-    config = {"stages": ["pip", "conan"]}
-    denver.validate_stage_filters(config, "pip", ["conan"])  # no error
+    config = {"stages": ["uv", "conan"]}
+    denver.validate_stage_filters(config, "uv", ["conan"])  # no error
 
 
 def test_validate_stage_filters_no_filters_ok():
-    config = {"stages": ["pip"]}
+    config = {"stages": ["uv"]}
     denver.validate_stage_filters(config, None, [])  # no error
 
 
 def test_validate_stage_filters_unknown_until_dies():
-    config = {"stages": ["pip"]}
+    config = {"stages": ["uv"]}
     with pytest.raises(SystemExit):
         denver.validate_stage_filters(config, "typo", [])
 
 
 def test_validate_stage_filters_unknown_skip_dies():
-    config = {"stages": ["pip"]}
+    config = {"stages": ["uv"]}
     with pytest.raises(SystemExit):
         denver.validate_stage_filters(config, None, ["typo"])

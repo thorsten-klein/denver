@@ -1,10 +1,10 @@
 # examples/zephyr-uv
 
-**A single `pip` stage: a Python virtualenv, and nothing else.**
+**A single `uv` stage: a Python virtualenv, and nothing else.**
 
 Despite the name, there is no Zephyr in this environment — no West workspace,
 no SDK, no container. It is named for the role it plays in a Zephyr setup
-(see below), but as an example it is simply the minimal `pip` env.
+(see below), but as an example it is simply the minimal `uv` env.
 
 ## What it does
 
@@ -33,7 +33,7 @@ problem rather than yours.
 **It is the bootstrap venv.** Look at what it installs: `conan` and `uv`
 themselves. That is the point of the name — a Zephyr setup needs a `conan`
 binary before its `conan` stage can run, and this env is a standalone way to
-get one. It is the same job the `pip`-before-`conan` ordering does inside
+get one. It is the same job the `uv`-before-`conan` ordering does inside
 [`../raspberry-pico`](../raspberry-pico), extracted into an env of its own.
 
 ## Purpose as an example
@@ -43,12 +43,12 @@ toolchain"**. One provider, four lines of configuration, no infrastructure:
 
 ```yaml
 stages:
-- pip
+- uv
 
 command: bash
 
-pip:
-  provider: pip
+uv:
+  provider: uv
   requirements:
   - requirements.txt
 ```
@@ -66,12 +66,12 @@ It is also where to look for two easily-missed generic keys:
 
 | File | What it is |
 |---|---|
-| `denver.yml` | The whole env: one `pip` stage |
+| `denver.yml` | The whole env: one `uv` stage |
 | `requirements.txt` | The pinned packages (`conan`, `uv`) |
 
 ## Next
 
-- [`doc/providers/pip.md`](../../doc/providers/pip.md) — every `pip:` key,
+- [`doc/providers/uv.md`](../../doc/providers/uv.md) — every `uv:` key,
   including `python:`, `overrides:`, `skip-if:` and `freeze-to:`
 - [`../raspberry-pico`](../raspberry-pico) — the next step up: this same
-  `pip` stage, plus a `conan` stage that uses what it installed
+  `uv` stage, plus a `conan` stage that uses what it installed

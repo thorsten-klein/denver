@@ -1,7 +1,7 @@
 """The test `denver examples/howto-env` runs by default.
 
 It asserts what each stage of the pipeline promised: the OS from the docker
-stage, the interpreter and packages from the pip stage, the pinned tools from
+stage, the interpreter and packages from the uv stage, the pinned tools from
 the conan stage, and the exported variable from the custom stage. A green run
 means the whole environment really was built, not just configured.
 """
@@ -23,7 +23,7 @@ def test_docker_stage_installed_the_apt_packages():
         assert shutil.which(tool), f"{tool} is not on PATH"
 
 
-def test_pip_stage_gave_us_python_3_12_and_pytest():
+def test_uv_stage_gave_us_python_3_12_and_pytest():
     assert sys.version_info[:2] == (3, 12)
     import pytest
 

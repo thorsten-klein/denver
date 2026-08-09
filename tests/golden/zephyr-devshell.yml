@@ -1,26 +1,26 @@
 version: 1.0
-denver-version: '>=1.0.3'
+denver-version: '>=1.1.0'
 hooks:
   env:
   - <REPO>/examples/zephyr-devshell/hooks/env.sh
   post-conan: null
   post-docker: null
-  post-pip: null
-  post-pip-zephyr: null
+  post-uv: null
+  post-uv-zephyr: null
   post-zephyr: null
   pre-cmd: null
   pre-conan: null
   pre-docker: null
-  pre-pip: null
-  pre-pip-zephyr: null
+  pre-uv: null
+  pre-uv-zephyr: null
   pre-zephyr: null
 runnable: false
 stages:
 - docker
 - conan
-- pip
+- uv
 - zephyr
-- pip-zephyr
+- uv-zephyr
 docker:
   provider: docker
   description: null
@@ -63,8 +63,8 @@ conan:
   recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
   remotes: {}
   user: denver
-pip:
-  provider: pip
+uv:
+  provider: uv
   description: null
   disabled: false
   scripts: null
@@ -99,8 +99,8 @@ zephyr:
   update-args: null
   west-config: null
   west-yml: /fake-west-topdir/west.yml
-pip-zephyr:
-  provider: pip
+uv-zephyr:
+  provider: uv
   description: null
   disabled: false
   scripts: null

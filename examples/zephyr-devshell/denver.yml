@@ -1,6 +1,6 @@
 version: 1.0
 # minimum denver (the tool) this env needs -- see doc/architecture.md
-denver-version: ">=1.0.3"
+denver-version: ">=1.1.0"
 
 # Shared base for all zephyr-devshell-<version> environments.
 #
@@ -12,10 +12,10 @@ denver-version: ">=1.0.3"
 # Not directly runnable: only inherited via 'import:', never started on its own.
 runnable: false
 
-# Pipeline stages, run in this order (see src/providers/). conan runs before pip
+# Pipeline stages, run in this order (see src/providers/). conan runs before uv
 # so the python-cache it provides (UV_FIND_LINKS) is available to the offline
-# pip install. pip-zephyr runs after zephyr (needs the workspace `west
-# packages pip` inspects to already be updated) and shares the 'pip' stage's
+# install. uv-zephyr runs after zephyr (needs the workspace `west
+# packages pip` inspects to already be updated) and shares the 'uv' stage's
 # venv (no 'venv:' of its own) so `west`'s own extension commands, imported
 # into that same running `west` process, can see what it installs. Each
 # entry is a stage id; its section must always declare 'provider: <name>'
@@ -23,9 +23,9 @@ runnable: false
 stages:
 - docker
 - conan
-- pip
+- uv
 - zephyr
-- pip-zephyr
+- uv-zephyr
 
 # The docker provider's config is stacked from the standalone zephyr-docker env
 # (which declares 'provider: docker' itself), including its 'default-cmd:'
@@ -57,10 +57,10 @@ conan:
   base-classes:
   - conan/base_classes
 
-# pip/zephyr/pip-zephyr are fully configured by the version-specific env
+# uv/zephyr/uv-zephyr are fully configured by the version-specific env
 # that imports this base; only their provider type is declared here.
-pip:
-  provider: pip
+uv:
+  provider: uv
 
 zephyr:
   provider: zephyr
@@ -72,7 +72,7 @@ zephyr:
 
 # west's own extension commands need whatever pip packages the workspace's
 # modules declare (via `west packages pip`) importable in the same running
-# `west` process -- so this shares the 'pip' stage's venv (no 'venv:' here)
+# `west` process -- so this shares the 'uv' stage's venv (no 'venv:' here)
 # rather than getting an isolated one of its own.
-pip-zephyr:
-  provider: pip
+uv-zephyr:
+  provider: uv

@@ -36,11 +36,11 @@ def test_banner_has_no_level_prefix(make_context, capsys):
 
 
 def test_banner_includes_stage_id(make_context, capsys):
-    # so two same-provider-type stages (e.g. two 'pip' stages) are
+    # so two same-provider-type stages (e.g. two 'uv' stages) are
     # distinguishable by which one's banner is currently showing
-    banner(make_context(), "pip-zephyr", "install")
+    banner(make_context(), "uv-zephyr", "install")
     err = capsys.readouterr().err
-    assert "pip-zephyr" in err and "install" in err
+    assert "uv-zephyr" in err and "install" in err
 
 
 def test_banner_includes_stage_progress(make_context, capsys):
@@ -54,15 +54,15 @@ def test_banner_includes_stage_progress(make_context, capsys):
 def test_skip_banner_shows_stage_and_reason(make_context, capsys):
     ctx = make_context()
     ctx.stage_index, ctx.stage_count = 5, 5
-    skip_banner(ctx, "pip-zephyr", "skipped by --skip")
+    skip_banner(ctx, "uv-zephyr", "skipped by --skip")
     err = capsys.readouterr().err
-    assert "[5/5] stage 'pip-zephyr' skipped by --skip" in err
+    assert "[5/5] stage 'uv-zephyr' skipped by --skip" in err
 
 
 def test_skip_banner_hidden_at_quiet_level_2(make_context, capsys):
     ctx = make_context()
     set_quiet(2)
-    skip_banner(ctx, "pip-zephyr", "skipped by --skip")
+    skip_banner(ctx, "uv-zephyr", "skipped by --skip")
     assert capsys.readouterr().err == ""
     set_quiet(0)
 
@@ -203,8 +203,8 @@ def test_variables_property(make_context):
 
 # ---- config section ------------------------------------------------------- #
 def test_section_interpolated(make_context):
-    ctx = make_context(config={"pip": {"python": "${DENVER_ENV_NAME}"}})
-    assert ctx.section("pip") == {"python": "myenv"}
+    ctx = make_context(config={"uv": {"python": "${DENVER_ENV_NAME}"}})
+    assert ctx.section("uv") == {"python": "myenv"}
     assert ctx.section("missing") == {}
 
 

@@ -21,9 +21,9 @@ everything that does **not** depend on which Zephyr version you want:
 stages:
 - docker      # 1. get into the right operating system
 - conan       # 2. native tools: SDK, cmake, ninja, clang, ccache, J-Link
-- pip         # 3. a venv, with west in it
+- uv          # 3. a venv, with west in it
 - zephyr      # 4. west update: clone the workspace repositories
-- pip-zephyr  # 5. the Python deps those repositories declare
+- uv-zephyr   # 5. the Python deps those repositories declare
 ```
 
 Concretely it contributes: the stage list and its ordering, the `docker:`
@@ -31,8 +31,8 @@ config (imported wholesale from [`../zephyr-docker`](../zephyr-docker)), the
 Conan base classes, the shared tool recipes, the cross-cutting environment
 variables, and the J-Link udev setup script.
 
-What it deliberately does *not* contribute: any pinned version. `pip:`,
-`zephyr:` and `pip-zephyr:` appear here declaring nothing but
+What it deliberately does *not* contribute: any pinned version. `uv:`,
+`zephyr:` and `uv-zephyr:` appear here declaring nothing but
 `provider:`. The version env fills them in.
 
 ## Why it exists
@@ -103,8 +103,8 @@ to put them in. Each version env lists
 `../zephyr-devshell/conan/recipes` in its own unit instead. `base-classes:`,
 by contrast, is env-wide and so is declared once here.
 
-**Two stages, one venv.** `pip-zephyr` has no `venv:` of its own, so it
-shares the `pip` stage's. That is required, not tidiness: `west`'s extension
+**Two stages, one venv.** `uv-zephyr` has no `venv:` of its own, so it
+shares the `uv` stage's. That is required, not tidiness: `west`'s extension
 commands are imported into the same running `west` process, so what stage 5
 installs has to be importable by the interpreter stage 3 set up.
 
