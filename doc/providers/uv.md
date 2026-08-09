@@ -37,6 +37,26 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   token appended as its own arg — the way to pull in a dynamically-computed
   set of packages (e.g. `$(west packages pip)`) without hand-maintaining a
   requirements file for them.
+- **`lock`** — optional; the uv-*project* (`pyproject.toml` + `uv.lock`) way
+  of filling the same venv, independent of `requirements:` above (either,
+  both or neither may be set). Two keys, each a path to a `uv.lock` (uv only
+  ever reads/writes `<project>/uv.lock`, so any other filename is a config
+  error, and the project is the directory the lockfile sits in — it must
+  hold that project's `pyproject.toml`):
+  - **`create`** — runs `uv lock` for that project, i.e. *writes* the
+    lockfile (an output, like `freeze-to:`).
+  - **`sync`** — runs `uv sync` for that project, installing the lockfile
+    into the venv this stage just activated (`--active`), exactly as locked
+    (`--frozen` — re-resolving it is `create:`'s job, not a silent side
+    effect of syncing) and without pruning packages the lockfile doesn't
+    mention (`--inexact`, so a venv shared with another stage, or filled by
+    this stage's own `requirements:`, survives).
+
+  With both set, `create:` runs first, so one stage can relock and then
+  install what it locked. `sync:`'s lockfile counts as an install input, so
+  changing it recreates the venv the way a changed requirements file does;
+  `create:`'s doesn't (it's this run's own output). Both commands get the
+  same `find-links:`/`no-index:` wheel sources as `uv pip install`.
 - **`overrides`** — a list of `--override` files.
 - **`find-links`** — extra wheel sources (e.g. a local cache directory).
 - **`no-index`** (default `false`) — `true`/`false`/`auto`. `false` installs
@@ -57,7 +77,8 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   to a patches file). Applies patches to the venv's installed packages
   after install.
 - **`skip-if`** — a list of scripts; if every one exits `0`, the install
-  step is skipped entirely (the venv is still created/activated).
+  step is skipped entirely — `uv pip install` as well as `lock:`'s `uv
+  lock`/`uv sync` (the venv is still created/activated).
 - **`venv`** — names this stage's venv, so several `uv` stages can target
   distinct venvs (or share one by using the same name, or both leaving it
   unset).

@@ -18,6 +18,7 @@ uv:
   freeze-to: null
   install-args: null
   link-mode: copy
+  lock: null
   no-index: false
   overrides: null
   python: 3.12.3

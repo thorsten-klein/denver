@@ -16,6 +16,9 @@ Everything is configured from denver.yml -> ``uv:``:
       - path/to/overrides.txt
       find-links:                 # extra wheel sources (optional, e.g. a cache)
       - ${DENVER_ENV_WORKDIR}/.conan/...
+      lock:                       # uv project lockfiles (optional)
+        create: py/uv.lock        # `uv lock` writes/updates this lockfile
+        sync: py/uv.lock          # `uv sync` installs this lockfile
       no-index: false             # true|false|auto (default false; 'auto' =>
                                    # true inside docker, false on the host)
       link-mode: copy             # uv link mode
@@ -34,6 +37,19 @@ Everything is configured from denver.yml -> ``uv:``:
 The provider creates the venv (recreating it when the requirement files or
 any 'install-args:' command's output change), activates it into ctx.env,
 installs the requirements and applies venv patches.
+
+``lock:`` is the uv-project (pyproject.toml) side of the same venv, and is
+independent of the requirements above -- either, both or neither may be
+set. ``create:`` runs ``uv lock`` for the project owning that lockfile
+(the directory the lockfile sits in, which must hold its pyproject.toml),
+i.e. it *writes* the file, like 'freeze-to:' does. ``sync:`` runs ``uv
+sync`` for the project owning that lockfile, installing it into the venv
+this stage just activated (``--active``) without re-resolving it
+(``--frozen``) and without pruning packages the lockfile doesn't mention
+(``--inexact``, so a shared venv's other stages survive). With both set,
+``create:`` runs first, so a single stage can relock and then install what
+it locked. Only ``sync:``'s lockfile counts as an input for the checksum
+that recreates the venv; ``create:``'s is an output.
 
 ``append-mode`` (default ``false``) makes every 'uv pip install' invocation
 reuse every -r/--override/--find-links/--no-index/literal arg any previous
@@ -78,6 +94,7 @@ Full key reference, worked examples and design notes: ``doc/providers/uv.md``.
 import hashlib
 import json
 import shutil
+from pathlib import Path
 
 from .base import Provider, fill_unset
 from .context import banner, die, info, sha256_of_files
@@ -87,6 +104,11 @@ from .context import banner, die, info, sha256_of_files
 # across runs (see UvProvider._group_args); anything else (a bare flag like
 # --no-index, or a literal install-args token) is its own one-token unit.
 _VALUE_FLAGS = ("-r", "--override", "--find-links")
+
+# the only keys a 'lock:' section understands (see module docstring); unlike a
+# stage's top-level keys (checked centrally against KEYS by denver.py) a typo
+# in here would otherwise be silently ignored.
+_LOCK_KEYS = ("create", "sync")
 
 
 class UvProvider(Provider):
@@ -101,6 +123,7 @@ class UvProvider(Provider):
         "skip-if",
         "venv-patcher",
         "requirements",
+        "lock",
         "install-args",
         "overrides",
         "find-links",
@@ -122,8 +145,27 @@ class UvProvider(Provider):
 
         # resolved centrally (like every other path in this section) so
         # --show-config shows the real script; whether it actually *exists*
-        # is checked at run time, right before we'd run it (see _skip_install).
+        # is checked at run time, right before we'd run it (_skip_if_satisfied).
         resolved["skip-if"] = [str(ctx.resolve_path(s)) for s in cfg.get("skip-if") or []]
+
+        if cfg.get("lock"):
+            lock_cfg = dict(cfg["lock"])
+            unknown = sorted(set(lock_cfg) - set(_LOCK_KEYS))
+            if unknown:
+                die(f"uv: unknown 'lock:' key(s) {', '.join(unknown)} -- known: {', '.join(_LOCK_KEYS)}")
+            for key in _LOCK_KEYS:
+                value = lock_cfg.get(key)
+                if not value:
+                    lock_cfg[key] = None
+                    continue
+                path = ctx.resolve_path(value)
+                # uv only ever reads/writes '<project>/uv.lock', so a path
+                # naming anything else could never be the file uv acts on --
+                # say so here rather than silently acting on a different one.
+                if path.name != "uv.lock":
+                    die(f"uv: 'lock: {key}:' must name a 'uv.lock' file, got: {path}")
+                lock_cfg[key] = str(path)
+            resolved["lock"] = lock_cfg
 
         if cfg.get("venv-patcher"):
             vp_cfg = dict(cfg["venv-patcher"])
@@ -161,22 +203,37 @@ class UvProvider(Provider):
         requirements = [ctx.resolve_path(r) for r in (cfg.get("requirements") or [])]
         overrides = [ctx.resolve_path(o) for o in (cfg.get("overrides") or [])]
         install_args, command_outputs = self._resolve_install_args(ctx, cfg)
+        lock_cfg = cfg.get("lock") or {}
+        lock_create, lock_sync = lock_cfg.get("create"), lock_cfg.get("sync")
 
-        if not requirements and not install_args:
+        if not requirements and not install_args and not lock_create and not lock_sync:
             info(f"uv[{self.stage}]: no requirements configured; only creating the venv")
 
         uv = cfg.get("uv")
         if not uv:
             die("uv provider needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
 
+        # 'lock: sync:'s lockfile is an install *input*, like a requirements
+        # file, so drift in it recreates the venv the same way; 'lock:
+        # create:'s is an output this run writes itself (like 'freeze-to:'),
+        # and would otherwise invalidate its own checksum every time.
+        checksum_files = requirements + overrides + ([Path(lock_sync)] if lock_sync else [])
+
         self._ensure_python(ctx, uv, python_version)
-        self._ensure_venv(ctx, uv, venv_dir, python_version, requirements + overrides, command_outputs)
+        self._ensure_venv(ctx, uv, venv_dir, python_version, checksum_files, command_outputs)
         self._activate(ctx, venv_dir)
 
-        if requirements or install_args:
-            self._install(ctx, uv, cfg, requirements, overrides, install_args)
+        if requirements or install_args or lock_create or lock_sync:
+            skip_if = cfg["skip-if"]
+            if not ctx.force and skip_if and self._skip_if_satisfied(ctx, skip_if):
+                info("uv: skip-if scripts all exited 0; skipping install")
+            else:
+                self._lock(ctx, uv, cfg, lock_create)
+                self._sync(ctx, uv, cfg, lock_sync)
+                if requirements or install_args:
+                    self._install(ctx, uv, cfg, requirements, overrides, install_args)
             self._apply_patches(ctx, cfg)
-            self._store_checksums(venv_dir, requirements + overrides, command_outputs)
+            self._store_checksums(venv_dir, checksum_files, command_outputs)
             self._freeze(ctx, cfg, uv)
 
     # ------------------------------------------------------------------ #
@@ -256,10 +313,15 @@ class UvProvider(Provider):
 
         recreate = ctx.force
         checksum_path = venv_dir / f"{self.stage}-checksums.txt"
-        previous = checksum_path.read_text() if checksum_path.is_file() else ""
+        # None (no file at all) rather than "": a stage whose install has no
+        # checksummable *files* (e.g. only 'lock: create:', or only literal
+        # 'install-args:') legitimately stores an empty checksum, and must
+        # still count as "seen before" instead of recreating its venv on
+        # every single run.
+        previous = checksum_path.read_text() if checksum_path.is_file() else None
         current = self._requirements_checksum(checksum_files, command_outputs)
 
-        if not previous:
+        if previous is None:
             recreate = True  # first run (or never completed): be safe
         elif previous != current:
             info("uv: requirement checksums changed; recreating venv")
@@ -278,6 +340,59 @@ class UvProvider(Provider):
         ctx.prepend_path(venv_dir / "bin")
         ctx.env.pop("PYTHONHOME", None)
 
+    def _index_args(self, ctx, cfg):
+        """The --find-links/--no-index args every uv command that resolves packages gets.
+
+        Shared by `uv pip install`, `uv lock` and `uv sync` so all three see
+        the same wheel sources -- an offline (no-index) env must stay offline
+        whichever of them does the resolving.
+        """
+        args = []
+        for link in cfg.get("find-links") or []:
+            args += ["--find-links", str(ctx.resolve_path(link))]
+        if cfg["no-index"]:
+            info("uv: using --no-index (offline install)")
+            args += ["--no-index"]
+        return args
+
+    def _project_dir(self, lockfile, key):
+        """The uv project a 'lock:' lockfile belongs to: the directory holding it (and its pyproject.toml).
+
+        Checked here, right before the uv command that needs it runs, rather
+        than centrally in resolve_defaults: 'lock: create:'s own directory
+        may legitimately only be filled in by an earlier stage of this run.
+        """
+        project = Path(lockfile).parent
+        if not (project / "pyproject.toml").is_file():
+            die(f"uv: no pyproject.toml beside 'lock: {key}:' ({lockfile}) -- a uv.lock belongs to its project")
+        return project
+
+    def _lock(self, ctx, uv, cfg, lock_create):
+        """Write/update 'lock: create:'s lockfile with `uv lock` (a no-op when unset)."""
+        if not lock_create:
+            return
+        project = self._project_dir(lock_create, "create")
+        ctx.run([uv, "lock", "--project", str(project), *self._index_args(ctx, cfg)])
+
+    def _sync(self, ctx, uv, cfg, lock_sync):
+        """Install 'lock: sync:'s lockfile into this stage's venv with `uv sync` (a no-op when unset)."""
+        if not lock_sync:
+            return
+        project = self._project_dir(lock_sync, "sync")
+        if not Path(lock_sync).is_file():
+            die(f"uv: 'lock: sync:' file not found: {lock_sync} -- set 'lock: create:' to generate it first")
+        # --active:  sync into the venv this stage just activated, not the
+        #            project's own .venv;
+        # --frozen:  install the lockfile exactly as it is, never silently
+        #            re-resolving (and rewriting) it here -- that is what
+        #            'lock: create:' is for;
+        # --inexact: leave whatever else lives in the venv (this stage's own
+        #            'requirements:', or another stage sharing this venv)
+        #            alone, instead of pruning everything the lockfile
+        #            doesn't mention.
+        args = ["--project", str(project), "--active", "--frozen", "--inexact"]
+        ctx.run([uv, "sync", *args, *self._index_args(ctx, cfg)], extra_env={"UV_LINK_MODE": cfg["link-mode"]})
+
     def _install(self, ctx, uv, cfg, requirements, overrides, install_args):
         """Run `uv pip install` with every -r/--override/--find-links/--no-index/install-args flag the config implies.
 
@@ -285,22 +400,13 @@ class UvProvider(Provider):
         arg any *previous* run of this stage ever resolved, with only this
         run's new ones appended -- see _merge_install_args.
         """
-        skip_if = cfg["skip-if"]
-        if not ctx.force and skip_if and self._skip_if_satisfied(ctx, skip_if):
-            info("uv: skip-if scripts all exited 0; skipping install")
-            return
-
         # build this run's own uv pip install args, in the order uv expects:
         # overrides, then find-links, then --no-index, then -r's, then every
         # 'install-args:' entry last.
         args = []
         for override in overrides:
             args += ["--override", str(override)]
-        for link in cfg.get("find-links") or []:
-            args += ["--find-links", str(ctx.resolve_path(link))]
-        if cfg["no-index"]:
-            info("uv: using --no-index (offline install)")
-            args += ["--no-index"]
+        args += self._index_args(ctx, cfg)
         for req in requirements:
             args += ["-r", str(req)]
         args += install_args
