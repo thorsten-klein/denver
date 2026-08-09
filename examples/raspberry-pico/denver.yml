@@ -6,6 +6,13 @@ stages:
 - uv
 - conan
 
+# top-level, applied once before any stage -- see doc/how-to.md
+env:
+  # conan's home for this env is kept in denver's working area rather than at
+  # conan's default ~/.conan2. This avoids conflicts with existing ~/.conan2
+  # caches and does not pollute them.
+  CONAN_HOME: ${DENVER_ENV_WORKDIR}/.conan2
+
 uv:
   provider: uv
   requirements:
