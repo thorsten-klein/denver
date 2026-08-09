@@ -84,13 +84,42 @@ def test_scm_version_outside_a_checkout(monkeypatch):
     assert denver.scm_version() is None
 
 
-def test_scm_version_reads_git_describe(monkeypatch, tmp_path):
+def _describing(output):
+    """Stub subprocess.run so scm_version() sees ``output`` from `git describe`."""
+    return lambda *a, **kw: types.SimpleNamespace(returncode=0, stdout=output)
+
+
+@pytest.mark.parametrize(
+    ("described", "expected"),
+    [
+        # tags have caught up with DEV_VERSION (or passed it): git describe
+        # is authoritative and is passed straight through.
+        ("9.9.9-2-gabc1234\n", "9.9.9-2-gabc1234"),
+        # sitting exactly on a tag: this tree really *is* that release, even
+        # an older one than DEV_VERSION -- never re-based.
+        ("1.0.3\n", "1.0.3"),
+        ("9.9.9\n", "9.9.9"),
+        # a tag matching the '*.*.*' glob that isn't a version at all: left
+        # alone rather than guessed at.
+        ("not.a.version-2-gabc1234\n", "not.a.version-2-gabc1234"),
+        # the normal in-development state: tags still name the previous
+        # release, so the commit suffix is carried onto DEV_VERSION.
+        ("1.0.3-2-gabc1234\n", "8.8.8-2-gabc1234"),
+    ],
+    ids=["tags-caught-up", "on-an-older-tag", "on-a-newer-tag", "unparseable-tag", "tags-behind"],
+)
+def test_scm_version_reads_git_describe(monkeypatch, tmp_path, described, expected):
     monkeypatch.setattr(denver, "checkout_root", lambda: tmp_path)
-    monkeypatch.setattr(
-        denver.subprocess,
-        "run",
-        lambda *a, **kw: types.SimpleNamespace(returncode=0, stdout="1.0.3-2-gabc1234\n"),
-    )
+    monkeypatch.setattr(denver, "DEV_VERSION", "8.8.8")
+    monkeypatch.setattr(denver.subprocess, "run", _describing(described))
+    assert denver.scm_version() == expected
+
+
+def test_scm_version_without_a_dev_version(monkeypatch, tmp_path):
+    """DEV_VERSION = None switches the re-basing off: git describe is reported verbatim."""
+    monkeypatch.setattr(denver, "checkout_root", lambda: tmp_path)
+    monkeypatch.setattr(denver, "DEV_VERSION", None)
+    monkeypatch.setattr(denver.subprocess, "run", _describing("1.0.3-2-gabc1234\n"))
     assert denver.scm_version() == "1.0.3-2-gabc1234"
 
 

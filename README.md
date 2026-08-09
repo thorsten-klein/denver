@@ -510,6 +510,8 @@ behavior isn't obvious from a one-line description.
 - **`--version`** prints the running denver's version and exits — derived
   from the checkout's git tags when denver runs from a checkout (script or
   editable install), otherwise from the installed package's metadata. A
+  checkout ahead of its last tag reports as a development build of the
+  release it is heading for (`1.1.0-17-gabc1234`). A
   `denver.yml` can require a minimum with `denver-version: ">=1.1.0"`, and
   is rejected up front by a denver older than that (see
   [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)).

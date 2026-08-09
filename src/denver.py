@@ -161,6 +161,29 @@ DISTRIBUTION_NAME = "denver-tool"
 # source copy with no git history and no install of any kind).
 UNKNOWN_VERSION = "unknown (not installed)"
 
+# The release this working tree is *developing towards* -- i.e. what its next
+# tag will be -- or None to switch the mechanism off entirely (nothing is
+# re-based; a checkout reports exactly what `git describe` says). Bump it in
+# the same commit that first relies on the new release, then tag that same
+# number (see doc/development.md, "Releasing").
+#
+# It exists because a checkout's git tags necessarily lag behind its content:
+# right after a feature lands, `git describe` still reports the *previous*
+# release (1.0.4-17-gabc1234), so an example pinning the 'denver-version:'
+# that feature ships in would refuse to run from source until the tag exists.
+# Running from a checkout must always work, so scm_version() bases a
+# checkout's version on this instead whenever the tags haven't caught up.
+# Once the tag is pushed, git describe overtakes it and this stops having
+# any effect until the next bump -- so a stale value can only ever understate
+# an untagged tree, never overstate a released one.
+#
+# Two tests keep it honest, so a forgotten bump can't go unnoticed: every
+# example must still run from this checkout, and DEV_VERSION must stay ahead
+# of the newest tag once there are commits past it (a new cycle has started,
+# so it has to name the release those commits are heading for) -- see
+# tests/test_dev_version.py.
+DEV_VERSION = "1.1.0"
+
 
 def scm_version():
     """Version of the denver running, derived from its checkout's git tags, or None.
@@ -173,6 +196,10 @@ def scm_version():
     if installed from a tarball with no git history). ``git describe`` reads
     the tags *now*, which is what a version requirement must be judged
     against.
+
+    A checkout whose tags still name an older release than ``DEV_VERSION``
+    (the normal state between a feature landing and the release being
+    tagged) is reported against DEV_VERSION instead -- see _dev_version.
 
     Returns None whenever that can't be answered -- not a checkout, no git
     binary, no tags (e.g. a shallow clone) -- leaving package_version()'s
@@ -193,7 +220,34 @@ def scm_version():
         return None
     if completed.returncode != 0:
         return None
-    return completed.stdout.strip() or None
+    described = completed.stdout.strip()
+    return _dev_version(described) if described else None
+
+
+def _dev_version(described):
+    """Re-base a `git describe` output onto DEV_VERSION when the tags lag behind it.
+
+    With DEV_VERSION set to None the whole mechanism is off and ``described``
+    is returned as-is, whatever it says.
+
+    ``described`` is either a bare tag (sitting exactly on a release) or
+    ``<tag>-<n>-g<sha>`` (n commits past it). Only the second form is ever
+    re-based: sitting *exactly* on a tag means this tree really is that
+    release, whatever DEV_VERSION happens to say, so it's returned untouched.
+
+    The commit suffix is carried over verbatim, so the result reads as the
+    development build it is (``1.1.0-17-gabc1234``, i.e. 17 commits into
+    developing 1.1.0) rather than claiming to be the release itself -- and,
+    ranking after 1.1.0 exactly as git describe's own output does, it
+    satisfies a ``denver-version: ">=1.1.0"`` pin the tree already honours.
+    """
+    if DEV_VERSION is None:
+        return described
+    tag, _, suffix = described.partition("-")
+    parsed, wanted = parse_version(tag), parse_version(DEV_VERSION)
+    if not suffix or parsed is None or compare_versions(parsed, wanted) >= 0:
+        return described
+    return f"{DEV_VERSION}-{suffix}"
 
 
 def package_version():

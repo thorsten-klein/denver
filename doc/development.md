@@ -126,7 +126,9 @@ request, in three jobs:
   available, so a change that only works at one end doesn't slip through.
   Coverage and test results are uploaded to Codecov from the 3.13 run.
 - **build** — builds the wheel/sdist, then installs it into a clean venv and
-  runs `denver --help` plus a real `--show-config` against a bundled example.
+  runs `denver --help` plus a real `--show-config` against a bundled example,
+  with `-c denver-version=null` to drop that example's pin (a dev-versioned
+  wheel can never satisfy one naming an untagged release — see "Releasing").
   That installed-mode smoke test exists because a checkout has a sibling
   `src/` layout that an installed wheel doesn't — exactly the gap that once
   let a `DENVER_DIR` bug through (see `denver.py`'s `_default_denver_dir()`
@@ -134,12 +136,12 @@ request, in three jobs:
 
 ## Releasing
 
-Versions come from git tags via `setuptools-scm` — there is no version
-string to bump in a file. Cutting a release is therefore just tagging:
+Versions come from git tags via `setuptools-scm` — a released artifact has
+no version string in a file. Cutting a release is therefore just tagging:
 
 ```bash
-git tag 1.0.0
-git push origin 1.0.0
+git tag 1.1.0
+git push origin 1.1.0
 ```
 
 `.github/workflows/publish.yml` triggers on any `*.*.*` tag: it builds the
@@ -157,5 +159,27 @@ A `denver.yml` states which denver *tool* version it needs with
 `denver-version:` (see [`architecture.md`](architecture.md)), so a file
 using a brand-new feature names the release that first shipped it. When an
 example under `examples/` is changed to rely on something unreleased, its
-`denver-version:` must name the version about to be tagged — that pin is
-part of cutting the release, not an afterthought.
+`denver-version:` names the version about to be tagged — a pin for a release
+that does not exist yet.
+
+`DEV_VERSION` in `src/denver.py` is what keeps that working. A checkout's
+tags necessarily lag behind its content: right after the feature lands,
+`git describe` still reports the *previous* release, so the example would
+refuse to run from source until the tag existed. `scm_version()` therefore
+reports an untagged tree against `DEV_VERSION` instead, carrying the commit
+suffix over (`1.1.0-17-gabc1234` — seventeen commits into developing 1.1.0,
+not a claim to be the release). So:
+
+- **Bump `DEV_VERSION` as soon as a cycle starts**, i.e. at the first commit
+  past the release tag. Two tests in `tests/test_dev_version.py` enforce it:
+  `test_examples_run_from_a_checkout` fails if any example's merged pin isn't
+  satisfied by what this checkout reports, and
+  `test_dev_version_keeps_up_with_the_release_tags` fails as soon as there
+  are commits past the newest tag and `DEV_VERSION` still names that tag —
+  which catches a forgotten bump before any pin has moved to expose it.
+- **Tag exactly that number.** Once the tag is pushed, `git describe`
+  overtakes `DEV_VERSION` and it stops having any effect until the next
+  bump, so a value left stale can only understate an untagged tree — never
+  overstate a released one.
+- Sitting *exactly* on a tag is never re-based: that tree really is that
+  release, whatever `DEV_VERSION` says.

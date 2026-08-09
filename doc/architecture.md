@@ -100,7 +100,10 @@ denver-version: ">=1.0.4"   # directly below version:, always
   plain `src/denver.py` script *and* an editable install, whose packaging
   metadata is frozen at install time and would go stale), otherwise from
   the installed distribution's metadata. `denver --version` prints the
-  same value. In the rare case where neither can answer (a source copy with
+  same value. A checkout whose tags haven't caught up with what the tree
+  contains reports against `DEV_VERSION` instead (`1.1.0-17-gabc1234`), so
+  running from source works at every commit rather than only after a
+  release — see "Releasing" in [`development.md`](development.md). In the rare case where neither can answer (a source copy with
   no git history and no install at all), the requirement is reported as
   unverifiable — a warning, not a failure.
 - A commit past a tag counts as newer than that tag (`1.0.3-2-gabc1234`
