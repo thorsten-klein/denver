@@ -33,6 +33,17 @@ def info(message):
     logger.info(message)
 
 
+def warn(message):
+    """Log ``message`` at warning level: something is off, but not off enough to stop.
+
+    Suppressed under --quiet exactly like info() (see set_quiet) -- only
+    die()'s errors survive that. So a warning is for a run that is expected
+    to keep working, just not the way the config says it should; anything
+    the user must see even under -q belongs in die() instead.
+    """
+    logger.warning(message)
+
+
 # 0 = normal, 1 = quiet (-q: banners still shown), 2+ = silent (-qq: nothing
 # denver-emitted shown at all). See set_quiet()/banner().
 _quiet_level = 0
@@ -218,6 +229,16 @@ class Context:
         # ctx.run(..., step="...")'s auto-banner knows which stage it's
         # for without every call site having to pass self.stage itself.
         self.stage_id = None
+        # each stage's config section exactly as the denver.yml (after
+        # stacking/overrides) spelled it, before any provider default was
+        # filled in -- kept by denver.resolve_provider_defaults so a stage's
+        # defaults can be resolved *again*, from scratch, right before it
+        # runs. Re-resolving the already-resolved section can't do that: a
+        # resolver reads its own output back as if the author had written
+        # it, so a PATH lookup that resolved to the host's copy upfront
+        # would survive an earlier stage installing the real one. Empty
+        # (never populated) when a provider is driven directly, e.g. in tests.
+        self.raw_sections = {}
         set_quiet(quiet)
 
         self.env_name = self.env_dir.name

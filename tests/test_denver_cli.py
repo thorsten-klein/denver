@@ -168,6 +168,57 @@ def test_main_dies_without_stages(tmp_path):
         denver.main([str(env_dir)])
 
 
+def test_main_reports_a_failing_command_instead_of_a_traceback(tmp_path, monkeypatch, caplog):
+    # a provider's subprocess failing is an ordinary outcome, not a denver
+    # bug: the user must get the command and its exit status, not a stack of
+    # frames whose only content is the last one.
+    import providers
+    from providers.base import Provider
+
+    class Fake(Provider):
+        name = "failer"
+        kind = "setup"
+
+        def setup(self, ctx):
+            ctx.run(["false-ish", "--flag"])
+
+    monkeypatch.setitem(providers.PROVIDERS, "failer", Fake)
+    monkeypatch.setattr(
+        denver.subprocess,
+        "run",
+        _raise(denver.subprocess.CalledProcessError(3, ["false-ish", "--flag"])),
+    )
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text("stages: [failer]\nfailer:\n  provider: failer\n")
+
+    with pytest.raises(SystemExit) as exc:
+        denver.main([str(env_dir), "--", "echo", "hi"])
+
+    assert exc.value.code == 1
+    assert "command failed (exit 3): false-ish --flag" in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+def test_command_failure_message_appends_captured_output():
+    # a capture=True call printed nothing, so the exception is holding the
+    # only explanation there is -- both streams, str or bytes.
+    error = denver.subprocess.CalledProcessError(1, ["conan", "config", "home"])
+    error.stdout = "  \n"  # whitespace only: nothing to report
+    error.stderr = b"ERROR: Invalid setting\n"
+    message = denver._command_failure_message(error)
+    assert message.splitlines() == [
+        "command failed (exit 1): conan config home",
+        "ERROR: Invalid setting",
+    ]
+
+
+def test_command_failure_message_handles_a_string_command():
+    # shell=True calls (e.g. the custom provider's 'cmd:') pass a str, not a list
+    error = denver.subprocess.CalledProcessError(2, "exit 2")
+    assert denver._command_failure_message(error) == "command failed (exit 2): exit 2"
+
+
 def test_main_dispatches_to_providers(tmp_path, monkeypatch, exec_recorder, capsys):
     import providers
     from providers.base import Provider

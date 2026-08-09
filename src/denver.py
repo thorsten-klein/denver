@@ -30,6 +30,7 @@ Examples:
 """
 
 import argparse
+import copy
 import importlib.metadata
 import json
 import logging
@@ -201,7 +202,7 @@ UNKNOWN_VERSION = "unknown (not installed)"
 # of the newest tag once there are commits past it (a new cycle has started,
 # so it has to name the release those commits are heading for) -- see
 # tests/test_dev_version.py.
-DEV_VERSION = "1.2.0"
+DEV_VERSION = None
 
 
 def scm_version():
@@ -722,11 +723,16 @@ def validate_stage_section_keys(stage, section):
         )
 
 
-def resolve_provider_defaults(config, ctx):
-    """Bake every stage's provider defaults into ``config``, once, in 'stages:' order.
+def resolve_stage_section(stage, raw_section, config, ctx):
+    """Resolve one stage's *raw* section into its complete effective one.
 
-    A later stage's resolver (zephyr) can read an earlier one's
-    already-resolved section (uv) this way. Mutates and returns ``config``.
+    Always given the section as the denver.yml spelled it, never a section
+    this function already resolved: a resolver reads an unset key's default
+    back as though the author had written it (``cfg.get("exe") or
+    ctx.which(...)``), so feeding it its own output turns every default it
+    ever computed into an explicit value that can no longer be revised.
+    That distinction is what lets this run a second time, per stage, once
+    earlier stages have changed the world -- see _run_stage_setup.
 
     'scripts:'/'disabled:' are filled in for every stage regardless of
     provider -- both are generic, provider-agnostic keys any stage's
@@ -734,24 +740,41 @@ def resolve_provider_defaults(config, ctx):
     run_stages's 'disabled:' handling), not part of any one provider's own
     KEYS, so they belong here, not in Provider.resolve_defaults's default.
     """
-    from providers import make_stage
     from providers.base import fill_unset
+
+    validate_stage_section_keys(stage, raw_section)
+    section = type(stage).resolve_defaults(ctx, raw_section, config)
+    disabled = raw_section.get("disabled", False)
+    if not isinstance(disabled, bool):
+        die(f"stage '{stage.stage}': 'disabled:' must be true or false, got {disabled!r}")
+    section["disabled"] = disabled
+    description = raw_section.get("description")
+    if description is not None and (
+        not isinstance(description, list) or not all(isinstance(line, str) for line in description)
+    ):
+        die(f"stage '{stage.stage}': 'description:' must be a list of strings, got {description!r}")
+    return fill_unset(section, ["scripts", "description"])
+
+
+def resolve_provider_defaults(config, ctx):
+    """Bake every stage's provider defaults into ``config``, once, in 'stages:' order.
+
+    A later stage's resolver (zephyr) can read an earlier one's
+    already-resolved section (uv) this way. Mutates and returns ``config``.
+
+    Each stage's raw section is kept on ``ctx`` first, so a stage can have
+    its defaults resolved again from that same starting point right before
+    it runs (see resolve_stage_section and _run_stage_setup). Deep-copied,
+    because from here on ``config[stage_id]`` is the resolved section and
+    nothing else may reach back into what it was resolved from.
+    """
+    from providers import make_stage
 
     for stage_id in config.get("stages") or []:
         stage = make_stage(stage_id, config)
         raw_section = config.get(stage_id) or {}
-        validate_stage_section_keys(stage, raw_section)
-        section = type(stage).resolve_defaults(ctx, raw_section, config)
-        disabled = raw_section.get("disabled", False)
-        if not isinstance(disabled, bool):
-            die(f"stage '{stage_id}': 'disabled:' must be true or false, got {disabled!r}")
-        section["disabled"] = disabled
-        description = raw_section.get("description")
-        if description is not None and (
-            not isinstance(description, list) or not all(isinstance(line, str) for line in description)
-        ):
-            die(f"stage '{stage_id}': 'description:' must be a list of strings, got {description!r}")
-        config[stage_id] = fill_unset(section, ["scripts", "description"])
+        ctx.raw_sections[stage_id] = copy.deepcopy(raw_section)
+        config[stage_id] = resolve_stage_section(stage, raw_section, config, ctx)
     return config
 
 
@@ -1240,12 +1263,22 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     ctx.stage_id = provider.stage
     # Re-resolve this stage's defaults right before it actually runs, not
     # just once, upfront, in resolve_full_config(): a value like
-    # zephyr.west (a PATH lookup) may only become resolvable after an
-    # earlier stage's setup() has actually installed/activated it (e.g.
-    # the uv stage installing west into the venv). --show-config, which
-    # never runs any setup(), can't see that -- this is what makes the
-    # real run more accurate than the upfront snapshot for such values.
-    config[provider.stage] = type(provider).resolve_defaults(ctx, config.get(provider.stage) or {}, config)
+    # zephyr.west or conan.exe (a PATH lookup) may resolve differently once
+    # an earlier stage's setup() has actually installed/activated it (e.g.
+    # the uv stage putting the pinned west/conan in the venv, ahead of any
+    # copy the host happens to have). --show-config, which never runs any
+    # setup(), can't see that -- this is what makes the real run more
+    # accurate than the upfront snapshot for such values.
+    #
+    # From the *raw* section (kept by resolve_provider_defaults), never the
+    # resolved one: a resolver can only fill an unset key, so re-resolving
+    # its own output is a no-op for everything it already decided -- which
+    # silently pinned conan.exe to whatever conan the host had, venv or no
+    # venv. A fresh copy each time, so a resolver that reshapes a nested
+    # value can't accumulate that across the two passes.
+    raw_section = ctx.raw_sections.get(provider.stage)
+    if raw_section is not None:
+        config[provider.stage] = resolve_stage_section(provider, copy.deepcopy(raw_section), config, ctx)
     run_hook(ctx, config_path, f"pre-{provider.stage}")
     start = time.time()
     provider.setup(ctx)
@@ -1612,8 +1645,49 @@ def print_help(parser):
     print(__doc__.strip())
 
 
+def _command_failure_message(exc):
+    """Render a CalledProcessError as denver's own error text, including whatever output the call captured.
+
+    A ``capture=True`` call (Context.run) holds the failing command's own
+    stdout/stderr in the exception rather than having printed it, so it is
+    appended here -- that message is usually the only thing that explains
+    the failure at all. A call that inherited stdout/stderr carries nothing
+    here and needs nothing: it already printed where the user could see it.
+    """
+    command = " ".join(str(c) for c in exc.cmd) if isinstance(exc.cmd, (list, tuple)) else str(exc.cmd)
+    lines = [f"command failed (exit {exc.returncode}): {command}"]
+    for stream in (exc.stdout, exc.stderr):
+        if not stream:
+            continue
+        text = stream.decode(errors="replace") if isinstance(stream, bytes) else str(stream)
+        if text.strip():
+            lines.append(text.rstrip())
+    return "\n".join(lines)
+
+
 def main(argv=None):
-    """Entry point: parse argv, resolve the env, and either exec its command or dispatch a denver-only subcommand.
+    """Entry point: run the CLI, reporting any subprocess failure no provider handled itself.
+
+    Providers run plenty of subprocesses (Context.run, ``check=True`` by
+    default) and any of them may fail. Without this, such a failure reaches
+    the user as a raw Python traceback whose frames say nothing about the
+    actual problem -- and, for a ``capture=True`` call, without even the
+    failing command's own message. Both are recovered by
+    ``_command_failure_message``.
+
+    This is the last line of defence, not the only one: a provider that can
+    say something *more specific* about its own failing command should
+    still catch it and ``die()`` with that (see
+    ConanProvider._ensure_profile), and everything else lands here.
+    """
+    try:
+        return _run_cli(argv)
+    except subprocess.CalledProcessError as exc:
+        die(_command_failure_message(exc))
+
+
+def _run_cli(argv=None):
+    """Parse argv, resolve the env, and either exec its command or dispatch a denver-only subcommand.
 
     ``argv`` defaults to ``sys.argv[1:]`` (real CLI invocation); tests pass
     an explicit list instead. Returns the process exit code -- 0 on success,

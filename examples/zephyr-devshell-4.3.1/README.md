@@ -123,10 +123,18 @@ recipes, so `conan` (stage 2) can supply them to `uv` (stage 3) via
 `UV_FIND_LINKS` — which is the real reason `conan` runs before `uv` here,
 and lets the install work offline.
 
-**6. `skip-if:`.** `uv/skip-if.sh` is four lines: if `west` and `conan` are
-both already on `PATH`, exit 0 and the install is skipped. This is the
-"fast on repeat runs" behaviour made explicit and overridable — `--force`
-ignores it.
+**6. `skip-if:`.** `uv/skip-if.sh` is three lines: if `west` and `conan` are
+both already executable **inside this env's venv** (`$VIRTUAL_ENV/bin`),
+exit 0 and the install is skipped. This is the "fast on repeat runs"
+behaviour made explicit and overridable — `--force` ignores it.
+
+It checks the venv, not `command -v`, on purpose: a `PATH` lookup also finds
+a `west`/`conan` the developer has installed host-wide, in some other
+version. That would satisfy the check on the very first run, skip the
+install, and leave the venv empty — and every later stage would quietly use
+the host's tools instead of the pinned ones. A `skip-if:` script decides
+whether *this env's* work is already done, so it must only ever look at
+this env's own state.
 
 ## Files
 

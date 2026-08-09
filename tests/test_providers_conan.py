@@ -103,7 +103,71 @@ def test_conan_explicit_exe(make_context, run_recorder, which):
     assert any("/opt/conan config home" in c for c in run_recorder.commands())
 
 
+def test_conan_outside_active_venv_warns(make_context, run_recorder, which, caplog, tmp_path):
+    # a venv left without a conan script (e.g. an interrupted install a later
+    # run still considers satisfied) makes exe's PATH lookup fall back to a
+    # host conan -- unpinning the env silently unless this says so
+    caplog.set_level("INFO")
+    which["conan"] = "/usr/bin/conan"
+    default_profile_ok(run_recorder)
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    ctx.env["VIRTUAL_ENV"] = str(tmp_path / "venv")
+    _ensure_default_conanfile(ctx, config)
+    run_conan(config, ctx)
+    assert "outside the active venv" in caplog.text
+    assert "--force" in caplog.text  # how to fix it, not just that it happened
+
+
+def test_conan_from_active_venv_does_not_warn(make_context, run_recorder, which, caplog, tmp_path):
+    caplog.set_level("INFO")
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "bin" / "conan").write_text("x")
+    which["conan"] = str(venv / "bin" / "conan")
+    default_profile_ok(run_recorder)
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    ctx.env["VIRTUAL_ENV"] = str(venv)
+    _ensure_default_conanfile(ctx, config)
+    run_conan(config, ctx)
+    assert "outside the active venv" not in caplog.text
+
+
 # ---- profile detection --------------------------------------------------------#
+def test_config_home_failure_dies_with_conans_own_message(make_context, run_recorder, which, caplog):
+    # `conan config home` is captured, so conan's stderr is the only thing
+    # that explains the failure -- it must reach the user, not the result object
+    caplog.set_level("INFO")
+    run_recorder.responses["config home"] = lambda cmd: type(
+        "R", (), {"stdout": "", "returncode": 1, "stderr": "ERROR: Invalid configuration: unknown conf 'tools.bogus'\n"}
+    )()
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    _ensure_default_conanfile(ctx, config)
+
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
+
+    assert "unknown conf 'tools.bogus'" in caplog.text
+    assert "config home` failed (exit 1)" in caplog.text
+    assert "CONAN_HOME=<unset" in caplog.text  # says which home it couldn't use
+
+
+def test_config_home_failure_names_a_configured_conan_home(make_context, run_recorder, which, caplog, tmp_path):
+    caplog.set_level("INFO")
+    run_recorder.responses["config home"] = lambda cmd: type("R", (), {"stdout": "", "returncode": 1, "stderr": ""})()
+    config = {"conan": {}}
+    ctx = make_context(config=config)
+    ctx.env["CONAN_HOME"] = str(tmp_path / "conanhome")
+    _ensure_default_conanfile(ctx, config)
+
+    with pytest.raises(SystemExit):
+        run_conan(config, ctx)
+
+    assert f"CONAN_HOME={tmp_path / 'conanhome'}" in caplog.text
+
+
 def test_profile_detect_runs_when_missing(make_context, run_recorder, which):
     run_recorder.responses["config home"] = lambda cmd: type("R", (), {"stdout": "/no/such/home\n", "returncode": 0})()
     config = {"conan": {}}

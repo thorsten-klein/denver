@@ -135,7 +135,7 @@ import shutil
 from pathlib import Path
 
 from .base import Provider, fill_unset
-from .context import banner, die
+from .context import banner, die, warn
 
 # ships alongside this module, so it's found regardless of whether denver
 # runs from a checkout or an installed package (see providers/conan_scripts).
@@ -311,6 +311,7 @@ class ConanProvider(Provider):
         conan = cfg.get("exe")
         if not conan:
             die("conan provider needs 'conan' on PATH (installed by the uv provider)")
+        self._warn_if_shadowing_venv(ctx, conan)
         python = ctx.which("python3") or "python3"
 
         recipes_exporter = Path(cfg["recipes-exporter"])
@@ -383,9 +384,51 @@ class ConanProvider(Provider):
         for config_dir in cfg.get("config") or []:
             ctx.run([conan, "config", "install", config_dir])
 
+    def _warn_if_shadowing_venv(self, ctx, conan):
+        """Warn when a venv is active but the conan about to run isn't the one inside it.
+
+        A host-wide or in-image conan is a legitimate setup (see module
+        docstring), so this is never fatal -- an env may well activate a
+        venv for something else entirely and get conan from the image.
+
+        But when an env installs conan via an earlier uv stage (as
+        examples/raspberry-pico does), 'conan' on PATH is *meant* to be
+        that venv's pinned one. ``exe``'s lookup now runs after that stage
+        (see denver._run_stage_setup), so reaching this point means the
+        venv really has no conan of its own -- an interrupted install a
+        later run still considers satisfied, or a requirements file that
+        simply never named conan -- and the host's is standing in for it,
+        unpinned. That only shows up as an unrelated conan failure much
+        further down, so say it here instead.
+        """
+        venv = ctx.env.get("VIRTUAL_ENV")
+        if not venv or Path(conan).resolve().is_relative_to(Path(venv).resolve()):
+            return
+        warn(
+            f"conan[{self.stage}]: using {conan}, from outside the active venv ({venv}) -- "
+            f"that venv has no conan of its own, so this run is not using a pinned version. "
+            f"If it should be pinned, name conan in the uv stage's requirements (and --force "
+            f"to rebuild the venv if it should already be there)."
+        )
+
     def _ensure_profile(self, ctx, conan):
         """Auto-detect a conan profile, unless one already exists at <conan home>/profiles/default."""
-        home = ctx.run([conan, "config", "home"], capture=True, echo=False).stdout.strip()
+        # `conan config home` is the first thing asked of conan here, and it
+        # fails whenever conan's *home* is unusable at all (an invalid
+        # global.conf, a cache written by another conan version, permissions)
+        # -- nothing to do with this env's config. Handled here rather than
+        # left to main()'s generic subprocess-failure message so it can name
+        # the home involved: this is a capture=True call, so conan's own
+        # stderr is sitting in the result rather than on the terminal.
+        result = ctx.run([conan, "config", "home"], capture=True, echo=False, check=False)
+        if result.returncode != 0:
+            conan_home = ctx.env.get("CONAN_HOME") or "<unset -- conan's own default, usually ~/.conan2>"
+            die(
+                f"conan[{self.stage}]: `{conan} config home` failed (exit {result.returncode}) -- "
+                f"conan cannot use its home (CONAN_HOME={conan_home}):\n"
+                f"{(result.stderr or '').rstrip()}"
+            )
+        home = result.stdout.strip()
         if not (Path(home) / "profiles" / "default").is_file():
             ctx.run([conan, "profile", "detect"])
 
