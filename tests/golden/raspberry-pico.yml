@@ -1,5 +1,7 @@
 version: 1.0
 denver-version: '>=1.1.0'
+env:
+  CONAN_HOME: ${DENVER_ENV_WORKDIR}/.conan2
 hooks:
   env: null
   post-conan: null
