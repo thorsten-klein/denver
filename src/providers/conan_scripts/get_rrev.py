@@ -198,10 +198,14 @@ def get_RREV(conanfile_dir):
     yml_sources = yml_data.get("sources") or {}
     yml_data["sources"] = yml_sources  # linked to yml_data, so a save() below keeps it
     changed = False
-    for obsolete_source in set(yml_sources) - set(exports_sources):
-        del yml_sources[obsolete_source]
-        changed = True
 
+    # Only entries named in 'exports_sources' are denver's to manage. A recipe
+    # is free to pin sources in conandata.yml that it fetches itself at build
+    # time (conan's own `get()`) instead of staging the archive next to the
+    # recipe -- a bare conan recipe with no 'exports_sources' at all is the
+    # extreme case. Those entries are left exactly as written rather than
+    # deleted as "obsolete": conandata.yml belongs to the recipe author, and
+    # silently dropping what they put there would break such a recipe.
     for exports_source in exports_sources:  # TODO: support wildcard *
         md5, source_changed = _sync_export_source(conanfile_dir, exports_source, yml_sources, conandata_yml)
         changed = changed or source_changed

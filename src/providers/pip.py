@@ -16,7 +16,8 @@ Everything is configured from denver.yml -> ``pip:``:
       - path/to/overrides.txt
       find-links:                 # extra wheel sources (optional, e.g. a cache)
       - ${DENVER_ENV_WORKDIR}/.conan/...
-      no-index: auto              # auto|true|false (auto => true inside docker)
+      no-index: false             # true|false|auto (default false; 'auto' =>
+                                   # true inside docker, false on the host)
       link-mode: copy             # uv link mode
       venv-patcher:                # applies venv patches (optional); when set,
         exe: venv-patcher          # executable (default: venv-patcher on PATH)
@@ -114,7 +115,7 @@ class PipProvider(Provider):
         resolved = dict(cfg)
         resolved["python"] = str(cfg.get("python") or "3.12.3")
         resolved["uv"] = cfg.get("uv") or ctx.which("uv")
-        no_index = cfg.get("no-index", "auto")
+        no_index = cfg.get("no-index", False)
         resolved["no-index"] = ctx.in_docker if no_index == "auto" else bool(no_index)
         resolved["link-mode"] = cfg.get("link-mode", "copy")
         resolved["append-mode"] = cfg.get("append-mode", False)

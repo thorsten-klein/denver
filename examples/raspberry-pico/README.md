@@ -1,0 +1,108 @@
+# examples/raspberry-pico
+
+**An embedded C/C++ cross-compilation environment — an ARM toolchain, the
+Pico SDK and CMake — with no container involved.**
+
+## What it does
+
+`denver examples/raspberry-pico` gives you a shell in which you can build
+firmware for the [Raspberry Pi Pico](https://www.raspberrypi.com/documentation/microcontrollers/):
+
+- `arm-none-eabi-gcc` 15.3 — the ARM bare-metal cross-compiler
+- `pico-sdk` 2.3.0, including `picotool`
+- `cmake` 3.31.9
+
+None of it is installed on your machine in the usual sense, and none of it is
+compiled locally: Conan unpacks prebuilt binaries into its cache and puts them
+on `PATH` for the lifetime of the shell.
+
+## Why it exists
+
+**It is the "our tools aren't Python" case, in its smallest honest form.**
+Embedded projects are where the classic README —  *"install the GNU Arm
+toolchain (version X), then the Pico SDK, set `PICO_SDK_PATH`, and make sure
+your CMake is at least Y"* — does the most damage, because every one of those
+steps is a place for two developers' machines to diverge. This env is that
+README made executable, and pinned.
+
+**It shows that `docker` is optional.** This is a full cross-compilation
+toolchain and there is no `docker` stage anywhere in it. Everything runs
+directly on the host. Reach for a container when you need a specific OS or
+system libraries (see [`../zephyr-docker`](../zephyr-docker)) — not
+reflexively, just because the project is an embedded one.
+
+## Purpose as an example
+
+Three things are worth reading this env for.
+
+**1. Why `pip` runs before `conan`.** The stage order looks backwards until
+you notice what `requirements.txt` contains:
+
+```yaml
+stages:
+- pip     # installs conan==2.31.2 and uv into a venv
+- conan   # ...and now the 'conan' executable exists to be run
+```
+
+Conan is itself a Python package. The `conan` provider expects a `conan`
+binary to already be on `PATH` wherever its stage runs, and the `pip` stage
+is what puts it there. This is the clearest illustration of the rule that a
+stage consumes what earlier stages left behind — including, here, the very
+tool it is named after.
+
+**2. Reusing recipes across environments.** The `conan` stage pulls its CMake
+recipe out of a *different* example rather than carrying a copy:
+
+```yaml
+base-classes:
+- ../zephyr-devshell/conan/base_classes   # shared conanfile base classes
+conanfiles:
+- path: conan/conanfile.py
+  recipe-dirs:
+  - conan/recipes                                # this env's own
+  - ../zephyr-devshell/conan/recipes/cmake       # borrowed from the devshell
+  catalog: conan/catalog.yml
+```
+
+A unit's `recipe-dirs:` are resolved into **one** catalog, so `catalog.yml`
+here pins all three recipes — the two local ones and the borrowed CMake —
+as `name/version@user/channel#revision`. `conanfile.py` then reads its
+`tool_requires` back out of that same file, which is why the pinned revisions
+show up in a reviewable diff instead of floating.
+
+**3. A real-world Conan escape hatch.** The `install-args:` block is the most
+instructive comment in the tree:
+
+```yaml
+install-args:
+- -c:a=tools.system.package_manager:mode=install
+- -c:a=tools.system.package_manager:sudo=True
+```
+
+`-c:a` (both contexts), not a plain `-c` — a plain `-c` is shorthand for
+`-c:h` and reaches only the *host* profile. `pico-sdk` is a `tool_requires`
+and is therefore built in the **build** context, which would keep Conan's
+default `check` mode and abort with *"'cmake' are missing but can't install"*
+on any machine that didn't already happen to have the apt package. The keys
+denver does not model itself, you pass through literally.
+
+## Files
+
+| Path | What it is |
+|---|---|
+| `denver.yml` | Two stages: `pip`, then `conan` |
+| `requirements.txt` | `conan` and `uv` — the tools the next stage needs |
+| `conan/conanfile.py` | Declares the three `tool_requires`, read from the catalog |
+| `conan/catalog.yml` | Generated pin file: recipe → exact reference + revision |
+| `conan/recipes/arm-none-eabi/15.3/` | The ARM toolchain recipe |
+| `conan/recipes/pico-sdk/2.3.0/` | Pico SDK + picotool, with its vendored deps |
+
+Both recipe directories carry a `test_package/`, Conan's own smoke test for a
+built package.
+
+## Next
+
+- [`doc/providers/conan.md`](../../doc/providers/conan.md) — `conanfiles:`
+  units, `recipe-dirs:`, catalogs, remotes, profiles
+- [`../zephyr-devshell`](../zephyr-devshell) — where the borrowed CMake recipe
+  and the conanfile base classes actually live

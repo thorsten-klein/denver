@@ -1,0 +1,101 @@
+version: '1.0'
+denver-version: '>=1.0.3'
+command: bash
+hooks:
+  env: null
+  post-best-practices: null
+  post-docker-with-tools: null
+  post-pip-packages: null
+  post-tools-from-internet: null
+  pre-best-practices: null
+  pre-cmd: null
+  pre-docker-with-tools: null
+  pre-pip-packages: null
+  pre-tools-from-internet: null
+stages:
+- docker-with-tools
+- pip-packages
+- tools-from-internet
+- best-practices
+docker-with-tools:
+  provider: docker
+  description:
+  - Relocates every stage below into an Ubuntu 24.04 container, so the OS and the
+    apt packages are the same for everyone.
+  disabled: false
+  scripts:
+    setup:
+    - setup/install_host_tools.sh
+  compose:
+    args: null
+    build: true
+    file: docker-compose.yml
+    service: dev
+  default-cmd: null
+  env-scripts:
+  - create-env.sh
+  exe: docker
+  image: null
+  registries: null
+  run-args:
+  - --rm
+pip-packages:
+  provider: pip
+  description:
+  - The python 3.12 virtualenv. 'conan' is in requirements.txt because the next stage
+    needs it on PATH -- the conan provider never installs it.
+  disabled: false
+  scripts: null
+  append-mode: false
+  find-links: null
+  freeze-to: null
+  install-args: null
+  link-mode: copy
+  no-index: false
+  overrides: null
+  python: 3.12.3
+  requirements:
+  - requirements.txt
+  skip-if: []
+  uv: /usr/bin/uv
+  venv: null
+  venv-patcher: null
+tools-from-internet:
+  provider: conan
+  description:
+  - Downloads cmake and the ARM toolchain at exactly the pinned versions and puts
+    them on PATH. One unit -- a conanfile plus the recipes it installs.
+  disabled: false
+  scripts: null
+  base-classes: []
+  build: missing
+  channel: snapshot
+  cleanup-remotes: true
+  conanfiles:
+  - catalog: ''
+    path: <REPO>/examples/howto-env/conan/conanfile.py
+    recipe-dirs:
+    - <REPO>/examples/howto-env/conan/recipes
+    recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
+  config: null
+  deployer: <REPO>/src/providers/conan_scripts/extensions/symlink.py
+  exe: /usr/bin/conan
+  install-args: null
+  no-auth: false
+  profiles:
+    build: []
+    host: []
+  recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
+  remotes: {}
+  user: denver
+best-practices:
+  provider: custom
+  description:
+  - 'Team convention: pytest always verbose, with live logs. Declared as ''source:''
+    rather than ''cmd:'', so the export survives into the final command.'
+  disabled: false
+  scripts: null
+  cmd: null
+  launcher: null
+  source: best-practices.sh
+

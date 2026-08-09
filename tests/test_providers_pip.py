@@ -327,12 +327,21 @@ def test_install_force_ignores_skip_if(make_context, run_recorder, which):
 @pytest.mark.parametrize(
     "no_index, in_docker, expect_present",
     [
-        (None, True, True),  # auto: in-docker defaults --no-index on
-        (None, False, False),  # auto: on-host defaults it off
+        (None, True, False),  # default is off, in docker as much as on the host
+        (None, False, False),
+        ("auto", True, True),  # explicit 'auto': in-docker turns --no-index on
+        ("auto", False, False),  # explicit 'auto': on-host leaves it off
         (True, False, True),  # explicit True wins even on host
         (False, True, False),  # explicit False wins even in-docker
     ],
-    ids=["auto-in-docker", "auto-on-host", "explicit-true", "explicit-false-in-docker"],
+    ids=[
+        "default-in-docker",
+        "default-on-host",
+        "auto-in-docker",
+        "auto-on-host",
+        "explicit-true",
+        "explicit-false-in-docker",
+    ],
 )
 def test_install_no_index(make_context, run_recorder, which, no_index, in_docker, expect_present):
     pip_cfg = {"requirements": ["r.txt"]}
