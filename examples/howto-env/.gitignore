@@ -1,0 +1,5 @@
+# written by create-env.sh on every run
+.env
+
+# conan's cache (CONAN_HOME in denver.yml): downloaded packages, not sources
+.conan2/

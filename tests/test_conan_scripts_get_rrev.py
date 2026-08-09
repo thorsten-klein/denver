@@ -250,18 +250,34 @@ def test_get_rrev_invalid_md5_length_raises(tmp_path, monkeypatch):
         get_rrev.get_RREV(recipe_dir)
 
 
-def test_get_rrev_obsolete_source_removed(tmp_path, monkeypatch):
+def test_get_rrev_keeps_sources_not_in_exports_sources(tmp_path, monkeypatch):
+    """A source the recipe fetches itself at build time is left alone, not deleted."""
     recipe_dir = _recipe_dir(tmp_path)
     src = "data.tar"
+    downloaded = {"url": "http://example/other.tar", "md5": "b" * 32}
     (recipe_dir / src).write_text("payload")
-    (recipe_dir / "conandata.yml").write_text(yaml.safe_dump({"sources": {src: {}, "gone.tar": {"md5": "b" * 32}}}))
+    (recipe_dir / "conandata.yml").write_text(yaml.safe_dump({"sources": {src: {}, "other.tar": downloaded}}))
     _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[src])
     _stub_git_tracked(monkeypatch, {str(recipe_dir / src)})
 
     get_rrev.get_RREV(recipe_dir)
 
     saved = yaml.safe_load((recipe_dir / "conandata.yml").read_text())
-    assert "gone.tar" not in saved["sources"]
+    assert saved["sources"]["other.tar"] == downloaded
+
+
+def test_get_rrev_bare_recipe_conandata_untouched(tmp_path, monkeypatch):
+    """A recipe with no 'exports_sources' keeps its conandata.yml verbatim."""
+    recipe_dir = _recipe_dir(tmp_path)
+    conandata = recipe_dir / "conandata.yml"
+    original = yaml.safe_dump({"sources": {"tool.tar.gz": {"url": "http://example/tool.tar.gz", "md5": "c" * 32}}})
+    conandata.write_text(original)
+    _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[])
+    _stub_git_tracked(monkeypatch, set())
+
+    get_rrev.get_RREV(recipe_dir)
+
+    assert conandata.read_text() == original
 
 
 def test_get_rrev_no_rewrite_when_nothing_changed(tmp_path, monkeypatch):

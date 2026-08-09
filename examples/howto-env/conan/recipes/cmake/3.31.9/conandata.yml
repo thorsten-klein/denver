@@ -1,0 +1,4 @@
+sources:
+  cmake-3.31.9-linux-x86_64.tar.gz:
+    md5: 7c102bf491091679895362bb8ae3f4bb
+    url: https://github.com/Kitware/CMake/releases/download/v3.31.9/cmake-3.31.9-linux-x86_64.tar.gz

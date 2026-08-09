@@ -18,6 +18,12 @@ import:
 # branch, and commit the regenerated file instead.
 pip:
   python: "3.12.3"
+  # install offline inside the container: the 'conan' stage before this one
+  # provides a full wheel cache (UV_FIND_LINKS, from the python-cache recipe),
+  # so there is nothing to fetch from an index in there. 'auto' still resolves
+  # to false on the host, where that cache is not on PATH -- and it has to be
+  # said explicitly, because the default is a plain online install.
+  no-index: auto
   requirements:
   - conan/recipes/python-cache/denver/requirements.txt
   - conan/recipes/python-cache/denver/requirements.final.txt
@@ -52,6 +58,9 @@ zephyr:
 # needs the same override pins the main pip stage uses (not inherited
 # automatically -- see src/providers/pip.py's module docstring).
 pip-zephyr:
+  # same offline install as the 'pip' stage above -- and, like everything
+  # else here, it has to say so itself rather than inherit it from that stage.
+  no-index: auto
   install-args:
   - $(west packages pip)
   overrides:

@@ -1,8 +1,8 @@
 # examples
 
-Six working environments, ordered here from smallest to largest. Each has its
-own README explaining what it does, why it exists and what it is meant to
-teach.
+Examples of working environments, ordered here from smallest to largest.
+Each has its own README explaining what it does, why it exists and what it is
+meant to teach.
 
 They are real, not illustrative. Every `denver.yml` here has its
 `--show-config` output pinned as a golden-file fixture under `tests/golden/`,
@@ -19,6 +19,7 @@ one exercises `zephyr-devshell` and `zephyr-docker` through its import chain.
 | [`zephyr-uv`](zephyr-uv/) | `pip` | A virtualenv and nothing else — proof that no container or toolchain is required |
 | [`raspberry-pico`](raspberry-pico/) | `pip` → `conan` | A cross-compilation toolchain **without Docker**. Why stage order matters |
 | [`zephyr-docker`](zephyr-docker/) | `docker` | The container layer on its own — a wrapper stage, and `env-scripts:` |
+| [`howto-env`](howto-env/) | `docker` → `pip` → `conan` → `custom` | Four providers in one small env, built step by step in [`doc/how-to.md`](../doc/how-to.md) |
 | [`zephyr-devshell`](zephyr-devshell/) | *(base — not runnable)* | The shared base: `import:`, layering, `runnable: false` |
 | [`zephyr-devshell-4.3.1`](zephyr-devshell-4.3.1/) | 5 stages | A full Zephyr RTOS setup. The patterns that only appear at scale |
 

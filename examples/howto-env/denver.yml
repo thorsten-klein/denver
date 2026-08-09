@@ -1,0 +1,60 @@
+version: "1.0"
+denver-version: ">=1.0.3"
+
+# The environment built step by step in doc/how-to.md. Every stage id here is
+# named after the problem it solves rather than after its provider -- an id is
+# only a label, the section below always declares 'provider:' itself.
+stages:
+- docker-with-tools   # 1. Ubuntu 24.04 + the apt packages + uv
+- pip-packages        # 2. the python 3.12 venv
+- tools-from-internet # 3. cmake 3.31.9 and the ARM toolchain 15.3, exactly
+- best-practices      # 4. the team's PYTEST_ADDOPTS convention
+
+# what the finished environment starts when no command follows '--'
+command: bash
+
+docker-with-tools:
+  provider: docker
+  description:
+  - Relocates every stage below into an Ubuntu 24.04 container, so the OS
+    and the apt packages are the same for everyone.
+  compose:
+    file: docker-compose.yml
+    service: dev
+  # writes the compose .env file (host UID/GID/HOME) right before build/run
+  env-scripts:
+  - create-env.sh
+  # one-time host bootstrap: `denver examples/howto-env --run setup`
+  scripts:
+    setup:
+    - setup/install_host_tools.sh
+
+pip-packages:
+  provider: pip
+  description:
+  - The python 3.12 virtualenv. 'conan' is in requirements.txt because the
+    next stage needs it on PATH -- the conan provider never installs it.
+  # inside a docker-wrapped env the interpreter is whatever the image has --
+  # denver can't install another one in there, so this must match the
+  # container's `python3 --version` exactly (Ubuntu 24.04: 3.12.3).
+  python: "3.12.3"
+  requirements:
+  - requirements.txt
+
+tools-from-internet:
+  provider: conan
+  description:
+  - Downloads cmake and the ARM toolchain at exactly the pinned versions and
+    puts them on PATH. One unit -- a conanfile plus the recipes it installs.
+  conanfiles:
+  - path: conan/conanfile.py
+    recipe-dirs:
+    - conan/recipes
+
+best-practices:
+  provider: custom
+  description:
+  - "Team convention: pytest always verbose, with live logs. Declared as
+    'source:' rather than 'cmd:', so the export survives into the final
+    command."
+  source: best-practices.sh

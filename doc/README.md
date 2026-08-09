@@ -17,6 +17,12 @@ flag list.
   wrapper relocation. Read this first if a word in another doc is unfamiliar;
   the rest of the tree assumes these definitions.
 
+- **[`how-to.md`](how-to.md)** — build a new environment from an empty
+  folder, one stage at a time: a worked use case, the `stages:` list, then
+  each stage in turn with its own provider and the supporting files it needs
+  (compose file, requirements, conanfile, west manifest, ...). Read this if
+  you'd rather learn the schema by writing one than by reading the reference.
+
 ## Reference
 
 - **[`architecture.md`](architecture.md)** — the system, once. The complete

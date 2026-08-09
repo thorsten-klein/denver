@@ -172,6 +172,7 @@ explaining what it does and why.
 |---|---|
 | [`doc/README.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/README.md) | Documentation index — start here |
 | [`doc/glossary.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/glossary.md) | Every term denver uses, defined once |
+| [`doc/how-to.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/how-to.md) | Step-by-step: build your own environment, one stage at a time |
 | [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md) | The `denver.yml` schema and how the system works |
 | [`doc/philosophy.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/philosophy.md) | The design principles behind it |
 | [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) | One key reference per provider: [pip](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/pip.md), [conan](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/conan.md), [docker](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md), [zephyr](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/zephyr.md), [custom](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/custom.md) |
@@ -420,13 +421,23 @@ not a meal.)
 - Writing your first own env? Start from
   [Step 1](#step-1--first-run-these-commands) above and add a stage only when
   you hit the problem it solves — most environments never need all five.
-- Want to write your own `denver.yml`? [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)
+- Want to write your own `denver.yml`? [`doc/how-to.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/how-to.md)
+  walks through building one from an empty folder, stage by stage;
+  [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)
   documents every key of the schema; or copy the closest `examples/*/denver.yml`.
 - Want details on one stage type's config keys? Each provider has its own
   reference under [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) — e.g.
   [`doc/providers/docker.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md) for every `docker:` key —
   and a terser lookup table in its module docstring next to the code
   (`src/providers/docker.py`).
+
+## You wanna set up your own environment?
+
+Then start with **[`doc/how-to.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/how-to.md)**.
+It documents how a `denver.yml` is created from scratch for a common use case.
+
+Helpful: The result of this is stored under:
+[`examples/howto-env/`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env/)
 
 ## Environment variables
 

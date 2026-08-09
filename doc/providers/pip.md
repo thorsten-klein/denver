@@ -37,10 +37,16 @@ a stage with no `uv` on `PATH` fails with `pip provider needs 'uv' on PATH`.
   requirements file for them.
 - **`overrides`** — a list of `--override` files.
 - **`find-links`** — extra wheel sources (e.g. a local cache directory).
-- **`no-index`** (default `"auto"`) — `auto`/`true`/`false`. `auto`
-  resolves to `true` inside a docker-wrapped env, `false` otherwise — the
-  assumption being a container already has everything it needs baked in
-  and shouldn't reach out to the network, while a host run should.
+- **`no-index`** (default `false`) — `true`/`false`/`auto`. `false` installs
+  from an index normally, wherever the stage runs. Set `auto` for an env
+  whose *container* is meant to install offline: it then resolves to `true`
+  inside a docker-wrapped env and `false` on the host — the assumption being
+  that the image already has everything it needs baked in (a wheel cache
+  reachable via `find-links:`) and shouldn't reach out to the network, while
+  a host run should. `auto` is opt-in rather than the default because a
+  container that has *not* had its wheels baked in is the far more common
+  case, and there the default has to be a working install, not an offline
+  one.
 - **`link-mode`** (default `"copy"`) — `uv`'s own link mode
   (`UV_LINK_MODE`); `copy` avoids a hardlink warning when the venv and
   `uv`'s cache are on different filesystems.
