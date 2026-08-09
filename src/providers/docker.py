@@ -102,10 +102,35 @@ Full key reference, worked examples and design notes: ``doc/providers/docker.md`
 """
 
 import os
+import sys
 from pathlib import Path
 
 from .base import Provider, fill_unset
 from .context import banner, die
+
+
+def _relocation_mounts(ctx):
+    """``docker compose run -v`` flags making the running denver reachable inside the container.
+
+    denver re-invokes itself inside the container (see denver.py's
+    reinvoke_command) by the very path it runs from on the host, which only
+    resolves there if that path is part of the relocated environment.
+    Anything under the invocation directory already is -- it is bind-mounted
+    at the same absolute path, which is what wrap()'s ``--workdir`` relies on
+    too -- so a checkout or an editable install needs nothing here and gets
+    no mount, exactly as before.
+
+    Installed anywhere else there is nothing to find: a frozen executable in
+    /usr/local/bin, or a wheel's site-packages. That location is bind-mounted
+    read-only at its own path, so the re-invocation runs precisely the denver
+    that started it rather than whatever the image happens to have (or, as
+    was the case, nothing at all).
+    """
+    source = Path(sys.executable).resolve() if getattr(sys, "frozen", False) else ctx.denver_pkg_dir
+    cwd = Path.cwd().resolve()
+    if source == cwd or cwd in source.parents:
+        return []
+    return ["-v", f"{source}:{source}:ro"]
 
 
 class DockerProvider(Provider):
@@ -250,6 +275,7 @@ class DockerProvider(Provider):
             *self._compose_args,
             "run",
             *self._run_args,
+            *_relocation_mounts(ctx),
             # land in the directory denver was invoked from (bind-mounted at
             # the same absolute path in the container), not the image's WORKDIR
             "--workdir",

@@ -1,6 +1,7 @@
 """Tests for denver.py orchestration: hooks, stacking, run_stages."""
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -309,6 +310,27 @@ def test_reinvoke_command(tmp_path):
     assert "-q" not in cmd
     # 'forwarded' is re-introduced behind a fresh '--', so the re-invoked
     # denver's own argv splitting separates it from denver's own flags again
+    assert cmd[-3:] == ["--", "echo", "hi"]
+
+
+def test_reinvoke_command_frozen_reinvokes_the_executable_itself(tmp_path, monkeypatch):
+    # a frozen single-file build has no denver.py to hand to an interpreter --
+    # __file__ then points into PyInstaller's extraction dir, at a path that is
+    # never actually written, and the container's python3 would not have
+    # denver's dependencies anyway. The executable re-runs itself instead.
+    exe = tmp_path / "bin" / "denver"
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe))
+    config_path = tmp_path / "e" / "denver.yml"
+
+    cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"])
+
+    assert cmd[0] == str(exe.resolve())
+    assert "python3" not in cmd
+    assert str(Path(denver.__file__).resolve()) not in cmd
+    # everything after the launcher is unchanged
+    assert cmd[1] == str(config_path)
+    assert cmd[cmd.index("--skip") + 1] == "docker"
     assert cmd[-3:] == ["--", "echo", "hi"]
 
 

@@ -3,6 +3,7 @@
 import os
 import shutil
 import subprocess
+import sys
 
 import pytest
 
@@ -123,6 +124,32 @@ def test_denver_builtin_always_overrides_real_env(make_context):
     # stale value of the same name was already in the process environment
     ctx = make_context(env={"DENVER_ENV_NAME": "stale"})
     assert ctx.env["DENVER_ENV_NAME"] == "myenv"
+
+
+# ---- frozen build: bundled libraries must not leak into child processes ----#
+def test_frozen_build_drops_its_own_ld_library_path(make_context, monkeypatch):
+    # a one-file build runs with LD_LIBRARY_PATH pointing at its extraction
+    # dir; a child inheriting it loads denver's bundled libraries instead of
+    # the system's, which is how `xz` ended up unable to satisfy its own
+    # symbol versions (see _drop_bundled_library_path)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    ctx = make_context(env={"LD_LIBRARY_PATH": "/tmp/_MEItest"})
+    assert "LD_LIBRARY_PATH" not in ctx.env
+
+
+def test_frozen_build_restores_the_users_own_ld_library_path(make_context, monkeypatch):
+    # PyInstaller stashes any pre-existing value here -- the child must see
+    # that one, not denver's, and never the stash variable itself
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    ctx = make_context(env={"LD_LIBRARY_PATH": "/tmp/_MEItest", "LD_LIBRARY_PATH_ORIG": "/opt/mine/lib"})
+    assert ctx.env["LD_LIBRARY_PATH"] == "/opt/mine/lib"
+    assert "LD_LIBRARY_PATH_ORIG" not in ctx.env
+
+
+def test_unfrozen_denver_leaves_ld_library_path_alone(make_context):
+    # nothing was bundled, so the variable is the user's own business
+    ctx = make_context(env={"LD_LIBRARY_PATH": "/opt/mine/lib"})
+    assert ctx.env["LD_LIBRARY_PATH"] == "/opt/mine/lib"
 
 
 def test_shell_prompt_prefix_exported(make_context):
