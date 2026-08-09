@@ -78,8 +78,26 @@ class DenverConanFile(ConanFile):
     def export_sources(self):
         if not isinstance(self.exports_sources, (list, tuple)):
             raise DenverConanFileError("exports_sources must be a list or tuple")
+        self._check_no_stale_conandata_sources()
         for source_name in self.exports_sources:
             self._export_one_source(source_name)
+
+    def _check_no_stale_conandata_sources(self):
+        """Fail if conandata.yml pins a source this recipe doesn't declare in exports_sources.
+
+        get_rrev.py only adds/updates the entries it is told about via
+        exports_sources and never deletes any, so a source dropped from a
+        recipe would otherwise linger in conandata.yml forever -- pinned,
+        unused, and quietly feeding a stale md5 into the recipe revision.
+        The recipe is the authority on what it exports, so the check belongs
+        here rather than in the RREV script.
+        """
+        stale = sorted(set(self.conan_data.get("sources") or {}) - set(self.exports_sources))
+        if stale:
+            raise DenverConanFileError(
+                f"conandata.yml lists sources which are not in exports_sources: {', '.join(stale)}. "
+                "Remove them from conandata.yml or add them to exports_sources."
+            )
 
     def _export_one_source(self, source_name):
         spec = self._source_spec(source_name)
