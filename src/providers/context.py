@@ -145,6 +145,39 @@ def interpolate(value, variables):
     return value
 
 
+def _drop_bundled_library_path(env):
+    """Undo a frozen build's LD_LIBRARY_PATH in the environment handed to child processes.
+
+    A one-file PyInstaller build (see scripts/create-python-exe.sh) unpacks
+    the libraries it bundles -- liblzma, libssl, libz, ... -- into a temporary
+    directory and runs with ``LD_LIBRARY_PATH`` pointing there, so its own
+    interpreter finds them. Every child process inherits that, and denver's
+    entire job is starting child processes: the *system's* programs, linked
+    against the *system's* libraries, which then load denver's instead. Where
+    the bundled copy is older (it is built on an old distro precisely so the
+    executable runs everywhere), they simply fail::
+
+        xz: /tmp/_MEIxxxxxx/liblzma.so.5: version `XZ_5.4' not found (required by xz)
+
+    PyInstaller preserves any pre-existing value as ``LD_LIBRARY_PATH_ORIG``,
+    so that one is restored when present and the variable dropped entirely
+    when it is not -- the state the user's own shell was in either way.
+
+    Undoing it here, on the environment rather than on this process, is what
+    makes it safe: the dynamic loader read the variable once at startup, so
+    denver's own already-resolved libraries are unaffected, while everything
+    downstream of ctx (run(), source(), exec() and the final command) gets a
+    clean environment from the single place it is seeded.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    original = env.pop("LD_LIBRARY_PATH_ORIG", None)
+    if original is None:
+        env.pop("LD_LIBRARY_PATH", None)
+    else:
+        env["LD_LIBRARY_PATH"] = original
+
+
 class Context:
     """Everything a provider needs to do its job."""
 
@@ -201,6 +234,7 @@ class Context:
 
         # the mutable environment the final command inherits
         self.env = dict(os.environ)
+        _drop_bundled_library_path(self.env)
         self._init_builtins()
 
     # ---- built-in variables --------------------------------------------- #

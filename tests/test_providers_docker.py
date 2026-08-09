@@ -1,5 +1,6 @@
 """Tests for providers.docker.DockerProvider."""
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -611,6 +612,60 @@ def test_wrap_workdir_is_invocation_cwd_not_image_default(make_context, run_reco
     monkeypatch.chdir(tmp_path)
     cmd = n.wrap(ctx, ["echo"])
     assert cmd[cmd.index("--workdir") + 1] == str(tmp_path)
+
+
+# ---- relocation mounts ----------------------------------------------------------------------#
+def test_wrap_does_not_mount_denver_when_it_runs_from_the_workspace(make_context, run_recorder, which, monkeypatch):
+    # the invocation dir is bind-mounted at the same absolute path already
+    # (that is what --workdir relies on), so a checkout or an editable install
+    # is reachable inside the container without any help
+    config = {"docker": docker_cfg()}
+    ctx = make_context(config=config)
+    write_compose(ctx)
+    ctx, n = run_docker(config, ctx)
+    monkeypatch.chdir(ctx.denver_pkg_dir.parent)
+
+    assert "-v" not in n.wrap(ctx, ["echo"])
+
+    monkeypatch.chdir(ctx.denver_pkg_dir)
+    assert "-v" not in n.wrap(ctx, ["echo"])
+
+
+def test_wrap_mounts_an_installed_denver_at_its_own_path(make_context, run_recorder, which, monkeypatch, tmp_path):
+    # a wheel's site-packages is nowhere near the workspace, so the inner
+    # denver would have nothing to re-invoke
+    config = {"docker": docker_cfg()}
+    ctx = make_context(config=config)
+    write_compose(ctx)
+    ctx, n = run_docker(config, ctx)
+    site_packages = tmp_path / "venv" / "site-packages"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setattr(ctx, "denver_pkg_dir", site_packages)
+    monkeypatch.chdir(workspace)
+
+    cmd = n.wrap(ctx, ["echo"])
+
+    assert cmd[cmd.index("-v") + 1] == f"{site_packages}:{site_packages}:ro"
+
+
+def test_wrap_mounts_the_frozen_executable_itself(make_context, run_recorder, which, monkeypatch, tmp_path):
+    config = {"docker": docker_cfg()}
+    ctx = make_context(config=config)
+    write_compose(ctx)
+    ctx, n = run_docker(config, ctx)
+    exe = tmp_path / "usr" / "local" / "bin" / "denver"
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(exe))
+    monkeypatch.chdir(ctx.env_dir)
+
+    cmd = n.wrap(ctx, ["echo"])
+
+    # the executable, not its package dir: a one-file build has no importable
+    # tree on disk to mount (see denver.py's reinvoke_command)
+    assert cmd[cmd.index("-v") + 1] == f"{exe.resolve()}:{exe.resolve()}:ro"
+    # ...and it lands before the service name, as a `docker compose run` flag
+    assert cmd.index("-v") < cmd.index("dev")
 
 
 # ---- UID/GID seeding ------------------------------------------------------------------------#

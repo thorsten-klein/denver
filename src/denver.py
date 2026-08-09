@@ -1039,6 +1039,15 @@ def reinvoke_command(
     ``python3`` (a bare command, not this host's interpreter path) is looked
     up wherever the command actually runs -- the container's PATH, not the
     host's -- matching docker.wrap()'s own bare-name commands.
+    Running as a frozen single-file executable (see
+    scripts/create-python-exe.sh) there is no denver.py to hand to an
+    interpreter at all: ``__file__`` then names a file inside PyInstaller's
+    per-run extraction directory that is never actually written (the modules
+    live in an archive inside the executable), and the container's ``python3``
+    would need denver's dependencies -- exactly what that build exists to
+    avoid. So the executable re-invokes *itself*, by its own absolute path,
+    which the wrapper makes resolvable inside the relocated environment by
+    bind-mounting it there (see docker.py's _frozen_denver_mount).
     ``wrapper_stage_ids`` (the active wrapper(s) relocating this command) are
     each passed as their own ``--skip``, so the re-invoked denver's own stage
     filtering drops them from 'stages:' and never tries to relocate again.
@@ -1065,7 +1074,12 @@ def reinvoke_command(
     outer denver's own wrapper-stage work), not just the inner process's
     own, much shorter, wall-clock.
     """
-    script = Path(__file__).resolve()
+    # the interpreter+script pair to re-run denver with, or the frozen
+    # executable on its own -- see this function's docstring
+    if getattr(sys, "frozen", False):
+        launcher = [str(Path(sys.executable).resolve())]
+    else:
+        launcher = ["python3", str(Path(__file__).resolve())]
     filter_flags = []
     if until_stage:
         filter_flags += ["--until", until_stage]
@@ -1077,7 +1091,7 @@ def reinvoke_command(
     if start_time is not None:
         extra_flags += ["--start-time", repr(start_time)]
     command = ["--", *forwarded] if forwarded else []
-    return ["python3", str(script), str(config_path), *filter_flags, *extra_flags, *command]
+    return [*launcher, str(config_path), *filter_flags, *extra_flags, *command]
 
 
 def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, force=False, ci=False):

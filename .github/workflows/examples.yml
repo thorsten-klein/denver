@@ -1,13 +1,13 @@
 name: Examples
 
-# Runs every example env end-to-end. Kept out of ci.yml on purpose: these are
+# Runs every example env end-to-end. Kept out of ci.yml on purpose. These are
 # the slow, network- and docker-heavy runs (conan remotes, west update, image
 # builds), so they guard the develop branch rather than every push/PR.
 on:
   push:
     branches:
     - develop
-  # on-demand: 'Run workflow' in the Actions tab, or `gh workflow run examples.yml`
+  # on-demand -- 'Run workflow' in the Actions tab, or `gh workflow run examples.yml`
   workflow_dispatch:
 
 concurrency:
@@ -15,14 +15,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # built once, by the same recipe the release uses (old-glibc container and
+  # all), then reused by every 'binary' entry of the matrix below -- so what
+  # the examples run is the executable users actually download, not a
+  # separately-built approximation of it.
+  binary:
+    uses: ./.github/workflows/build-binary.yml
+
   examples:
+    needs: binary
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: true
+      # every mode reported, not just the first to break. Which modes fail is
+      # the whole signal here -- a fault in one of them says something quite
+      # different from a fault in all four.
+      fail-fast: false
       matrix:
-        # note zephyr-devshell is not startable at all: it declares
-        # 'runnable: false' -- it is the shared base the versioned devshells
-        # 'import:', and denver rejects starting it directly.
+        # note zephyr-devshell is not startable at all. It declares
+        # 'runnable' set to false -- it is the shared base the versioned devshells
+        # 'import', and denver rejects starting it directly.
         example:
         - simple-env
         - raspberry-pico
@@ -33,17 +44,54 @@ jobs:
           # denver derives its own version from the checkout's git tags (see
           # denver.py's scm_version), and the default shallow, tagless
           # checkout has none -- leaving it to answer 0.1.dev1, which no
-          # example's 'denver-version:' pin is satisfied by.
+          # example's 'denver-version' pin is satisfied by. The 'wheel' and
+          # 'binary' modes have no checkout to consult at run time and go by
+          # the version setuptools-scm baked in at build time instead -- also
+          # from these tags, so they need them just as much.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-      - run: uv sync --group dev
-      # '-- echo ...' instead of a bare run: the pipeline is executed in full,
-      # but the env's 'default-cmd' (an interactive shell for several of these)
-      # is replaced by a command that terminates.
-      - name: Run examples/${{ matrix.example }}
-        run: uv run denver examples/${{ matrix.example }} -- echo "${{ matrix.example }} ok"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: denver-binary
+          path: /tmp/denver-binary
+
+      - name: Install denver, every mode
+        run: |
+          set -eux
+          # 'script' -- "no install required to run" is a deliberate
+          # constraint (see denver.py's _default_denver_dir) -- an interpreter
+          # with denver's single dependency, and the checkout as-is.
+          uv venv .venv
+          uv pip install --python .venv/bin/python pyyaml
+
+          uv venv /tmp/denver-wheel
+          uv pip install --python /tmp/denver-wheel/bin/python .
+
+          uv venv /tmp/denver-editable
+          uv pip install --python /tmp/denver-editable/bin/python -e .
+
+          # the released archive, unpacked exactly as a user would -- which
+          # also keeps the exec bit a zipped artifact would lose. This mode
+          # needs no python at all, as the executable brings its own.
+          tar -xf /tmp/denver-binary/denver_x64_Linux.tar.xz -C /tmp
+
+      # Every mode against the same example, on one runner, so the expensive
+      # work is done once as the caches are shared.and reused.
+      - name: Option 1 -- run the script
+        run: .venv/bin/python src/denver.py examples/${{ matrix.example }} -- echo "ok (script)"
+
+      - name: Option 2 -- run install from a wheel
+        run: /tmp/denver-wheel/bin/denver examples/${{ matrix.example }} -- echo "ok (wheel)"
+
+      - name: Option 3 -- run installed in editable mode
+        run: /tmp/denver-editable/bin/denver examples/${{ matrix.example }} -- echo "ok (editable)"
+
+      - name: Option 4 -- run the standalone executable
+        run: /tmp/denver examples/${{ matrix.example }} -- echo "ok (binary)"
+
       # A run must leave the checkout exactly as it found it. There should be neither
       # modified nor untracked files in git
       - name: Check the run left the checkout clean
