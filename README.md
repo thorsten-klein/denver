@@ -544,6 +544,35 @@ denver examples/zephyr-devshell-4.3.1 --skip docker
 
 (If denver is vendored via git-nested, call `src/denver.py` directly instead.)
 
+## Known limitations
+
+**Every place denver runs needs `import yaml` to work.** denver is a Python
+program with exactly one runtime dependency, PyYAML, so installing it from
+PyPI covers the host automatically. What it cannot cover is a *wrapped*
+environment: a `docker` stage relocates the rest of the stack into the
+container and re-invokes denver in there with the image's own bare `python3`
+— an interpreter that knows nothing about the install on your host. That
+image must supply PyYAML itself:
+
+```dockerfile
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-yaml \
+    && rm -rf /var/lib/apt/lists/*
+```
+
+If it doesn't, denver stops with an error naming the interpreter that
+failed to `import yaml`.
+
+**Which PyYAML that is, is deliberately not pinned.** The host copy and the
+image copy are resolved by two different package managers and will drift
+apart in general. denver accepts that: it calls exactly two functions from
+the library, `yaml.safe_load` and `yaml.safe_dump`, whose behaviour has been
+stable across PyYAML releases for years. So any reasonably recent PyYAML is
+fine, and denver imports whatever it finds instead of demanding a particular
+version and forcing every image to track it. The declared dependency is a
+floor (`pyyaml>=6`), not a pin — and it constrains only the host install
+anyway, never the image's.
+
 ## Contributing
 
 Bug reports, feature requests and pull requests are welcome — see

@@ -41,7 +41,26 @@ import time
 from pathlib import Path
 from typing import NoReturn
 
-import yaml
+try:
+    import yaml
+except ImportError:  # pragma: no cover - depends on the interpreter denver runs on
+    # PyYAML is denver's only runtime dependency, so a pip/uv install always
+    # has it -- but a docker-wrapped env re-invokes denver with the
+    # *container's* bare `python3` (see reinvoke_command), which resolves
+    # imports against the image, not against whatever installed denver on the
+    # host. That process is one the user never asked for by name, so the bare
+    # ImportError traceback points at neither the cause nor the fix. Printed
+    # rather than logged: logging isn't configured this early, and the same
+    # "ERROR: " prefix keeps it looking like every other denver error.
+    sys.stderr.write(
+        f"ERROR: denver requires PyYAML, but 'import yaml' failed in {sys.executable} "
+        f"(python {'.'.join(str(n) for n in sys.version_info[:3])}).\n"
+        f"ERROR: Install it there, e.g. 'pip install pyyaml' / 'uv pip install pyyaml', "
+        f"or 'apt-get install python3-yaml' on Debian/Ubuntu.\n"
+        f"ERROR: If this ran inside a container, that interpreter is the image's: "
+        f"add PyYAML to the Dockerfile of the docker stage's image.\n"
+    )
+    sys.exit(1)
 
 # Make the bundled ``providers`` package importable both when run as
 # ``src/denver.py`` and when installed as the ``denver`` module.
