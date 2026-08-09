@@ -3,7 +3,7 @@
 
 Launch a reproducible development environment described by a ``denver.yml``
 file: denver resolves it (following ``import:`` inheritance), then runs the
-generic *providers* its ``stages:`` list names (pip, conan, zephyr, docker,
+generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker,
 ...) to build/enter the environment purely from config.
 
 A command to run, if given, must be introduced with '--' (e.g.
@@ -161,6 +161,29 @@ DISTRIBUTION_NAME = "denver-tool"
 # source copy with no git history and no install of any kind).
 UNKNOWN_VERSION = "unknown (not installed)"
 
+# The release this working tree is *developing towards* -- i.e. what its next
+# tag will be -- or None to switch the mechanism off entirely (nothing is
+# re-based; a checkout reports exactly what `git describe` says). Bump it in
+# the same commit that first relies on the new release, then tag that same
+# number (see doc/development.md, "Releasing").
+#
+# It exists because a checkout's git tags necessarily lag behind its content:
+# right after a feature lands, `git describe` still reports the *previous*
+# release (1.0.4-17-gabc1234), so an example pinning the 'denver-version:'
+# that feature ships in would refuse to run from source until the tag exists.
+# Running from a checkout must always work, so scm_version() bases a
+# checkout's version on this instead whenever the tags haven't caught up.
+# Once the tag is pushed, git describe overtakes it and this stops having
+# any effect until the next bump -- so a stale value can only ever understate
+# an untagged tree, never overstate a released one.
+#
+# Two tests keep it honest, so a forgotten bump can't go unnoticed: every
+# example must still run from this checkout, and DEV_VERSION must stay ahead
+# of the newest tag once there are commits past it (a new cycle has started,
+# so it has to name the release those commits are heading for) -- see
+# tests/test_dev_version.py.
+DEV_VERSION = "1.1.0"
+
 
 def scm_version():
     """Version of the denver running, derived from its checkout's git tags, or None.
@@ -173,6 +196,10 @@ def scm_version():
     if installed from a tarball with no git history). ``git describe`` reads
     the tags *now*, which is what a version requirement must be judged
     against.
+
+    A checkout whose tags still name an older release than ``DEV_VERSION``
+    (the normal state between a feature landing and the release being
+    tagged) is reported against DEV_VERSION instead -- see _dev_version.
 
     Returns None whenever that can't be answered -- not a checkout, no git
     binary, no tags (e.g. a shallow clone) -- leaving package_version()'s
@@ -193,7 +220,34 @@ def scm_version():
         return None
     if completed.returncode != 0:
         return None
-    return completed.stdout.strip() or None
+    described = completed.stdout.strip()
+    return _dev_version(described) if described else None
+
+
+def _dev_version(described):
+    """Re-base a `git describe` output onto DEV_VERSION when the tags lag behind it.
+
+    With DEV_VERSION set to None the whole mechanism is off and ``described``
+    is returned as-is, whatever it says.
+
+    ``described`` is either a bare tag (sitting exactly on a release) or
+    ``<tag>-<n>-g<sha>`` (n commits past it). Only the second form is ever
+    re-based: sitting *exactly* on a tag means this tree really is that
+    release, whatever DEV_VERSION happens to say, so it's returned untouched.
+
+    The commit suffix is carried over verbatim, so the result reads as the
+    development build it is (``1.1.0-17-gabc1234``, i.e. 17 commits into
+    developing 1.1.0) rather than claiming to be the release itself -- and,
+    ranking after 1.1.0 exactly as git describe's own output does, it
+    satisfies a ``denver-version: ">=1.1.0"`` pin the tree already honours.
+    """
+    if DEV_VERSION is None:
+        return described
+    tag, _, suffix = described.partition("-")
+    parsed, wanted = parse_version(tag), parse_version(DEV_VERSION)
+    if not suffix or parsed is None or compare_versions(parsed, wanted) >= 0:
+        return described
+    return f"{DEV_VERSION}-{suffix}"
 
 
 def package_version():
@@ -262,10 +316,10 @@ def deep_merge(base, override, _path=""):
     A *string* value works the other way around: if a lower layer already
     set the same key to a different string, that's almost always an
     accidental divergent override (e.g. two stacked layers disagreeing on
-    ``pip.python``), so it's a hard error instead of a silent override.
+    ``uv.python``), so it's a hard error instead of a silent override.
     Prefix the overriding value with ``!`` to do it deliberately, e.g.::
 
-        pip:
+        uv:
           python: "!3.12.3"
 
     which discards whatever a lower layer set (the ``!`` is stripped from
@@ -653,7 +707,7 @@ def resolve_provider_defaults(config, ctx):
     """Bake every stage's provider defaults into ``config``, once, in 'stages:' order.
 
     A later stage's resolver (zephyr) can read an earlier one's
-    already-resolved section (pip) this way. Mutates and returns ``config``.
+    already-resolved section (uv) this way. Mutates and returns ``config``.
 
     'scripts:'/'disabled:' are filled in for every stage regardless of
     provider -- both are generic, provider-agnostic keys any stage's
@@ -722,7 +776,7 @@ def collect_import_dirs(config_path, _seen=None):
     Breadth-first: the env's own direct imports, then their imports, etc.
     This is the search order ``Context.resolve_path`` uses to fall back to a
     base env's file when the leaf doesn't have one -- e.g. a conventional
-    default like ``pip/skip-if.sh`` or ``conan/base_classes``. Walking the
+    default like ``uv/skip-if.sh`` or ``conan/base_classes``. Walking the
     whole chain (not just the direct imports) is what makes those
     conventions work through multiple levels of ``import:`` stacking: each
     layer, closest to the leaf first, is checked in turn, so a more-derived
@@ -956,7 +1010,7 @@ def reinvoke_command(
     """Re-invoke denver (skipping ``wrapper_stage_ids``) so setup providers run in the wrapper.
 
     Used inside a wrapper (e.g. docker): the same denver runs again inside the
-    container, where the wrapper is inactive and pip/conan/zephyr build/enter
+    container, where the wrapper is inactive and uv/conan/zephyr build/enter
     the environment. denver's sources are available at the same path (the
     workspace is bind-mounted) -- ``Path(__file__).resolve()`` is this exact
     file's own absolute path, so this works unchanged whether denver runs
@@ -1155,7 +1209,7 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     # just once, upfront, in resolve_full_config(): a value like
     # zephyr.west (a PATH lookup) may only become resolvable after an
     # earlier stage's setup() has actually installed/activated it (e.g.
-    # the pip stage installing west into the venv). --show-config, which
+    # the uv stage installing west into the venv). --show-config, which
     # never runs any setup(), can't see that -- this is what makes the
     # real run more accurate than the upfront snapshot for such values.
     config[provider.stage] = type(provider).resolve_defaults(ctx, config.get(provider.stage) or {}, config)
@@ -1228,8 +1282,8 @@ def run_stages(
     ctx.apply_env_map(config.get("env"))
 
     # each entry in 'stages:' is a pipeline stage (a provider type + config
-    # id), run in order -- so an env can order conan before pip, have several
-    # pip stages, etc. Instantiated for *every* declared id (not just the
+    # id), run in order -- so an env can order conan before uv, have several
+    # uv stages, etc. Instantiated for *every* declared id (not just the
     # runnable ones) purely to learn each skipped stage's kind (wrapper vs.
     # setup) and declared position -- make_stage() itself does no I/O.
     all_stages = [make_stage(stage_id, config) for stage_id in all_stage_ids]

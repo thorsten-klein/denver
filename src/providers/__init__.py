@@ -9,12 +9,12 @@ from .conan import ConanProvider
 from .context import Context, banner, die, info
 from .custom import CustomProvider
 from .docker import DockerProvider
-from .pip import PipProvider
+from .uv import UvProvider
 from .zephyr import ZephyrProvider
 
 # Registry of available providers, keyed by the name used in denver.yml.
 PROVIDERS = {
-    "pip": PipProvider,
+    "uv": UvProvider,
     "conan": ConanProvider,
     "zephyr": ZephyrProvider,
     "docker": DockerProvider,
@@ -48,7 +48,7 @@ def make_stage(stage_id, config):
         )
     # the provider gets the *whole* config (not just its own section): its
     # config_section()/resolve_defaults() re-read the right slice via
-    # self.stage, and zephyr's resolver needs to see pip's section too.
+    # self.stage, and zephyr's resolver needs to see uv's section too.
     provider = cls(config)
     provider.stage = stage_id
     return provider

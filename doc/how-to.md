@@ -45,7 +45,7 @@ denver envs/howto-example
   [`../README.md`](../README.md).
 - The docker stage will run on your host. Per documentation this means,
   that only `docker` with Compose plugin must be installed on the host system.
-- Analog for the pip stage: `uv` must be available.
+- Analog for the uv stage: `uv` must be available.
 
 ## Step 0 — the skeleton
 
@@ -62,7 +62,7 @@ We add the first general entries to `envs/howto-example/denver.yml`:
 
 ```yaml
 version: "1.0"            # the denver.yml schema version -- currently only "1.0" exists
-denver-version: ">=1.0.3" # the minimum denver *tool* this file needs
+denver-version: ">=1.1.0" # the minimum denver *tool* this file needs
 ```
 
 Two different questions, so two keys: `version:` pins the schema, and
@@ -86,19 +86,19 @@ Let's identify the necessary stages. From the use case description we can see th
 | What the colleague was told | Provider | Stage id we will use |
 |---|---|---|
 | "use Ubuntu 24.04" + `apt install jq net-tools curl` | [`docker`](providers/docker.md) | `docker-with-tools` |
-| "create a python 3.12 virtualenv, install `pytest==9.1.1`" | [`pip`](providers/pip.md) | `pip-packages` |
+| "create a python 3.12 virtualenv, install `pytest==9.1.1`" | [`uv`](providers/uv.md) | `uv-packages` |
 | "`cmake` 3.31.9 and ARM 15.3 — exactly those versions" | [`conan`](providers/conan.md) | `tools-from-internet` |
 | "export `PYTEST_ADDOPTS`" | [`custom`](providers/custom.md) | `best-practices` |
 
-**Note**: A stage id is a name we freely choose. `pip-packages` is a `pip`
-stage because its section says `provider: pip`, not because of what it is called.
+**Note**: A stage id is a name we freely choose. `uv-packages` is a `uv`
+stage because its section says `provider: uv`, not because of what it is called.
 
 Now Write the `stages:` list first: it *is* the core of the environment. Note that the order is significant here.
 
 ```yaml
 stages:
 - docker-with-tools
-- pip-packages
+- uv-packages
 - tools-from-internet
 - best-practices
 ```
@@ -107,11 +107,11 @@ Three things about that list:
 
 - **A stage id is only a label.** Each id needs a matching top-level section
   that declares `provider:` explicitly — nothing is ever guessed from the id,
-  which is exactly what lets one environment run two `pip` stages under
+  which is exactly what lets one environment run two `uv` stages under
   different ids.
-- **Order is the dependency chain.** `conan` comes after `pip` because the
-  conan provider never installs conan itself. As `conan` is a pip package,
-  it is installed via pip in the pip stage. For simlicity we only want one pip stage, where we install all pip packages. This is why it must be before conan stage.
+- **Order is the dependency chain.** `conan` comes after `uv` because the
+  conan provider never installs conan itself. As `conan` is a Python package,
+  it is installed into the venv by the uv stage. For simplicity we only want one uv stage, where we install all Python packages. This is why it must be before the conan stage.
 
 In the next step we can create each stage.
 
@@ -120,7 +120,7 @@ In the next step we can create each stage.
 A `docker` stage is a **wrapper**: it builds nothing itself, it *relocates*
 the rest of the pipeline into a compose service. denver builds/enters the
 container and re-invokes itself inside it with this stage skipped, so the
-`pip` and `conan` stages build their work in there rather than on your host.
+`uv` and `conan` stages build their work in there rather than on your host.
 
 ```yaml
 docker-with-tools:      # the id from stages:, not the provider name
@@ -164,7 +164,7 @@ RUN export UV_INSTALL_DIR=/usr/local/bin; \
 ```
 
 **Note**:
-- `uv` is installed into the docker container as it is required by the pip stage later (which runs in the docker).
+- `uv` is installed into the docker container as it is required by the uv stage later (which runs in the docker).
 - `python3` and `python3-yaml` are for **denver itself**: a wrapper stage
   re-invokes denver *inside* the container, and denver is a python program
   (PyYAML is its only dependency). `git` is for the conan stage, whose recipe
@@ -236,14 +236,14 @@ tag is missing. So a changed `Dockerfile` does *not* rebuild on the next
 an `image:` and let denver manage the build-once behaviour
 ([`providers/docker.md`](providers/docker.md)).
 
-## Step 3 — the `pip-packages` stage
+## Step 3 — the `uv-packages` stage
 
 This one already runs *inside* the container, because the `docker` provider
 above relocated everything after it in there.
 
 ```yaml
-pip-packages:
-  provider: pip
+uv-packages:
+  provider: uv
   # in a docker-wrapped env this is checked against the image's own python
   # rather than installed -- and checked as an exact string, so it has to be
   # the container's full `python3 --version` (Ubuntu 24.04: 3.12.3)
@@ -265,11 +265,11 @@ pytest==9.1.1
 `pytest` is what the use case asked for. `conan` is there because of the
 *next* stage: the conan provider never installs conan itself, it expects it
 on `PATH`, and this venv is what puts it there. That is the whole reason
-`pip-packages` sits before `tools-from-internet` in `stages:`.
+`uv-packages` sits before `tools-from-internet` in `stages:`.
 
 The provider drives [`uv`](https://docs.astral.sh/uv/) rather than plain
-`pip` — which is why the `Dockerfile` installs `uv`. Three keys worth knowing
-early:
+`pip` — which is why the `Dockerfile` installs `uv`, and why the provider is
+named after it. Three keys worth knowing early:
 
 - **`requirements:`** is a *list* of `-r` files resolved together in one
   install, not one install per entry.
@@ -281,7 +281,7 @@ early:
 Check the environment now with
 
 ```bash
-denver envs/howto-example --until pip-packages -- pytest --version
+denver envs/howto-example --until uv-packages -- pytest --version
 ```
 
 ## Step 4 — the `tools-from-internet` stage
@@ -451,7 +451,7 @@ def test_docker_stage_gave_us_ubuntu_24_04():
     assert "Ubuntu 24.04" in platform.freedesktop_os_release()["PRETTY_NAME"]
 
 
-def test_pip_stage_gave_us_python_3_12_and_pytest():
+def test_uv_stage_gave_us_python_3_12_and_pytest():
     assert sys.version_info[:2] == (3, 12)
     assert pytest.__version__ == "9.1.1"
 
@@ -470,7 +470,7 @@ $ denver examples/howto-env -q -- pytest examples/howto-env/tests
 
 test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED
 test_environment.py::test_docker_stage_installed_the_apt_packages PASSED
-test_environment.py::test_pip_stage_gave_us_python_3_12_and_pytest PASSED
+test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED
 test_environment.py::test_conan_stage_gave_us_the_pinned_tool_versions PASSED
 test_environment.py::test_custom_stage_exported_the_team_convention PASSED
 ```
@@ -485,7 +485,7 @@ denver envs/howto-example -- pytest            # run one command instead of inte
 denver envs/howto-example --fast               # activate what is already built; run no build step
 denver envs/howto-example --force              # ignore every "nothing changed" shortcut
 denver envs/howto-example --skip docker-with-tools      # same stack, directly on the host
-denver envs/howto-example -c pip-packages.python=3.13   # override one value, this run
+denver envs/howto-example -c uv-packages.python=3.13    # override one value, this run
 ```
 
 The first run is the slow one. After that, each stage fingerprints its own
@@ -498,8 +498,8 @@ without even checking, which needs one full run to have happened first.
 the very same stack directly on the host instead of in the container, so "does
 this work without Docker?" is one flag away rather than a separate code path.
 Whatever the container was providing must then exist on the host itself: for
-this env that is `uv` (the pip stage) and `git` (the conan stage's recipe
-exporter). `conan` is *not* one of them — it arrives through the pip stage's
+this env that is `uv` (the uv stage) and `git` (the conan stage's recipe
+exporter). `conan` is *not* one of them — it arrives through the uv stage's
 venv on the host exactly as it does in the container. Note also that
 `create-env.sh` never runs on this path, so `CONAN_HOME` is unset and conan
 falls back to `~/.conan2` rather than the env's own cache.

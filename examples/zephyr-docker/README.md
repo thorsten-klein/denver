@@ -17,7 +17,7 @@ valid whether they were produced inside or outside the container.
 
 ## Why it exists
 
-**Because some problems can't be fixed from inside a virtualenv.** A `pip` or
+**Because some problems can't be fixed from inside a virtualenv.** A `uv` or
 `conan` stage can pin a package or a toolchain; neither can give you a
 specific glibc, a system library, or a distribution that a vendor tool refuses
 to run without. That is the whole job of a `docker` stage.

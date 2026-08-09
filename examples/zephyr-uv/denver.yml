@@ -1,18 +1,18 @@
 version: 1.0
 # minimum denver (the tool) this env needs -- see doc/architecture.md
-denver-version: ">=1.0.3"
+denver-version: ">=1.1.0"
 
 # A lightweight, uv-managed virtualenv -- the "system venv" (no conan, zephyr or
-# docker). Replaces system_venv.sh / system_venv_activate.sh: the pip provider
+# docker). Replaces system_venv.sh / system_venv_activate.sh: the uv provider
 # creates the venv, installs the requirements and drops into a shell with it
 # activated.
 stages:
-- pip
+- uv
 
 # drop into a shell with the venv on PATH when no command is given
 command: bash
 
-pip:
-  provider: pip
+uv:
+  provider: uv
   requirements:
   - requirements.txt

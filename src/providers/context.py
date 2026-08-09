@@ -61,7 +61,7 @@ def banner(ctx, stage, message):
     ``[ctx.stage_index/ctx.stage_count]`` is the stage's position in the
     overall pipeline (set by denver.py as it runs each stage in order).
     Prefixed with the stage id, not just the message -- an env can declare
-    several stages of the same provider type (e.g. two 'pip' stages), and
+    several stages of the same provider type (e.g. two 'uv' stages), and
     the message alone (e.g. 'install') can't tell those apart; the stage id
     always can. There's no sub-step numbering: each call is just the next
     line in that stage's own progress trail, in whatever order the provider
@@ -196,7 +196,7 @@ class Context:
 
         # venv lives under the workdir; host and in-docker venvs are kept apart.
         # venv_dir is the default; venv_dir_for(name) gives a per-stage venv so
-        # an env can have several pip stages with distinct venvs.
+        # an env can have several uv stages with distinct venvs.
         self.venv_dir = self.venv_dir_for(None)
 
         # the mutable environment the final command inherits

@@ -1,25 +1,25 @@
 version: 1.0
-denver-version: '>=1.0.3'
+denver-version: '>=1.1.0'
 hooks:
   env:
   - <REPO>/examples/zephyr-devshell/hooks/env.sh
   post-conan: null
   post-docker: null
-  post-pip: null
-  post-pip-zephyr: null
+  post-uv: null
+  post-uv-zephyr: null
   post-zephyr: null
   pre-cmd: null
   pre-conan: null
   pre-docker: null
-  pre-pip: null
-  pre-pip-zephyr: null
+  pre-uv: null
+  pre-uv-zephyr: null
   pre-zephyr: null
 stages:
 - docker
 - conan
-- pip
+- uv
 - zephyr
-- pip-zephyr
+- uv-zephyr
 docker:
   provider: docker
   description: null
@@ -68,8 +68,8 @@ conan:
   recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
   remotes: {}
   user: denver
-pip:
-  provider: pip
+uv:
+  provider: uv
   description: null
   disabled: false
   scripts: null
@@ -86,12 +86,12 @@ pip:
   - conan/recipes/python-cache/denver/requirements.txt
   - conan/recipes/python-cache/denver/requirements.final.txt
   skip-if:
-  - <REPO>/examples/zephyr-devshell-4.3.1/pip/skip-if.sh
+  - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-if.sh
   uv: /usr/bin/uv
   venv: null
   venv-patcher:
     exe: /usr/bin/venv-patcher
-    patches: <REPO>/examples/zephyr-devshell-4.3.1/pip/venv-patcher/patches.yml
+    patches: <REPO>/examples/zephyr-devshell-4.3.1/uv/venv-patcher/patches.yml
 zephyr:
   provider: zephyr
   description: null
@@ -110,8 +110,8 @@ zephyr:
   update-args: null
   west-config: null
   west-yml: <REPO>/examples/zephyr-devshell-4.3.1/west.yml
-pip-zephyr:
-  provider: pip
+uv-zephyr:
+  provider: uv
   description: null
   disabled: false
   scripts: null
@@ -127,10 +127,10 @@ pip-zephyr:
   python: 3.12.3
   requirements: null
   skip-if:
-  - <REPO>/examples/zephyr-devshell-4.3.1/pip/skip-if.sh
+  - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-if.sh
   uv: /usr/bin/uv
   venv: null
   venv-patcher:
     exe: /usr/bin/venv-patcher
-    patches: <REPO>/examples/zephyr-devshell-4.3.1/pip/venv-patcher/patches.yml
+    patches: <REPO>/examples/zephyr-devshell-4.3.1/uv/venv-patcher/patches.yml
 

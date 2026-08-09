@@ -112,7 +112,7 @@ def test_build_false_skips(make_context, run_recorder, which, capsys):
 
 def test_fast_has_no_effect_on_build_decision(make_context, run_recorder, which):
     # --fast is not threaded through setup() at all here (unlike
-    # pip/conan/zephyr): 'compose.build:' is read exactly as configured, so
+    # uv/conan/zephyr): 'compose.build:' is read exactly as configured, so
     # a real build still runs under --fast, same as without it.
     config = {"docker": docker_cfg(image="myapp:dev")}
     ctx = make_context(config=config, fast=True)

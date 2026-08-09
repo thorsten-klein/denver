@@ -123,7 +123,7 @@ exports and installs is always exactly what the config names, and an env
 that inherits a base's recipes says so explicitly.
 
 conan itself must already be available wherever this stage runs -- denver
-never installs it: in practice an earlier pip stage does, by listing
+never installs it: in practice an earlier uv stage does, by listing
 ``conan`` in its ``requirements:``, but a host-wide or in-image install
 works just as well (and ``exe:`` can name a specific one).
 
@@ -310,7 +310,7 @@ class ConanProvider(Provider):
 
         conan = cfg.get("exe")
         if not conan:
-            die("conan provider needs 'conan' on PATH (installed by the pip provider)")
+            die("conan provider needs 'conan' on PATH (installed by the uv provider)")
         python = ctx.which("python3") or "python3"
 
         recipes_exporter = Path(cfg["recipes-exporter"])

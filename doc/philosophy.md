@@ -105,7 +105,7 @@ The same `denver.yml`, run on a fresh clone and on a six-month-old working
 copy, should produce the same environment — not one shaped by whatever
 history happens to be sitting on that particular machine.
 
-This principle has been in real tension with a real feature: pip's
+This principle has been in real tension with a real feature: the uv provider's
 `append-mode` accumulates every `uv pip install` argument any previous run
 of a stage ever resolved, specifically so a source that drops out later
 (e.g. a workspace losing a dynamic requirements command) doesn't cause uv

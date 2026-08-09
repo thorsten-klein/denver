@@ -20,23 +20,23 @@ run, in what order, and how each is configured. Its schema is documented in
 section, run in order. The entry is the *stage id*, and the top-level section
 of the same name is that stage's config. A stage id is just a label — the
 section must always declare `provider: <name>` explicitly — which is what
-lets one environment run two `pip` stages (e.g. `pip` and `pip-zephyr`)
+lets one environment run two `uv` stages (e.g. `uv` and `uv-zephyr`)
 targeting different venvs.
 
 **Provider** — the generic engine behind a stage type. denver ships five:
-`pip`, `conan`, `zephyr`, `docker` and `custom`. A provider holds no
+`uv`, `conan`, `zephyr`, `docker` and `custom`. A provider holds no
 project-specific knowledge; everything specific comes from the `denver.yml`
 section it is given. See [`providers/`](providers/).
 
 **Step** — a stage's own internal sub-phase, e.g. conan's
-prepare/export/install or pip's ensure-python/ensure-venv/install/activate.
+prepare/export/install or uv's ensure-python/ensure-venv/install/activate.
 Each step prints its own banner line, in whatever order the provider actually
 does the work; there is deliberately no "step 3 of 7" numbering to keep in
 sync with the code.
 
 **Setup provider** (`kind: setup`) — a provider that builds part of the
 environment in place: creates a venv, installs tools, updates a workspace.
-`pip`, `conan` and `zephyr` are setup providers; `custom` is one unless it
+`uv`, `conan` and `zephyr` are setup providers; `custom` is one unless it
 declares `launcher:`.
 
 **Wrapper provider** (`kind: wrapper`) — a provider that builds nothing
@@ -61,7 +61,7 @@ disagree, because a provider's `setup()` never computes a default of its own.
 **Whole-file `import:`** — one `denver.yml` inheriting another environment's
 entire stack as a base, then adding or overriding only what differs. This is
 how a version-specific environment reuses a shared base without copy-pasting
-its `stages:`/`docker:`/`conan:`/`pip:` config.
+its `stages:`/`docker:`/`conan:`/`uv:` config.
 
 **Section-level `import:`** (also called *stacking*) — one stage section
 pulling its content from another environment's section, without inheriting

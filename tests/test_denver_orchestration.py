@@ -14,7 +14,7 @@ from providers.base import Provider
 def test_collect_import_dirs(tmp_path):
     base = tmp_path / "base"
     base.mkdir()
-    (base / "denver.yml").write_text("stages: [pip]\n")
+    (base / "denver.yml").write_text("stages: [uv]\n")
     env_dir = tmp_path / "env"
     env_dir.mkdir()
     cfg_path = env_dir / "denver.yml"
@@ -26,7 +26,7 @@ def test_collect_import_dirs_none(tmp_path):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
     cfg_path = env_dir / "denver.yml"
-    cfg_path.write_text("stages: [pip]\n")
+    cfg_path.write_text("stages: [uv]\n")
     assert denver.collect_import_dirs(cfg_path) == []
 
 
@@ -36,7 +36,7 @@ def test_collect_import_dirs_multi_level_nearest_first(tmp_path):
     found in 'mid' before falling through to 'base'."""
     base = tmp_path / "base"
     base.mkdir()
-    (base / "denver.yml").write_text("stages: [pip]\n")
+    (base / "denver.yml").write_text("stages: [uv]\n")
 
     mid = tmp_path / "mid"
     mid.mkdir()
@@ -70,15 +70,15 @@ def _write_denver_yml(env_dir, content):
 
 def test_run_hook_missing_key_noop(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [pip]\n")
-    denver.run_hook(ctx, cfg_path, "pre-pip")  # no error
+    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [uv]\n")
+    denver.run_hook(ctx, cfg_path, "pre-uv")  # no error
 
 
 def test_run_hook_single_script(make_context):
     ctx = make_context()
     (ctx.env_dir / "hook.sh").write_text("export HOOKED=1\n")
-    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  pre-pip: hook.sh\n")
-    denver.run_hook(ctx, cfg_path, "pre-pip")
+    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  pre-uv: hook.sh\n")
+    denver.run_hook(ctx, cfg_path, "pre-uv")
     assert ctx.env["HOOKED"] == "1"
 
 
@@ -94,9 +94,9 @@ def test_run_hook_list_of_scripts(make_context):
 
 def test_run_hook_missing_script_dies(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  pre-pip: nope.sh\n")
+    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  pre-uv: nope.sh\n")
     with pytest.raises(SystemExit):
-        denver.run_hook(ctx, cfg_path, "pre-pip")
+        denver.run_hook(ctx, cfg_path, "pre-uv")
 
 
 def test_run_hook_unconfigured_script_is_never_discovered(make_context):
@@ -105,14 +105,14 @@ def test_run_hook_unconfigured_script_is_never_discovered(make_context):
     ctx = make_context()
     (ctx.env_dir / "hooks").mkdir()
     (ctx.env_dir / "hooks" / "env.sh").write_text("export CONVENTIONAL=1\n")
-    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [pip]\n")  # no hooks: at all
+    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [uv]\n")  # no hooks: at all
     denver.run_hook(ctx, cfg_path, "env")
     assert "CONVENTIONAL" not in ctx.env
 
 
 def test_run_hook_nothing_configured_is_a_no_op(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [pip]\n")
+    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [uv]\n")
     denver.run_hook(ctx, cfg_path, "env")  # no error, nothing to source
     assert "CONVENTIONAL" not in ctx.env
 
@@ -169,7 +169,7 @@ def test_run_hook_stacked_lists_from_both_layers(tmp_path, make_context):
     # base-first, and each entry resolves against its own layer's dir.
     base_dir = tmp_path / "base"
     (base_dir / "hooks").mkdir(parents=True)
-    (base_dir / "denver.yml").write_text("stages: [pip]\nhooks:\n  env:\n  - hooks/env.sh\n")
+    (base_dir / "denver.yml").write_text("stages: [uv]\nhooks:\n  env:\n  - hooks/env.sh\n")
     (base_dir / "hooks" / "env.sh").write_text("export FROM_BASE=1\n")
 
     env_dir = tmp_path / "derived"
@@ -240,7 +240,7 @@ def test_expand_section_imports_explicit_section_ref(tmp_path):
 def test_expand_section_imports_no_imports_passthrough(tmp_path):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    config = {"pip": {"python": "3.9"}, "stages": ["pip"]}
+    config = {"uv": {"python": "3.9"}, "stages": ["uv"]}
     expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
     assert expanded == config
     assert extra_dirs == []
@@ -344,18 +344,18 @@ def test_reinvoke_command_forwards_original_until_and_skip(tmp_path):
     # wrapper -- the inner denver has no other way to know about them.
     config_path = tmp_path / "e" / "denver.yml"
     cmd = denver.reinvoke_command(
-        config_path, ["echo", "hi"], ["docker"], until_stage="conan", skip_stages=["pip-zephyr"]
+        config_path, ["echo", "hi"], ["docker"], until_stage="conan", skip_stages=["uv-zephyr"]
     )
     assert cmd[cmd.index("--until") + 1] == "conan"
     skip_positions = [i for i, tok in enumerate(cmd) if tok == "--skip"]
-    assert [cmd[i + 1] for i in skip_positions] == ["pip-zephyr", "docker"]
+    assert [cmd[i + 1] for i in skip_positions] == ["uv-zephyr", "docker"]
 
 
 def test_reinvoke_command_forwards_fast(tmp_path):
     config_path = tmp_path / "e" / "denver.yml"
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], fast=True)
     # --fast must reach the re-invoked (in-container) denver too, for the
-    # same reason as -q above -- it's what actually skips pip/conan/zephyr's
+    # same reason as -q above -- it's what actually skips uv/conan/zephyr's
     # build steps, which run inside the container, not on the host.
     assert "--fast" in cmd
     assert cmd[-2:] == ["echo", "hi"]
@@ -638,7 +638,7 @@ def test_run_stages_wrapper_reinvocation_forwards_quiet(tmp_path, fake_providers
     }
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], quiet=True)
     # -q must be re-passed to the in-container denver, or the reinvoked
-    # process (which does the actual pip/conan/zephyr build) stays noisy.
+    # process (which does the actual uv/conan/zephyr build) stays noisy.
     assert "-q" in exec_recorder["args"]
 
 
@@ -846,7 +846,7 @@ def test_run_stages_logo_shown_even_when_already_in_docker(
 
 
 def test_run_stages_reresolves_stage_defaults_before_setup(tmp_path, run_recorder, exec_recorder, monkeypatch):
-    """A PATH-lookup default (pip.uv) resolved once, upfront, before any
+    """A PATH-lookup default (uv.uv) resolved once, upfront, before any
     stage's setup() runs, can be stale by the time that stage's setup()
     actually executes (e.g. an earlier stage installs/activates the tool in
     between). run_stages() must re-resolve each stage's defaults right
@@ -878,7 +878,7 @@ def test_run_stages_reresolves_stage_defaults_before_setup(tmp_path, run_recorde
         "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
     )()
 
-    config = {"stages": ["pip"], "pip": {"provider": "pip"}}
+    config = {"stages": ["uv"], "uv": {"provider": "uv"}}
     env_dir, cfg_path = _env(tmp_path, config)
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
     # setup() didn't die on "uv not found" -- it saw the re-resolved value

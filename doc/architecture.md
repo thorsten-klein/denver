@@ -16,7 +16,7 @@ provider's own config keys are documented under [`providers/`](providers/).
 ## Core model
 
 An *environment* is a `denver.yml`; it declares an ordered list of *stages*
-under `stages:`; each stage names a `provider:` type (`pip`, `conan`,
+under `stages:`; each stage names a `provider:` type (`uv`, `conan`,
 `zephyr`, `docker`, `custom`) plus some provider-specific keys in a
 top-level section of the stage's own name.
 
@@ -30,7 +30,7 @@ container (see "Wrapper / relocation" below).
 A stage id is only a label. The section must always declare its
 `provider:` explicitly, even when the id happens to match a provider name —
 no type is ever guessed from an id. That is what lets one environment run
-two `pip` stages (say `pip` and `pip-zephyr`, targeting the same or
+two `uv` stages (say `uv` and `uv-zephyr`, targeting the same or
 different venvs) at different points of the pipeline.
 
 ## The `denver.yml` schema
@@ -100,7 +100,10 @@ denver-version: ">=1.0.4"   # directly below version:, always
   plain `src/denver.py` script *and* an editable install, whose packaging
   metadata is frozen at install time and would go stale), otherwise from
   the installed distribution's metadata. `denver --version` prints the
-  same value. In the rare case where neither can answer (a source copy with
+  same value. A checkout whose tags haven't caught up with what the tree
+  contains reports against `DEV_VERSION` instead (`1.1.0-17-gabc1234`), so
+  running from source works at every commit rather than only after a
+  release — see "Releasing" in [`development.md`](development.md). In the rare case where neither can answer (a source copy with
   no git history and no install at all), the requirement is reported as
   unverifiable — a warning, not a failure.
 - A commit past a tag counts as newer than that tag (`1.0.3-2-gabc1234`
@@ -116,7 +119,7 @@ same conclusion: that denver is too old for this `denver.yml`.
 Four keys may appear in *any* stage's section, whatever its provider:
 
 - **`provider`** (**required**) — which provider engine runs this stage:
-  `pip`, `conan`, `zephyr`, `docker` or `custom`.
+  `uv`, `conan`, `zephyr`, `docker` or `custom`.
 - **`description`** — free text (a list of strings) with whatever notes are
   useful to whoever reads the config: what this stage is for, why it's
   configured this way. denver never reads it; it is only surfaced in
@@ -202,7 +205,7 @@ explains a lot of otherwise-surprising behavior:
    bare `<overwrite>` entry to do the same as a pure marker (it's removed from
    the merged list, unlike `!foo` which keeps `foo`). A *string*
    works the same way: two layers disagreeing on the same string key (e.g.
-   `pip.python: "3.11"` vs `"3.12"`) is treated as a likely mistake and is a
+   `uv.python: "3.11"` vs `"3.12"`) is treated as a likely mistake and is a
    hard error, unless the overriding value is explicitly prefixed with `!`
    (e.g. `python: "!3.12"`) to say "yes, replace it on purpose." For both,
    `!` only means anything when there's an actual lower-layer value to
@@ -231,7 +234,7 @@ copy-pasting it:
 
 - **Whole-file `import:`** inherits another env's entire stack as a base,
   e.g. a project-specific env importing a shared base that already
-  declares `stages:`, `docker:`, `conan:`, `pip:`. The importing file only
+  declares `stages:`, `docker:`, `conan:`, `uv:`. The importing file only
   needs to state what's actually different for it.
 - **Section-level `import:`** stacks just one section from another env,
   e.g. a `docker:` section pulling in a shared base's `docker:` config
@@ -246,10 +249,10 @@ something nobody meant to run.
 ## Command-line overrides
 
 - **`-c KEY.PATH=VALUE`** overrides one value in the resolved config,
-  addressed by a dotted path (e.g. `-c pip.python=3.13`). Any missing
+  addressed by a dotted path (e.g. `-c uv.python=3.13`). Any missing
   parent section along the path is created automatically. `KEY.PATH+=VALUE`
   appends to an existing list/string/number instead of replacing it. The
-  value is parsed as YAML, so `-c pip.no-index=true` sets a real boolean,
+  value is parsed as YAML, so `-c uv.no-index=true` sets a real boolean,
   not the string `"true"`. Repeatable; later `-c`s win over earlier ones
   targeting the same path.
 - **`-cf FILE`** overlays a whole YAML file on top of the env's own

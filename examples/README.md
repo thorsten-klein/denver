@@ -16,10 +16,10 @@ one exercises `zephyr-devshell` and `zephyr-docker` through its import chain.
 | Example | Stages | What it is for |
 |---|---|---|
 | [`simple-env`](simple-env/) | 3 × `custom` | The whole model at minimum size. Also the `cmd:` vs `source:` demo |
-| [`zephyr-uv`](zephyr-uv/) | `pip` | A virtualenv and nothing else — proof that no container or toolchain is required |
-| [`raspberry-pico`](raspberry-pico/) | `pip` → `conan` | A cross-compilation toolchain **without Docker**. Why stage order matters |
+| [`zephyr-uv`](zephyr-uv/) | `uv` | A virtualenv and nothing else — proof that no container or toolchain is required |
+| [`raspberry-pico`](raspberry-pico/) | `uv` → `conan` | A cross-compilation toolchain **without Docker**. Why stage order matters |
 | [`zephyr-docker`](zephyr-docker/) | `docker` | The container layer on its own — a wrapper stage, and `env-scripts:` |
-| [`howto-env`](howto-env/) | `docker` → `pip` → `conan` → `custom` | Four providers in one small env, built step by step in [`doc/how-to.md`](../doc/how-to.md) |
+| [`howto-env`](howto-env/) | `docker` → `uv` → `conan` → `custom` | Four providers in one small env, built step by step in [`doc/how-to.md`](../doc/how-to.md) |
 | [`zephyr-devshell`](zephyr-devshell/) | *(base — not runnable)* | The shared base: `import:`, layering, `runnable: false` |
 | [`zephyr-devshell-4.3.1`](zephyr-devshell-4.3.1/) | 5 stages | A full Zephyr RTOS setup. The patterns that only appear at scale |
 

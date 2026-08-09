@@ -1,7 +1,7 @@
 # custom provider
 
 A `custom` stage is the escape hatch: an arbitrary shell command, for
-whatever a project needs that doesn't fit `pip`/`conan`/`zephyr`/`docker`.
+whatever a project needs that doesn't fit `uv`/`conan`/`zephyr`/`docker`.
 
 ```yaml
 my-stage:

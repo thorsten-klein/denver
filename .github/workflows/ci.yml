@@ -67,9 +67,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # setuptools-scm derives the wheel's version from the git tags, and
-          # the smoke test below runs an example whose 'denver-version:' pin
-          # that version has to satisfy.
+          # setuptools-scm derives the wheel's version from the git tags, so
+          # a tagless shallow checkout would build a 0.1.dev1 wheel rather
+          # than one named after the release this commit builds on.
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v3
         with:
@@ -82,8 +82,17 @@ jobs:
       # _default_denver_dir() docstring). --show-config resolves the env by
       # path and bakes in every provider's defaults, so it's what actually
       # exercises provider importability here.
+      #
+      # '-c denver-version=null' drops the example's own pin for this run
+      # (overrides are applied before the version gate). Between a pin being
+      # bumped and the release being tagged, no wheel built from this tree
+      # can satisfy it: a wheel is not a checkout, so denver.py's DEV_VERSION
+      # never applies, and setuptools-scm's dev version (1.0.5.dev17+g...) is
+      # a *pre-release*, which ranks below the release it anticipates by
+      # design. That's a true statement about the wheel and nothing to do
+      # with whether the providers import, which is all this step checks.
       - run: |
           python3 -m venv /tmp/denver-smoke-test
           /tmp/denver-smoke-test/bin/pip install dist/*.whl
           /tmp/denver-smoke-test/bin/denver --help
-          /tmp/denver-smoke-test/bin/denver "$(pwd)/examples/simple-env" --show-config
+          /tmp/denver-smoke-test/bin/denver "$(pwd)/examples/simple-env" --show-config -c denver-version=null

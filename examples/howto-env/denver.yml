@@ -1,12 +1,12 @@
 version: "1.0"
-denver-version: ">=1.0.3"
+denver-version: ">=1.1.0"
 
 # The environment built step by step in doc/how-to.md. Every stage id here is
 # named after the problem it solves rather than after its provider -- an id is
 # only a label, the section below always declares 'provider:' itself.
 stages:
 - docker-with-tools   # 1. Ubuntu 24.04 + the apt packages + uv
-- pip-packages        # 2. the python 3.12 venv
+- uv-packages         # 2. the python 3.12 venv
 - tools-from-internet # 3. cmake 3.31.9 and the ARM toolchain 15.3, exactly
 - best-practices      # 4. the team's PYTEST_ADDOPTS convention
 
@@ -29,8 +29,8 @@ docker-with-tools:
     setup:
     - setup/install_host_tools.sh
 
-pip-packages:
-  provider: pip
+uv-packages:
+  provider: uv
   description:
   - The python 3.12 virtualenv. 'conan' is in requirements.txt because the
     next stage needs it on PATH -- the conan provider never installs it.

@@ -16,7 +16,7 @@ see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everythi
 **`west` must be installed** wherever this stage runs — denver never
 installs it, and unlike the other providers there is no key to point at a
 particular one: it always uses the first `west` on `PATH`. In practice an
-earlier `pip` stage provides it, by listing `west` in its `requirements:`.
+earlier `uv` stage provides it, by listing `west` in its `requirements:`.
 
 ## Key reference
 
@@ -47,11 +47,11 @@ west reads it itself, no provider-specific handling needed.
 ## Design notes
 
 - **The `west` executable is never configured here** — always the first
-  `west` on `PATH`, installed by an earlier `pip` stage.
+  `west` on `PATH`, installed by an earlier `uv` stage.
 - **`west packages pip` is a separate concern.** Installing the Python
   packages a workspace's own modules declare (`west packages pip`) isn't
-  this provider's job — give a *separate* `pip` stage a `requirements:
-  [$(west packages pip)]` entry instead (see [`pip.md`](pip.md)), with its own
+  this provider's job — give a *separate* `uv` stage a `requirements:
+  [$(west packages pip)]` entry instead (see [`uv.md`](uv.md)), with its own
   `overrides:`/`freeze-to:` for pinning them. It has to run *after* this
   stage, since until the workspace is updated there's no way to know what
   those packages even are.

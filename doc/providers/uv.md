@@ -1,18 +1,18 @@
-# pip provider
+# uv provider
 
-A `pip` stage creates/manages a Python virtualenv, using
-[`uv`](https://docs.astral.sh/uv/) instead of plain `pip` underneath.
+A `uv` stage creates/manages a Python virtualenv with
+[`uv`](https://docs.astral.sh/uv/) (rather than plain `pip`/`venv`).
 
 ```yaml
-my-pip-stage:
-  provider: pip
+my-uv-stage:
+  provider: uv
   python: "3.12.3"
   requirements:
   - requirements.txt
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `pip`.)
+see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `uv`.)
 
 ## Requires
 
@@ -21,13 +21,15 @@ installs it. That's the host for a plain run, or the container when a
 `docker` stage relocated the pipeline first (see "Wrapper / relocation" in
 [`../architecture.md`](../architecture.md)), in which case the image needs
 it. Install it per [uv's own instructions](https://docs.astral.sh/uv/getting-started/installation/);
-a stage with no `uv` on `PATH` fails with `pip provider needs 'uv' on PATH`.
+a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
 
 ## Key reference
 
 - **`python`** (default `"3.12.3"`) — the interpreter version the venv is
   created with.
-- **`uv`** (default: `uv` on `PATH`) — the `uv` executable.
+- **`uv`** (default: `uv` on `PATH`) — the `uv` executable itself. (Yes,
+  `uv.uv`: the provider is named after the tool, and this key still points at
+  the binary — e.g. `-c uv.uv=/opt/uv/bin/uv`.)
 - **`requirements`** — a list of `-r` files, installed together.
 - **`install-args`** — extra literal `uv pip install` arguments, e.g.
   `["--pre"]`. An entry wrapped as `$(...)` is instead run as a shell
@@ -56,12 +58,12 @@ a stage with no `uv` on `PATH` fails with `pip provider needs 'uv' on PATH`.
   after install.
 - **`skip-if`** — a list of scripts; if every one exits `0`, the install
   step is skipped entirely (the venv is still created/activated).
-- **`venv`** — names this stage's venv, so several `pip` stages can target
+- **`venv`** — names this stage's venv, so several `uv` stages can target
   distinct venvs (or share one by using the same name, or both leaving it
   unset).
 - **`freeze-to`** — a path; after a real install, `uv pip freeze`'s full
   output is written there. Useful as a lockfile a later run (or a different
-  `pip` stage) can read back via `requirements:`.
+  `uv` stage) can read back via `requirements:`.
 - **`append-mode`** (default `false`) — see "Reproducibility" in
   [`../philosophy.md`](../philosophy.md) for the full trade-off. When `true`, every `uv pip
   install` invocation reuses every `-r`/`--override`/`--find-links`/
@@ -85,12 +87,13 @@ when `venv-patcher:` names its `patches:` file explicitly.
 - **Why `uv`, not plain `pip`.** Speed (a full resolve+install that takes
   `pip` tens of seconds typically takes `uv` a fraction of that) and
   robustness (a more thorough, deterministic resolver) matter more for a
-  tool meant to be run often, not just once at project setup.
+  tool meant to be run often, not just once at project setup. The provider
+  is named after the tool it actually runs, so the config says what happens.
 - **`overrides:` for conflict resolution.** Rather than hand-editing (or
   forking) a `requirements.txt` to work around a version conflict between
   two dependencies, an `overrides:` file pins the conflicting package
   directly, without touching the requirements file it's overriding.
-- **Several `pip` stages, one venv.** Two (or more) stages sharing a `venv:`
+- **Several `uv` stages, one venv.** Two (or more) stages sharing a `venv:`
   name build up the *same* venv in sequence — e.g. so a later stage's
   packages are importable by whatever a tool installed by an earlier stage
   needs to see. Only the first such stage (in `stages:` order) to touch a

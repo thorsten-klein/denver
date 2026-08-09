@@ -91,7 +91,7 @@ isn't the right one.
   locally"/"found on a registry"/skipped applies, `wrap()`'s `run` last —
   so the relocation itself is visible, not silent between the last
   `setup()` line and the container's own output.
-- **`--fast` has no effect here.** Unlike pip/conan/zephyr, this provider
+- **`--fast` has no effect here.** Unlike uv/conan/zephyr, this provider
   doesn't thread `--fast` through `setup()` at all — `compose.build:` is
   read exactly as configured, so a real `docker compose build` still runs
   under `--fast` if the image wasn't found locally or on a registry. The

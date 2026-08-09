@@ -84,13 +84,42 @@ def test_scm_version_outside_a_checkout(monkeypatch):
     assert denver.scm_version() is None
 
 
-def test_scm_version_reads_git_describe(monkeypatch, tmp_path):
+def _describing(output):
+    """Stub subprocess.run so scm_version() sees ``output`` from `git describe`."""
+    return lambda *a, **kw: types.SimpleNamespace(returncode=0, stdout=output)
+
+
+@pytest.mark.parametrize(
+    ("described", "expected"),
+    [
+        # tags have caught up with DEV_VERSION (or passed it): git describe
+        # is authoritative and is passed straight through.
+        ("9.9.9-2-gabc1234\n", "9.9.9-2-gabc1234"),
+        # sitting exactly on a tag: this tree really *is* that release, even
+        # an older one than DEV_VERSION -- never re-based.
+        ("1.0.3\n", "1.0.3"),
+        ("9.9.9\n", "9.9.9"),
+        # a tag matching the '*.*.*' glob that isn't a version at all: left
+        # alone rather than guessed at.
+        ("not.a.version-2-gabc1234\n", "not.a.version-2-gabc1234"),
+        # the normal in-development state: tags still name the previous
+        # release, so the commit suffix is carried onto DEV_VERSION.
+        ("1.0.3-2-gabc1234\n", "8.8.8-2-gabc1234"),
+    ],
+    ids=["tags-caught-up", "on-an-older-tag", "on-a-newer-tag", "unparseable-tag", "tags-behind"],
+)
+def test_scm_version_reads_git_describe(monkeypatch, tmp_path, described, expected):
     monkeypatch.setattr(denver, "checkout_root", lambda: tmp_path)
-    monkeypatch.setattr(
-        denver.subprocess,
-        "run",
-        lambda *a, **kw: types.SimpleNamespace(returncode=0, stdout="1.0.3-2-gabc1234\n"),
-    )
+    monkeypatch.setattr(denver, "DEV_VERSION", "8.8.8")
+    monkeypatch.setattr(denver.subprocess, "run", _describing(described))
+    assert denver.scm_version() == expected
+
+
+def test_scm_version_without_a_dev_version(monkeypatch, tmp_path):
+    """DEV_VERSION = None switches the re-basing off: git describe is reported verbatim."""
+    monkeypatch.setattr(denver, "checkout_root", lambda: tmp_path)
+    monkeypatch.setattr(denver, "DEV_VERSION", None)
+    monkeypatch.setattr(denver.subprocess, "run", _describing("1.0.3-2-gabc1234\n"))
     assert denver.scm_version() == "1.0.3-2-gabc1234"
 
 
@@ -124,7 +153,7 @@ def test_main_denver_version_error_wins_over_unknown_key(tmp_path, monkeypatch, 
     monkeypatch.setattr(denver, "package_version", lambda: "1.0.3")
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text('denver-version: ">=99.0"\nfrom-the-future: true\nstages: [pip]\n')
+    (env_dir / "denver.yml").write_text('denver-version: ">=99.0"\nfrom-the-future: true\nstages: [uv]\n')
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "--show-config"])
     assert ">=99.0" in caplog.text
@@ -173,7 +202,7 @@ def test_main_forwarded_command_without_separator_dies(tmp_path):
     # than silently treating it as (part of) the command.
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "echo", "hi"])
 
@@ -185,7 +214,7 @@ def test_main_unrecognised_flag_dies_immediately_even_in_show_config_mode(tmp_pa
     # --show-config itself never looks at 'forwarded'.
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "--show-config", "--exclude=docker", "--help"])
 
@@ -418,7 +447,7 @@ def test_main_run_flag_runs_named_scripts_and_exits(tmp_path, run_recorder, whic
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "prep.sh").write_text("#!/bin/bash\n")
-    (env_dir / "denver.yml").write_text(f"stages: [pip]\npip:\n  provider: pip\n  scripts:\n    {name}: [prep.sh]\n")
+    (env_dir / "denver.yml").write_text(f"stages: [uv]\nuv:\n  provider: uv\n  scripts:\n    {name}: [prep.sh]\n")
     assert denver.main([str(env_dir), "--run", name]) == 0
     assert str((env_dir / "prep.sh").resolve()) in run_recorder.commands()[-1]
     # --run never builds/enters the environment
@@ -440,24 +469,24 @@ def test_main_no_config_direction_dies(tmp_path):
 def test_main_show_config_flag(tmp_path, capsys, which):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n  python: '3.12.3'\n")
+    (base_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  python: '3.12.3'\n")
 
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("import: [../base]\npip:\n  requirements: [r.txt]\n")
+    (env_dir / "denver.yml").write_text("import: [../base]\nuv:\n  requirements: [r.txt]\n")
 
     assert denver.main([str(env_dir), "--show-config"]) == 0
     out = capsys.readouterr().out
     assert "import" not in out  # the directive itself is dropped, not the data
     printed = denver.yaml.safe_load(out)
-    assert printed["stages"] == ["pip"]
-    assert printed["pip"]["python"] == "3.12.3"
-    assert printed["pip"]["requirements"] == ["r.txt"]
+    assert printed["stages"] == ["uv"]
+    assert printed["uv"]["python"] == "3.12.3"
+    assert printed["uv"]["requirements"] == ["r.txt"]
     # provider defaults (PATH lookups, filesystem conventions, static
     # fallbacks) are baked in too -- not just what denver.yml itself sets.
-    assert printed["pip"]["uv"] == "/usr/bin/uv"
-    assert printed["pip"]["skip-if"] == []
-    assert printed["pip"]["link-mode"] == "copy"
+    assert printed["uv"]["uv"] == "/usr/bin/uv"
+    assert printed["uv"]["skip-if"] == []
+    assert printed["uv"]["link-mode"] == "copy"
 
 
 def test_main_show_config_key_order(tmp_path, capsys, which):
@@ -468,16 +497,16 @@ def test_main_show_config_key_order(tmp_path, capsys, which):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text(
         "version: 1.0\n"
-        "stages: [zephyr, pip]\n"
+        "stages: [zephyr, uv]\n"
         "command: fish\n"
         "zephyr:\n  provider: custom\n  cmd: echo z\n"
-        "pip:\n  provider: custom\n  cmd: echo p\n"
+        "uv:\n  provider: custom\n  cmd: echo p\n"
     )
 
     assert denver.main([str(env_dir), "--show-config"]) == 0
     out = capsys.readouterr().out
     top_level_keys = [line.split(":", 1)[0] for line in out.splitlines() if line and not line.startswith((" ", "-"))]
-    assert top_level_keys == ["version", "command", "hooks", "stages", "zephyr", "pip"]
+    assert top_level_keys == ["version", "command", "hooks", "stages", "zephyr", "uv"]
 
 
 def test_main_show_config_lists_scripts_for_every_stage(tmp_path, capsys, which):
@@ -487,14 +516,14 @@ def test_main_show_config_lists_scripts_for_every_stage(tmp_path, capsys, which)
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text(
-        "stages: [pip, my-stage]\n"
-        "pip:\n  provider: pip\n  scripts:\n    setup: [prep.sh]\n"
+        "stages: [uv, my-stage]\n"
+        "uv:\n  provider: uv\n  scripts:\n    setup: [prep.sh]\n"
         "my-stage:\n  provider: custom\n  cmd: echo hi\n"
     )
 
     assert denver.main([str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["scripts"] == {"setup": ["prep.sh"]}
+    assert printed["uv"]["scripts"] == {"setup": ["prep.sh"]}
     assert printed["my-stage"]["scripts"] is None
 
 
@@ -503,21 +532,19 @@ def test_main_show_config_lists_disabled_for_every_stage(tmp_path, capsys, which
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text(
-        "stages: [pip, my-stage]\n"
-        "pip:\n  provider: pip\n  disabled: true\n"
-        "my-stage:\n  provider: custom\n  cmd: echo hi\n"
+        "stages: [uv, my-stage]\nuv:\n  provider: uv\n  disabled: true\nmy-stage:\n  provider: custom\n  cmd: echo hi\n"
     )
 
     assert denver.main([str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["disabled"] is True
+    assert printed["uv"]["disabled"] is True
     assert printed["my-stage"]["disabled"] is False
 
 
 def test_main_show_config_disabled_not_a_bool_dies(tmp_path, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n  disabled: yes-please\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  disabled: yes-please\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "--show-config"])
 
@@ -527,21 +554,21 @@ def test_main_show_config_lists_description_for_every_stage(tmp_path, capsys, wh
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text(
-        "stages: [pip, my-stage]\n"
-        "pip:\n  provider: pip\n  description: ['installs the venv']\n"
+        "stages: [uv, my-stage]\n"
+        "uv:\n  provider: uv\n  description: ['installs the venv']\n"
         "my-stage:\n  provider: custom\n  cmd: echo hi\n"
     )
 
     assert denver.main([str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["description"] == ["installs the venv"]
+    assert printed["uv"]["description"] == ["installs the venv"]
     assert printed["my-stage"]["description"] is None
 
 
 def test_main_show_config_description_not_a_list_of_strings_dies(tmp_path, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n  description: not-a-list\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  description: not-a-list\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "--show-config"])
 
@@ -550,24 +577,24 @@ def test_main_show_config_resolves_hooks(tmp_path, capsys, which):
     """--show-config must reflect the effective hooks: a list-valued entry, a
     single-string entry, and a name with nothing configured (shown as null).
 
-    An unconfigured hooks/post-pip.sh is written to disk too, to pin down
+    An unconfigured hooks/post-uv.sh is written to disk too, to pin down
     that it is *not* discovered."""
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "hooks").mkdir()
     (env_dir / "hooks" / "env.sh").write_text("#!/bin/bash\n")
-    (env_dir / "hooks" / "post-pip.sh").write_text("#!/bin/bash\n")
-    (env_dir / "pre-pip.sh").write_text("#!/bin/bash\n")
+    (env_dir / "hooks" / "post-uv.sh").write_text("#!/bin/bash\n")
+    (env_dir / "pre-uv.sh").write_text("#!/bin/bash\n")
     (env_dir / "denver.yml").write_text(
-        "stages: [pip]\npip:\n  provider: pip\nhooks:\n  env:\n  - hooks/env.sh\n  pre-pip: pre-pip.sh\n"
+        "stages: [uv]\nuv:\n  provider: uv\nhooks:\n  env:\n  - hooks/env.sh\n  pre-uv: pre-uv.sh\n"
     )
 
     assert denver.main([str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     hooks = printed["hooks"]
     assert hooks["env"] == [str((env_dir / "hooks" / "env.sh").resolve())]
-    assert hooks["pre-pip"] == [str((env_dir / "pre-pip.sh").resolve())]
-    assert hooks["post-pip"] is None
+    assert hooks["pre-uv"] == [str((env_dir / "pre-uv.sh").resolve())]
+    assert hooks["post-uv"] is None
     assert hooks["pre-cmd"] is None
 
 
@@ -600,15 +627,15 @@ def test_main_show_config_skip_drops_stage_and_section(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text(
-        "stages: [docker, pip]\n"
+        "stages: [docker, uv]\n"
         "docker:\n  provider: docker\n  compose:\n    file: docker-compose.yml\n"
-        "pip:\n  provider: pip\n"
+        "uv:\n  provider: uv\n"
     )
     (env_dir / "docker-compose.yml").write_text("services: {}\n")
 
     assert denver.main([str(env_dir), "--show-config", "--skip", "docker"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["stages"] == ["pip"]
+    assert printed["stages"] == ["uv"]
     assert "docker" not in printed
     assert "pre-docker" not in printed["hooks"]
 
@@ -642,27 +669,27 @@ def test_main_uses_sys_argv_when_no_argv_given(monkeypatch, capsys):
 def test_main_config_flag_combines_with_show_config(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n  python: '3.9'\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  python: '3.9'\n")
 
-    assert denver.main([str(env_dir), "-c", "pip.python=3.12.3", "--show-config"]) == 0
+    assert denver.main([str(env_dir), "-c", "uv.python=3.12.3", "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["python"] == "3.12.3"
+    assert printed["uv"]["python"] == "3.12.3"
 
 
 def test_main_config_flag_repeatable_last_wins(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
 
-    denver.main([str(env_dir), "-c", "pip.python=3.9", "--config", "pip.python=3.12.3", "--show-config"])
+    denver.main([str(env_dir), "-c", "uv.python=3.9", "--config", "uv.python=3.12.3", "--show-config"])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["python"] == "3.12.3"
+    assert printed["uv"]["python"] == "3.12.3"
 
 
 def test_main_config_flag_creates_new_section(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
 
     denver.main([str(env_dir), "-c", "env.FOO=bar", "--show-config"])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
@@ -672,46 +699,46 @@ def test_main_config_flag_creates_new_section(tmp_path, capsys, which):
 def test_main_config_file_flag_overlays_denver_yml(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n  python: '3.9'\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  python: '3.9'\n")
     overlay = tmp_path / "overlay.yml"
-    overlay.write_text("pip:\n  python: '!3.12.3'\n")
+    overlay.write_text("uv:\n  python: '!3.12.3'\n")
 
     denver.main([str(env_dir), "-cf", str(overlay), "--show-config"])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["python"] == "3.12.3"
+    assert printed["uv"]["python"] == "3.12.3"
 
 
 def test_main_config_file_flag_multiple_applied_in_order(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     first = tmp_path / "first.yml"
-    first.write_text("pip:\n  requirements: [a]\n")
+    first.write_text("uv:\n  requirements: [a]\n")
     second = tmp_path / "second.yml"
-    second.write_text("pip:\n  python: '3.11'\n")
+    second.write_text("uv:\n  python: '3.11'\n")
 
     denver.main([str(env_dir), "--config-file", str(first), "--config-file", str(second), "--show-config"])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["requirements"] == ["a"]
-    assert printed["pip"]["python"] == "3.11"
+    assert printed["uv"]["requirements"] == ["a"]
+    assert printed["uv"]["python"] == "3.11"
 
 
 def test_main_config_override_wins_over_config_file(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     overlay = tmp_path / "overlay.yml"
-    overlay.write_text("pip:\n  python: '3.9'\n")
+    overlay.write_text("uv:\n  python: '3.9'\n")
 
-    denver.main([str(env_dir), "-cf", str(overlay), "-c", "pip.python=3.12.3", "--show-config"])
+    denver.main([str(env_dir), "-cf", str(overlay), "-c", "uv.python=3.12.3", "--show-config"])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["python"] == "3.12.3"
+    assert printed["uv"]["python"] == "3.12.3"
 
 
 def test_main_config_flag_missing_argument_dies(tmp_path):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "-c"])
 
@@ -818,10 +845,10 @@ def test_main_config_flag_equals_syntax_splits_on_first_equals_only(tmp_path, ca
     # split only on the *first* '=', leaving KEY.PATH=VALUE intact.
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
-    assert denver.main([str(env_dir), "--config=pip.python=3.12.3", "--show-config"]) == 0
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
+    assert denver.main([str(env_dir), "--config=uv.python=3.12.3", "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
-    assert printed["pip"]["python"] == "3.12.3"
+    assert printed["uv"]["python"] == "3.12.3"
 
 
 def test_main_boolean_flag_with_equals_dies(tmp_path):
@@ -829,7 +856,7 @@ def test_main_boolean_flag_with_equals_dies(tmp_path):
     # '--show-config=foo' instead of silently ignoring the '=foo' part.
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "--show-config=foo"])
 
@@ -837,7 +864,7 @@ def test_main_boolean_flag_with_equals_dies(tmp_path):
 def test_main_until_flag_unknown_stage_dies(tmp_path):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "--until", "typo-stage"])
 
@@ -845,7 +872,7 @@ def test_main_until_flag_unknown_stage_dies(tmp_path):
 def test_main_unknown_stage_section_key_dies(tmp_path):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [pip]\npip:\n  provider: pip\n  pythonn: '3.12.3'\n")
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  pythonn: '3.12.3'\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "--show-config"])
 
@@ -853,7 +880,7 @@ def test_main_unknown_stage_section_key_dies(tmp_path):
 def test_main_unsupported_config_version_dies(tmp_path):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("version: 2.0\nstages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("version: 2.0\nstages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir), "--show-config"])
 
@@ -861,14 +888,14 @@ def test_main_unsupported_config_version_dies(tmp_path):
 def test_main_matching_config_version_ok(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("version: 1.0\nstages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("version: 1.0\nstages: [uv]\nuv:\n  provider: uv\n")
     assert denver.main([str(env_dir), "--show-config"]) == 0
 
 
 def test_main_runnable_false_dies_when_run_directly(tmp_path):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("runnable: false\nstages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("runnable: false\nstages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
         denver.main([str(env_dir)])
 
@@ -876,5 +903,5 @@ def test_main_runnable_false_dies_when_run_directly(tmp_path):
 def test_main_runnable_false_still_allows_show_config(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("runnable: false\nstages: [pip]\npip:\n  provider: pip\n")
+    (env_dir / "denver.yml").write_text("runnable: false\nstages: [uv]\nuv:\n  provider: uv\n")
     assert denver.main([str(env_dir), "--show-config"]) == 0

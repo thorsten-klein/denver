@@ -20,7 +20,7 @@ into one command:
 $ denver examples/howto-env -- pytest examples/howto-env/tests
 test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED
 test_environment.py::test_docker_stage_installed_the_apt_packages PASSED
-test_environment.py::test_pip_stage_gave_us_python_3_12_and_pytest PASSED
+test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED
 test_environment.py::test_conan_stage_gave_us_the_pinned_tool_versions PASSED
 test_environment.py::test_custom_stage_exported_the_team_convention PASSED
 ```
@@ -31,7 +31,7 @@ provider:
 | Stage id | Provider | What it does |
 |---|---|---|
 | `docker-with-tools` | `docker` | relocates everything below into an Ubuntu 24.04 container |
-| `pip-packages` | `pip` | the python 3.12 venv: `pytest` (and `conan`, for the next stage) |
+| `uv-packages` | `uv` | the python 3.12 venv: `pytest` (and `conan`, for the next stage) |
 | `tools-from-internet` | `conan` | downloads `cmake` 3.31.9 and `arm-none-eabi` 15.3, exactly |
 | `best-practices` | `custom` | exports `PYTEST_ADDOPTS`, sourced so it survives |
 
@@ -52,7 +52,7 @@ ten lines, and nothing is inherited via `import:`.
 
 **The image contains what denver's own stages need.** A wrapper stage
 re-invokes denver *inside* the container, so `container/Dockerfile` installs
-`python3` + `python3-yaml` (denver itself), `uv` (the pip stage) and `git`
+`python3` + `python3-yaml` (denver itself), `uv` (the uv stage) and `git`
 (the conan stage's recipe exporter) on top of the use case's own apt list.
 Getting this wrong is the most common way a first docker-wrapped env fails.
 

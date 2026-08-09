@@ -1,8 +1,8 @@
-"""pip provider: a generic Python virtualenv managed with uv.
+"""uv provider: a generic Python virtualenv managed with uv.
 
-Everything is configured from denver.yml -> ``pip:``:
+Everything is configured from denver.yml -> ``uv:``:
 
-    pip:
+    uv:
       python: "3.12.3"            # interpreter version for the venv
       uv: uv                      # uv executable (default: uv on PATH)
       requirements:               # -r files, installed together
@@ -21,7 +21,7 @@ Everything is configured from denver.yml -> ``pip:``:
       link-mode: copy             # uv link mode
       venv-patcher:                # applies venv patches (optional); when set,
         exe: venv-patcher          # executable (default: venv-patcher on PATH)
-        patches: pip/venv-patcher/patches.yml   # 'patches:' is required
+        patches: uv/venv-patcher/patches.yml   # 'patches:' is required
       skip-if:                    # skip (re)install if these scripts all exit 0
       - check.sh                  # (optional; never guessed, see below)
       freeze-to:                   # write `uv pip freeze`'s output here after
@@ -47,7 +47,7 @@ list is kept in ``<DENVER_DIR>/.envs/<env>/.logs/<stage>-install-args.json``,
 outside the venv itself (so it survives a checksum-triggered venv
 recreation); delete the file to reset it.
 
-Several pip stages may share one venv (via an unset/identical 'venv:') --
+Several uv stages may share one venv (via an unset/identical 'venv:') --
 e.g. so `west`'s own extension commands (imported into the *same* running
 `west` process) can see packages a later stage installs on top of what an
 earlier one built. Only the first such stage (in 'stages:' order) to touch a
@@ -56,14 +56,14 @@ sharing it only ever installs on top, never wipes what the first one built.
 
 Every default above (python's version, uv/venv-patcher's executable,
 no-index's auto-resolution, ...) is computed once, centrally, by
-``PipProvider.resolve_defaults`` -- not in setup(). By the time this
+``UvProvider.resolve_defaults`` -- not in setup(). By the time this
 provider's setup() runs, its config section already has every default
 filled in (see ``denver.resolve_provider_defaults``), so nothing here ever
 falls back to a PATH lookup itself.
 
 ``skip-if`` and ``venv-patcher`` are never guessed from the env's directory
-layout: denver does not go looking for a ``pip/skip-if.sh``/``.py`` or a
-``pip/venv-patcher/patches.yml`` that happens to exist. With no ``skip-if:``
+layout: denver does not go looking for a ``uv/skip-if.sh``/``.py`` or a
+``uv/venv-patcher/patches.yml`` that happens to exist. With no ``skip-if:``
 there is no skip check, and the venv patcher runs only when a
 ``venv-patcher:`` section names its ``patches:`` file explicitly (an
 unreadable or missing one is an error, not a silent no-op).
@@ -72,7 +72,7 @@ unreadable or missing one is an error, not a silent no-op).
 never installs it: the host for a plain run, or the image when a ``docker``
 stage relocated the pipeline first.
 
-Full key reference, worked examples and design notes: ``doc/providers/pip.md``.
+Full key reference, worked examples and design notes: ``doc/providers/uv.md``.
 """
 
 import hashlib
@@ -84,15 +84,15 @@ from .context import banner, die, info, sha256_of_files
 
 # uv pip install flags that take exactly one following value -- used to keep
 # a flag and its value together as one atomic unit when accumulating args
-# across runs (see PipProvider._group_args); anything else (a bare flag like
+# across runs (see UvProvider._group_args); anything else (a bare flag like
 # --no-index, or a literal install-args token) is its own one-token unit.
 _VALUE_FLAGS = ("-r", "--override", "--find-links")
 
 
-class PipProvider(Provider):
+class UvProvider(Provider):
     """A generic Python virtualenv managed with uv -- see module docstring for denver.yml keys."""
 
-    name = "pip"
+    name = "uv"
     KEYS = (
         "python",
         "uv",
@@ -129,10 +129,10 @@ class PipProvider(Provider):
             vp_cfg = dict(cfg["venv-patcher"])
             patches = vp_cfg.get("patches")
             if not patches:
-                die("pip: 'venv-patcher:' needs an explicit 'patches:' file")
+                die("uv: 'venv-patcher:' needs an explicit 'patches:' file")
             patches_path = ctx.resolve_path(patches)
             if not patches_path.is_file():
-                die(f"pip: venv-patcher patches file not found: {patches_path}")
+                die(f"uv: venv-patcher patches file not found: {patches_path}")
             vp_cfg["patches"] = str(patches_path)
             vp_cfg["exe"] = vp_cfg.get("exe") or ctx.which("venv-patcher")
             resolved["venv-patcher"] = vp_cfg
@@ -142,14 +142,14 @@ class PipProvider(Provider):
     def setup(self, ctx):
         """Create/activate the venv, install requirements (unless --fast), and apply venv patches."""
         cfg = self.config_section(ctx)
-        # each pip stage may target its own venv (config 'venv:'); default venv
-        # otherwise. This is what lets an env have several pip stages.
+        # each uv stage may target its own venv (config 'venv:'); default venv
+        # otherwise. This is what lets an env have several uv stages.
         venv_dir = ctx.venv_dir_for(cfg.get("venv"))
 
         if ctx.fast:
             banner(ctx, self.stage, "install (skipped by --fast)")
             if not venv_dir.is_dir():
-                die(f"pip[{self.stage}]: --fast needs an existing venv at {venv_dir} -- run once without --fast first")
+                die(f"uv[{self.stage}]: --fast needs an existing venv at {venv_dir} -- run once without --fast first")
             banner(ctx, self.stage, "activate")
             self._activate(ctx, venv_dir)
             return
@@ -163,11 +163,11 @@ class PipProvider(Provider):
         install_args, command_outputs = self._resolve_install_args(ctx, cfg)
 
         if not requirements and not install_args:
-            info(f"pip[{self.stage}]: no requirements configured; only creating the venv")
+            info(f"uv[{self.stage}]: no requirements configured; only creating the venv")
 
         uv = cfg.get("uv")
         if not uv:
-            die("pip provider needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
+            die("uv provider needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
 
         self._ensure_python(ctx, uv, python_version)
         self._ensure_venv(ctx, uv, venv_dir, python_version, requirements + overrides, command_outputs)
@@ -220,12 +220,12 @@ class PipProvider(Provider):
         """Make interpreter ``version`` available to uv: verified offline in docker, installed otherwise."""
         if ctx.in_docker:
             # in docker the interpreter is fixed (baked into the image); we can't
-            # install a different one, so just assert it matches what pip.python
+            # install a different one, so just assert it matches what uv.python
             # asks for, then let uv find (not install) it.
             result = ctx.run(["python3", "--version"], capture=True, echo=False)
             installed = result.stdout.split()[-1]
             if installed != version:
-                die(f"docker provides Python {installed}, but pip.python={version}")
+                die(f"docker provides Python {installed}, but uv.python={version}")
             ctx.run([uv, "python", "find", version])
         else:
             # on the host, uv is free to download/install the requested version itself.
@@ -234,7 +234,7 @@ class PipProvider(Provider):
     def _ensure_venv(self, ctx, uv, venv_dir, version, checksum_files, command_outputs):
         """Create the venv if missing, or recreate it if forced or its requirements changed since last run.
 
-        Several pip stages may share one venv_dir (see module docstring) --
+        Several uv stages may share one venv_dir (see module docstring) --
         only the first stage (per denver run) to reach here for a given
         venv_dir gets to decide whether to recreate it; a later stage
         sharing the same venv_dir this run just installs on top of it,
@@ -247,9 +247,9 @@ class PipProvider(Provider):
         comparing it here is what lets an unchanged env skip both the
         recreate and the (often slow) reinstall on every single run.
         """
-        ensured = getattr(ctx, "_pip_venvs_ensured_this_run", None)
+        ensured = getattr(ctx, "_uv_venvs_ensured_this_run", None)
         if ensured is None:
-            ensured = ctx._pip_venvs_ensured_this_run = set()
+            ensured = ctx._uv_venvs_ensured_this_run = set()
         if venv_dir in ensured:
             return
         ensured.add(venv_dir)
@@ -262,11 +262,11 @@ class PipProvider(Provider):
         if not previous:
             recreate = True  # first run (or never completed): be safe
         elif previous != current:
-            info("pip: requirement checksums changed; recreating venv")
+            info("uv: requirement checksums changed; recreating venv")
             recreate = True
 
         if recreate and venv_dir.exists():
-            info(f"pip: removing {venv_dir}")
+            info(f"uv: removing {venv_dir}")
             shutil.rmtree(venv_dir, ignore_errors=True)
 
         if not venv_dir.exists():
@@ -287,7 +287,7 @@ class PipProvider(Provider):
         """
         skip_if = cfg["skip-if"]
         if not ctx.force and skip_if and self._skip_if_satisfied(ctx, skip_if):
-            info("pip: skip-if scripts all exited 0; skipping install")
+            info("uv: skip-if scripts all exited 0; skipping install")
             return
 
         # build this run's own uv pip install args, in the order uv expects:
@@ -299,7 +299,7 @@ class PipProvider(Provider):
         for link in cfg.get("find-links") or []:
             args += ["--find-links", str(ctx.resolve_path(link))]
         if cfg["no-index"]:
-            info("pip: using --no-index (offline install)")
+            info("uv: using --no-index (offline install)")
             args += ["--no-index"]
         for req in requirements:
             args += ["-r", str(req)]
@@ -377,7 +377,7 @@ class PipProvider(Provider):
         for script in scripts:
             path = ctx.resolve_path(script)
             if not path.is_file():
-                die(f"pip: skip-if script not found: {path}")
+                die(f"uv: skip-if script not found: {path}")
             result = ctx.run([path], check=False, capture=True, echo=False)
             if result.returncode != 0:
                 return False
@@ -391,7 +391,7 @@ class PipProvider(Provider):
             return
         patcher = vp_cfg.get("exe")
         if not patcher:
-            info("pip: venv-patcher not installed; skipping venv patches")
+            info("uv: venv-patcher not installed; skipping venv patches")
             return
         ctx.run([patcher, "apply", "-f", patches])
 
@@ -413,7 +413,7 @@ class PipProvider(Provider):
         target = ctx.resolve_path(freeze_to)
         frozen = ctx.run([uv, "pip", "freeze"], capture=True, echo=False).stdout
         header = (
-            "# This file is auto-generated by the pip provider!\n"
+            "# This file is auto-generated by the uv provider!\n"
             "# To update versions: edit the source requirements and re-run with --force.\n"
         )
         target.parent.mkdir(parents=True, exist_ok=True)
