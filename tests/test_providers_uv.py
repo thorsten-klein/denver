@@ -502,6 +502,211 @@ def test_append_mode_deduplicates_unchanged_requirement(make_context, run_record
     assert install_cmd.count(str((ctx.env_dir / "r.txt").resolve())) == 1
 
 
+# ---- lock: create / sync ---------------------------------------------------------#
+def make_project(ctx, rel="py", *, lockfile=True):
+    """A minimal uv project dir (pyproject.toml, optionally its uv.lock) under the env dir."""
+    project = ctx.env_dir / rel
+    project.mkdir(parents=True, exist_ok=True)
+    (project / "pyproject.toml").write_text("[project]\nname = 'x'\nversion = '0'\n")
+    if lockfile:
+        (project / "uv.lock").write_text("version = 1\n")
+    return project
+
+
+def start_next_run(ctx, run_recorder):
+    """Make ``ctx`` look like a *later* denver invocation against the same on-disk state.
+
+    _ensure_venv only lets the first stage per run decide whether to recreate
+    a given venv (see the shared-venv tests); a second run_uv() call against
+    the same ctx would otherwise be treated as a second *stage* of one run and
+    never reach the checksum comparison at all.
+    """
+    ctx._uv_venvs_ensured_this_run.clear()
+    run_recorder.calls.clear()
+
+
+def test_lock_create_runs_uv_lock_for_the_project(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"create": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    project = make_project(ctx, lockfile=False)
+    run_uv(config, ctx)
+
+    argv = next(a for a in run_recorder.argvs() if "uv lock" in " ".join(a))
+    assert argv[argv.index("--project") + 1] == str(project)
+
+
+def test_lock_sync_installs_lockfile_into_the_activated_venv(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    project = make_project(ctx)
+    run_uv(config, ctx)
+
+    argv = next(a for a in run_recorder.argvs() if "uv sync" in " ".join(a))
+    assert argv[argv.index("--project") + 1] == str(project)
+    # into *this* stage's venv, exactly as locked, without pruning whatever
+    # else (another stage, this stage's own 'requirements:') lives in it
+    assert {"--active", "--frozen", "--inexact"} <= set(argv)
+    assert ctx.env["VIRTUAL_ENV"] == str(ctx.venv_dir)
+
+
+def test_lock_create_runs_before_sync(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"create": "py/uv.lock", "sync": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    make_project(ctx)
+    run_uv(config, ctx)
+
+    commands = run_recorder.commands()
+    assert next(i for i, c in enumerate(commands) if "uv lock" in c) < next(
+        i for i, c in enumerate(commands) if "uv sync" in c
+    )
+
+
+def test_lock_without_pyproject_dies(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "py").mkdir()
+    (ctx.env_dir / "py" / "uv.lock").write_text("version = 1\n")
+    with pytest.raises(SystemExit):
+        run_uv(config, ctx)
+
+
+def test_lock_sync_missing_lockfile_dies(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    make_project(ctx, lockfile=False)
+    with pytest.raises(SystemExit):
+        run_uv(config, ctx)
+
+
+def test_lock_path_must_name_a_uv_lock_file(make_context, run_recorder, which):
+    # uv only ever reads/writes '<project>/uv.lock' -- a path naming anything
+    # else is a config error, caught centrally in resolve_defaults.
+    config = {"uv": {"lock": {"sync": "py/frozen.lock"}}}
+    ctx = make_context(config=config)
+    make_project(ctx)
+    with pytest.raises(SystemExit):
+        run_uv(config, ctx)
+
+
+def test_lock_unknown_subkey_dies(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"syncc": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    make_project(ctx)
+    with pytest.raises(SystemExit):
+        run_uv(config, ctx)
+
+
+def test_lock_only_stage_never_pip_installs(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    make_project(ctx)
+    run_uv(config, ctx)
+    assert not any("uv pip install" in c for c in run_recorder.commands())
+
+
+def test_lock_alongside_requirements_both_run(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "lock": {"sync": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
+    make_project(ctx)
+    run_uv(config, ctx)
+
+    commands = run_recorder.commands()
+    assert any("uv sync" in c for c in commands)
+    # the lockfile is synced first, so the requirements install on top of it
+    assert next(i for i, c in enumerate(commands) if "uv sync" in c) < next(
+        i for i, c in enumerate(commands) if "uv pip install" in c
+    )
+
+
+def test_lock_sync_lockfile_change_recreates_venv(make_context, run_recorder, which):
+    # 'lock: sync:'s lockfile is an install input, so drift in it recreates
+    # the venv just like a changed requirements file does
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    make_project(ctx)
+    run_uv(config, ctx)
+
+    (ctx.env_dir / "py" / "uv.lock").write_text("version = 1\n# changed\n")
+    (ctx.venv_dir / "marker").write_text("x")
+    start_next_run(ctx, run_recorder)
+    run_uv(config, ctx)
+
+    assert any("uv venv" in c for c in run_recorder.commands())
+    assert not (ctx.venv_dir / "marker").exists()
+
+
+def test_lock_sync_unchanged_lockfile_keeps_venv(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    make_project(ctx)
+    run_uv(config, ctx)
+
+    start_next_run(ctx, run_recorder)
+    run_uv(config, ctx)
+
+    assert not any("uv venv " in c for c in run_recorder.commands())
+    assert any("uv sync" in c for c in run_recorder.commands())  # still re-synced
+
+
+def test_lock_create_output_does_not_invalidate_its_own_checksum(make_context, run_recorder, which):
+    # the created lockfile is an *output* (like 'freeze-to:'): writing it must
+    # not make the next run think its inputs drifted and recreate the venv
+    config = {"uv": {"lock": {"create": "py/uv.lock"}}}
+    ctx = make_context(config=config)
+    make_project(ctx, lockfile=False)
+    run_uv(config, ctx)
+    (ctx.env_dir / "py" / "uv.lock").write_text("version = 1\n")  # what `uv lock` would have written
+
+    start_next_run(ctx, run_recorder)
+    run_uv(config, ctx)
+    assert not any("uv venv " in c for c in run_recorder.commands())
+
+
+def test_lock_gets_the_same_wheel_sources_as_pip_install(make_context, run_recorder, which):
+    config = {
+        "uv": {
+            "lock": {"create": "py/uv.lock", "sync": "py/uv.lock"},
+            "find-links": ["wheels"],
+            "no-index": True,
+        }
+    }
+    ctx = make_context(config=config)
+    make_project(ctx)
+    (ctx.env_dir / "wheels").mkdir()
+    run_uv(config, ctx)
+
+    for command in ("uv lock", "uv sync"):
+        argv = next(a for a in run_recorder.argvs() if command in " ".join(a))
+        assert argv[argv.index("--find-links") + 1] == str((ctx.env_dir / "wheels").resolve())
+        assert "--no-index" in argv
+
+
+def test_lock_skipped_by_skip_if(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}, "skip-if": ["check.sh"]}}
+    ctx = make_context(config=config)
+    make_project(ctx)
+    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
+    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
+    # checksums must already match, otherwise the venv is recreated first
+    ctx.venv_dir.mkdir(parents=True)
+    from providers.context import sha256_of_files
+
+    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "py" / "uv.lock"]))
+
+    run_uv(config, ctx)
+    assert not any("uv sync" in c for c in run_recorder.commands())
+
+
+def test_lock_not_synced_under_fast(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+    ctx = make_context(config=config, fast=True)
+    make_project(ctx)
+    ctx.venv_dir.mkdir(parents=True)
+    run_uv(config, ctx)
+    assert run_recorder.calls == []
+
+
 # ---- freeze-to ------------------------------------------------------------------#
 def test_freeze_writes_when_configured(make_context, run_recorder, which):
     config = {"uv": {"requirements": ["r.txt"], "freeze-to": "frozen.txt"}}

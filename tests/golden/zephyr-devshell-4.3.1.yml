@@ -78,6 +78,7 @@ uv:
   freeze-to: null
   install-args: null
   link-mode: copy
+  lock: null
   no-index: false
   overrides:
   - conan/recipes/python-cache/denver/overrides.txt
@@ -121,6 +122,7 @@ uv-zephyr:
   install-args:
   - $(west packages pip)
   link-mode: copy
+  lock: null
   no-index: false
   overrides:
   - conan/recipes/python-cache/denver/overrides.txt
