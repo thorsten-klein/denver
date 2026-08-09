@@ -1,0 +1,142 @@
+name: Release binary
+
+# Builds the single-file 'denver' executable (see scripts/create-python-exe.sh)
+# and attaches denver_x64_Linux.tar.xz to the release, so denver can be used
+# on a machine that has no python -- and no pip, no uv -- at all.
+#
+# Separate from publish.yml on purpose: that one is triggered by the tag push
+# and uploads to PyPI, while attaching an asset needs the GitHub *release* to
+# already exist, which is only guaranteed once it is published.
+on:
+  release:
+    types: [published]
+  # on-demand: builds and verifies without touching any release. Give 'tag'
+  # to also (re-)attach the asset to an existing release, e.g. after fixing
+  # the build for one already published.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to build from and attach the asset to (empty: build + verify only)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The release this builds: its tag is what setuptools-scm turns into the
+  # version frozen into the binary, so checking out anything else would
+  # produce an executable that misreports itself. Empty on a plain
+  # workflow_dispatch -- then the triggering ref is built as-is.
+  REF: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  ARCHIVE: denver_x64_Linux.tar.xz
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A PyInstaller binary links the glibc of the machine that built it, and
+    # glibc is only backward compatible -- built on ubuntu-latest it would
+    # refuse to start on anything older than that runner. AlmaLinux 8 has
+    # glibc 2.28, the oldest that still runs the node20 the actions below
+    # need, which covers every distro from Ubuntu 20.04 / Debian 10 /
+    # Fedora 29 / RHEL 8 onwards (see the verify job). glibc-based distros
+    # only: musl ones (Alpine) can never run this binary.
+    container: almalinux:8
+    steps:
+      # Before the checkout: without git, actions/checkout silently falls
+      # back to downloading a tarball, and a checkout with no .git has no
+      # tags for setuptools-scm to derive the version from.
+      - name: Install build prerequisites
+        run: dnf -y install python3.12 python3.12-pip git tar xz
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
+          # the version frozen into the binary comes from the tags (see REF
+          # above), and the default shallow checkout fetches none of them.
+          fetch-depth: 0
+
+      # the checkout is owned by a different user than this container's root,
+      # which git refuses to read from until told it is not a security issue.
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build the executable
+        run: scripts/create-python-exe.sh --output dist --python python3.12
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: denver-binary
+          path: dist/${{ env.ARCHIVE }}
+          if-no-files-found: error
+
+  # Proves the "runs on any x86_64 Linux" claim rather than assuming it: the
+  # binary is dropped into stock distro images that have no python installed,
+  # and has to run an example end to end there.
+  verify:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          # the glibc floor it was built against, and the oldest still-
+          # supported LTS releases -- the ones a modern-runner build breaks
+          - almalinux:8
+          - ubuntu:20.04
+          - debian:11
+          # ... plus the current end of the range, where a binary built too
+          # old would fail instead
+          - ubuntu:24.04
+          - fedora:latest
+          - archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # only for examples/simple-env below; the binary carries its own
+          # version, so this checkout needs no tags.
+          ref: ${{ env.REF }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: denver-binary
+
+      - name: Unpack
+        run: tar -xf "$ARCHIVE"
+
+      # Unpacked on the runner and mounted in, so the distro images need
+      # neither tar/xz nor anything else to take part -- the point is that
+      # only the binary is required. '-c denver-version=null' drops the
+      # example's own pin, which a workflow_dispatch build off an untagged
+      # commit cannot satisfy (see ci.yml's smoke test for the full why).
+      - name: Run on ${{ matrix.image }}
+        run: |
+          docker run --rm \
+            -v "$PWD/denver:/usr/local/bin/denver:ro" \
+            -v "$PWD:/work" -w /work \
+            ${{ matrix.image }} \
+            sh -c 'denver --version && denver /work/examples/simple-env -c denver-version=null -- echo "denver runs on ${{ matrix.image }}"'
+
+  upload:
+    needs: verify
+    # nothing to attach when workflow_dispatch ran without a tag
+    if: github.event_name == 'release' || inputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: denver-binary
+
+      # --clobber so re-running against an already-attached release replaces
+      # the asset instead of failing halfway.
+      - name: Attach ${{ env.ARCHIVE }} to ${{ env.REF }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "$REF" "$ARCHIVE" --clobber

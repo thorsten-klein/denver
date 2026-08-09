@@ -195,6 +195,21 @@ uv tool install git+https://github.com/thorsten-klein/denver.git
 
 This installs the `denver` script/entry point. 
 
+On a machine with no Python at all, take the standalone executable attached to
+every [release](https://github.com/thorsten-klein/denver/releases) instead — it
+bundles denver, its providers and a Python interpreter in one file:
+
+```bash
+curl -sSL https://github.com/thorsten-klein/denver/releases/latest/download/denver_x64_Linux.tar.xz | tar -xJf -
+./denver --version
+```
+
+x86_64 Linux with glibc 2.28 or newer (Ubuntu 20.04+, Debian 10+, Fedora 29+,
+RHEL/Alma/Rocky 8+, Arch, Mint 20+); musl-based distros such as Alpine are not
+covered. Build it yourself with `scripts/create-python-exe.sh`. Note this only
+replaces *denver's* own installation — the tools its providers drive
+(see [pre-conditions](#pre-conditions)) still have to be there.
+
 To hack on denver itself (or pin it to a specific commit/tag/branch),
 clone it and install in editable mode instead:
 
