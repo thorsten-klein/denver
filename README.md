@@ -8,7 +8,7 @@
 [![codecov](https://codecov.io/gh/thorsten-klein/denver/branch/develop/graph/badge.svg)](https://codecov.io/gh/thorsten-klein/denver)
 [![PyPI](https://img.shields.io/pypi/v/denver-tool.svg)](https://pypi.org/project/denver-tool/)
 [![Python versions](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fthorsten-klein%2Fdenver%2Fdevelop%2Fpyproject.toml)](https://pypi.org/project/denver-tool/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/thorsten-klein/denver/blob/develop/LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/thorsten-klein/denver/blob/develop/LICENSE)
 
 **D**evelopment **Env**ironment Launch**er** — declares dev environments in a
 `denver.yml`: reproducible and layerable to fit your project's needs.
@@ -602,4 +602,4 @@ runs lint, format, mypy and the test suite; denver keeps 100% coverage).
 
 ## License
 
-MIT — see [`LICENSE`](https://github.com/thorsten-klein/denver/blob/develop/LICENSE).
+Apache License 2.0 — see [`LICENSE`](https://github.com/thorsten-klein/denver/blob/develop/LICENSE).

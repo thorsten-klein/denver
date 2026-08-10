@@ -289,7 +289,7 @@ def package_version():
 
 
 def license_text():
-    """The MIT LICENSE text denver ships under, or None if it can't be found.
+    """The Apache-2.0 LICENSE text denver ships under, or None if it can't be found.
 
     Mirrors package_version()'s two sources for the same reason: a checkout
     (running the plain script, or an editable install) has the repo's own
@@ -1599,7 +1599,7 @@ def build_arg_parser():
     parser.add_argument("env", nargs="?", help="path to an env directory or a denver.yml file")
     parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
     parser.add_argument("--version", action="store_true", help="show the installed denver version and exit")
-    parser.add_argument("--license", action="store_true", help="show denver's LICENSE (MIT) and exit")
+    parser.add_argument("--license", action="store_true", help="show denver's LICENSE (Apache-2.0) and exit")
     parser.add_argument("--show-config", action="store_true", help="print the final deep-merged denver.yml and exit")
     parser.add_argument(
         "--run", metavar="NAME", help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login')"

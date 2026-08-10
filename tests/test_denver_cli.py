@@ -81,7 +81,7 @@ def test_main_version_flag_without_any_version_source(monkeypatch, capsys):
 
 def test_main_license_flag(capsys):
     assert denver.main(["--license"]) == 0
-    assert "MIT License" in capsys.readouterr().out
+    assert "Apache License" in capsys.readouterr().out
 
 
 def test_license_text_from_checkout(monkeypatch, tmp_path):
