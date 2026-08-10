@@ -120,6 +120,54 @@ def _fetch_export_source(
         raise GetRREVError(f"Error: don't know how to get file {exports_source_abs}")
 
 
+def _reconcile_export_source_entry(
+    conanfile_dir: Path, exports_source: str, entry: dict, exports_source_abs: Path
+) -> bool:
+    """Sync ``entry``'s git-tracked/url bookkeeping to match reality (mutated in place). Returns True if changed."""
+    changed = False
+    if _is_git_tracked(conanfile_dir, exports_source_abs):
+        if entry.pop("url", None) is not None:  # url on a tracked file doesn't make sense
+            changed = True
+        if exports_source_abs.exists():
+            file_md5 = md5sum(exports_source_abs)
+            if entry.get("md5") != file_md5:
+                entry["md5"] = file_md5
+                changed = True
+    elif not entry.get("url") and not entry.get("custom"):
+        raise GetRREVError(f"Error: 'url' must be specified for {exports_source} in {conanfile_dir}")
+    return changed
+
+
+def _ensure_md5(
+    conanfile_dir: Path, exports_source: str, entry: dict, exports_source_abs: Path, conandata_yml: Path
+) -> tuple[str, bool]:
+    """Validate ``entry``'s pinned md5, or fetch the source and compute+pin one. Returns ``(md5, changed)``."""
+    md5 = entry.get("md5")
+    if md5:
+        # validate the pinned md5's shape (a real 32-char hex digest) -- a raised
+        # error here, not assert, so this is enforced even under `python -O`
+        # (which strips assert statements)
+        if len(md5) != 32:
+            raise GetRREVError(
+                f"Error: md5 '{md5}' for '{exports_source}' in '{conandata_yml}' is not a valid "
+                "md5 (expected 32 hex characters)."
+            )
+        changed = False
+    else:
+        if not exports_source_abs.exists():
+            _fetch_export_source(conanfile_dir, exports_source, entry, conandata_yml, exports_source_abs)
+        md5 = md5sum(exports_source_abs)
+        entry["md5"] = md5
+        changed = True
+
+    if not md5:
+        raise GetRREVError(
+            f"Error: Could not get md5 for file '{exports_source_abs}'. Please make sure that you have "
+            f"specified the md5sum for this file in '{conandata_yml}' or that the file is present locally."
+        )
+    return md5, changed
+
+
 def _sync_export_source(
     conanfile_dir: Path, exports_source: str, yml_sources: dict, conandata_yml: Path
 ) -> tuple[str, bool]:
@@ -138,44 +186,13 @@ def _sync_export_source(
     yml_sources[exports_source] = entry
 
     exports_source_abs = conanfile_dir / exports_source
-    if _is_git_tracked(conanfile_dir, exports_source_abs):
-        if entry.pop("url", None) is not None:  # url on a tracked file doesn't make sense
-            changed = True
-        if exports_source_abs.exists():
-            file_md5 = md5sum(exports_source_abs)
-            if entry.get("md5") != file_md5:
-                entry["md5"] = file_md5
-                changed = True
-    elif not entry.get("url") and not entry.get("custom"):
-        raise GetRREVError(f"Error: 'url' must be specified for {exports_source} in {conanfile_dir}")
+    entry_changed = _reconcile_export_source_entry(conanfile_dir, exports_source, entry, exports_source_abs)
+    md5, md5_changed = _ensure_md5(conanfile_dir, exports_source, entry, exports_source_abs, conandata_yml)
 
-    md5 = entry.get("md5")
-    if md5:
-        # validate the pinned md5's shape (a real 32-char hex digest) -- a raised
-        # error here, not assert, so this is enforced even under `python -O`
-        # (which strips assert statements)
-        if len(md5) != 32:
-            raise GetRREVError(
-                f"Error: md5 '{md5}' for '{exports_source}' in '{conandata_yml}' is not a valid "
-                "md5 (expected 32 hex characters)."
-            )
-    else:
-        if not exports_source_abs.exists():
-            _fetch_export_source(conanfile_dir, exports_source, entry, conandata_yml, exports_source_abs)
-        md5 = md5sum(exports_source_abs)
-        entry["md5"] = md5
-        changed = True
-
-    if not md5:
-        raise GetRREVError(
-            f"Error: Could not get md5 for file '{exports_source_abs}'. Please make sure that you have "
-            f"specified the md5sum for this file in '{conandata_yml}' or that the file is present locally."
-        )
-
-    return md5, changed
+    return md5, changed or entry_changed or md5_changed
 
 
-def get_RREV(conanfile_dir):
+def compute_rrev(conanfile_dir):
     """Compute (name, version, RREV) for the recipe at ``conanfile_dir``, ensuring its sources/md5s are pinned."""
     conanfile_dir = Path(conanfile_dir).resolve()  # ensure absolute path
     conanfile_py = conanfile_dir / "conanfile.py"
@@ -206,7 +223,7 @@ def get_RREV(conanfile_dir):
     # extreme case. Those entries are left exactly as written rather than
     # deleted as "obsolete": conandata.yml belongs to the recipe author, and
     # silently dropping what they put there would break such a recipe.
-    for exports_source in exports_sources:  # TODO: support wildcard *
+    for exports_source in exports_sources:  # NOTE: wildcard '*' entries aren't (yet) expanded; synced literally
         md5, source_changed = _sync_export_source(conanfile_dir, exports_source, yml_sources, conandata_yml)
         changed = changed or source_changed
         relevant_md5_sums.append((f"export_source/{exports_source}", md5))
@@ -228,5 +245,5 @@ if __name__ == "__main__":
 
     conanfile_dir = args.conanfile if Path(args.conanfile).is_dir() else Path(args.conanfile).parent
 
-    _, _, rrev = get_RREV(conanfile_dir)
+    _, _, rrev = compute_rrev(conanfile_dir)
     print(rrev)

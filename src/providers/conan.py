@@ -141,6 +141,11 @@ from .context import banner, die, warn
 # runs from a checkout or an installed package (see providers/conan_scripts).
 CONAN_SCRIPTS_DIR = Path(__file__).resolve().parent / "conan_scripts"
 
+# name of conan's own install tree (under ctx.env_workdir) and the buildenv
+# script it aggregates into -- referenced from several stages below.
+CONAN_INSTALL_DIRNAME = ".conan"
+CONANBUILDENV_NAME = "conanbuildenv.sh"
+
 
 class ConanProvider(Provider):
     """Provisions native tools via Conan and exposes them on PATH -- see module docstring for denver.yml keys."""
@@ -188,18 +193,8 @@ class ConanProvider(Provider):
         if not path.is_file():
             die(f"conan: conanfile not found: {path}")
 
-        recipe_dirs = []
-        for name in entry.get("recipe-dirs") or []:
-            d = ctx.resolve_path(name)
-            if not d.is_dir():
-                die(f"conan: recipe dir not found: {d}")
-            recipe_dirs.append(str(d))
-
-        catalog = entry.get("catalog") or ""
-        if not isinstance(catalog, str):
-            die(f"conan: 'catalog:' must be a single path, not {catalog!r}")
-        if catalog and not recipe_dirs:
-            die(f"conan: 'catalog: {catalog}' has no 'recipe-dirs:' to build a catalog from ({path})")
+        recipe_dirs = cls._resolve_recipe_dirs(ctx, entry)
+        catalog = cls._resolve_catalog(entry, recipe_dirs, path)
 
         exporter = ctx.resolve_path(entry["recipes-exporter"]) if entry.get("recipes-exporter") else None
         if exporter and not exporter.is_file():
@@ -213,7 +208,28 @@ class ConanProvider(Provider):
         }
 
     @classmethod
-    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003 -- shared (ctx, cfg, config) signature
+    def _resolve_recipe_dirs(cls, ctx, entry):
+        """Validate and resolve one unit's 'recipe-dirs:' entries."""
+        recipe_dirs = []
+        for name in entry.get("recipe-dirs") or []:
+            d = ctx.resolve_path(name)
+            if not d.is_dir():
+                die(f"conan: recipe dir not found: {d}")
+            recipe_dirs.append(str(d))
+        return recipe_dirs
+
+    @classmethod
+    def _resolve_catalog(cls, entry, recipe_dirs, path):
+        """Validate one unit's 'catalog:' entry (never resolved here -- it's an output, not an input)."""
+        catalog = entry.get("catalog") or ""
+        if not isinstance(catalog, str):
+            die(f"conan: 'catalog:' must be a single path, not {catalog!r}")
+        if catalog and not recipe_dirs:
+            die(f"conan: 'catalog: {catalog}' has no 'recipe-dirs:' to build a catalog from ({path})")
+        return catalog
+
+    @classmethod
+    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
         """Resolve exe/recipes-exporter/deployer/base-classes paths, recipe-dirs, conanfiles, build, etc.
 
         See module docstring.
@@ -226,19 +242,7 @@ class ConanProvider(Provider):
         resolved["deployer"] = str(
             ctx.resolve_path(cfg.get("deployer") or CONAN_SCRIPTS_DIR / "extensions" / "symlink.py")
         )
-        configured_base_classes = cfg.get("base-classes")
-        if isinstance(configured_base_classes, str):
-            die(
-                "conan: 'base-classes:' must be a list of directories, not a single string "
-                f"(got {configured_base_classes!r} -- write it as a one-entry list)"
-            )
-        base_classes = []
-        for entry in configured_base_classes or []:
-            d = ctx.resolve_path(entry)
-            if not d.is_dir():
-                die(f"conan: base-classes dir not found: {d}")
-            base_classes.append(str(d))
-        resolved["base-classes"] = base_classes
+        resolved["base-classes"] = cls._resolve_base_classes(ctx, cfg)
 
         resolved["conanfiles"] = [
             cls._resolve_unit(ctx, entry, default_exporter=resolved["recipes-exporter"])
@@ -254,14 +258,8 @@ class ConanProvider(Provider):
             "build": list(profiles_cfg.get("build") or []),
         }
 
-        configured_config_dirs = cfg.get("config")
-        if configured_config_dirs:
-            config_dirs = []
-            for entry in configured_config_dirs:
-                p = ctx.resolve_path(entry)
-                if not p.is_dir():
-                    die(f"conan: config dir not found: {p}")
-                config_dirs.append(str(p))
+        config_dirs = cls._resolve_config_dirs(ctx, cfg)
+        if config_dirs is not None:
             resolved["config"] = config_dirs
 
         resolved["remotes"] = cfg.get("remotes") or {}
@@ -271,6 +269,37 @@ class ConanProvider(Provider):
 
         return fill_unset(resolved, cls.KEYS)
 
+    @classmethod
+    def _resolve_base_classes(cls, ctx, cfg):
+        """Validate and resolve 'base-classes:' dirs."""
+        configured_base_classes = cfg.get("base-classes")
+        if isinstance(configured_base_classes, str):
+            die(
+                "conan: 'base-classes:' must be a list of directories, not a single string "
+                f"(got {configured_base_classes!r} -- write it as a one-entry list)"
+            )
+        base_classes = []
+        for entry in configured_base_classes or []:
+            d = ctx.resolve_path(entry)
+            if not d.is_dir():
+                die(f"conan: base-classes dir not found: {d}")
+            base_classes.append(str(d))
+        return base_classes
+
+    @classmethod
+    def _resolve_config_dirs(cls, ctx, cfg):
+        """Validate and resolve 'config:' dirs, if any are configured (None => leave unset)."""
+        configured_config_dirs = cfg.get("config")
+        if not configured_config_dirs:
+            return None
+        config_dirs = []
+        for entry in configured_config_dirs:
+            p = ctx.resolve_path(entry)
+            if not p.is_dir():
+                die(f"conan: config dir not found: {p}")
+            config_dirs.append(str(p))
+        return config_dirs
+
     def setup(self, ctx):
         """Detect a conan profile, export/install every recipe, then activate the resulting conanbuildenv.sh."""
         cfg = self.config_section(ctx)
@@ -278,34 +307,10 @@ class ConanProvider(Provider):
         units = cfg["conanfiles"]
         has_recipes = any(unit["recipe-dirs"] for unit in units)
         remotes = cfg.get("remotes") or {}
-        # cleanup-remotes is skipped when both 'remotes:' is left unset/empty
-        # *and* this env has its own 'config:' (whose `conan config install`
-        # may itself have installed a remotes.json denver never interprets,
-        # see module docstring): reconciling an empty 'remotes:' to
-        # "exhaustive" in that case would silently disable every remote
-        # config install just set up. An explicit (non-empty) 'remotes:'
-        # still reconciles/cleans up as normal regardless of 'config:'.
-        cleanup_remotes = cfg["cleanup-remotes"] and not (cfg.get("config") and not remotes)
-        # cleanup-remotes makes 'remotes:' exhaustive even when empty (see
-        # module docstring): reconciliation must then run regardless of
-        # whether any are actually configured, to disable every remote
-        # already present.
-        reconcile_remotes = cleanup_remotes or bool(remotes)
+        cleanup_remotes, reconcile_remotes = self._resolve_remote_reconciliation(cfg, remotes)
+
         if ctx.fast:
-            # same banner sequence as a full run (see below), so --fast's
-            # progress trail looks identical -- every substep says it was
-            # skipped instead of silently vanishing, plus one extra
-            # 'activate' substep for the real work --fast actually does.
-            banner(ctx, self.stage, "config (skipped by --fast)")
-            if has_recipes or reconcile_remotes:
-                banner(ctx, self.stage, "prepare (skipped by --fast)")
-            banner(ctx, self.stage, "export (skipped by --fast)")
-            banner(ctx, self.stage, "install (skipped by --fast)")
-            buildenv = ctx.env_workdir / ".conan" / "conanbuildenv.sh"
-            if not buildenv.is_file():
-                die(f"conan[{self.stage}]: --fast needs an existing {buildenv} -- run once without --fast first")
-            banner(ctx, self.stage, "activate")
-            ctx.source(buildenv)
+            self._run_fast(ctx, has_recipes, reconcile_remotes)
             return
 
         conan = cfg.get("exe")
@@ -328,20 +333,83 @@ class ConanProvider(Provider):
         self._ensure_profile(ctx, conan)
 
         if has_recipes or reconcile_remotes:
-            # remotes-only work, always via the env-wide exporter: --prepare
-            # returns before any catalog is touched, so it takes no unit of
-            # its own -- just the base classes, for their PYTHONPATH side.
-            prepare_cmd = [python, str(recipes_exporter), "--prepare"]
-            if has_recipes:
-                prepare_cmd += base_classes_args
-            if reconcile_remotes:
-                prepare_cmd += ["--remotes-json", str(self._write_remotes_json(ctx, remotes))]
-            if cleanup_remotes:
-                prepare_cmd += ["--cleanup-remotes"]
-            if ctx.force:
-                prepare_cmd += ["--force"]
-            ctx.run(prepare_cmd, step="prepare")
+            self._run_prepare(
+                ctx,
+                python,
+                recipes_exporter,
+                base_classes_args,
+                has_recipes,
+                remotes,
+                cleanup_remotes,
+                reconcile_remotes,
+            )
 
+        self._export_units(ctx, cfg, python, units, base_classes_args)
+
+        # `conan install` every unit's conanfile in order, each aggregating
+        # its own conanbuildenv.sh into one overall file.
+        self._install(ctx, conan, cfg, deployer, [Path(unit["path"]) for unit in units])
+
+        # activate the tools conan just installed
+        buildenv = ctx.env_workdir / CONAN_INSTALL_DIRNAME / CONANBUILDENV_NAME
+        if buildenv.is_file():
+            ctx.source(buildenv)
+
+    @classmethod
+    def _resolve_remote_reconciliation(cls, cfg, remotes):
+        """Decide whether/how this run reconciles conan remotes -- see module docstring for the 'config:' exception."""
+        # cleanup-remotes is skipped when both 'remotes:' is left unset/empty
+        # *and* this env has its own 'config:' (whose `conan config install`
+        # may itself have installed a remotes.json denver never interprets,
+        # see module docstring): reconciling an empty 'remotes:' to
+        # "exhaustive" in that case would silently disable every remote
+        # config install just set up. An explicit (non-empty) 'remotes:'
+        # still reconciles/cleans up as normal regardless of 'config:'.
+        cleanup_remotes = cfg["cleanup-remotes"] and not (cfg.get("config") and not remotes)
+        # cleanup-remotes makes 'remotes:' exhaustive even when empty (see
+        # module docstring): reconciliation must then run regardless of
+        # whether any are actually configured, to disable every remote
+        # already present.
+        reconcile_remotes = cleanup_remotes or bool(remotes)
+        return cleanup_remotes, reconcile_remotes
+
+    def _run_fast(self, ctx, has_recipes, reconcile_remotes):
+        """Run the --fast path: banner every stage as skipped, then just activate the existing conanbuildenv.sh."""
+        # same banner sequence as a full run (see below), so --fast's
+        # progress trail looks identical -- every substep says it was
+        # skipped instead of silently vanishing, plus one extra
+        # 'activate' substep for the real work --fast actually does.
+        banner(ctx, self.stage, "config (skipped by --fast)")
+        if has_recipes or reconcile_remotes:
+            banner(ctx, self.stage, "prepare (skipped by --fast)")
+        banner(ctx, self.stage, "export (skipped by --fast)")
+        banner(ctx, self.stage, "install (skipped by --fast)")
+        buildenv = ctx.env_workdir / CONAN_INSTALL_DIRNAME / CONANBUILDENV_NAME
+        if not buildenv.is_file():
+            die(f"conan[{self.stage}]: --fast needs an existing {buildenv} -- run once without --fast first")
+        banner(ctx, self.stage, "activate")
+        ctx.source(buildenv)
+
+    def _run_prepare(
+        self, ctx, python, recipes_exporter, base_classes_args, has_recipes, remotes, cleanup_remotes, reconcile_remotes
+    ):
+        """Run the exporter's --prepare pass: base classes on PYTHONPATH, remotes reconciliation, or both."""
+        # remotes-only work, always via the env-wide exporter: --prepare
+        # returns before any catalog is touched, so it takes no unit of
+        # its own -- just the base classes, for their PYTHONPATH side.
+        prepare_cmd = [python, str(recipes_exporter), "--prepare"]
+        if has_recipes:
+            prepare_cmd += base_classes_args
+        if reconcile_remotes:
+            prepare_cmd += ["--remotes-json", str(self._write_remotes_json(ctx, remotes))]
+        if cleanup_remotes:
+            prepare_cmd += ["--cleanup-remotes"]
+        if ctx.force:
+            prepare_cmd += ["--force"]
+        ctx.run(prepare_cmd, step="prepare")
+
+    def _export_units(self, ctx, cfg, python, units, base_classes_args):
+        """Export every unit's recipe-dirs (and write its catalog, if configured) into the local conan cache."""
         # build each unit's catalog and export its recipes to the local cache
         # -- one invocation per unit, over all of that unit's recipe-dirs at
         # once, so recipes in one dir can depend on recipes in another dir of
@@ -360,19 +428,10 @@ class ConanProvider(Provider):
             export_cmd += base_classes_args
             ctx.run(export_cmd)
 
-        # `conan install` every unit's conanfile in order, each aggregating
-        # its own conanbuildenv.sh into one overall file.
-        self._install(ctx, conan, cfg, deployer, [Path(unit["path"]) for unit in units])
-
-        # activate the tools conan just installed
-        buildenv = ctx.env_workdir / ".conan" / "conanbuildenv.sh"
-        if buildenv.is_file():
-            ctx.source(buildenv)
-
     # ------------------------------------------------------------------ #
     def _write_remotes_json(self, ctx, remotes):
         """Serialize the resolved 'remotes:' config to a JSON file recipes.py's --remotes-json can read."""
-        path = ctx.env_workdir / ".conan" / "remotes.json"
+        path = ctx.env_workdir / CONAN_INSTALL_DIRNAME / "remotes.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(remotes))
         return path
@@ -435,9 +494,9 @@ class ConanProvider(Provider):
     def _install(self, ctx, conan, cfg, deployer, conanfiles):
         """`conan install` every conanfile in order, symlink-deploying each into a shared tree."""
         banner(ctx, self.stage, "install")
-        install_root = ctx.env_workdir / ".conan"
+        install_root = ctx.env_workdir / CONAN_INSTALL_DIRNAME
         symlinks_dir = install_root / "symlinks"
-        overall_buildenv = install_root / "conanbuildenv.sh"
+        overall_buildenv = install_root / CONANBUILDENV_NAME
 
         # start from a clean install tree, then aggregate each conanbuildenv.sh
         shutil.rmtree(install_root, ignore_errors=True)
@@ -480,4 +539,4 @@ class ConanProvider(Provider):
                 extra_env={"PYTHONPATH": ""},
             )
             with overall_buildenv.open("a") as fh:
-                fh.write(f"source {out_dir / 'conanbuildenv.sh'}\n")
+                fh.write(f"source {out_dir / CONANBUILDENV_NAME}\n")

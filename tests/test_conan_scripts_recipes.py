@@ -209,8 +209,9 @@ def test_authenticate_remote_reraises_when_not_interactive(monkeypatch):
     prompted = []
     monkeypatch.setattr(recipes, "_prompt_and_login", lambda r: prompted.append(r.name))
 
+    remote = Remote("sdd", "http://sdd")
     with pytest.raises(AuthenticationException):
-        recipes.authenticate_remote(Remote("sdd", "http://sdd"))
+        recipes.authenticate_remote(remote)
     assert prompted == []
 
 
@@ -767,7 +768,8 @@ def test_upload_runs_conan_upload(monkeypatch):
     ref = RecipeReference.loads("foo/1.0@denver/snapshot")
     pref = PkgReference(ref, "id", "rev")
     recipes.upload(pref, "remote")
-    assert called and called[0][0] == "conan"
+    assert called
+    assert called[0][0] == "conan"
 
 
 def test_create_skips_and_tests_when_found(monkeypatch):
@@ -785,7 +787,20 @@ def test_create_runs_conan_create_when_missing(monkeypatch):
     ref = RecipeReference.loads("foo/1.0@denver/snapshot")
     pref = PkgReference(ref, "id", "rev")
     recipes.create(Path("/r"), pref)
-    assert called and called[0][0] == "conan"
+    assert called
+    assert called[0][0] == "conan"
+
+
+def test_run_conan_cli_rejects_non_string_arg(monkeypatch):
+    monkeypatch.setattr(recipes.subprocess, "run", lambda *a, **k: pytest.fail("must not run"))
+    with pytest.raises(ValueError, match="invalid conan CLI arguments"):
+        recipes._run_conan_cli("create", None)
+
+
+def test_run_conan_cli_rejects_nul_byte_in_arg(monkeypatch):
+    monkeypatch.setattr(recipes.subprocess, "run", lambda *a, **k: pytest.fail("must not run"))
+    with pytest.raises(ValueError, match="invalid conan CLI arguments"):
+        recipes._run_conan_cli("create", "foo\0bar")
 
 
 # --------------------------------------------------------------------------- #

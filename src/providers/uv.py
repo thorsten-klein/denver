@@ -133,7 +133,7 @@ class UvProvider(Provider):
     )
 
     @classmethod
-    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003 -- shared (ctx, cfg, config) signature
+    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
         """Resolve python/uv/no-index/skip-if/venv-patcher defaults -- see module docstring."""
         resolved = dict(cfg)
         resolved["python"] = str(cfg.get("python") or "3.12.3")
@@ -148,38 +148,54 @@ class UvProvider(Provider):
         # is checked at run time, right before we'd run it (_skip_if_satisfied).
         resolved["skip-if"] = [str(ctx.resolve_path(s)) for s in cfg.get("skip-if") or []]
 
-        if cfg.get("lock"):
-            lock_cfg = dict(cfg["lock"])
-            unknown = sorted(set(lock_cfg) - set(_LOCK_KEYS))
-            if unknown:
-                die(f"uv: unknown 'lock:' key(s) {', '.join(unknown)} -- known: {', '.join(_LOCK_KEYS)}")
-            for key in _LOCK_KEYS:
-                value = lock_cfg.get(key)
-                if not value:
-                    lock_cfg[key] = None
-                    continue
-                path = ctx.resolve_path(value)
-                # uv only ever reads/writes '<project>/uv.lock', so a path
-                # naming anything else could never be the file uv acts on --
-                # say so here rather than silently acting on a different one.
-                if path.name != "uv.lock":
-                    die(f"uv: 'lock: {key}:' must name a 'uv.lock' file, got: {path}")
-                lock_cfg[key] = str(path)
+        lock_cfg = cls._resolve_lock_defaults(ctx, cfg)
+        if lock_cfg is not None:
             resolved["lock"] = lock_cfg
 
-        if cfg.get("venv-patcher"):
-            vp_cfg = dict(cfg["venv-patcher"])
-            patches = vp_cfg.get("patches")
-            if not patches:
-                die("uv: 'venv-patcher:' needs an explicit 'patches:' file")
-            patches_path = ctx.resolve_path(patches)
-            if not patches_path.is_file():
-                die(f"uv: venv-patcher patches file not found: {patches_path}")
-            vp_cfg["patches"] = str(patches_path)
-            vp_cfg["exe"] = vp_cfg.get("exe") or ctx.which("venv-patcher")
+        vp_cfg = cls._resolve_venv_patcher_defaults(ctx, cfg)
+        if vp_cfg is not None:
             resolved["venv-patcher"] = vp_cfg
 
         return fill_unset(resolved, cls.KEYS)
+
+    @classmethod
+    def _resolve_lock_defaults(cls, ctx, cfg):
+        """Validate and resolve 'lock:'s paths, if set -- None otherwise (see module docstring)."""
+        if not cfg.get("lock"):
+            return None
+        lock_cfg = dict(cfg["lock"])
+        unknown = sorted(set(lock_cfg) - set(_LOCK_KEYS))
+        if unknown:
+            die(f"uv: unknown 'lock:' key(s) {', '.join(unknown)} -- known: {', '.join(_LOCK_KEYS)}")
+        for key in _LOCK_KEYS:
+            value = lock_cfg.get(key)
+            if not value:
+                lock_cfg[key] = None
+                continue
+            path = ctx.resolve_path(value)
+            # uv only ever reads/writes '<project>/uv.lock', so a path
+            # naming anything else could never be the file uv acts on --
+            # say so here rather than silently acting on a different one.
+            if path.name != "uv.lock":
+                die(f"uv: 'lock: {key}:' must name a 'uv.lock' file, got: {path}")
+            lock_cfg[key] = str(path)
+        return lock_cfg
+
+    @classmethod
+    def _resolve_venv_patcher_defaults(cls, ctx, cfg):
+        """Validate and resolve 'venv-patcher:'s patches file/exe, if set -- None otherwise."""
+        if not cfg.get("venv-patcher"):
+            return None
+        vp_cfg = dict(cfg["venv-patcher"])
+        patches = vp_cfg.get("patches")
+        if not patches:
+            die("uv: 'venv-patcher:' needs an explicit 'patches:' file")
+        patches_path = ctx.resolve_path(patches)
+        if not patches_path.is_file():
+            die(f"uv: venv-patcher patches file not found: {patches_path}")
+        vp_cfg["patches"] = str(patches_path)
+        vp_cfg["exe"] = vp_cfg.get("exe") or ctx.which("venv-patcher")
+        return vp_cfg
 
     def setup(self, ctx):
         """Create/activate the venv, install requirements (unless --fast), and apply venv patches."""
@@ -189,11 +205,7 @@ class UvProvider(Provider):
         venv_dir = ctx.venv_dir_for(cfg.get("venv"))
 
         if ctx.fast:
-            banner(ctx, self.stage, "install (skipped by --fast)")
-            if not venv_dir.is_dir():
-                die(f"uv[{self.stage}]: --fast needs an existing venv at {venv_dir} -- run once without --fast first")
-            banner(ctx, self.stage, "activate")
-            self._activate(ctx, venv_dir)
+            self._setup_fast(ctx, venv_dir)
             return
 
         banner(ctx, self.stage, "install")
@@ -224,19 +236,56 @@ class UvProvider(Provider):
         self._activate(ctx, venv_dir)
 
         if requirements or install_args or lock_create or lock_sync:
-            skip_if = cfg["skip-if"]
-            if not ctx.force and skip_if and self._skip_if_satisfied(ctx, skip_if):
-                info("uv: skip-if scripts all exited 0; skipping install")
-            else:
-                self._lock(ctx, uv, cfg, lock_create)
-                self._sync(ctx, uv, cfg, lock_sync)
-                if requirements or install_args:
-                    self._install(ctx, uv, cfg, requirements, overrides, install_args)
-            self._apply_patches(ctx, cfg)
-            self._store_checksums(venv_dir, checksum_files, command_outputs)
-            self._freeze(ctx, cfg, uv)
+            self._install_and_patch(
+                ctx,
+                uv,
+                cfg,
+                venv_dir,
+                requirements,
+                overrides,
+                install_args,
+                lock_create,
+                lock_sync,
+                checksum_files,
+                command_outputs,
+            )
 
     # ------------------------------------------------------------------ #
+    def _setup_fast(self, ctx, venv_dir):
+        """Handle '--fast': activate the existing venv verbatim, without touching requirements at all."""
+        banner(ctx, self.stage, "install (skipped by --fast)")
+        if not venv_dir.is_dir():
+            die(f"uv[{self.stage}]: --fast needs an existing venv at {venv_dir} -- run once without --fast first")
+        banner(ctx, self.stage, "activate")
+        self._activate(ctx, venv_dir)
+
+    def _install_and_patch(
+        self,
+        ctx,
+        uv,
+        cfg,
+        venv_dir,
+        requirements,
+        overrides,
+        install_args,
+        lock_create,
+        lock_sync,
+        checksum_files,
+        command_outputs,
+    ):
+        """Install requirements/lockfile (unless skip-if says otherwise), apply venv patches, record checksums."""
+        skip_if = cfg["skip-if"]
+        if not ctx.force and skip_if and self._skip_if_satisfied(ctx, skip_if):
+            info("uv: skip-if scripts all exited 0; skipping install")
+        else:
+            self._lock(ctx, uv, cfg, lock_create)
+            self._sync(ctx, uv, cfg, lock_sync)
+            if requirements or install_args:
+                self._install(ctx, uv, cfg, requirements, overrides, install_args)
+        self._apply_patches(ctx, cfg)
+        self._store_checksums(venv_dir, checksum_files, command_outputs)
+        self._freeze(ctx, cfg, uv)
+
     def _resolve_install_args(self, ctx, cfg):
         """Resolve 'install-args:' into a flat list of literal `uv pip install` args.
 

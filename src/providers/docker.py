@@ -153,7 +153,7 @@ class DockerProvider(Provider):
         self._run_args = None
 
     @classmethod
-    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003 -- shared (ctx, cfg, config) signature
+    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
         """Resolve exe/compose.file/compose.service/compose.build/run-args defaults -- see module docstring."""
         resolved = dict(cfg)
         resolved["exe"] = cfg.get("exe") or "docker"
@@ -196,11 +196,7 @@ class DockerProvider(Provider):
             # nothing to search a registry *for* without a canonical tag --
             # silently treat 'registries:' as unset rather than erroring.
             registries = []
-        for i, registry in enumerate(registries):
-            if not registry.get("url"):
-                die(f"docker: registries[{i}] needs a 'url:'")
-            if bool(registry.get("username")) != bool(registry.get("password")):
-                die(f"docker: registries[{i}] ('{registry['url']}') needs both 'username:' and 'password:', or neither")
+        self._validate_registries(registries)
 
         # bannered first so its own visible work (a registry login's echo,
         # an env-script's echo/output) never prints ahead of any banner,
@@ -236,32 +232,7 @@ class DockerProvider(Provider):
         self._service = compose["service"]
         self._run_args = [str(a) for a in cfg["run-args"]]
 
-        # --fast has no special case here: 'compose.build:' is read exactly
-        # as configured, so a real 'docker compose build' still runs if
-        # nothing was found locally/on a registry, --fast or not. The
-        # 'found locally'/'found on a registry' banners above always take
-        # priority, though. A build never runs without 'image:' either --
-        # there'd be nothing to check for next run, so it'd rebuild every
-        # single time regardless of --fast/found_locally.
-        if remote_ref:
-            banner(ctx, self.stage, f"found '{remote_ref}' on a configured registry, will pull on run")
-        elif found_locally and not ctx.force:
-            banner(ctx, self.stage, f"image '{image}' found locally, skip build")
-        elif image and compose["build"]:
-            ctx.run(
-                [exe, "compose", *self._compose_file_args(), *self._compose_args, "build", self._service],
-                step="build",
-            )
-        elif registries:
-            urls = [r["url"] for r in registries]
-            die(
-                f"docker: image '{image}' not found locally or on any of the configured "
-                f"registries ({', '.join(urls)}), and compose.build is false"
-            )
-        elif not compose["build"]:
-            banner(ctx, self.stage, "build (skipped: compose.build=false)")
-        else:
-            banner(ctx, self.stage, "build (skipped: 'image:' is not set)")
+        self._build_or_skip(ctx, exe, image, compose, registries, remote_ref, found_locally)
 
     def wrap(self, ctx, cmd):
         """Turn ``cmd`` into ``docker compose run <run-args> <service> <cmd...>``, bannered after setup()'s own banner."""
@@ -283,6 +254,45 @@ class DockerProvider(Provider):
             self._service,
             *[str(c) for c in cmd],
         ]
+
+    def _validate_registries(self, registries):
+        """Die if any 'registries:' entry is missing 'url:', or has just one of username/password."""
+        for i, registry in enumerate(registries):
+            if not registry.get("url"):
+                die(f"docker: registries[{i}] needs a 'url:'")
+            if bool(registry.get("username")) != bool(registry.get("password")):
+                die(f"docker: registries[{i}] ('{registry['url']}') needs both 'username:' and 'password:', or neither")
+
+    def _build_or_skip(self, ctx, exe, image, compose, registries, remote_ref, found_locally):
+        """Banner a registry/local hit, run 'compose build', die if nowhere found, or banner a skipped build.
+
+        --fast has no special case here: 'compose.build:' is read exactly
+        as configured, so a real 'docker compose build' still runs if
+        nothing was found locally/on a registry, --fast or not. The
+        'found locally'/'found on a registry' banners above always take
+        priority, though. A build never runs without 'image:' either --
+        there'd be nothing to check for next run, so it'd rebuild every
+        single time regardless of --fast/found_locally.
+        """
+        if remote_ref:
+            banner(ctx, self.stage, f"found '{remote_ref}' on a configured registry, will pull on run")
+        elif found_locally and not ctx.force:
+            banner(ctx, self.stage, f"image '{image}' found locally, skip build")
+        elif image and compose["build"]:
+            ctx.run(
+                [exe, "compose", *self._compose_file_args(), *self._compose_args, "build", self._service],
+                step="build",
+            )
+        elif registries:
+            urls = [r["url"] for r in registries]
+            die(
+                f"docker: image '{image}' not found locally or on any of the configured "
+                f"registries ({', '.join(urls)}), and compose.build is false"
+            )
+        elif not compose["build"]:
+            banner(ctx, self.stage, "build (skipped: compose.build=false)")
+        else:
+            banner(ctx, self.stage, "build (skipped: 'image:' is not set)")
 
     def _image_present_locally(self, ctx, exe, image):
         """True if ``image`` already exists in the local docker image cache."""

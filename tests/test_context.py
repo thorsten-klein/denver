@@ -56,7 +56,8 @@ def test_banner_includes_stage_id(make_context, capsys):
     # distinguishable by which one's banner is currently showing
     banner(make_context(), "uv-zephyr", "install")
     err = capsys.readouterr().err
-    assert "uv-zephyr" in err and "install" in err
+    assert "uv-zephyr" in err
+    assert "install" in err
 
 
 def test_banner_includes_stage_progress(make_context, capsys):
@@ -381,7 +382,8 @@ def test_run_quiet_suppresses_echo_and_output(make_context, run_recorder, capsys
     ctx = make_context(quiet=True)
     ctx.run(["true"], echo=True)
     out, err = capsys.readouterr()
-    assert out == "" and err == ""
+    assert out == ""
+    assert err == ""
     call = run_recorder.calls[-1]
     assert call.kwargs["stdout"] == subprocess.DEVNULL
     assert call.kwargs["stderr"] == subprocess.DEVNULL
@@ -392,7 +394,8 @@ def test_run_quiet_does_not_override_explicit_capture(make_context, run_recorder
     ctx.run(["true"], capture=True)
     call = run_recorder.calls[-1]
     assert call.kwargs["capture_output"] is True
-    assert "stdout" not in call.kwargs and "stderr" not in call.kwargs
+    assert "stdout" not in call.kwargs
+    assert "stderr" not in call.kwargs
 
 
 def test_quiet_level_1_hides_info_but_collapses_banner_to_one_line(make_context, capsys, caplog):
@@ -463,6 +466,18 @@ def test_exec_calls_execvpe(make_context, exec_recorder):
     ctx.exec(["fish", "-l"])
     assert exec_recorder["file"] == "fish"
     assert exec_recorder["args"] == ["fish", "-l"]
+
+
+def test_exec_empty_command_dies(make_context):
+    ctx = make_context()
+    with pytest.raises(SystemExit):
+        ctx.exec([])
+
+
+def test_exec_nul_byte_in_command_dies(make_context):
+    ctx = make_context()
+    with pytest.raises(SystemExit):
+        ctx.exec(["fish", "-c", "echo\0hi"])
 
 
 def test_exec_oserror_dies(make_context, monkeypatch):

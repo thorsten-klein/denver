@@ -574,8 +574,9 @@ def test_denver_docker_image_visible_to_env_scripts(make_context, run_recorder, 
 # ---- wrap() -----------------------------------------------------------------------------#
 def test_wrap_before_setup_dies(make_context):
     n = DockerProvider({})
+    ctx = make_context()
     with pytest.raises(SystemExit):
-        n.wrap(make_context(), ["fish"])
+        n.wrap(ctx, ["fish"])
 
 
 def test_wrap_builds_run_command(make_context, run_recorder, which):

@@ -1,7 +1,7 @@
 """Tests for providers.conan_scripts.build_catalog -- the catalog.yml generator
 recipes.py invokes as a subprocess (see recipes.generate_catalog).
 
-get_rrev.inspect()/get_rrev.get_RREV() (real recipe-revision computation
+get_rrev.inspect()/get_rrev.compute_rrev() (real recipe-revision computation
 against conan's cache) are monkeypatched throughout: this module's own
 logic -- catalog.yml bookkeeping, dependency resolution, rrev propagation --
 is what's under test here, not conan's revision algorithm itself (that
@@ -59,7 +59,7 @@ def _make_recipe(tmp_path, monkeypatch, name="foo", version="1.0", conandata=Non
     (recipe_dir / "conanfile.py").write_text("x")
     (recipe_dir / "conandata.yml").write_text(yaml.safe_dump(conandata or {}))
 
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: (name, version, "deadbeef"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: (name, version, "deadbeef"))
     monkeypatch.setattr(build_catalog.get_rrev, "inspect", lambda path, attrs: {"name": name, "version": version})
     monkeypatch.setattr(build_catalog, "workdir", tmp_path)
 
@@ -102,7 +102,7 @@ def test_recipe_get_full_reference_with_and_without_rrev(tmp_path, monkeypatch):
     recipe = _make_recipe(tmp_path, monkeypatch)
     recipe.rrev = "deadbeef"
     assert recipe.get_full_reference() == "foo/1.0@denver/snapshot#deadbeef"
-    assert recipe.get_full_reference(RREV=False) == "foo/1.0@denver/snapshot"
+    assert recipe.get_full_reference(rrev=False) == "foo/1.0@denver/snapshot"
 
 
 def test_recipe_add_dependency_dedupes(tmp_path, monkeypatch):
@@ -115,7 +115,7 @@ def test_recipe_add_dependency_dedupes(tmp_path, monkeypatch):
 
 def test_recipe_calculate_rrev(tmp_path, monkeypatch):
     recipe = _make_recipe(tmp_path, monkeypatch)
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("foo", "1.0", "newrev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: ("foo", "1.0", "newrev"))
     assert recipe.calculate_rrev() == "newrev"
 
 
@@ -199,7 +199,7 @@ def test_catalog_update_rrevs_recursively_propagates(tmp_path, monkeypatch):
     catalog.recipes = [recipe, dep]
     catalog.resolve_dependencies_recursively(recipe)
 
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("bar", "1.0", "newrev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: ("bar", "1.0", "newrev"))
     catalog.update_rrevs_recursively(dep)
 
     assert dep.rrev == "newrev"
@@ -222,7 +222,7 @@ def test_catalog_update_rrevs_sorts_and_resaves(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         build_catalog.get_rrev,
-        "get_RREV",
+        "compute_rrev",
         lambda d: ("bar", "1.0", "newrev") if "bar" in str(d) else (None, None, None),
     )
     catalog.update_rrevs_recursively(dep)
@@ -249,7 +249,7 @@ def test_catalog_update_rrevs_recursively_exact_match_not_prefix(tmp_path, monke
     dep.users["requires"] = [recipe]
     catalog.recipes = [recipe, dep]
 
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("bar", "1.0", "newrev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: ("bar", "1.0", "newrev"))
     catalog.update_rrevs_recursively(dep)  # must not raise ("too many values to unpack")
 
     assert "bar/1.0@denver/snapshot#newrev" in recipe.conandata_yml.data["requires"]
@@ -274,7 +274,7 @@ def test_catalog_update_rrevs_recursively_cycle_terminates(tmp_path, monkeypatch
 
     monkeypatch.setattr(
         build_catalog.get_rrev,
-        "get_RREV",
+        "compute_rrev",
         lambda d: ("a", "1.0", "newrev-a") if Path(d).parent.name == "a" else ("b", "1.0", "newrev-b"),
     )
 
@@ -305,7 +305,7 @@ def test_catalog_add_recipe_dirs_runs_check(tmp_path, monkeypatch):
     recipe_dir.mkdir(parents=True)
     (recipe_dir / "conanfile.py").write_text("x")
     (recipe_dir / "conandata.yml").write_text("{}")
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("foo", "1.0", "rev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: ("foo", "1.0", "rev"))
     monkeypatch.setattr(build_catalog.get_rrev, "inspect", lambda path, attrs: {"name": "foo", "version": "1.0"})
     monkeypatch.setattr(build_catalog, "workdir", tmp_path)
 
@@ -324,7 +324,7 @@ def test_main_end_to_end(tmp_path, monkeypatch):
     (recipe_dir / "conanfile.py").write_text("x")
     (recipe_dir / "conandata.yml").write_text("{}")
 
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("foo", "1.0", "rev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: ("foo", "1.0", "rev"))
     monkeypatch.setattr(build_catalog.get_rrev, "inspect", lambda path, attrs: {"name": "foo", "version": "1.0"})
     monkeypatch.setattr(build_catalog, "workdir", tmp_path)
 
@@ -346,7 +346,7 @@ def test_main_user_channel_flags_set_reference(tmp_path, monkeypatch):
     (recipe_dir / "conanfile.py").write_text("x")
     (recipe_dir / "conandata.yml").write_text("{}")
 
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("foo", "1.0", "rev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: ("foo", "1.0", "rev"))
     monkeypatch.setattr(build_catalog.get_rrev, "inspect", lambda path, attrs: {"name": "foo", "version": "1.0"})
     monkeypatch.setattr(build_catalog, "workdir", tmp_path)
 
@@ -374,7 +374,7 @@ def test_main_without_output_prints_and_writes_nothing(tmp_path, monkeypatch, ca
     (recipe_dir / "conanfile.py").write_text("x")
     (recipe_dir / "conandata.yml").write_text("{}")
 
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("foo", "1.0", "rev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: ("foo", "1.0", "rev"))
     monkeypatch.setattr(build_catalog.get_rrev, "inspect", lambda path, attrs: {"name": "foo", "version": "1.0"})
     monkeypatch.setattr(build_catalog, "workdir", tmp_path)
     monkeypatch.setattr(sys, "argv", ["build_catalog.py"])
@@ -393,7 +393,7 @@ def test_build_returns_resolved_catalog(tmp_path, monkeypatch):
     (recipe_dir / "conanfile.py").write_text("x")
     (recipe_dir / "conandata.yml").write_text("{}")
 
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: ("foo", "1.0", "rev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: ("foo", "1.0", "rev"))
     monkeypatch.setattr(build_catalog.get_rrev, "inspect", lambda path, attrs: {"name": "foo", "version": "1.0"})
 
     catalog = build_catalog.build([recipes_dir], user="acme", channel="stable")
@@ -419,7 +419,7 @@ def test_build_covers_every_dir_it_is_given(tmp_path, monkeypatch):
     _make_recipe_tree(base, "foo")
     _make_recipe_tree(layer, "bar")
 
-    monkeypatch.setattr(build_catalog.get_rrev, "get_RREV", lambda d: (Path(d).parents[0].name, "1.0", "rev"))
+    monkeypatch.setattr(build_catalog.get_rrev, "compute_rrev", lambda d: (Path(d).parents[0].name, "1.0", "rev"))
     monkeypatch.setattr(
         build_catalog.get_rrev,
         "inspect",

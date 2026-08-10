@@ -37,6 +37,8 @@ from conan.cli.commands.test import run_test
 from conan.internal.errors import AuthenticationException, ConanConnectionError, ConanException, NotFoundException
 from conan.internal.util.files import load
 
+CONANFILE_NAME = 'conanfile.py'
+
 
 @functools.cache
 def _real_conan_api():
@@ -156,8 +158,8 @@ def get_deps_graph_remote(reference: RecipeReference):
             False,
             check_updates=True,
         )
-        # TODO: analyze_binaries()/install_sources() once needed.
-    return deps_graph  # noqa: RET504 -- named for the TODO'd calls above, once they're enabled
+        # NOTE: analyze_binaries()/install_sources() intentionally omitted -- not needed yet.
+    return deps_graph  # noqa: RET504  # named for the deferred calls noted above, once they're enabled
 
 
 def needs_export(reference: RecipeReference) -> bool:
@@ -238,7 +240,7 @@ def get_recipes_from_entries(recipes_dirs, entries) -> dict[Path, PkgReference]:
         # the conventional layout under the first dir, so whatever fails next
         # fails against a concrete path instead of a None.
         recipe_dir = index.get((ref.name, str(ref.version))) or recipes_dirs[0] / ref.name / str(ref.version)
-        recipes_ref[(recipe_dir / 'conanfile.py').absolute()] = ref
+        recipes_ref[(recipe_dir / CONANFILE_NAME).absolute()] = ref
     return recipes_ref
 
 
@@ -256,7 +258,7 @@ def _resolve_recipe_arg(recipe):
     """Turn a CLI 'recipes' arg (a conanfile.py path or its containing dir) into an absolute conanfile.py path."""
     path = Path(recipe)
     if path.is_dir():
-        path = path / 'conanfile.py'
+        path = path / CONANFILE_NAME
     return path.resolve()
 
 
@@ -368,7 +370,7 @@ def find_pref(pref, remotes):
 def test(recipe_path, pref):
     """Run ``recipe_path``'s test_package against ``pref``, if a test_package exists."""
     print_banner(f"Test: {recipe_path}")
-    test_conanfile_path = recipe_path.parent / 'test_package' / 'conanfile.py'
+    test_conanfile_path = recipe_path.parent / 'test_package' / CONANFILE_NAME
     if not test_conanfile_path.exists():
         print(f"Info: No test_package exists: '{test_conanfile_path}'")
         return
@@ -392,6 +394,13 @@ def _run_conan_cli(*args):
 
     TODO: replace with conan's own python API, if/when one covers this.
     """
+    # args are built by this module's own callers (create()'s --name=/
+    # --version=/--user=/--channel=, sourced from a RecipeReference), never
+    # taken verbatim from raw CLI/network input -- but validated here all
+    # the same, so a malformed recipe reference fails with a clear error
+    # instead of reaching subprocess.run() as a mystery argument.
+    if any(not isinstance(arg, str) or not arg or "\0" in arg for arg in args):
+        raise ValueError(f"invalid conan CLI arguments: {args!r}")
     subprocess.run(['conan', *args], check=True)
 
 
@@ -549,6 +558,24 @@ def prepare(remotes: dict[str, dict[str, str | bool]], *, cleanup: bool = False,
     conan_login(remotes, force=force)
 
 
+def _export_missing_recipes(recipes_ref):
+    """Export every ``{path: RecipeReference}`` entry that ``needs_export()`` (see there)."""
+    for recipe_path, ref in recipes_ref.items():
+        if needs_export(ref):
+            export(recipe_path, ref)
+
+
+def _run_per_pref_actions(recipes_pref, args):
+    """Create/run_ci/upload each ``{path: PkgReference}`` entry, as selected by ``args``."""
+    for recipe_path, pref in recipes_pref.items():
+        if args.create:
+            create(recipe_path, pref)
+        if args.ci:
+            run_ci(recipe_path, pref, [args.remote])
+        if args.upload:
+            upload(pref, args.remote)
+
+
 def _process_catalog(recipes_dirs, args):
     """Run one catalog's generate/export/create/ci/upload pipeline, as selected by ``args``."""
     if args.no_generate:
@@ -566,18 +593,10 @@ def _process_catalog(recipes_dirs, args):
         recipes_ref = handle_args_recipe(recipes_ref, args.recipes)
 
     if args.export:
-        for recipe_path, ref in recipes_ref.items():
-            if needs_export(ref):
-                export(recipe_path, ref)  # TODO: Only export if not installable from remote
+        _export_missing_recipes(recipes_ref)
 
     recipes_pref = get_recipes_prefs(recipes_ref)
-    for recipe_path, pref in recipes_pref.items():
-        if args.create:
-            create(recipe_path, pref)
-        if args.ci:
-            run_ci(recipe_path, pref, [args.remote])
-        if args.upload:
-            upload(pref, args.remote)
+    _run_per_pref_actions(recipes_pref, args)
 
 
 def _build_arg_parser():

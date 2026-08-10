@@ -135,7 +135,7 @@ def find_outermost_in_parents(start, name):
     return matches[-1] if matches else None
 
 
-_VAR_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+_VAR_RE = re.compile(r"\$\{([A-Za-z_]\w*)(?::-([^}]*))?\}")
 
 
 def interpolate(value, variables):
@@ -503,6 +503,16 @@ class Context:
     def exec(self, cmd):
         """Replace the current process with ``cmd`` using the context env."""
         cmd = [str(c) for c in cmd]
+        # a resolved command is always denver's own doing (default_command()/
+        # resolve_command(), a wrapper's wrap(), or a script's own argv) --
+        # never raw external input -- but a malformed 'command:'/script entry
+        # (e.g. an empty string) must not reach os.execvpe() as a bare,
+        # confusing OSError: validated here so the failure names the actual
+        # problem instead.
+        if not cmd or not cmd[0]:
+            die(f"exec: empty or invalid command: {cmd!r}")
+        if any("\0" in arg for arg in cmd):
+            die(f"exec: command arguments must not contain NUL bytes: {cmd!r}")
         # Flush stdout *before* logging "exec:" (and again right before the
         # actual os.execvpe() below): print() output (e.g. the startup logo,
         # a stage's "finished in Xs" line) isn't always line-buffered --

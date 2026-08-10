@@ -311,7 +311,8 @@ def test_validate_denver_version_message_names_both_versions(monkeypatch, caplog
     monkeypatch.setattr(denver, "package_version", lambda: "1.0.3")
     with pytest.raises(SystemExit):
         denver.validate_denver_version({"denver-version": ">=1.0.4"})
-    assert ">=1.0.4" in caplog.text and "1.0.3" in caplog.text
+    assert ">=1.0.4" in caplog.text
+    assert "1.0.3" in caplog.text
 
 
 def test_validate_denver_version_untagged_checkout_counts_as_newer(monkeypatch):
