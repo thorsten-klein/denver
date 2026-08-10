@@ -79,6 +79,49 @@ def test_main_version_flag_without_any_version_source(monkeypatch, capsys):
     assert capsys.readouterr().out.strip() == f"denver {denver.UNKNOWN_VERSION}"
 
 
+def test_main_license_flag(capsys):
+    assert denver.main(["--license"]) == 0
+    assert "MIT License" in capsys.readouterr().out
+
+
+def test_license_text_from_checkout(monkeypatch, tmp_path):
+    # running out of a checkout (the plain script, or an editable install):
+    # the checkout's own LICENSE file wins over installed metadata.
+    (tmp_path / "LICENSE").write_text("checkout license\n")
+
+    def _unexpected(name):
+        raise AssertionError("installed metadata should not be consulted when a checkout LICENSE exists")
+
+    monkeypatch.setattr(denver, "checkout_root", lambda: tmp_path)
+    monkeypatch.setattr(denver.importlib.metadata, "distribution", _unexpected)
+    assert denver.license_text() == "checkout license\n"
+
+
+def test_license_text_installed(monkeypatch):
+    monkeypatch.setattr(denver, "checkout_root", lambda: None)
+    monkeypatch.setattr(
+        denver.importlib.metadata,
+        "distribution",
+        lambda name: types.SimpleNamespace(read_text=lambda path: "installed license\n"),
+    )
+    assert denver.license_text() == "installed license\n"
+
+
+def test_license_text_not_installed(monkeypatch):
+    def raise_not_found(name):
+        raise denver.importlib.metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(denver, "checkout_root", lambda: None)
+    monkeypatch.setattr(denver.importlib.metadata, "distribution", raise_not_found)
+    assert denver.license_text() is None
+
+
+def test_main_license_flag_without_any_license_source(monkeypatch):
+    monkeypatch.setattr(denver, "license_text", lambda: None)
+    with pytest.raises(SystemExit):
+        denver.main(["--license"])
+
+
 def test_scm_version_outside_a_checkout(monkeypatch):
     monkeypatch.setattr(denver, "checkout_root", lambda: None)
     assert denver.scm_version() is None
