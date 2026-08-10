@@ -60,6 +60,11 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           report_type: test_results
+      - name: SonarCloud Scan
+        if: matrix.python-version == '3.13'
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   build:
     runs-on: ubuntu-latest
