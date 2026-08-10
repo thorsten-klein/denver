@@ -87,7 +87,7 @@ def test_inspect_missing_attribute_raises(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# get_RREV()
+# compute_rrev()
 # --------------------------------------------------------------------------- #
 def _recipe_dir(tmp_path, name="foo", version="1.0", body="class Foo: pass\n"):
     d = tmp_path / name / version
@@ -113,7 +113,7 @@ def test_get_rrev_no_exports_sources(tmp_path, monkeypatch):
     recipe_dir = _recipe_dir(tmp_path)
     _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[])
 
-    name, version, rrev = get_rrev.get_RREV(recipe_dir)
+    name, version, rrev = get_rrev.compute_rrev(recipe_dir)
     assert (name, version) == ("foo", "1.0")
     assert rrev
     assert (recipe_dir / "conandata.yml").is_file()  # created since missing
@@ -128,7 +128,7 @@ def test_get_rrev_denver_conan_file_included_when_referenced(tmp_path, monkeypat
     (tmp_path / "DenverConanFile.py").write_text("# stub\n")
     monkeypatch.setattr(get_rrev, "DenverConanFile", fake_module)
 
-    _, _, rrev = get_rrev.get_RREV(recipe_dir)
+    _, _, rrev = get_rrev.compute_rrev(recipe_dir)
     assert rrev
 
 
@@ -138,7 +138,7 @@ def test_get_rrev_denver_conan_file_none_skipped(tmp_path, monkeypatch):
     _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[])
     monkeypatch.setattr(get_rrev, "DenverConanFile", None)
 
-    _, _, rrev = get_rrev.get_RREV(recipe_dir)
+    _, _, rrev = get_rrev.compute_rrev(recipe_dir)
     assert rrev
 
 
@@ -150,7 +150,7 @@ def test_get_rrev_tracked_source_removes_url_and_computes_md5(tmp_path, monkeypa
     _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[src])
     _stub_git_tracked(monkeypatch, {str(recipe_dir / src)})
 
-    get_rrev.get_RREV(recipe_dir)
+    get_rrev.compute_rrev(recipe_dir)
 
     saved = yaml.safe_load((recipe_dir / "conandata.yml").read_text())
     assert "url" not in saved["sources"][src]
@@ -167,7 +167,7 @@ def test_get_rrev_tracked_source_missing_file_and_no_pin_errors(tmp_path, monkey
     _stub_git_tracked(monkeypatch, {str(recipe_dir / src)})
 
     with pytest.raises(get_rrev.GetRREVError, match="don't know how to get file"):
-        get_rrev.get_RREV(recipe_dir)
+        get_rrev.compute_rrev(recipe_dir)
 
 
 def test_get_rrev_untracked_without_url_or_custom_raises(tmp_path, monkeypatch):
@@ -178,7 +178,7 @@ def test_get_rrev_untracked_without_url_or_custom_raises(tmp_path, monkeypatch):
     _stub_git_tracked(monkeypatch, set())  # not tracked
 
     with pytest.raises(get_rrev.GetRREVError, match="'url' must be specified"):
-        get_rrev.get_RREV(recipe_dir)
+        get_rrev.compute_rrev(recipe_dir)
 
 
 def test_get_rrev_untracked_downloads_via_url(tmp_path, monkeypatch):
@@ -196,7 +196,7 @@ def test_get_rrev_untracked_downloads_via_url(tmp_path, monkeypatch):
 
     monkeypatch.setattr(get_rrev, "urlretrieve", fake_urlretrieve)
 
-    get_rrev.get_RREV(recipe_dir)
+    get_rrev.compute_rrev(recipe_dir)
     assert downloaded == [("http://example/x", recipe_dir / src)]
 
 
@@ -215,7 +215,7 @@ def test_get_rrev_untracked_downloads_via_custom_command(tmp_path, monkeypatch):
 
     monkeypatch.setattr(get_rrev.subprocess, "run", fake_run)
 
-    get_rrev.get_RREV(recipe_dir)
+    get_rrev.compute_rrev(recipe_dir)
     assert ran == [(["fetch-it"], recipe_dir)]
 
 
@@ -234,7 +234,7 @@ def test_get_rrev_existing_valid_md5_skips_recompute(tmp_path, monkeypatch):
 
     monkeypatch.setattr(get_rrev, "urlretrieve", lambda *a: pytest.fail("must not download"))
 
-    get_rrev.get_RREV(recipe_dir)  # must not raise
+    get_rrev.compute_rrev(recipe_dir)  # must not raise
 
 
 def test_get_rrev_invalid_md5_length_raises(tmp_path, monkeypatch):
@@ -247,7 +247,7 @@ def test_get_rrev_invalid_md5_length_raises(tmp_path, monkeypatch):
     _stub_git_tracked(monkeypatch, set())
 
     with pytest.raises(get_rrev.GetRREVError, match="not a valid"):
-        get_rrev.get_RREV(recipe_dir)
+        get_rrev.compute_rrev(recipe_dir)
 
 
 def test_get_rrev_keeps_sources_not_in_exports_sources(tmp_path, monkeypatch):
@@ -260,7 +260,7 @@ def test_get_rrev_keeps_sources_not_in_exports_sources(tmp_path, monkeypatch):
     _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[src])
     _stub_git_tracked(monkeypatch, {str(recipe_dir / src)})
 
-    get_rrev.get_RREV(recipe_dir)
+    get_rrev.compute_rrev(recipe_dir)
 
     saved = yaml.safe_load((recipe_dir / "conandata.yml").read_text())
     assert saved["sources"]["other.tar"] == downloaded
@@ -275,7 +275,7 @@ def test_get_rrev_bare_recipe_conandata_untouched(tmp_path, monkeypatch):
     _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[])
     _stub_git_tracked(monkeypatch, set())
 
-    get_rrev.get_RREV(recipe_dir)
+    get_rrev.compute_rrev(recipe_dir)
 
     assert conandata.read_text() == original
 
@@ -294,7 +294,7 @@ def test_get_rrev_no_rewrite_when_nothing_changed(tmp_path, monkeypatch):
     saved_calls = []
     monkeypatch.setattr(get_rrev, "save", lambda path, content: saved_calls.append(path))
 
-    get_rrev.get_RREV(recipe_dir)
+    get_rrev.compute_rrev(recipe_dir)
     assert saved_calls == []
 
 
@@ -313,4 +313,4 @@ def test_get_rrev_missing_md5_after_all_branches_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "md5sum", lambda p: "")
 
     with pytest.raises(get_rrev.GetRREVError, match="Could not get md5"):
-        get_rrev.get_RREV(recipe_dir)
+        get_rrev.compute_rrev(recipe_dir)

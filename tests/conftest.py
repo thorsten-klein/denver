@@ -15,6 +15,23 @@ import pytest
 import yaml
 
 from providers import Context
+from providers.context import set_quiet
+
+
+@pytest.fixture(autouse=True)
+def _reset_quiet_level():
+    """Restore the shared 'denver' logger to its default level after every test.
+
+    Context.__init__ calls set_quiet(), which sets logging.getLogger("denver")'s
+    level directly -- a process-wide mutation with no corresponding reset. Under
+    pytest-xdist's dynamic load-balancing, a quiet=1/2 test can run right before
+    an unrelated one in the same worker process, silencing that later test's own
+    warning/info logging (and its caplog assertions) for no reason visible in
+    either test. Autouse so every test gets a clean slate regardless of which
+    ones construct a quiet Context.
+    """
+    yield
+    set_quiet(0)
 
 
 # --------------------------------------------------------------------------- #

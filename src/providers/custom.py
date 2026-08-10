@@ -63,12 +63,8 @@ class CustomProvider(Provider):
         """'wrapper' if this stage's own section sets a (non-empty) 'launcher:', else the default 'setup'."""
         return "wrapper" if (self.config.get(self.stage) or {}).get("launcher") else "setup"
 
-    def setup(self, ctx):
-        """Run 'cmd:' via bash -c (unless --fast) and/or source 'source:' (always)."""
-        cfg = self.config_section(ctx)
-        cmd = cfg.get("cmd")
-        source = cfg.get("source")
-        launcher = cfg.get("launcher")
+    def _validate_cfg(self, cmd, source, launcher):
+        """Die unless cmd/source/launcher are well-typed and at least one is given."""
         if cmd is not None and (not isinstance(cmd, str) or not cmd.strip()):
             die(f"custom[{self.stage}]: 'cmd' must be a non-empty string")
         if source is not None and (not isinstance(source, str) or not source.strip()):
@@ -79,6 +75,14 @@ class CustomProvider(Provider):
             die(f"custom[{self.stage}]: 'launcher' must be a list of non-empty strings")
         if not cmd and not source and not launcher:
             die(f"custom[{self.stage}]: at least one of 'cmd'/'source'/'launcher' must be given")
+
+    def setup(self, ctx):
+        """Run 'cmd:' via bash -c (unless --fast) and/or source 'source:' (always)."""
+        cfg = self.config_section(ctx)
+        cmd = cfg.get("cmd")
+        source = cfg.get("source")
+        launcher = cfg.get("launcher")
+        self._validate_cfg(cmd, source, launcher)
 
         banner(ctx, self.stage, "run")
         if cmd and ctx.fast:

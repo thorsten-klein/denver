@@ -737,10 +737,11 @@ def test_run_stages_skip_excludes_named_stage(tmp_path, fake_providers, exec_rec
 
 def test_run_stages_until_and_skip_filters_out_everything_dies(tmp_path, fake_providers):
     env_dir, cfg_path = _env(tmp_path, _multi_stage_config())
+    config = _multi_stage_config()
     with pytest.raises(SystemExit):
         denver.run_stages(
             env_dir,
-            _multi_stage_config(),
+            config,
             cfg_path,
             [],
             until_stage="fakewrap",

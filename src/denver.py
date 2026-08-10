@@ -380,20 +380,30 @@ def deep_merge(base, override, _path=""):
         return result
 
     if isinstance(base, list) and isinstance(override, list):
-        if any(isinstance(entry, str) and (entry.startswith("!") or entry == "<overwrite>") for entry in override):
-            return [
-                entry[1:] if isinstance(entry, str) and entry.startswith("!") else entry
-                for entry in override
-                if entry != "<overwrite>"
-            ]
-        return base + override
+        return _merge_lists(base, override)
 
+    return _merge_scalar(base, override, _path)
+
+
+def _merge_lists(base, override):
+    """``deep_merge``'s list case: appended, unless ``override`` carries a ``!``/``<overwrite>`` reset marker."""
+    if any(isinstance(entry, str) and (entry.startswith("!") or entry == "<overwrite>") for entry in override):
+        return [
+            entry[1:] if isinstance(entry, str) and entry.startswith("!") else entry
+            for entry in override
+            if entry != "<overwrite>"
+        ]
+    return base + override
+
+
+def _merge_scalar(base, override, path):
+    """``deep_merge``'s scalar case: ``override`` wins, but a conflicting string needs an explicit ``!``."""
     if isinstance(override, str) and override.startswith("!") and base is not _UNSET:
         return override[1:]
 
     if isinstance(base, str) and isinstance(override, str) and base != override:
         die(
-            f"conflicting values for '{_path}' across stacked layers: {base!r} vs {override!r}. "
+            f"conflicting values for '{path}' across stacked layers: {base!r} vs {override!r}. "
             f"Prefix the new value with '!' to override deliberately, e.g. \"!{override}\"."
         )
     return override
@@ -583,7 +593,7 @@ _PRERELEASE_RE = re.compile(r"[.\-_]?(a|b|c|rc|alpha|beta|dev|pre)\d*", re.IGNOR
 # each specifier in a 'denver-version:' value: an optional operator (bare
 # means '>=' -- the overwhelmingly common "at least this version" case)
 # followed by a version.
-_SPEC_RE = re.compile(r"\s*(>=|<=|==|!=|>|<)?\s*(\S+)\s*")
+_SPEC_RE = re.compile(r"\s*(?:(>=|<=|==|!=|>|<)\s*)?(\S+)\s*")
 _SPEC_OPERATORS = {
     ">=": lambda order: order >= 0,
     ">": lambda order: order > 0,
@@ -1353,7 +1363,6 @@ def run_stages(
     'stages:' list, which --until/--skip never changes.
     """
     from providers import make_stage
-    from providers.context import skip_banner
 
     if start_time is None:
         start_time = time.time()
@@ -1394,81 +1403,175 @@ def run_stages(
     # excluded above by stage filtering; also inactive once already inside it.
     active_wrappers = [] if ctx.in_docker else wrappers
 
-    def run_setup(provider):
-        _run_stage_setup(
-            ctx, config, config_path, provider, quiet=quiet, stage_index=stage_index[provider.stage], stage_count=total
-        )
-
     # a stage past the --until cut-off was dropped by --until; a stage that
     # survived --until/--skip filtering (still in stage_ids) but is missing
     # from `runnable` was dropped by its own 'disabled: true'; anything else
     # missing from `runnable` was named by an explicit --skip.
     cutoff = all_stage_ids.index(until_stage) if until_stage in all_stage_ids else None
-
-    def show_skipped(skipped):
-        for s in skipped:
-            if s.stage in stage_ids:
-                reason = "skipped (disabled: true)"
-            else:
-                past_cutoff = cutoff is not None and all_stage_ids.index(s.stage) > cutoff
-                reason = "skipped by --until" if past_cutoff else "skipped by --skip"
-            ctx.stage_index, ctx.stage_count = stage_index[s.stage], total
-            skip_banner(ctx, s.stage, reason)
+    skip_state = _StageSkipState(
+        stage_index=stage_index, total=total, stage_ids=stage_ids, cutoff=cutoff, all_stage_ids=all_stage_ids
+    )
 
     if active_wrappers:
-        # Host side: prepare the wrapper(s), then relocate execution into them.
-        show_skipped(skipped_wrappers)
-        for w in active_wrappers:
-            run_setup(w)
-        if setups:
-            # setup providers run *inside* the wrapper: re-invoke denver there
-            # -- it recomputes skipped_setups identically (same denver.yml,
-            # same --until/--skip) and shows those banners itself.
-            cmd = reinvoke_command(
-                config_path,
-                forwarded,
-                [w.stage for w in active_wrappers],
-                until_stage=until_stage,
-                skip_stages=skip_stages,
-                quiet=quiet,
-                fast=fast,
-                force=force,
-                ci=ci,
-                start_time=start_time,
-            )
-        else:
-            # pure wrapper: relocate the user's command (or default) directly
-            # -- nothing will re-invoke to show skipped_setups, so show them
-            # here instead.
-            show_skipped(skipped_setups)
-            cmd = resolve_command(config, forwarded)
-        for w in reversed(active_wrappers):
-            ctx.stage_index, ctx.stage_count = stage_index[w.stage], total
-            ctx.stage_id = w.stage
-            cmd = w.wrap(ctx, cmd)
-        if not setups and quiet < 2:
-            _print_env_started(ctx, start_time)
-        ctx.exec(cmd)
+        _run_stages_via_wrapper(
+            ctx,
+            config,
+            config_path,
+            forwarded,
+            active_wrappers=active_wrappers,
+            setups=setups,
+            skipped_wrappers=skipped_wrappers,
+            skipped_setups=skipped_setups,
+            skip_state=skip_state,
+            until_stage=until_stage,
+            skip_stages=skip_stages,
+            quiet=quiet,
+            fast=fast,
+            force=force,
+            ci=ci,
+            start_time=start_time,
+        )
     else:
-        # Here (host with the wrapper stage skipped, or already inside the
-        # wrapper): build the local environment and run the command directly.
-        # skipped_wrappers is shown only on the host: once inside the
-        # wrapper (ctx.in_docker), a wrapper stage's absence here is either
-        # it having already run for real (outer process) or reinvoke_command's
-        # own forced --skip (never a genuine user --until/--skip) -- neither
-        # should print a second, spurious "skipped by --skip" banner.
-        if not ctx.in_docker:
-            show_skipped(skipped_wrappers)
-        for n in setups:
-            run_setup(n)
-        show_skipped(skipped_setups)
-        if quiet < 2:
-            _print_env_started(ctx, start_time)
-        if not quiet:
-            print_logo()
+        _run_stages_directly(
+            ctx,
+            config,
+            config_path,
+            forwarded,
+            setups=setups,
+            skipped_wrappers=skipped_wrappers,
+            skipped_setups=skipped_setups,
+            skip_state=skip_state,
+            quiet=quiet,
+            start_time=start_time,
+        )
+
+
+class _StageSkipState:
+    """Everything ``_show_skipped`` needs to explain why a stage isn't running -- see run_stages."""
+
+    def __init__(self, *, stage_index, total, stage_ids, cutoff, all_stage_ids):
+        self.stage_index = stage_index
+        self.total = total
+        self.stage_ids = stage_ids
+        self.cutoff = cutoff
+        self.all_stage_ids = all_stage_ids
+
+
+def _show_skipped(ctx, skipped, skip_state):
+    """Print a "skipped by ..." banner for each stage in ``skipped`` (disabled: true, --until, or --skip)."""
+    from providers.context import skip_banner
+
+    for s in skipped:
+        if s.stage in skip_state.stage_ids:
+            reason = "skipped (disabled: true)"
+        else:
+            past_cutoff = skip_state.cutoff is not None and skip_state.all_stage_ids.index(s.stage) > skip_state.cutoff
+            reason = "skipped by --until" if past_cutoff else "skipped by --skip"
+        ctx.stage_index, ctx.stage_count = skip_state.stage_index[s.stage], skip_state.total
+        skip_banner(ctx, s.stage, reason)
+
+
+def _run_stages_via_wrapper(
+    ctx,
+    config,
+    config_path,
+    forwarded,
+    *,
+    active_wrappers,
+    setups,
+    skipped_wrappers,
+    skipped_setups,
+    skip_state,
+    until_stage,
+    skip_stages,
+    quiet,
+    fast,
+    force,
+    ci,
+    start_time,
+):
+    """Host side: prepare the wrapper(s), then relocate execution into them (see run_stages)."""
+    _show_skipped(ctx, skipped_wrappers, skip_state)
+    for w in active_wrappers:
+        _run_stage_setup(
+            ctx,
+            config,
+            config_path,
+            w,
+            quiet=quiet,
+            stage_index=skip_state.stage_index[w.stage],
+            stage_count=skip_state.total,
+        )
+    if setups:
+        # setup providers run *inside* the wrapper: re-invoke denver there
+        # -- it recomputes skipped_setups identically (same denver.yml,
+        # same --until/--skip) and shows those banners itself.
+        cmd = reinvoke_command(
+            config_path,
+            forwarded,
+            [w.stage for w in active_wrappers],
+            until_stage=until_stage,
+            skip_stages=skip_stages,
+            quiet=quiet,
+            fast=fast,
+            force=force,
+            ci=ci,
+            start_time=start_time,
+        )
+    else:
+        # pure wrapper: relocate the user's command (or default) directly
+        # -- nothing will re-invoke to show skipped_setups, so show them
+        # here instead.
+        _show_skipped(ctx, skipped_setups, skip_state)
         cmd = resolve_command(config, forwarded)
-        run_hook(ctx, config_path, "pre-cmd")
-        ctx.exec(cmd)
+    for w in reversed(active_wrappers):
+        ctx.stage_index, ctx.stage_count = skip_state.stage_index[w.stage], skip_state.total
+        ctx.stage_id = w.stage
+        cmd = w.wrap(ctx, cmd)
+    if not setups and quiet < 2:
+        _print_env_started(ctx, start_time)
+    ctx.exec(cmd)
+
+
+def _run_stages_directly(
+    ctx,
+    config,
+    config_path,
+    forwarded,
+    *,
+    setups,
+    skipped_wrappers,
+    skipped_setups,
+    skip_state,
+    quiet,
+    start_time,
+):
+    """Host with the wrapper stage skipped (or already inside it): build the env and run the command directly."""
+    # skipped_wrappers is shown only on the host: once inside the
+    # wrapper (ctx.in_docker), a wrapper stage's absence here is either
+    # it having already run for real (outer process) or reinvoke_command's
+    # own forced --skip (never a genuine user --until/--skip) -- neither
+    # should print a second, spurious "skipped by --skip" banner.
+    if not ctx.in_docker:
+        _show_skipped(ctx, skipped_wrappers, skip_state)
+    for n in setups:
+        _run_stage_setup(
+            ctx,
+            config,
+            config_path,
+            n,
+            quiet=quiet,
+            stage_index=skip_state.stage_index[n.stage],
+            stage_count=skip_state.total,
+        )
+    _show_skipped(ctx, skipped_setups, skip_state)
+    if quiet < 2:
+        _print_env_started(ctx, start_time)
+    if not quiet:
+        print_logo()
+    cmd = resolve_command(config, forwarded)
+    run_hook(ctx, config_path, "pre-cmd")
+    ctx.exec(cmd)
 
 
 def hook_names_for_stages(stage_ids):
@@ -1703,56 +1806,67 @@ def main(argv=None):
     ConanProvider._ensure_profile), and everything else lands here.
     """
     try:
-        return _run_cli(argv)
+        _run_cli(argv)
     except subprocess.CalledProcessError as exc:
         die(_command_failure_message(exc))
+    return 0
 
 
-def _run_cli(argv=None):
-    """Parse argv, resolve the env, and either exec its command or dispatch a denver-only subcommand.
+def _split_argv(argv):
+    """Split ``argv`` on the first literal ``--``: denver's own flags, then the command to forward verbatim.
 
-    ``argv`` defaults to ``sys.argv[1:]`` (real CLI invocation); tests pass
-    an explicit list instead. Returns the process exit code -- 0 on success,
-    or never returns at all when the resolved command replaces this process
-    (``os.execvpe``, via ``Context.exec``).
-
-    Split on the first literal ``--``: everything before it is denver's own
-    flags, parsed by argparse; everything after it (if any) is the command
-    to run, forwarded untouched -- so a command's own flags (e.g.
-    `denver env -- west build --pristine`) are never mistaken for denver's,
-    and conversely a mistyped/unknown denver flag is never silently mistaken
-    for (part of) the command: with no `--`, an unconsumed token is just an
-    extra positional argparse itself rejects.
+    So a command's own flags (e.g. `denver env -- west build --pristine`)
+    are never mistaken for denver's, and conversely a mistyped/unknown
+    denver flag is never silently mistaken for (part of) the command: with
+    no `--`, an unconsumed token is just an extra positional argparse itself
+    rejects.
     """
-    argv = list(sys.argv[1:] if argv is None else argv)
-    parser = build_arg_parser()
-
-    if not argv:
-        print_help(parser)
-        return 0
-
     if "--" in argv:
         separator = argv.index("--")
-        head, forwarded = argv[:separator], argv[separator + 1 :]
-    else:
-        head, forwarded = argv, []
+        return argv[:separator], argv[separator + 1 :]
+    return argv, []
 
-    args = parser.parse_args(head)
 
+def _handle_info_flags(args, parser):
+    """Handle --help/--version/--license, if given. Returns True if one was (each prints and/or dies)."""
     if args.help:
         print_help(parser)
-        return 0
+        return True
 
     if args.version:
         print(f"denver {package_version() or UNKNOWN_VERSION}")
-        return 0
+        return True
 
     if args.license:
         text = license_text()
         if text is None:
             die("LICENSE not found -- neither a checkout nor installed package metadata has it")
         print(text)
-        return 0
+        return True
+
+    return False
+
+
+def _run_cli(argv=None):
+    """Parse argv, resolve the env, and either exec its command or dispatch a denver-only subcommand.
+
+    ``argv`` defaults to ``sys.argv[1:]`` (real CLI invocation); tests pass
+    an explicit list instead. Never returns at all when the resolved command
+    replaces this process (``os.execvpe``, via ``Context.exec``); otherwise
+    returns normally on success, or exits via ``die()``.
+    """
+    argv = list(sys.argv[1:] if argv is None else argv)
+    parser = build_arg_parser()
+
+    if not argv:
+        print_help(parser)
+        return
+
+    head, forwarded = _split_argv(argv)
+    args = parser.parse_args(head)
+
+    if _handle_info_flags(args, parser):
+        return
 
     if args.env is None:
         die("no environment given -- see `denver --help`")
@@ -1772,7 +1886,7 @@ def _run_cli(argv=None):
 
     if args.show_config:
         show_config(env_dir, config, config_path, until_stage=args.until, skip_stages=args.skip)
-        return 0
+        return
 
     if args.run:
         run_named_scripts(
@@ -1784,7 +1898,7 @@ def _run_cli(argv=None):
             skip_stages=args.skip,
             quiet=args.quiet,
         )
-        return 0
+        return
 
     # 'runnable: false' marks a shared/base env (meant to be inherited via
     # import:, not started directly). --show-config/--setup/--login above
@@ -1808,7 +1922,6 @@ def _run_cli(argv=None):
         ci=args.ci,
         start_time=args.start_time,
     )
-    return 0
 
 
 if __name__ == "__main__":

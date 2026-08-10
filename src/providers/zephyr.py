@@ -56,10 +56,13 @@ from .context import banner, die, find_in_parents, find_outermost_in_parents, in
 # a fixed shallow-clone strategy, not a denver.yml key (see module docstring).
 CI_UPDATE_ARGS = ("--narrow", "-o=--depth=1")
 
+# west's own per-workspace marker dir, holding its config file.
+WEST_DIRNAME = ".west"
+
 
 def west_topdir(start):
     """Locate the workspace top: nearest ``.west``, else the outermost ``.git``."""
-    for parent in find_in_parents(start, ".west"):
+    for parent in find_in_parents(start, WEST_DIRNAME):
         return parent
     outermost_git = find_outermost_in_parents(start, ".git")
     return outermost_git if outermost_git else None
@@ -80,7 +83,7 @@ class ZephyrProvider(Provider):
     )
 
     @classmethod
-    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003 -- shared (ctx, cfg, config) signature
+    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
         """Resolve west-yml/base/blobs-fetch-args/patch-committer -- see module docstring."""
         # WEST_TOPDIR is a zephyr concept, not a denver built-in -- computed
         # and exported here (not in Context) so non-zephyr envs never pay for
@@ -135,7 +138,7 @@ class ZephyrProvider(Provider):
             banner(ctx, self.stage, "prepare (skipped by --fast)")
             banner(ctx, self.stage, "west config (skipped by --fast)")
             banner(ctx, self.stage, "west update (skipped by --fast)")
-            west_config = top / ".west" / "config"
+            west_config = top / WEST_DIRNAME / "config"
             if not west_config.exists():
                 die(
                     f"zephyr[{self.stage}]: --fast needs an existing workspace at "

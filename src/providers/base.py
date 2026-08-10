@@ -75,7 +75,7 @@ class Provider:
 
     # ---- config defaults (override what you need) ------------------------ #
     @classmethod
-    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003 -- shared (ctx, cfg, config) signature
+    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
         """Compute this stage's *complete* effective config section, once, centrally.
 
         Explicit values pass through untouched, everything else gets this

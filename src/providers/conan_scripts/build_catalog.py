@@ -111,7 +111,7 @@ class Recipe:
         side-effect-free; the caller (Catalog.add_recipe_dirs) calls this
         explicitly as a separate step.
         """
-        get_rrev.get_RREV(self.recipe_dir)  # this will re-generate conandata.yml
+        get_rrev.compute_rrev(self.recipe_dir)  # this will re-generate conandata.yml
         self.conandata_yml.read()
 
     def add_dependency(self, kind, recipe):
@@ -125,12 +125,12 @@ class Recipe:
         if not find(kind_members, recipe):
             kind_members.append(recipe)
 
-    def get_full_reference(self, RREV=True):
+    def get_full_reference(self, rrev=True):
         """Return this recipe's full conan reference, e.g. 'name/version@user/channel#rrev'."""
         if not self.rrev:
             raise GenerateError(f"Error: rrev not set for '{self.recipe_dir}'")
         reference_str = f"{self.name}/{self.version}@{self.user}/{self.channel}"
-        if RREV:
+        if rrev:
             reference_str += f"#{self.rrev}"
         return reference_str
 
@@ -150,7 +150,7 @@ class Recipe:
 
     def calculate_rrev(self):
         """Recompute and return this recipe's current RREV (does not mutate ``self.rrev``)."""
-        _, _, rrev = get_rrev.get_RREV(self.recipe_dir)
+        _, _, rrev = get_rrev.compute_rrev(self.recipe_dir)
         return rrev
 
     def get_json(self):
@@ -190,6 +190,25 @@ class Catalog:
                 break
         return retval
 
+    def _dependency_not_found_error(self, recipe, kind, ref_name, ref_version):
+        """Build the GenerateError for a requires/tool_requires reference resolve_dependencies_recursively can't find.
+
+        find_recipe() already matches on the referenced version; a
+        same-named recipe at a *different* version means the reference is
+        just stale, not missing -- point at the version it should be
+        updated to instead of a generic "not found".
+        """
+        same_name = [r for r in self.recipes if r.name == ref_name]
+        if len(same_name) == 1:
+            return GenerateError(
+                f"Error: You should update reference for '{ref_name}' in "
+                f"'{recipe.conandata_yml.path}' ({kind}) to version "
+                f"'{same_name[0].version}' (currently '{ref_version}')."
+            )
+        return GenerateError(
+            f"Error: Could not find any dependency '{ref_name}/{ref_version}' (used in {recipe.conandata_yml.path}"
+        )
+
     def resolve_dependencies_recursively(self, recipe):
         """Link ``recipe``'s requires/tool_requires (from its conandata.yml) to their loaded Recipe objects."""
         if not recipe.conandata_yml:
@@ -202,21 +221,7 @@ class Catalog:
                 ref_name, ref_version = _reference_name_version(reference)
                 dep_recipe = self.find_recipe(ref_name, ref_version)
                 if not dep_recipe:
-                    # find_recipe() above already matches on the referenced
-                    # version; a same-named recipe at a *different* version
-                    # means the reference is just stale, not missing --
-                    # point at the version it should be updated to instead
-                    # of a generic "not found".
-                    same_name = [r for r in self.recipes if r.name == ref_name]
-                    if len(same_name) == 1:
-                        raise GenerateError(
-                            f"Error: You should update reference for '{ref_name}' in "
-                            f"'{recipe.conandata_yml.path}' ({kind}) to version "
-                            f"'{same_name[0].version}' (currently '{ref_version}')."
-                        )
-                    raise GenerateError(
-                        f"Error: Could not find any dependency '{ref_name}/{ref_version}' (used in {recipe.conandata_yml.path}"
-                    )
+                    raise self._dependency_not_found_error(recipe, kind, ref_name, ref_version)
                 if kind not in dep_recipe.users:
                     dep_recipe.users[kind] = []
 
@@ -245,7 +250,7 @@ class Catalog:
         recipe.rrev = recipe.calculate_rrev()
 
         for kind, users in recipe.users.items():
-            recipe_reference = recipe.get_full_reference(RREV=True)
+            recipe_reference = recipe.get_full_reference(rrev=True)
 
             for user in users:
                 do_save = False
