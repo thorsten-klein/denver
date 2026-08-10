@@ -18,6 +18,10 @@ on:
         type: string
         required: false
         default: denver-binary
+    outputs:
+      version:
+        description: 'Version of the built denver, e.g. 1.2.3 -- for composing the exact denver-<version>-x64-linux.tar.xz filename in a caller'
+        value: ${{ jobs.build.outputs.version }}
 
 jobs:
   build:
@@ -30,6 +34,8 @@ jobs:
     # Fedora 29 / RHEL 8 onwards. glibc-based distros only -- musl ones
     # (Alpine) can never run this binary.
     container: almalinux:8
+    outputs:
+      version: ${{ steps.build.outputs.version }}
     steps:
       # Before the checkout -- without git, actions/checkout silently falls
       # back to downloading a tarball, and a checkout with no .git has no
@@ -50,13 +56,23 @@ jobs:
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Build the executable
-        run: scripts/create-python-exe.sh --output dist --python python3.12
+        id: build
+        run: |
+          scripts/create-python-exe.sh --output dist --python python3.12
+          # 'denver X.Y.Z' -> X.Y.Z. Exposed as a job output so a caller can
+          # compose the exact denver-<version>-x64-linux.tar.xz filename
+          # itself (e.g. release-binary.yml's 'gh release upload') instead of
+          # globbing for it.
+          echo "version=$(dist/denver --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
 
       # the .tar.xz rather than the bare executable. It is what a release
       # actually ships, and unlike a zipped artifact it keeps the exec bit,
-      # so consumers just untar and run it.
+      # so consumers just untar and run it. Named denver-<version>-x64-linux
+      # by create-python-exe.sh, so the version can't be spelled out here --
+      # matched by glob instead (see steps.build.outputs.version for callers
+      # that need the exact name).
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.artifact }}
-          path: dist/denver_x64_Linux.tar.xz
+          path: dist/denver-*-x64-linux.tar.xz
           if-no-files-found: error

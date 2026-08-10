@@ -8,8 +8,9 @@
 #
 #   scripts/create-python-exe.sh [--output DIR] [--python PYTHON] [--no-archive]
 #
-# Output (default dist/): the executable 'denver' plus denver_x64_Linux.tar.xz
-# holding it, which is what the release workflow attaches to the release.
+# Output (default dist/): the executable 'denver' plus a
+# denver-<version>-x64-linux.tar.xz holding it, which is what the release
+# workflow attaches to the release.
 #
 # PORTABILITY: a PyInstaller binary bundles the interpreter but still links
 # the *build machine's* glibc, and glibc is only backward compatible -- so the
@@ -28,9 +29,10 @@ set -euo pipefail
 # executable.
 PYINSTALLER_VERSION="6.16.0"
 
-# The asset name the release workflow uploads; x64/Linux is not a guess but
-# what this build is -- PyInstaller freezes for the running platform only.
-ARCHIVE_NAME="denver_x64_Linux.tar.xz"
+# The asset name the release workflow uploads follows
+# denver-<version>-x64-linux.tar.xz; x64/Linux is not a guess but what this
+# build is -- PyInstaller freezes for the running platform only. The version
+# is filled in once it's known, after freezing (see below).
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/dist"
@@ -136,22 +138,33 @@ echo ">>> freezing"
 # which says nothing about whether this binary is complete (same reasoning as
 # ci.yml's installed-mode smoke test).
 echo ">>> smoke-testing $BUILD_DIR/dist/denver"
-"$BUILD_DIR/dist/denver" --version
+VERSION_OUTPUT="$("$BUILD_DIR/dist/denver" --version)"
+echo "$VERSION_OUTPUT"
 "$BUILD_DIR/dist/denver" --help >/dev/null
 "$BUILD_DIR/dist/denver" "$REPO_ROOT/examples/simple-env" --show-config -c denver-version=null >/dev/null
+
+# 'denver X.Y.Z' -> X.Y.Z; see denver.py's package_version for what it prints.
+VERSION="${VERSION_OUTPUT#denver }"
+ARCHIVE_NAME="denver-${VERSION}-x64-linux.tar.xz"
 
 mkdir -p "$OUTPUT_DIR"
 cp "$BUILD_DIR/dist/denver" "$OUTPUT_DIR/denver"
 
 if [ "$ARCHIVE" = 1 ]; then
+    # The tarball holds the versioned binary plus a 'denver' symlink to it,
+    # so it can be dropped anywhere on PATH under a name that doesn't change
+    # release to release, while the file itself still names the version it
+    # is -- e.g. for side-by-side installs of more than one release.
+    cp "$BUILD_DIR/dist/denver" "$BUILD_DIR/dist/denver-$VERSION"
+    ln -sf "denver-$VERSION" "$BUILD_DIR/dist/denver"
     # LICENSE rides along: the tarball is a redistribution of denver in
     # binary form, and MIT asks for the notice to travel with it.
     cp "$REPO_ROOT/LICENSE" "$BUILD_DIR/dist/LICENSE"
-    XZ_OPT=-9 tar -C "$BUILD_DIR/dist" -caf "$OUTPUT_DIR/$ARCHIVE_NAME" denver LICENSE
+    XZ_OPT=-9 tar -C "$BUILD_DIR/dist" -caf "$OUTPUT_DIR/$ARCHIVE_NAME" "denver-$VERSION" denver LICENSE
 fi
 
 echo
-echo ">>> $("$OUTPUT_DIR/denver" --version) -> $OUTPUT_DIR/denver ($(du -h "$OUTPUT_DIR/denver" | cut -f1))"
+echo ">>> $VERSION_OUTPUT -> $OUTPUT_DIR/denver ($(du -h "$OUTPUT_DIR/denver" | cut -f1))"
 if [ "$ARCHIVE" = 1 ]; then
     echo ">>> $OUTPUT_DIR/$ARCHIVE_NAME ($(du -h "$OUTPUT_DIR/$ARCHIVE_NAME" | cut -f1))"
 fi
