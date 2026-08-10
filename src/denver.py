@@ -288,6 +288,27 @@ def package_version():
         return None
 
 
+def license_text():
+    """The MIT LICENSE text denver ships under, or None if it can't be found.
+
+    Mirrors package_version()'s two sources for the same reason: a checkout
+    (running the plain script, or an editable install) has the repo's own
+    LICENSE file to read, but an installed wheel -- or this frozen into a
+    PyInstaller binary via --copy-metadata -- has no checkout at all, only
+    the LICENSE file setuptools copied into the dist-info's licenses/ dir
+    (per pyproject.toml's 'license-files').
+    """
+    root = checkout_root()
+    if root is not None:
+        license_path = root / "LICENSE"
+        if license_path.is_file():
+            return license_path.read_text()
+    try:
+        return importlib.metadata.distribution(DISTRIBUTION_NAME).read_text("licenses/LICENSE")
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
 # --------------------------------------------------------------------------- #
 # Config loading & merging
 # --------------------------------------------------------------------------- #
@@ -1578,6 +1599,7 @@ def build_arg_parser():
     parser.add_argument("env", nargs="?", help="path to an env directory or a denver.yml file")
     parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
     parser.add_argument("--version", action="store_true", help="show the installed denver version and exit")
+    parser.add_argument("--license", action="store_true", help="show denver's LICENSE (MIT) and exit")
     parser.add_argument("--show-config", action="store_true", help="print the final deep-merged denver.yml and exit")
     parser.add_argument(
         "--run", metavar="NAME", help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login')"
@@ -1723,6 +1745,13 @@ def _run_cli(argv=None):
 
     if args.version:
         print(f"denver {package_version() or UNKNOWN_VERSION}")
+        return 0
+
+    if args.license:
+        text = license_text()
+        if text is None:
+            die("LICENSE not found -- neither a checkout nor installed package metadata has it")
+        print(text)
         return 0
 
     if args.env is None:

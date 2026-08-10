@@ -130,16 +130,19 @@ echo ">>> freezing"
     --add-data "$REPO_ROOT/src/providers/docker_scripts:providers/docker_scripts" \
     "$REPO_ROOT/src/denver.py"
 
-# Smoke test before packaging: --version proves the bundled metadata is
-# readable, --show-config resolves an env through every provider -- which is
-# what actually catches a provider or a bundled script that did not make it
-# into the archive. '-c denver-version=null' drops the example's own pin: a
-# build from an untagged tree reports a dev version no pin is satisfied by,
-# which says nothing about whether this binary is complete (same reasoning as
-# ci.yml's installed-mode smoke test).
+# Smoke test before packaging: --version and --license both prove the
+# bundled dist-info metadata is readable (see denver.py's package_version and
+# license_text -- --copy-metadata above is what makes either possible in a
+# frozen binary), --show-config resolves an env through every provider --
+# which is what actually catches a provider or a bundled script that did not
+# make it into the archive. '-c denver-version=null' drops the example's own
+# pin: a build from an untagged tree reports a dev version no pin is
+# satisfied by, which says nothing about whether this binary is complete
+# (same reasoning as ci.yml's installed-mode smoke test).
 echo ">>> smoke-testing $BUILD_DIR/dist/denver"
 VERSION_OUTPUT="$("$BUILD_DIR/dist/denver" --version)"
 echo "$VERSION_OUTPUT"
+"$BUILD_DIR/dist/denver" --license >/dev/null
 "$BUILD_DIR/dist/denver" --help >/dev/null
 "$BUILD_DIR/dist/denver" "$REPO_ROOT/examples/simple-env" --show-config -c denver-version=null >/dev/null
 
@@ -157,10 +160,7 @@ if [ "$ARCHIVE" = 1 ]; then
     # is -- e.g. for side-by-side installs of more than one release.
     cp "$BUILD_DIR/dist/denver" "$BUILD_DIR/dist/denver-$VERSION"
     ln -sf "denver-$VERSION" "$BUILD_DIR/dist/denver"
-    # LICENSE rides along: the tarball is a redistribution of denver in
-    # binary form, and MIT asks for the notice to travel with it.
-    cp "$REPO_ROOT/LICENSE" "$BUILD_DIR/dist/LICENSE"
-    XZ_OPT=-9 tar -C "$BUILD_DIR/dist" -caf "$OUTPUT_DIR/$ARCHIVE_NAME" "denver-$VERSION" denver LICENSE
+    XZ_OPT=-9 tar -C "$BUILD_DIR/dist" -caf "$OUTPUT_DIR/$ARCHIVE_NAME" "denver-$VERSION" denver
 fi
 
 echo
