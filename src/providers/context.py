@@ -975,12 +975,17 @@ class Context:
         cmd = [str(c) for c in cmd]
         # a resolved command is always denver's own doing (default_command()/
         # resolve_command(), a wrapper's wrap(), or a script's own argv) --
-        # never raw external input -- but a malformed 'command:'/script entry
-        # (e.g. an empty string) must not reach os.execvpe() as a bare,
-        # confusing OSError: validated here so the failure names the actual
-        # problem instead.
+        # sourced from the same invoking user's own denver.yml/CLI, not a
+        # remote or otherwise privileged party -- but a malformed
+        # 'command:'/script entry (e.g. an empty string) must not reach
+        # os.execvpe() as a bare, confusing OSError, and cmd[0] looking like a
+        # CLI flag (e.g. a stray '-c' from a mistyped 'command:') would be
+        # taken as the literal program name by execvpe anyway, so catching it
+        # here names the actual problem instead of a baffling "no such file".
         if not cmd or not cmd[0]:
             die(f"exec: empty or invalid command: {cmd!r}")
+        if cmd[0].startswith("-"):
+            die(f"exec: command must not look like a CLI option: {cmd[0]!r}")
         if any("\0" in arg for arg in cmd):
             die(f"exec: command arguments must not contain NUL bytes: {cmd!r}")
         if self.dry_run:
