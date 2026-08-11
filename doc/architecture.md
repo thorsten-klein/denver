@@ -306,6 +306,11 @@ nothing expensive re-runs.
 - **`--ci`** swaps in narrower/faster args a stage judges appropriate for a
   CI runner instead of an interactive host (e.g. a shallow clone).
 
+Being opposites, `--fast` and `--force` are mutually exclusive and giving
+both is an error. There is no sensible resolution to guess at: a provider
+takes its `--fast` path before it ever looks at `--force`, so the pair would
+otherwise mean "`--fast`, and the `--force` you typed did nothing".
+
 Neither `--force` nor `--ci` is ever read from a real environment variable
 — both only ever come from the flag itself, so behavior can't silently
 change based on what happens to be exported in the calling shell.
