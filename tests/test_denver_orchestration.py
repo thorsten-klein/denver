@@ -983,7 +983,7 @@ def test_run_stages_reresolves_stage_defaults_before_setup(tmp_path, run_recorde
         Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
         return run_recorder.default
 
-    run_recorder.responses["venv -p"] = create_venv_dir
+    run_recorder.responses["uv venv"] = create_venv_dir
     run_recorder.responses["python3 --version"] = lambda cmd: type(
         "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
     )()
@@ -1033,8 +1033,11 @@ def test_run_stages_reresolves_over_a_default_it_already_found(tmp_path, run_rec
     # the second's own refresh must resolve to the venv's uv, not the host's
     config = {
         "stages": ["uv-first", "uv-second"],
-        "uv-first": {"provider": "uv"},
-        "uv-second": {"provider": "uv"},
+        # 'python:' set only so `uv python install` runs and carries the
+        # resolved uv path this test is actually about (it is a no-op with
+        # no version configured -- see UvProvider._ensure_python).
+        "uv-first": {"provider": "uv", "python": "3.12.3"},
+        "uv-second": {"provider": "uv", "python": "3.12.3"},
     }
     env_dir, cfg_path = _env(tmp_path, config)
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])

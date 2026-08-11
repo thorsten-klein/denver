@@ -126,7 +126,7 @@ uv-zephyr:
   no-index: false
   overrides:
   - conan/recipes/python-cache/denver/overrides.txt
-  python: 3.12.3
+  python: null
   requirements: null
   skip-if:
   - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-if.sh
