@@ -1799,8 +1799,16 @@ def build_arg_parser():
         help="suppress denver's own output (repeatable: -q keeps the stage banner visible, -qq silences "
         "everything, only the launched command speaks)",
     )
-    parser.add_argument("--fast", action="store_true", help="only activate what's already built; never (re-)build it")
-    parser.add_argument(
+    # --fast and --force ask for opposite things ("don't build anything" vs
+    # "rebuild everything"), and --fast wins by construction: every provider
+    # takes its --fast path before ctx.force is ever read, silently
+    # discarding the --force. Rejected here rather than resolved, because
+    # either resolution would be a guess about which one the user meant.
+    # A group (not a hand-written check) so argparse reports it itself, the
+    # same way it reports every other malformed invocation.
+    rebuild = parser.add_mutually_exclusive_group()
+    rebuild.add_argument("--fast", action="store_true", help="only activate what's already built; never (re-)build it")
+    rebuild.add_argument(
         "--force",
         action="store_true",
         help="force expensive recomputation (recreate venv, rerun west update, ...), bypassing every "
