@@ -194,7 +194,7 @@ class DockerProvider(Provider):
     def setup(self, ctx):
         """Validate the compose files/exe, run env-scripts, and build the image if not found locally/remotely."""
         if ctx.in_container:
-            die("docker provider: already running inside a container")
+            die(f"docker[{self.stage}]: already running inside a container")
 
         # seed convenience variables BEFORE the config section is interpolated,
         # so ${UID}/${GID} in denver.yml resolve correctly.
@@ -208,7 +208,7 @@ class DockerProvider(Provider):
         # env's docker stage on a machine without docker is legitimate and
         # shouldn't abort before the compose commands are shown.
         if not ctx.which(exe, dry_fallback=True):
-            die(f"docker provider needs '{exe}' on PATH")
+            die(f"docker[{self.stage}]: needs '{exe}' on PATH")
 
         compose = cfg["compose"]
         files = compose["file"]

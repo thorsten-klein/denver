@@ -37,7 +37,7 @@ def write_compose(ctx, name="docker-compose.yml"):
 
 
 # ---- guard clauses -------------------------------------------------------------#
-def test_already_in_docker_dies(make_context):
+def test_already_in_container_dies(make_context):
     config = {"docker": docker_cfg()}
     ctx = make_context(config=config, in_container=True)
     with pytest.raises(SystemExit):

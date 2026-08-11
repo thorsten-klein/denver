@@ -317,7 +317,7 @@ class ConanProvider(Provider):
 
         conan = cfg.get("exe")
         if not conan:
-            die("conan provider needs 'conan' on PATH (installed by the uv provider)")
+            die(f"conan[{self.stage}]: needs 'conan' on PATH -- normally installed by an earlier uv stage")
         self._warn_if_shadowing_venv(ctx, conan)
         python = ctx.which("python3") or "python3"
 

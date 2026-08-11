@@ -34,6 +34,13 @@ Each step prints its own banner line, in whatever order the provider actually
 does the work; there is deliberately no "step 3 of 7" numbering to keep in
 sync with the code.
 
+Every stage is announced by a single `-- [i/n] stage '<id>' (<provider>)`
+line before its first step, emitted by denver itself rather than by the
+provider — so a stage that fails before doing anything (a missing tool, a
+bad path) has still said which stage it is, and `<id>` is exactly what
+`--skip` takes. Stages report in `stages:` order whether they run or are
+skipped, so the trail reads as the pipeline it describes.
+
 **Setup provider** (`kind: setup`) — a provider that builds part of the
 environment in place: creates a venv, installs tools, updates a workspace.
 `uv`, `conan` and `zephyr` are setup providers; `custom` is one unless it
