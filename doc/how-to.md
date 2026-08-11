@@ -17,6 +17,10 @@ who wants to build it is told:
 > - net-tools
 > - curl
 >
+> Grab the editor we all use, `neovim` 0.12.4, from its GitHub releases page —
+> it ships as a prebuilt tarball, just unpack it somewhere and put it on
+> `PATH`.
+>
 > Download and install the following tools from the internet:
 > (Important: use exactly those specified versions):
 > - `cmake` 3.31.9
@@ -87,6 +91,7 @@ Let's identify the necessary stages. From the use case description we can see th
 |---|---|---|
 | "use Ubuntu 24.04" + `apt install jq net-tools curl` | [`docker`](providers/docker.md) | `docker-with-tools` |
 | "create a python 3.12 virtualenv, install `pytest==9.1.1`" | [`uv`](providers/uv.md) | `uv-packages` |
+| "unpack the neovim 0.12.4 tarball and put it on `PATH`" | [`custom`](providers/custom.md) | `nvim-by-hand` |
 | "`cmake` 3.31.9 and ARM 15.3 — exactly those versions" | [`conan`](providers/conan.md) | `tools-from-internet` |
 | "export `PYTEST_ADDOPTS`" | [`custom`](providers/custom.md) | `best-practices` |
 
@@ -99,16 +104,17 @@ Now Write the `stages:` list first: it *is* the core of the environment. Note th
 stages:
 - docker-with-tools
 - uv-packages
+- nvim-by-hand
 - tools-from-internet
 - best-practices
 ```
 
-Three things about that list:
+Two things about that list:
 
 - **A stage id is only a label.** Each id needs a matching top-level section
   that declares `provider:` explicitly — nothing is ever guessed from the id,
-  which is exactly what lets one environment run two `uv` stages under
-  different ids.
+  which is exactly what lets this one environment run two `custom` stages
+  (`nvim-by-hand` and `best-practices`) under different ids.
 - **Order is the dependency chain.** `conan` comes after `uv` because the
   conan provider never installs conan itself. As `conan` is a Python package,
   it is installed into the venv by the uv stage. For simplicity we only want one uv stage, where we install all Python packages. This is why it must be before the conan stage.
@@ -170,9 +176,13 @@ RUN export UV_INSTALL_DIR=/usr/local/bin; \
   (PyYAML is its only dependency). `git` is for the conan stage, whose recipe
   exporter shells out to it. The rule of thumb for the image: whatever has to
   exist before denver's own stages can run in there.
-- `cmake` and the ARM toolchain are **not** installed via apt. The use
-  case requires exact versions, and pinning versions through a distro's package
-  manager is a losing game. This is why `conan` will be used later instead.
+- `curl` is in the apt list because the use case asked for it — and the
+  `nvim-by-hand` stage later downloads with it, so it would have to be there
+  anyway.
+- `cmake`, the ARM toolchain and `neovim` are **not** installed via apt. The
+  use case requires exact versions, and pinning versions through a distro's
+  package manager is a losing game. This is why the two stages below fetch
+  them at pinned versions instead — one by hand, one via `conan`.
 
 `envs/howto-example/create-env.sh` — This script will generate `.env` file with user-specific informations.
 When we specify it in `denver.yml` as `env-scripts:`, it will run right before build/run (on the host machine). 
@@ -284,12 +294,140 @@ Check the environment now with
 denver envs/howto-example --until uv-packages -- pytest --version
 ```
 
-## Step 4 — the `tools-from-internet` stage
+## Step 4 — the `nvim-by-hand` stage
 
-This is where the exact tool versions come from: conan downloads a pinned
-archive, verifies its checksum, unpacks it into a package of its own and puts
-that package on `PATH`. No `apt`, no version drift, same result on every
-machine.
+The next line of the use case is a prebuilt binary: download a tarball,
+unpack it, put it on `PATH`. Nothing about that needs a package manager, so
+for this simple case let's do it with a `custom` stage — a shell script that
+takes care about the provisioning of this tool:
+
+```yaml
+nvim-by-hand:
+  provider: custom
+  # the build step: an isolated subprocess, so it prints what it does and
+  # nothing it exports has to survive. Skipped by --fast.
+  cmd: bash ${DENVER_ENV_DIR}/nvim/install.sh
+  # the activation: sourced, so the PATH entry it exports survives into
+  # every later stage and the final command
+  source: nvim/activate.sh
+```
+
+**Why two scripts and not one.** `cmd:` runs via `bash -c` in a subprocess of
+its own — perfect for downloading and unpacking, useless for `export PATH=`,
+because that export dies with the subprocess. `source:` is the opposite: the
+script is *sourced* into the environment denver is assembling, so whatever it
+exports reaches everything after it. Installing and activating are two
+different jobs, so they are two scripts. (More on this pair in
+[`providers/custom.md`](providers/custom.md); `examples/simple-env` is a
+three-stage demo of nothing else.)
+
+**Note**: one sourced script would do the whole job just as well — check,
+download, unpack, `export PATH=`, all in `source: install-nvim.sh` and no
+`cmd:` at all. It is split into two here to make the two roles visible, and
+the split has small advantages of its own: `cmd:`'s output is shown while it
+downloads (denver captures a *sourced* script's output, since it has to read
+the resulting environment out of it), and `--fast`/`--dry-run` skip a `cmd:`
+while they always run a `source:`. If you go with one script, mind that a
+sourced script must never call `exit` — it would end denver's own sourcing
+shell before it reads the environment back, and the `PATH` entry would be
+lost.
+
+Note also `${DENVER_ENV_DIR}` in `cmd:`. A `cmd:` inherits denver's working
+directory — wherever the user happened to be — so a relative path would be a
+coin flip; `${DENVER_ENV_DIR}` is a built-in denver expands to the directory
+holding this `denver.yml` (see
+[`architecture.md`](architecture.md#variable-interpolation)). `source:` needs
+none of that: it is resolved relative to the `denver.yml` already.
+
+### The files it needs
+
+`envs/howto-example/nvim/nvim.env` — the pin itself, in one place, so the
+installing and the activating script can never disagree about which version
+they mean or where it lives:
+
+```bash
+NVIM_VERSION="0.12.4"
+NVIM_URL="https://github.com/neovim/neovim/releases/download/v${NVIM_VERSION}/nvim-linux-x86_64.tar.gz"
+NVIM_SHA256="012bf3fcac5ade43914df3f174668bf64d05e049a4f032a388c027b1ebd78628"
+NVIM_PREFIX="${DENVER_ENV_WORKDIR}/nvim/${NVIM_VERSION}"
+```
+
+`DENVER_ENV_WORKDIR` is the other built-in worth knowing here: denver's own
+state directory for this environment (`<env dir>/.denver/<denver.yml stem>/`).
+Unpacking into it means the install belongs to this env, is not shared with
+any other, survives the `--rm` container (it lives inside the env directory,
+which is bind-mounted), and disappears with the checkout. `/usr/local/bin`
+would need root and would leak into every other environment on the machine
+(if run without docker). The version is part of the path, so bumping
+`NVIM_VERSION` installs next to the old release rather than on top of it.
+
+`envs/howto-example/nvim/install.sh` — download, verify, unpack:
+
+```bash
+#!/bin/bash -e
+SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$SELF_DIR/nvim.env"
+
+# runs on every start, so it has to recognise what it already installed
+if [ -x "$NVIM_PREFIX/bin/nvim" ]; then
+    echo "nvim $NVIM_VERSION already installed: $NVIM_PREFIX"
+    exit 0
+fi
+
+cd "$DENVER_ENV_DIR"
+mkdir -p "$(dirname "$NVIM_PREFIX")"
+STAGING=$(mktemp -d "$NVIM_PREFIX.XXXXXX")
+trap 'rm -rf "$STAGING"' EXIT
+
+# download and unpack
+curl -fLsS -o "$STAGING/nvim.tar.gz" "$NVIM_URL"
+echo "$NVIM_SHA256  $STAGING/nvim.tar.gz" | sha256sum -c -
+tar -xzf "$STAGING/nvim.tar.gz" -C "$STAGING" --strip-components=1
+rm -f "$STAGING/nvim.tar.gz"
+
+# moved into place only once complete: a failed download must not leave a
+# half-unpacked tree that the check above would then accept forever
+mv "$STAGING" "$NVIM_PREFIX"
+trap - EXIT
+```
+
+`envs/howto-example/nvim/activate.sh` — the one line that makes it usable:
+
+```bash
+#!/bin/bash
+SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$SELF_DIR/nvim.env"
+
+export PATH="$NVIM_PREFIX/bin:$PATH"
+```
+
+### Check it
+
+```bash
+denver envs/howto-example --until nvim-by-hand -- nvim --version
+```
+
+Expected: `NVIM v0.12.4`. Run it a second time — the download is gone and the
+stage costs milliseconds, because of that `if [ -x ... ]`.
+
+**Read the install script again before the next step.** Twenty lines, and
+almost none of them are about neovim: a checksum, a staging directory, an
+idempotence check, a place to put things — every one of them a decision you
+now own, for exactly one tool. The next step is the same job for two more
+tools, and it is where that stops scaling.
+
+## Step 5 — the `tools-from-internet` stage
+
+This is the other way to get exact tool versions into an environment: conan.
+
+conan is a package manager, and it does for you what you just did by hand in
+`nvim-by-hand`: it downloads a pinned archive, verifies its checksum, unpacks
+it into a package of its own and puts that package on `PATH`. No `apt`, no
+version drift, same result on every machine.
+
+What changes is how much of that you write yourself. Here it is which tool,
+in which version — the download, the checksum check, the "already installed"
+shortcut and the cache belong to conan rather than to a script of yours.
 
 ```yaml
 tools-from-internet:
@@ -375,9 +513,38 @@ denver envs/howto-example --until tools-from-internet -- arm-none-eabi-gcc --ver
 
 It is expected that both tools are present in their pinned versions.
 
-## Step 5 — the `best-practices` stage
+### By hand or via conan?
 
-The remaining step of the use case is solved via `custom` provider.
+Both stages solved the same sentence — "this exact prebuilt tool, on `PATH`" —
+so it is worth naming what actually differs:
+
+| | `nvim-by-hand` (`custom`) | `tools-from-internet` (`conan`) |
+|---|---|---|
+| What you write per tool | ~20 lines of bash | a `conandata.yml` (url + checksum) and a small recipe |
+| Download, checksum, unpack | your script's job | conan's |
+| "already installed" shortcut | your `if [ -x ... ]` | conan's cache, keyed by reference |
+| Cache shared between envs/checkouts | no — one copy per env | yes, one `CONAN_HOME` |
+| Dependencies between tools | none possible | conan resolves them |
+| Needs `conan` on `PATH` first | no | yes (hence the `uv` stage before it) |
+
+Rules of thumb:
+
+- **One tool, one archive, nothing depends on it** → by hand is honest and
+  has no moving parts. `curl | sha256sum -c | tar` is not a thing worth a
+  package manager.
+- **Several tools, or one you keep re-pinning, or several environments
+  wanting the same 800 MB toolchain** → conan. The per-tool cost drops to a
+  url and a checksum, and the second environment on the machine pays nothing.
+
+The example keeps both on purpose: `nvim-by-hand` is the escape hatch you
+will need eventually for the tool nobody packaged, and it is also the
+clearest description of what the conan stage next to it is doing for you.
+
+## Step 6 — the `best-practices` stage
+
+The last line of the use case is solved with a `custom` stage again — the
+second one in this environment, and this time with no `cmd:` at all, since
+there is nothing to install.
 
 `envs/howto-example/best-practices.sh`:
 
@@ -405,7 +572,7 @@ env:
 A `custom` stage earns its place as soon as the script is reused (e.g. reused in other environments), or if actual shell logic is necessary
 — e.g. in case of conditional settings (`if ...; then ...; fi`) or dynamic path computations.
 
-## Step 6 — what actually starts
+## Step 7 — what actually starts
 
 Everything so far *builds* the environment. The last line of the use case —
 "finally you should be able to run `pytest`" — is about *using* it, and that
@@ -456,6 +623,10 @@ def test_uv_stage_gave_us_python_3_12_and_pytest():
     assert pytest.__version__ == "9.1.1"
 
 
+def test_custom_stage_put_the_hand_installed_nvim_on_path():
+    assert "NVIM v0.12.4" in run(["nvim", "--version"], capture_output=True, text=True).stdout
+
+
 def test_conan_stage_gave_us_the_pinned_tool_versions():
     assert "3.31.9" in run(["cmake", "--version"], capture_output=True, text=True).stdout
     assert "15.3" in run(["arm-none-eabi-gcc", "--version"], capture_output=True, text=True).stdout
@@ -471,6 +642,7 @@ $ denver examples/howto-env -q -- pytest examples/howto-env/tests
 test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED
 test_environment.py::test_docker_stage_installed_the_apt_packages PASSED
 test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED
+test_environment.py::test_custom_stage_put_the_hand_installed_nvim_on_path PASSED
 test_environment.py::test_conan_stage_gave_us_the_pinned_tool_versions PASSED
 test_environment.py::test_custom_stage_exported_the_team_convention PASSED
 ```
@@ -492,14 +664,20 @@ The first run is the slow one. After that, each stage fingerprints its own
 inputs — the requirement files, the recipe contents — and skips its expensive
 step when nothing relevant changed, so a repeat run costs seconds. `--force`
 is how you bypass that; `--fast` is the other extreme, skipping the build step
-without even checking, which needs one full run to have happened first.
+without even checking, which needs one full run to have happened first. A
+`custom` stage is the exception on both counts: denver has no idea what an
+arbitrary command changes, so `nvim-by-hand` re-runs `install.sh` every time
+(which is why that script checks for itself and exits) and under `--fast` its
+`cmd:` is skipped entirely, while its `source:` still runs — the `PATH` entry
+is not a build step.
 
 **Note on `--skip docker-with-tools`**: worth trying at least once — it builds
 the very same stack directly on the host instead of in the container, so "does
 this work without Docker?" is one flag away rather than a separate code path.
 Whatever the container was providing must then exist on the host itself: for
-this env that is `uv` (the uv stage) and `git` (the conan stage's recipe
-exporter). `conan` is *not* one of them — it arrives through the uv stage's
+this env that is `uv` (the uv stage), `curl` (the `nvim-by-hand` stage's
+`install.sh`; `tar` and `sha256sum` it also uses are on every Linux host) and
+`git` (the conan stage's recipe exporter). `conan` is *not* one of them — it arrives through the uv stage's
 venv on the host exactly as it does in the container. Note also that
 `create-env.sh` never runs on this path, so `CONAN_HOME` is unset and conan
 falls back to `~/.conan2` rather than the env's own cache.

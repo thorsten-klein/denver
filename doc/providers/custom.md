@@ -45,6 +45,48 @@ At least one of `cmd`/`source`/`launcher` must be given. `cmd:`/`source:`
 `launcher:` is set — `launcher:` only changes what happens to the *final*
 command.
 
+## Worked example: bringing a prebuilt binary in by hand
+
+The common shape for "download a release tarball and put it on `PATH`" uses
+both keys, because installing and activating are two different jobs
+([`examples/howto-env`](../../examples/howto-env)'s `nvim-by-hand` stage):
+
+```yaml
+nvim-by-hand:
+  provider: custom
+  cmd: bash ${DENVER_ENV_DIR}/nvim/install.sh   # download, checksum, unpack
+  source: nvim/activate.sh                      # export PATH=...
+```
+
+- **`cmd:`** is the build step: an isolated subprocess is exactly right for
+  it (it prints its progress, and it is correctly skipped by `--fast`), and
+  it needs to export nothing. It must be idempotent by itself — denver
+  fingerprints a `uv`/`conan` stage's inputs, but it cannot know what an
+  arbitrary command changed, so the script runs on every start and has to
+  recognise its own previous result.
+- **`source:`** is the activation: one `export PATH=`, sourced so it reaches
+  every later stage and the final command. Keeping it out of `cmd:` is not
+  style — an export in `cmd:` dies with that subprocess; and keeping the
+  download out of `source:` matters just as much, since a sourced script
+  also runs under `--fast` and `--dry-run`.
+- **One script would work too**: check, download, unpack and `export PATH=`
+  all in a single `source:` script, with no `cmd:` at all. The split buys
+  visible download progress (a sourced script's output is captured, since
+  denver reads the resulting environment out of it) and `--fast`/`--dry-run`
+  skipping the expensive half. A single sourced script must never `exit`,
+  which would end denver's sourcing shell before it reads the environment
+  back.
+- The two scripts share their pin (version, url, checksum, install prefix)
+  via a third file both source, so they cannot drift apart. Unpack into
+  `${DENVER_ENV_WORKDIR}` (denver's per-env state dir) rather than
+  `/usr/local/bin`: no root needed, no leaking into other environments, and
+  deleting the env deletes the tool.
+
+When there are several such tools, or a cache worth sharing between
+environments, this is the point to move the job to
+[`conan`](conan.md) — which does all of the above, per tool, for a url and a
+checksum.
+
 ## Design notes
 
 - **`cmd:` vs `source:`.** A `provider: custom` stage's own `cmd:` never
