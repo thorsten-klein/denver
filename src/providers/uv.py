@@ -94,9 +94,11 @@ Full key reference, worked examples and design notes: ``doc/providers/uv.md``.
 import hashlib
 import json
 from pathlib import Path
+from typing import ClassVar
 
 from .base import Provider, fill_unset
 from .context import banner, die, info, sha256_of_files
+from .schema import boolean, enum, string, string_list
 
 # uv pip install flags that take exactly one following value -- used to keep
 # a flag and its value together as one atomic unit when accumulating args
@@ -130,6 +132,43 @@ class UvProvider(Provider):
         "freeze-to",
         "append-mode",
     )
+    KEY_SPECS: ClassVar[dict] = {
+        "python": string("Interpreter version for the venv. Unset => no '-p': uv's own discovery decides."),
+        "uv": string("The uv executable itself (default: uv on PATH)."),
+        "no-index": enum(
+            "Install offline. 'auto' resolves to true inside a container, false on the host.", [True, False, "auto"]
+        ),
+        "link-mode": enum("uv's link mode (UV_LINK_MODE).", ["copy", "hardlink", "symlink", "clone"]),
+        "skip-if": string_list("Scripts; if every one exits 0 the install step is skipped entirely."),
+        "venv-patcher": {
+            "type": "object",
+            "properties": {
+                "exe": string("The venv-patcher executable (default: venv-patcher on PATH)."),
+                "patches": string("Patches file. Required whenever 'venv-patcher:' is given at all."),
+            },
+            "required": ["patches"],
+            "description": "Applies patches to the venv's installed packages after install.",
+        },
+        "requirements": string_list("`-r` files, installed together."),
+        "lock": {
+            "type": "object",
+            "properties": {
+                "create": string("uv.lock this stage writes with `uv lock`."),
+                "sync": string("uv.lock this stage installs with `uv sync` (counts as an install input)."),
+            },
+            "additionalProperties": False,
+            "description": "The uv-project (pyproject.toml + uv.lock) way of filling the same venv.",
+        },
+        "install-args": string_list("Extra literal `uv pip install` args; a '$(...)' entry is run and split."),
+        "overrides": string_list("`--override` files."),
+        "find-links": string_list("Extra wheel sources, e.g. a local cache directory."),
+        "venv": string("Names this stage's venv, so stages can share one or target distinct ones."),
+        "freeze-to": string("Path `uv pip freeze`'s full output is written to after a real install."),
+        "append-mode": boolean(
+            "Reuse every install arg any previous run resolved. Off: it makes the venv "
+            "depend on this machine's run history."
+        ),
+    }
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature

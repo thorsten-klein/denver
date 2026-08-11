@@ -1,0 +1,828 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/thorsten-klein/denver/develop/schema/denver.schema.json",
+  "title": "denver.yml",
+  "description": "An environment denver can launch. See https://github.com/thorsten-klein/denver",
+  "type": "object",
+  "properties": {
+    "version": {
+      "anyOf": [
+        {
+          "enum": [
+            "1.0",
+            1.0
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "\\$\\{"
+        }
+      ],
+      "description": "denver.yml schema version this file is written against. Only '1.0' is understood."
+    },
+    "denver-version": {
+      "type": "string",
+      "description": "Minimum denver *tool* version this file needs, e.g. '>=1.0.4' or '>=1.0.4, <2'."
+    },
+    "import": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Environments (or YAML files) whose whole configuration is inherited as a base, before this file's own."
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The ordered pipeline: each entry is a stage id with a top-level section of that name."
+    },
+    "command": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "description": "Default command once the environment is built, when none is given after '--'."
+    },
+    "runnable": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "pattern": "\\$\\{"
+        }
+      ],
+      "description": "false marks this file a base meant only to be imported, never started directly."
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      },
+      "description": "Environment variables for the whole environment; values go through ${...} interpolation."
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "description": "Scripts sourced at fixed points: 'env', 'pre-<stage>'/'post-<stage>', 'pre-cmd'."
+    }
+  },
+  "additionalProperties": {
+    "type": "object",
+    "properties": {
+      "provider": {
+        "type": "string",
+        "description": "Which provider engine runs this stage. Required -- never guessed from the stage id."
+      },
+      "description": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Free text about this stage; denver never reads it (shown in --show-config)."
+      },
+      "disabled": {
+        "anyOf": [
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "string",
+            "pattern": "\\$\\{"
+          }
+        ],
+        "description": "true opts this stage out of the pipeline without deleting its configuration."
+      },
+      "scripts": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "description": "One-shot scripts run by 'denver <env> --run <name>' instead of the pipeline."
+      },
+      "import": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Stack another env's section here: '<path>' or '<path>:<section>'. Supplies 'provider:' too."
+      }
+    },
+    "propertyNames": {
+      "enum": [
+        "append-mode",
+        "base",
+        "base-classes",
+        "blobs-cache",
+        "blobs-fetch-args",
+        "build",
+        "channel",
+        "cleanup-remotes",
+        "cmd",
+        "compose",
+        "conanfiles",
+        "config",
+        "default-cmd",
+        "deployer",
+        "description",
+        "disabled",
+        "env-scripts",
+        "exe",
+        "find-links",
+        "freeze-to",
+        "image",
+        "import",
+        "install-args",
+        "launcher",
+        "link-mode",
+        "lock",
+        "no-auth",
+        "no-index",
+        "overrides",
+        "patch-committer",
+        "profiles",
+        "provider",
+        "python",
+        "recipes-exporter",
+        "registries",
+        "remotes",
+        "requirements",
+        "run-args",
+        "scripts",
+        "skip-if",
+        "source",
+        "update-args",
+        "user",
+        "uv",
+        "venv",
+        "venv-patcher",
+        "west-config",
+        "west-yml"
+      ]
+    },
+    "allOf": [
+      {
+        "if": {
+          "properties": {
+            "provider": {
+              "const": "conan"
+            }
+          },
+          "required": [
+            "provider"
+          ]
+        },
+        "then": {
+          "properties": {
+            "exe": {
+              "type": "string",
+              "description": "The conan executable (default: conan on PATH, usually from an earlier uv stage)."
+            },
+            "recipes-exporter": {
+              "type": "string",
+              "description": "Script that generates/exports recipes (default: the bundled recipes.py)."
+            },
+            "deployer": {
+              "type": "string",
+              "description": "conan deployer (default: the bundled symlink.py)."
+            },
+            "base-classes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Directories of shared conanfile base classes."
+            },
+            "conanfiles": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "description": "The conanfile installed by this unit. Required."
+                  },
+                  "recipe-dirs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Dirs holding recipes exported before this unit installs."
+                  },
+                  "catalog": {
+                    "type": "string",
+                    "description": "Where this unit's pinned references are written (unset => in memory)."
+                  },
+                  "recipes-exporter": {
+                    "type": "string",
+                    "description": "Overrides the top-level exporter for this unit only."
+                  }
+                },
+                "required": [
+                  "path"
+                ]
+              },
+              "description": "Units, in install order: a conanfile plus the recipes it is installed from."
+            },
+            "build": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "--build=<value> (default: 'missing'); a list becomes one flag per entry."
+            },
+            "install-args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra `conan install` args."
+            },
+            "no-auth": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "pattern": "\\$\\{"
+                }
+              ],
+              "description": "Pass --no-remote to `conan install`."
+            },
+            "profiles": {
+              "type": "object",
+              "properties": {
+                "host": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Each entry becomes its own -pr:h flag, in order."
+                },
+                "build": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Each entry becomes its own -pr:b flag, in order."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Conan profiles for the host and build contexts."
+            },
+            "config": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Directories each installed via `conan config install <dir>`, in order."
+            },
+            "remotes": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "Remote URL."
+                  },
+                  "verify_ssl": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "\\$\\{"
+                      }
+                    ],
+                    "description": "Default: true."
+                  },
+                  "enabled": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "\\$\\{"
+                      }
+                    ],
+                    "description": "Default: true. CONAN_REMOTE_ENABLE_<NAME> overrides at run time."
+                  }
+                }
+              },
+              "description": "Project-owned, exhaustive list of remotes; every other remote is disabled."
+            },
+            "cleanup-remotes": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "pattern": "\\$\\{"
+                }
+              ],
+              "description": "Make 'remotes:' exhaustive even when unset/empty (default: true)."
+            },
+            "user": {
+              "type": "string",
+              "description": "conan user half of every generated reference (default: denver)."
+            },
+            "channel": {
+              "type": "string",
+              "description": "conan channel half of every generated reference (default: snapshot)."
+            }
+          },
+          "propertyNames": {
+            "enum": [
+              "base-classes",
+              "build",
+              "channel",
+              "cleanup-remotes",
+              "conanfiles",
+              "config",
+              "deployer",
+              "description",
+              "disabled",
+              "exe",
+              "import",
+              "install-args",
+              "no-auth",
+              "profiles",
+              "provider",
+              "recipes-exporter",
+              "remotes",
+              "scripts",
+              "user"
+            ]
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "provider": {
+              "const": "custom"
+            }
+          },
+          "required": [
+            "provider"
+          ]
+        },
+        "then": {
+          "properties": {
+            "cmd": {
+              "type": "string",
+              "description": "Shell command run via `bash -c` during this stage; its exports do not survive."
+            },
+            "source": {
+              "type": "string",
+              "description": "Script *sourced* after 'cmd:', so its exports reach later stages and the command."
+            },
+            "launcher": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Makes this stage a wrapper: each entry's tokens are prepended to the command."
+            }
+          },
+          "propertyNames": {
+            "enum": [
+              "cmd",
+              "description",
+              "disabled",
+              "import",
+              "launcher",
+              "provider",
+              "scripts",
+              "source"
+            ]
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "provider": {
+              "const": "docker"
+            }
+          },
+          "required": [
+            "provider"
+          ]
+        },
+        "then": {
+          "properties": {
+            "exe": {
+              "type": "string",
+              "description": "The docker executable (default: docker)."
+            },
+            "default-cmd": {
+              "type": "string",
+              "description": "Fallback interactive command once relocated; 'command:' still wins."
+            },
+            "image": {
+              "type": "string",
+              "description": "Canonical local tag; must match the compose file's own service `image:`."
+            },
+            "registries": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "description": "Registry host; checked via `docker manifest inspect`, never pulled here."
+                  },
+                  "username": {
+                    "type": "string",
+                    "description": "Set together with 'password:' to `docker login` before the check."
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "Password, fed via stdin -- never argv. Usually a ${VAR}."
+                  }
+                },
+                "required": [
+                  "url"
+                ]
+              },
+              "description": "Registries checked in order before falling back to a build; first hit wins."
+            },
+            "compose": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  ],
+                  "description": "Compose file(s). Required -- denver never guesses a docker-compose.yml."
+                },
+                "service": {
+                  "type": "string",
+                  "description": "Compose service to run (default: dev)."
+                },
+                "build": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "\\$\\{"
+                    }
+                  ],
+                  "description": "Whether denver may `compose build`. Ignored entirely without 'image:'."
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Extra `docker compose` args."
+                }
+              },
+              "required": [
+                "file"
+              ],
+              "description": "How to reach the compose service this stage relocates into."
+            },
+            "run-args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra `docker compose run` args (default: ['--rm'])."
+            },
+            "env-scripts": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "Script(s) run host-side before build/run, e.g. to write a compose .env file."
+            }
+          },
+          "propertyNames": {
+            "enum": [
+              "compose",
+              "default-cmd",
+              "description",
+              "disabled",
+              "env-scripts",
+              "exe",
+              "image",
+              "import",
+              "provider",
+              "registries",
+              "run-args",
+              "scripts"
+            ]
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "provider": {
+              "const": "uv"
+            }
+          },
+          "required": [
+            "provider"
+          ]
+        },
+        "then": {
+          "properties": {
+            "python": {
+              "type": "string",
+              "description": "Interpreter version for the venv. Unset => no '-p': uv's own discovery decides."
+            },
+            "uv": {
+              "type": "string",
+              "description": "The uv executable itself (default: uv on PATH)."
+            },
+            "no-index": {
+              "anyOf": [
+                {
+                  "enum": [
+                    true,
+                    false,
+                    "auto",
+                    "!auto"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "\\$\\{"
+                }
+              ],
+              "description": "Install offline. 'auto' resolves to true inside a container, false on the host."
+            },
+            "link-mode": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "copy",
+                    "hardlink",
+                    "symlink",
+                    "clone",
+                    "!copy",
+                    "!hardlink",
+                    "!symlink",
+                    "!clone"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "pattern": "\\$\\{"
+                }
+              ],
+              "description": "uv's link mode (UV_LINK_MODE)."
+            },
+            "skip-if": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Scripts; if every one exits 0 the install step is skipped entirely."
+            },
+            "venv-patcher": {
+              "type": "object",
+              "properties": {
+                "exe": {
+                  "type": "string",
+                  "description": "The venv-patcher executable (default: venv-patcher on PATH)."
+                },
+                "patches": {
+                  "type": "string",
+                  "description": "Patches file. Required whenever 'venv-patcher:' is given at all."
+                }
+              },
+              "required": [
+                "patches"
+              ],
+              "description": "Applies patches to the venv's installed packages after install."
+            },
+            "requirements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "`-r` files, installed together."
+            },
+            "lock": {
+              "type": "object",
+              "properties": {
+                "create": {
+                  "type": "string",
+                  "description": "uv.lock this stage writes with `uv lock`."
+                },
+                "sync": {
+                  "type": "string",
+                  "description": "uv.lock this stage installs with `uv sync` (counts as an install input)."
+                }
+              },
+              "additionalProperties": false,
+              "description": "The uv-project (pyproject.toml + uv.lock) way of filling the same venv."
+            },
+            "install-args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra literal `uv pip install` args; a '$(...)' entry is run and split."
+            },
+            "overrides": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "`--override` files."
+            },
+            "find-links": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra wheel sources, e.g. a local cache directory."
+            },
+            "venv": {
+              "type": "string",
+              "description": "Names this stage's venv, so stages can share one or target distinct ones."
+            },
+            "freeze-to": {
+              "type": "string",
+              "description": "Path `uv pip freeze`'s full output is written to after a real install."
+            },
+            "append-mode": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "pattern": "\\$\\{"
+                }
+              ],
+              "description": "Reuse every install arg any previous run resolved. Off: it makes the venv depend on this machine's run history."
+            }
+          },
+          "propertyNames": {
+            "enum": [
+              "append-mode",
+              "description",
+              "disabled",
+              "find-links",
+              "freeze-to",
+              "import",
+              "install-args",
+              "link-mode",
+              "lock",
+              "no-index",
+              "overrides",
+              "provider",
+              "python",
+              "requirements",
+              "scripts",
+              "skip-if",
+              "uv",
+              "venv",
+              "venv-patcher"
+            ]
+          }
+        }
+      },
+      {
+        "if": {
+          "properties": {
+            "provider": {
+              "const": "zephyr"
+            }
+          },
+          "required": [
+            "provider"
+          ]
+        },
+        "then": {
+          "properties": {
+            "west-yml": {
+              "type": "string",
+              "description": "The west manifest (default: west.yml in the outermost enclosing git repo)."
+            },
+            "base": {
+              "type": "string",
+              "description": "ZEPHYR_BASE (default: ${WEST_TOPDIR}/zephyr-rtos)."
+            },
+            "west-config": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "boolean",
+                  "number"
+                ]
+              },
+              "description": "Extra/overriding `west config` key=value pairs."
+            },
+            "blobs-cache": {
+              "type": "string",
+              "description": "Path a generated '<path>:<url>' listing of every west blob is written to."
+            },
+            "blobs-fetch-args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra `west blobs fetch` args (default: ['--auto-accept'])."
+            },
+            "patch-committer": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Git identity used when applying each project's own zephyr/patches.yml."
+            },
+            "update-args": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Extra `west update` args. --ci adds a shallow-clone strategy on top."
+            }
+          },
+          "propertyNames": {
+            "enum": [
+              "base",
+              "blobs-cache",
+              "blobs-fetch-args",
+              "description",
+              "disabled",
+              "import",
+              "patch-committer",
+              "provider",
+              "scripts",
+              "update-args",
+              "west-config",
+              "west-yml"
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

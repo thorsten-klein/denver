@@ -23,6 +23,8 @@ entirely under ctx.fast.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 
 def fill_unset(resolved, keys):
     """Show every documented-but-unconfigured key explicitly as ``null`` in --show-config.
@@ -54,6 +56,12 @@ class Provider:
     #: every denver.yml key this provider's section understands -- shown
     #: (as null if unset) in --show-config; see resolve_defaults.
     KEYS: tuple[str, ...] = ()
+
+    #: JSON Schema fragment per key in KEYS, for the generated denver.yml
+    #: schema (see providers.schema). Kept beside KEYS rather than replacing
+    #: it: KEYS stays the single thing validation reads, and a test asserts
+    #: the two describe the same set, so neither can drift from the other.
+    KEY_SPECS: ClassVar[dict] = {}
 
     def __init__(self, config):
         """Store the whole merged denver.yml ``config`` and default this provider's stage id to its type name."""

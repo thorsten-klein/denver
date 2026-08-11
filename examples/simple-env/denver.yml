@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../schema/denver.schema.json
 version: "1.0"
 # minimum denver (the tool) this env needs -- see doc/architecture.md
 denver-version: ">=1.1.0"

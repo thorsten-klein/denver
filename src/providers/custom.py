@@ -51,9 +51,11 @@ Full key reference, worked examples and design notes: ``doc/providers/custom.md`
 """
 
 import shlex
+from typing import ClassVar
 
 from .base import Provider
 from .context import banner, die, info
+from .schema import string, string_list
 
 
 class CustomProvider(Provider):
@@ -61,6 +63,11 @@ class CustomProvider(Provider):
 
     name = "custom"
     KEYS = ("cmd", "source", "launcher")
+    KEY_SPECS: ClassVar[dict] = {
+        "cmd": string("Shell command run via `bash -c` during this stage; its exports do not survive."),
+        "source": string("Script *sourced* after 'cmd:', so its exports reach later stages and the command."),
+        "launcher": string_list("Makes this stage a wrapper: each entry's tokens are prepended to the command."),
+    }
 
     @property
     def kind(self):

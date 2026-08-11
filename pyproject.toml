@@ -48,6 +48,9 @@ lint = [
 ]
 test = [
     "coverage>=7.10",
+    # validates the generated denver.yml schema against the bundled examples
+    # (tests/test_schema.py) -- denver itself never needs it at run time.
+    "jsonschema>=4.0",
     "pytest>=8.4,<10.0",
     "pytest-xdist>=3.0.0",
     "pytest-cov>=7.0",

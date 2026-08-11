@@ -319,6 +319,21 @@ def license_text():
 # --------------------------------------------------------------------------- #
 # Config loading & merging
 # --------------------------------------------------------------------------- #
+def denver_yml_schema():
+    """The JSON Schema describing denver.yml, generated from this denver's own providers.
+
+    Generated rather than maintained by hand, from the same declarations the
+    run-time validators read (each provider's KEYS/KEY_SPECS plus the key
+    sets below), so the two cannot drift. Generated from the *registry*
+    rather than a fixed list, so the schema always describes exactly the
+    providers this denver has.
+    """
+    from providers import PROVIDERS
+    from providers.schema import build
+
+    return build(PROVIDERS, GENERIC_STAGE_KEYS, KNOWN_TOP_LEVEL_KEYS)
+
+
 def load_yaml(path):
     """Load a YAML file, returning a dict ({} for empty files)."""
     with Path(path).open() as f:
@@ -1787,6 +1802,7 @@ def build_arg_parser():
     parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
     parser.add_argument("--version", action="store_true", help="show the installed denver version and exit")
     parser.add_argument("--license", action="store_true", help="show denver's LICENSE (Apache-2.0) and exit")
+    parser.add_argument("--schema", action="store_true", help="print the JSON Schema for denver.yml and exit")
     parser.add_argument("--show-config", action="store_true", help="print the final deep-merged denver.yml and exit")
     parser.add_argument(
         "--run", metavar="NAME", help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login')"
@@ -1926,6 +1942,10 @@ def _handle_info_flags(args, parser):
 
     if args.version:
         print(f"denver {package_version() or UNKNOWN_VERSION}")
+        return True
+
+    if args.schema:
+        print(json.dumps(denver_yml_schema(), indent=2))
         return True
 
     if args.license:

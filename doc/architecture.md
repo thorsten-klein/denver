@@ -114,6 +114,33 @@ A denver too old to know the key at all (before it was introduced) rejects
 the file with `unknown top-level key(s) denver-version` — different wording,
 same conclusion: that denver is too old for this `denver.yml`.
 
+### Editor support (JSON Schema)
+
+`denver --schema` prints a JSON Schema describing this file, generated from
+the very declarations denver validates against — each provider's own key
+list — so it cannot drift from what denver actually enforces. A copy is
+committed at [`schema/denver.schema.json`](../schema/denver.schema.json) and
+a test fails if the two disagree.
+
+Point an editor at it with a modeline at the top of a `denver.yml`:
+
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/thorsten-klein/denver/develop/schema/denver.schema.json
+```
+
+Typing `provider: uv` then offers exactly the `uv` keys and flags anything
+else — the same rule denver applies at run time, moved to the moment you
+write the file.
+
+Three things the schema deliberately does **not** enforce, because a
+`denver.yml` is frequently a *layer* rather than a whole environment:
+`provider:` is not required (a derived env inherits it through `import:`,
+and a stacked section from the section it imports), a `${VAR}` template is
+accepted wherever a boolean or enum is expected, and `deep_merge`'s `!` /
+`<overwrite>` markers are accepted as values. Enforcing any of them would
+flag valid files, which is worse than missing an error denver reports
+clearly anyway.
+
 ### Generic stage keys
 
 Four keys may appear in *any* stage's section, whatever its provider:

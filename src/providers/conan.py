@@ -132,9 +132,11 @@ Full key reference, worked examples and design notes: ``doc/providers/conan.md``
 
 import json
 from pathlib import Path
+from typing import ClassVar
 
 from .base import Provider, fill_unset
 from .context import banner, die, warn
+from .schema import boolean, string, string_list
 
 # ships alongside this module, so it's found regardless of whether denver
 # runs from a checkout or an installed package (see providers/conan_scripts).
@@ -166,6 +168,57 @@ class ConanProvider(Provider):
         "user",
         "channel",
     )
+    KEY_SPECS: ClassVar[dict] = {
+        "exe": string("The conan executable (default: conan on PATH, usually from an earlier uv stage)."),
+        "recipes-exporter": string("Script that generates/exports recipes (default: the bundled recipes.py)."),
+        "deployer": string("conan deployer (default: the bundled symlink.py)."),
+        "base-classes": string_list("Directories of shared conanfile base classes."),
+        "conanfiles": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "path": string("The conanfile installed by this unit. Required."),
+                    "recipe-dirs": string_list("Dirs holding recipes exported before this unit installs."),
+                    "catalog": string("Where this unit's pinned references are written (unset => in memory)."),
+                    "recipes-exporter": string("Overrides the top-level exporter for this unit only."),
+                },
+                "required": ["path"],
+            },
+            "description": "Units, in install order: a conanfile plus the recipes it is installed from.",
+        },
+        "build": {
+            "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+            "description": "--build=<value> (default: 'missing'); a list becomes one flag per entry.",
+        },
+        "install-args": string_list("Extra `conan install` args."),
+        "no-auth": boolean("Pass --no-remote to `conan install`."),
+        "profiles": {
+            "type": "object",
+            "properties": {
+                "host": string_list("Each entry becomes its own -pr:h flag, in order."),
+                "build": string_list("Each entry becomes its own -pr:b flag, in order."),
+            },
+            "additionalProperties": False,
+            "description": "Conan profiles for the host and build contexts.",
+        },
+        "config": string_list("Directories each installed via `conan config install <dir>`, in order."),
+        "remotes": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "url": string("Remote URL."),
+                    "verify_ssl": boolean("Default: true."),
+                    "enabled": boolean("Default: true. CONAN_REMOTE_ENABLE_<NAME> overrides at run time."),
+                },
+            },
+            "description": "Project-owned, exhaustive list of remotes; every other remote is disabled.",
+        },
+        "cleanup-remotes": boolean("Make 'remotes:' exhaustive even when unset/empty (default: true)."),
+        "user": string("conan user half of every generated reference (default: denver)."),
+        "channel": string("conan channel half of every generated reference (default: snapshot)."),
+    }
 
     UNIT_KEYS = ("path", "recipe-dirs", "catalog", "recipes-exporter")
 

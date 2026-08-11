@@ -48,9 +48,11 @@ Full key reference, worked examples and design notes: ``doc/providers/zephyr.md`
 
 import os
 from pathlib import Path
+from typing import ClassVar
 
 from .base import Provider, fill_unset
 from .context import banner, die, find_in_parents, find_outermost_in_parents, info
+from .schema import string, string_list
 
 # extra `west update` args added on top of 'update-args:' whenever ctx.ci --
 # a fixed shallow-clone strategy, not a denver.yml key (see module docstring).
@@ -81,6 +83,23 @@ class ZephyrProvider(Provider):
         "patch-committer",
         "update-args",
     )
+    KEY_SPECS: ClassVar[dict] = {
+        "west-yml": string("The west manifest (default: west.yml in the outermost enclosing git repo)."),
+        "base": string("ZEPHYR_BASE (default: ${WEST_TOPDIR}/zephyr-rtos)."),
+        "west-config": {
+            "type": "object",
+            "additionalProperties": {"type": ["string", "boolean", "number"]},
+            "description": "Extra/overriding `west config` key=value pairs.",
+        },
+        "blobs-cache": string("Path a generated '<path>:<url>' listing of every west blob is written to."),
+        "blobs-fetch-args": string_list("Extra `west blobs fetch` args (default: ['--auto-accept'])."),
+        "patch-committer": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            "description": "Git identity used when applying each project's own zephyr/patches.yml.",
+        },
+        "update-args": string_list("Extra `west update` args. --ci adds a shallow-clone strategy on top."),
+    }
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature

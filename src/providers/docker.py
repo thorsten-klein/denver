@@ -104,9 +104,11 @@ Full key reference, worked examples and design notes: ``doc/providers/docker.md`
 import os
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 from .base import Provider, fill_unset
 from .context import banner, die
+from .schema import boolean, string, string_list
 
 
 def _relocation_mounts(ctx):
@@ -142,6 +144,43 @@ class DockerProvider(Provider):
     # default_command() ('command:' still wins if set) -- but it's a real
     # docker: key, so it's still listed for --show-config's sake.
     KEYS = ("exe", "default-cmd", "image", "registries", "compose", "run-args", "env-scripts")
+    KEY_SPECS: ClassVar[dict] = {
+        "exe": string("The docker executable (default: docker)."),
+        "default-cmd": string("Fallback interactive command once relocated; 'command:' still wins."),
+        "image": string("Canonical local tag; must match the compose file's own service `image:`."),
+        "registries": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "url": string("Registry host; checked via `docker manifest inspect`, never pulled here."),
+                    "username": string("Set together with 'password:' to `docker login` before the check."),
+                    "password": string("Password, fed via stdin -- never argv. Usually a ${VAR}."),
+                },
+                "required": ["url"],
+            },
+            "description": "Registries checked in order before falling back to a build; first hit wins.",
+        },
+        "compose": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                    "description": "Compose file(s). Required -- denver never guesses a docker-compose.yml.",
+                },
+                "service": string("Compose service to run (default: dev)."),
+                "build": boolean("Whether denver may `compose build`. Ignored entirely without 'image:'."),
+                "args": string_list("Extra `docker compose` args."),
+            },
+            "required": ["file"],
+            "description": "How to reach the compose service this stage relocates into.",
+        },
+        "run-args": string_list("Extra `docker compose run` args (default: ['--rm'])."),
+        "env-scripts": {
+            "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+            "description": "Script(s) run host-side before build/run, e.g. to write a compose .env file.",
+        },
+    }
 
     def __init__(self, config):
         """Init the bits setup() stashes for wrap() as None, so wrap() can tell "not run yet" from a real value."""
