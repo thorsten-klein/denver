@@ -1567,6 +1567,16 @@ def run_stages(
     )
 
     if active_wrappers:
+        run_options = _RunOptions(
+            until_stage=until_stage,
+            skip_stages=skip_stages,
+            quiet=quiet,
+            fast=fast,
+            force=force,
+            ci=ci,
+            no_wait=no_wait,
+            start_time=start_time,
+        )
         _run_stages_via_wrapper(
             ctx,
             config,
@@ -1577,14 +1587,7 @@ def run_stages(
             skipped_wrappers=skipped_wrappers,
             skipped_setups=skipped_setups,
             skip_state=skip_state,
-            until_stage=until_stage,
-            skip_stages=skip_stages,
-            quiet=quiet,
-            fast=fast,
-            force=force,
-            ci=ci,
-            no_wait=no_wait,
-            start_time=start_time,
+            run_options=run_options,
         )
     else:
         _run_stages_directly(
@@ -1650,6 +1653,20 @@ class _StageSkipState:
         self.all_stages = all_stages
 
 
+class _RunOptions:
+    """The per-invocation flags ``_run_stages_via_wrapper`` threads through to a wrapper reinvocation -- see run_stages."""
+
+    def __init__(self, *, until_stage, skip_stages, quiet, fast, force, ci, no_wait, start_time):
+        self.until_stage = until_stage
+        self.skip_stages = skip_stages
+        self.quiet = quiet
+        self.fast = fast
+        self.force = force
+        self.ci = ci
+        self.no_wait = no_wait
+        self.start_time = start_time
+
+
 def _show_skipped(ctx, skipped, skip_state):
     """Print a "skipped by ..." banner for each stage in ``skipped`` (disabled: true, --until, or --skip)."""
     from providers.context import skip_banner
@@ -1676,14 +1693,7 @@ def _run_stages_via_wrapper(
     skipped_wrappers,
     skipped_setups,
     skip_state,
-    until_stage,
-    skip_stages,
-    quiet,
-    fast,
-    force,
-    ci,
-    no_wait,
-    start_time,
+    run_options,
 ):
     """Host side: prepare the wrapper(s), then relocate execution into them (see run_stages)."""
     # Same single ordered walk as _run_stages_directly, for the same reason:
@@ -1702,7 +1712,7 @@ def _run_stages_via_wrapper(
                 config,
                 config_path,
                 stage,
-                quiet=quiet,
+                quiet=run_options.quiet,
                 stage_index=skip_state.stage_index[stage.stage],
                 stage_count=skip_state.total,
             )
@@ -1733,14 +1743,14 @@ def _run_stages_via_wrapper(
             config_path,
             forwarded,
             [w.stage for w in active_wrappers],
-            until_stage=until_stage,
-            skip_stages=skip_stages,
-            quiet=quiet,
-            fast=fast,
-            force=force,
-            ci=ci,
-            no_wait=no_wait,
-            start_time=start_time,
+            until_stage=run_options.until_stage,
+            skip_stages=run_options.skip_stages,
+            quiet=run_options.quiet,
+            fast=run_options.fast,
+            force=run_options.force,
+            ci=run_options.ci,
+            no_wait=run_options.no_wait,
+            start_time=run_options.start_time,
         )
     else:
         # pure wrapper: relocate the user's command (or default) directly.
@@ -1752,8 +1762,8 @@ def _run_stages_via_wrapper(
         ctx.stage_index, ctx.stage_count = skip_state.stage_index[w.stage], skip_state.total
         ctx.stage_id = w.stage
         cmd = w.wrap(ctx, cmd)
-    if not setups and quiet < 2:
-        _print_env_started(ctx, start_time)
+    if not setups and run_options.quiet < 2:
+        _print_env_started(ctx, run_options.start_time)
     ctx.exec(cmd)
 
 

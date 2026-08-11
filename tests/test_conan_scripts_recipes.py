@@ -803,6 +803,15 @@ def test_run_conan_cli_rejects_nul_byte_in_arg(monkeypatch):
         recipes._run_conan_cli("create", "foo\0bar")
 
 
+def test_reject_option_like_passes_through_normal_value():
+    assert recipes._reject_option_like("/some/path", "recipe path") == "/some/path"
+
+
+def test_reject_option_like_rejects_leading_dash():
+    with pytest.raises(ValueError, match="looks like a CLI option"):
+        recipes._reject_option_like("--evil", "recipe path")
+
+
 # --------------------------------------------------------------------------- #
 # main(): argument parsing
 # --------------------------------------------------------------------------- #

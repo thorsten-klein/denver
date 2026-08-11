@@ -404,6 +404,22 @@ def _run_conan_cli(*args):
     subprocess.run(['conan', *args], check=True)
 
 
+def _reject_option_like(value, what):
+    """Refuse a ``value`` headed for conan as a bare (non ``--flag=``) argument if it could pass as a CLI option.
+
+    ``create()``'s recipe path and ``upload()``'s package reference are both
+    positional, not `--name=`-style -- so, unlike those, a value starting
+    with '-' would be read by conan's own arg parser as an option rather
+    than the path/reference it actually is. Neither can genuinely produce
+    that shape today (see call sites), but this is the one place that can
+    still say so plainly instead of letting a future change reach conan as
+    an injected flag.
+    """
+    if value.startswith('-'):
+        raise ValueError(f"{what} looks like a CLI option, refusing to pass it to conan: {value!r}")
+    return value
+
+
 def create(recipe_path, pref):
     """Build ``recipe_path`` via `conan create` (or just test it, if already built) unless ``pref`` is found locally."""
     print_banner(f"Create: {recipe_path}")
@@ -414,7 +430,7 @@ def create(recipe_path, pref):
         return
     _run_conan_cli(
         'create',
-        os.fspath(recipe_path),
+        _reject_option_like(os.fspath(recipe_path), 'recipe path'),
         f'--name={pref.ref.name}',
         f'--version={pref.ref.version}',
         f'--user={pref.ref.user}',
@@ -429,7 +445,7 @@ def upload(pref, remote_name):
     found, _ = find_pref(pref, remotes=[remote_name])
     if found:
         return
-    _run_conan_cli('upload', f'-r={remote_name}', repr(pref))
+    _run_conan_cli('upload', f'-r={remote_name}', _reject_option_like(repr(pref), 'package reference'))
 
 
 def run_ci(recipe_path, pref, remotes):

@@ -723,6 +723,12 @@ def test_exec_nul_byte_in_command_dies(make_context):
         ctx.exec(["fish", "-c", "echo\0hi"])
 
 
+def test_exec_option_like_command_dies(make_context):
+    ctx = make_context()
+    with pytest.raises(SystemExit):
+        ctx.exec(["-c", "echo hi"])
+
+
 def test_exec_oserror_dies(make_context, monkeypatch):
     ctx = make_context()
 
