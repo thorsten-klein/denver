@@ -1002,6 +1002,24 @@ def test_main_run_listing_does_not_resolve_provider_defaults(tmp_path, capsys):
     assert "login" in capsys.readouterr().err
 
 
+def test_main_fast_and_force_together_are_rejected(tmp_path, capsys):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
+    with pytest.raises(SystemExit) as exc:
+        denver.main([str(env_dir), "--fast", "--force"])
+    # argparse's own error, not a die(): exit 2, and it names both flags so
+    # the message says which pair conflicts.
+    assert exc.value.code == 2
+    assert "not allowed with argument" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("flag", ["--fast", "--force"])
+def test_main_fast_or_force_alone_still_parses(flag):
+    args = denver.build_arg_parser().parse_args(["some-env", flag])
+    assert getattr(args, flag.lstrip("-")) is True
+
+
 def test_main_unknown_stage_section_key_dies(tmp_path):
     env_dir = tmp_path / "e"
     env_dir.mkdir()

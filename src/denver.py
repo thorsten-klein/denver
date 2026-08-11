@@ -1097,6 +1097,7 @@ def reinvoke_command(
     fast=False,
     force=False,
     ci=False,
+    no_wait=False,
     start_time=None,
 ):
     """Re-invoke denver (skipping ``wrapper_stage_ids``) so setup providers run in the wrapper.
@@ -1159,7 +1160,11 @@ def reinvoke_command(
     for stage_id in (*skip_stages, *wrapper_stage_ids):
         filter_flags += ["--skip", stage_id]
     extra_flags = (
-        (["-q"] * quiet) + (["--fast"] if fast else []) + (["--force"] if force else []) + (["--ci"] if ci else [])
+        (["-q"] * quiet)
+        + (["--fast"] if fast else [])
+        + (["--force"] if force else [])
+        + (["--ci"] if ci else [])
+        + (["--no-wait"] if no_wait else [])
     )
     if start_time is not None:
         extra_flags += ["--start-time", repr(start_time)]
@@ -1243,7 +1248,7 @@ def _collect_stage_scripts(ctx, stage_ids, name):
 
 
 def run_named_scripts(
-    env_dir, config, config_path, name, *, until_stage=None, skip_stages=(), quiet=False, dry_run=False
+    env_dir, config, config_path, name, *, until_stage=None, skip_stages=(), quiet=False, dry_run=False, no_wait=False
 ):
     """Run every (filtered) stage's ``scripts: <name>:`` entries, each in the context it actually needs.
 
@@ -1274,6 +1279,7 @@ def run_named_scripts(
 
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
     config, ctx = resolve_full_config(env_dir, config, config_path, quiet=quiet, dry_run=dry_run)
+    ctx.acquire_lock(wait=not no_wait)
     run_hook(ctx, config_path, "env")
     ctx.apply_env_map(config.get("env"))
 
@@ -1373,9 +1379,17 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     ``stage_index``/``stage_count`` (this stage's position among the stages
     running in *this* process -- see run_stages()) feed banner()'s '[i/n]'.
     """
+    from providers.context import stage_banner
+
     ctx.stage_index = stage_index
     ctx.stage_count = stage_count
     ctx.stage_id = provider.stage
+    # Announced centrally, before anything this stage does -- including
+    # before its own resolve_defaults, which can die on a bad path, and
+    # before providers that check for their tool ahead of their first
+    # banner() call. A stage that fails must still have said which stage it
+    # is: that id is what --skip takes.
+    stage_banner(ctx, provider.stage, provider.name)
     # Re-resolve this stage's defaults right before it actually runs, not
     # just once, upfront, in resolve_full_config(): a value like
     # zephyr.west or conan.exe (a PATH lookup) may resolve differently once
@@ -1435,6 +1449,7 @@ def run_stages(
     force=False,
     ci=False,
     dry_run=False,
+    no_wait=False,
     start_time=None,
 ):
     """Build/enter the environment via its stages, then exec the command.
@@ -1476,6 +1491,8 @@ def run_stages(
     config, ctx = resolve_full_config(
         env_dir, config, config_path, quiet=quiet, fast=fast, force=force, ci=ci, dry_run=dry_run
     )
+    # before any stage touches shared state, and before the wrapper relocates
+    ctx.acquire_lock(wait=not no_wait)
 
     # hooks.env sources a script once, before anything else -- its exports
     # (and the declarative 'env:' map applied right after) are visible to
@@ -1515,7 +1532,12 @@ def run_stages(
     # missing from `runnable` was named by an explicit --skip.
     cutoff = all_stage_ids.index(until_stage) if until_stage in all_stage_ids else None
     skip_state = _StageSkipState(
-        stage_index=stage_index, total=total, stage_ids=stage_ids, cutoff=cutoff, all_stage_ids=all_stage_ids
+        stage_index=stage_index,
+        total=total,
+        stage_ids=stage_ids,
+        cutoff=cutoff,
+        all_stage_ids=all_stage_ids,
+        all_stages=all_stages,
     )
 
     if active_wrappers:
@@ -1535,6 +1557,7 @@ def run_stages(
             fast=fast,
             force=force,
             ci=ci,
+            no_wait=no_wait,
             start_time=start_time,
         )
     else:
@@ -1553,14 +1576,20 @@ def run_stages(
 
 
 class _StageSkipState:
-    """Everything ``_show_skipped`` needs to explain why a stage isn't running -- see run_stages."""
+    """Everything ``_show_skipped`` needs to explain why a stage isn't running -- see run_stages.
 
-    def __init__(self, *, stage_index, total, stage_ids, cutoff, all_stage_ids):
+    ``all_stages`` is every declared stage, in 'stages:' order: it is what
+    lets both run paths walk the pipeline once, in order, rather than
+    running the stages first and reporting the skipped ones afterwards.
+    """
+
+    def __init__(self, *, stage_index, total, stage_ids, cutoff, all_stage_ids, all_stages):
         self.stage_index = stage_index
         self.total = total
         self.stage_ids = stage_ids
         self.cutoff = cutoff
         self.all_stage_ids = all_stage_ids
+        self.all_stages = all_stages
 
 
 def _show_skipped(ctx, skipped, skip_state):
@@ -1594,20 +1623,32 @@ def _run_stages_via_wrapper(
     fast,
     force,
     ci,
+    no_wait,
     start_time,
 ):
     """Host side: prepare the wrapper(s), then relocate execution into them (see run_stages)."""
-    _show_skipped(ctx, skipped_wrappers, skip_state)
-    for w in active_wrappers:
-        _run_stage_setup(
-            ctx,
-            config,
-            config_path,
-            w,
-            quiet=quiet,
-            stage_index=skip_state.stage_index[w.stage],
-            stage_count=skip_state.total,
-        )
+    # Same single ordered walk as _run_stages_directly, for the same reason:
+    # each declared stage reports in its own pipeline position. A *runnable*
+    # setup stage is passed over silently here -- it runs inside the wrapper,
+    # and the re-invoked denver banners it there. Its skipped siblings are
+    # likewise left to that inner run, unless nothing will re-invoke at all
+    # (a pure wrapper), in which case this is the only chance to show them.
+    active_wrapper_ids = {w.stage for w in active_wrappers}
+    skipped_wrapper_ids = {s.stage for s in skipped_wrappers}
+    skipped_setup_ids = {s.stage for s in skipped_setups}
+    for stage in skip_state.all_stages:
+        if stage.stage in active_wrapper_ids:
+            _run_stage_setup(
+                ctx,
+                config,
+                config_path,
+                stage,
+                quiet=quiet,
+                stage_index=skip_state.stage_index[stage.stage],
+                stage_count=skip_state.total,
+            )
+        elif stage.stage in skipped_wrapper_ids or (stage.stage in skipped_setup_ids and not setups):
+            _show_skipped(ctx, [stage], skip_state)
     if setups:
         # setup providers run *inside* the wrapper: re-invoke denver there
         # -- it recomputes skipped_setups identically (same denver.yml,
@@ -1639,13 +1680,13 @@ def _run_stages_via_wrapper(
             fast=fast,
             force=force,
             ci=ci,
+            no_wait=no_wait,
             start_time=start_time,
         )
     else:
-        # pure wrapper: relocate the user's command (or default) directly
-        # -- nothing will re-invoke to show skipped_setups, so show them
-        # here instead.
-        _show_skipped(ctx, skipped_setups, skip_state)
+        # pure wrapper: relocate the user's command (or default) directly.
+        # skipped_setups were already shown in pipeline position by the walk
+        # above, since nothing will re-invoke to show them.
         cmd = resolve_command(config, forwarded)
     for w in reversed(active_wrappers):
         ctx.stage_index, ctx.stage_count = skip_state.stage_index[w.stage], skip_state.total
@@ -1670,24 +1711,34 @@ def _run_stages_directly(
     start_time,
 ):
     """Host with the wrapper stage skipped (or already inside it): build the env and run the command directly."""
+    # One walk over the declared stages, in 'stages:' order, so the progress
+    # trail reads as the pipeline it describes: a stage either runs here or
+    # says why it didn't, in its own position. Running every stage first and
+    # only then reporting the skipped ones (as this did) puts '[4/4] d' above
+    # '[2/4] b skipped', and -- worse -- loses the skip lines entirely when an
+    # earlier stage dies, which is exactly when they explain the most.
+    #
     # skipped_wrappers is shown only on the host: once inside the
     # wrapper (ctx.in_docker), a wrapper stage's absence here is either
     # it having already run for real (outer process) or reinvoke_command's
     # own forced --skip (never a genuine user --until/--skip) -- neither
     # should print a second, spurious "skipped by --skip" banner.
-    if not ctx.in_docker:
-        _show_skipped(ctx, skipped_wrappers, skip_state)
-    for n in setups:
-        _run_stage_setup(
-            ctx,
-            config,
-            config_path,
-            n,
-            quiet=quiet,
-            stage_index=skip_state.stage_index[n.stage],
-            stage_count=skip_state.total,
-        )
-    _show_skipped(ctx, skipped_setups, skip_state)
+    setup_ids = {n.stage for n in setups}
+    skipped_wrapper_ids = {s.stage for s in skipped_wrappers}
+    skipped_setup_ids = {s.stage for s in skipped_setups}
+    for stage in skip_state.all_stages:
+        if stage.stage in setup_ids:
+            _run_stage_setup(
+                ctx,
+                config,
+                config_path,
+                stage,
+                quiet=quiet,
+                stage_index=skip_state.stage_index[stage.stage],
+                stage_count=skip_state.total,
+            )
+        elif stage.stage in skipped_setup_ids or (stage.stage in skipped_wrapper_ids and not ctx.in_docker):
+            _show_skipped(ctx, [stage], skip_state)
     if quiet < 2:
         _print_env_started(ctx, start_time)
     if not quiet:
@@ -1843,8 +1894,16 @@ def build_arg_parser():
         help="suppress denver's own output (repeatable: -q keeps the stage banner visible, -qq silences "
         "everything, only the launched command speaks)",
     )
-    parser.add_argument("--fast", action="store_true", help="only activate what's already built; never (re-)build it")
-    parser.add_argument(
+    # --fast and --force ask for opposite things ("don't build anything" vs
+    # "rebuild everything"), and --fast wins by construction: every provider
+    # takes its --fast path before ctx.force is ever read, silently
+    # discarding the --force. Rejected here rather than resolved, because
+    # either resolution would be a guess about which one the user meant.
+    # A group (not a hand-written check) so argparse reports it itself, the
+    # same way it reports every other malformed invocation.
+    rebuild = parser.add_mutually_exclusive_group()
+    rebuild.add_argument("--fast", action="store_true", help="only activate what's already built; never (re-)build it")
+    rebuild.add_argument(
         "--force",
         action="store_true",
         help="force expensive recomputation (recreate venv, rerun west update, ...), bypassing every "
@@ -1852,6 +1911,11 @@ def build_arg_parser():
     )
     parser.add_argument(
         "--ci", action="store_true", help="CI mode: swap in narrower/faster args (e.g. a shallow `west update`)"
+    )
+    parser.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="fail instead of waiting when another denver run already holds this env",
     )
     parser.add_argument(
         "--dry-run",
@@ -2037,6 +2101,7 @@ def _run_cli(argv=None):
             skip_stages=args.skip,
             quiet=args.quiet,
             dry_run=args.dry_run,
+            no_wait=args.no_wait,
         )
         return
 
@@ -2061,6 +2126,7 @@ def _run_cli(argv=None):
         force=args.force,
         ci=args.ci,
         dry_run=args.dry_run,
+        no_wait=args.no_wait,
         start_time=args.start_time,
     )
 

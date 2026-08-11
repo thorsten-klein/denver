@@ -25,8 +25,12 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
 
 ## Key reference
 
-- **`python`** (default `"3.12.3"`) — the interpreter version the venv is
-  created with.
+- **`python`** (optional, no default) — the interpreter version the venv is
+  created with, passed to `uv venv -p`. Left unset, denver passes no `-p` at
+  all and uv's own discovery decides (`UV_PYTHON`, then a `.python-version`
+  file, then the system interpreter) — denver never picks a version nobody
+  wrote down. See "One venv, one interpreter" below for what happens when
+  this contradicts a venv that already exists.
 - **`uv`** (default: `uv` on `PATH`) — the `uv` executable itself. (Yes,
   `uv.uv`: the provider is named after the tool, and this key still points at
   the binary — e.g. `-c uv.uv=/opt/uv/bin/uv`.)
@@ -102,6 +106,31 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
 layout (see "Explicit over implicit" in [`../philosophy.md`](../philosophy.md)) — with no
 `skip-if:` there is simply no skip check, and the venv patcher runs only
 when `venv-patcher:` names its `patches:` file explicitly.
+
+## One venv, one interpreter
+
+A venv holds exactly one interpreter, and the one it already has wins:
+
+- An **existing venv's interpreter is authoritative and reused.** denver
+  never silently rebuilds a venv because `python:` changed — recreating it
+  would also silently discard everything installed into it.
+- A **`python:` that contradicts the existing venv is an error**, naming
+  both and the two ways out: `--force` to recreate that venv at the new
+  version, or give the stage its own `venv:` so both interpreters can
+  coexist.
+- The same rule covers **several stages sharing one venv** (an unset or
+  identical `venv:`). Sharing a venv means sharing its interpreter, so a
+  later stage declaring a different `python:` is the same error rather than
+  a special case — previously it was silently ignored.
+- Comparison is a prefix, exactly as uv resolves it: `python: "3.12"`
+  accepts a venv on 3.12.7, while `"3.12.3"` does not accept 3.12.4. A
+  `python:` that isn't a plain release number (`cpython@3.12`, a path to an
+  interpreter) is passed to uv untouched and not compared — denver does not
+  re-implement uv's resolution to second-guess it.
+- The one case denver *does* recreate a venv unasked: its base interpreter
+  has disappeared (a distro upgrade moved `python3`, a uv-managed
+  interpreter was pruned). Such a venv is broken rather than reusable, and
+  there is no configured value it could be contradicting.
 
 ## Design notes
 

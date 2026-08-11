@@ -1,5 +1,6 @@
 """Tests for providers.context."""
 
+import errno
 import os
 import shutil
 import subprocess
@@ -18,6 +19,7 @@ from providers.context import (
     set_quiet,
     sha256_of_files,
     skip_banner,
+    stage_banner,
     warn,
 )
 
@@ -76,6 +78,42 @@ def test_skip_banner_shows_stage_and_reason(make_context, capsys):
     assert "[5/5] stage 'uv-zephyr' skipped by --skip" in err
 
 
+def test_stage_banner_shows_stage_and_provider(make_context, capsys):
+    ctx = make_context()
+    ctx.stage_index, ctx.stage_count = 4, 5
+    stage_banner(ctx, "uv-zephyr", "uv")
+    err = capsys.readouterr().err
+    assert "[4/5] stage 'uv-zephyr' (uv)" in err
+
+
+def test_stage_banner_hidden_at_quiet_level_2(make_context, capsys):
+    ctx = make_context()
+    set_quiet(2)
+    stage_banner(ctx, "uv-zephyr", "uv")
+    assert capsys.readouterr().err == ""
+    set_quiet(0)
+
+
+def test_run_reports_an_unstartable_command_instead_of_raising(make_context, caplog):
+    # a configured 'exe:' naming a file that isn't there: Popen raises before
+    # check= applies, so main()'s CalledProcessError handler never sees it.
+    caplog.set_level("INFO")
+    ctx = make_context()
+    ctx.stage_id = "native-tools"
+    with pytest.raises(SystemExit):
+        ctx.run(["/nonexistent/conan", "config", "home"])
+    assert "stage 'native-tools': cannot run /nonexistent/conan config home" in caplog.text
+
+
+def test_run_reports_an_unstartable_command_without_a_stage(make_context, caplog):
+    # the same call outside any stage (a provider driven directly, e.g. in
+    # tests) still reports the command rather than raising.
+    caplog.set_level("INFO")
+    with pytest.raises(SystemExit):
+        make_context().run(["/nonexistent/tool"])
+    assert "cannot run /nonexistent/tool" in caplog.text
+
+
 def test_skip_banner_hidden_at_quiet_level_2(make_context, capsys):
     ctx = make_context()
     set_quiet(2)
@@ -121,6 +159,81 @@ def test_interpolate_variants():
     assert interpolate(["${A}", 1], variables) == ["x", 1]
     assert interpolate({"k": "${A}"}, variables) == {"k": "x"}
     assert interpolate(42, variables) == 42
+
+
+# ---- the per-env run lock ------------------------------------------------- #
+@pytest.fixture(autouse=True)
+def _forget_held_locks():
+    """Drop this process's held-lock registry between tests (see _HELD_LOCKS)."""
+    yield
+    for fd in ctxmod._HELD_LOCKS.values():
+        os.close(fd)
+    ctxmod._HELD_LOCKS.clear()
+
+
+def test_lock_is_taken_and_stamped(make_context):
+    ctx = make_context()
+    ctx.acquire_lock()
+    stamp = (ctx.env_workdir / ctxmod.LOCK_FILE_NAME).read_text()
+    assert stamp.startswith(f"pid={os.getpid()}")
+    assert "boot=" in stamp
+
+
+def test_lock_is_not_taken_under_dry_run(make_context):
+    ctx = make_context(dry_run=True)
+    ctx.acquire_lock()
+    assert not (ctx.env_workdir / ctxmod.LOCK_FILE_NAME).exists()
+
+
+def test_lock_held_by_this_process_is_not_retaken(make_context):
+    # flock is per open file description, so a second open() of the same path
+    # would block against the first even from inside one process
+    ctx = make_context()
+    ctx.acquire_lock()
+    ctx.acquire_lock()  # must not deadlock
+    assert len(ctxmod._HELD_LOCKS) == 1
+
+
+def test_lock_waits_for_another_process(make_context, monkeypatch, caplog):
+    caplog.set_level("INFO")
+    ctx = make_context()
+    calls = []
+
+    def fake_flock(fd, flags):
+        calls.append(flags)
+        if flags & ctxmod.fcntl.LOCK_NB:
+            raise OSError(errno.EAGAIN, "held")
+
+    monkeypatch.setattr(ctxmod.fcntl, "flock", fake_flock)
+    ctx.acquire_lock()
+    assert "waiting for another denver run" in caplog.text
+    assert calls[-1] == ctxmod.fcntl.LOCK_EX  # blocking retry
+
+
+def test_lock_no_wait_fails_instead_of_waiting(make_context, monkeypatch):
+    ctx = make_context()
+
+    def fake_flock(fd, flags):
+        raise OSError(errno.EAGAIN, "held")
+
+    monkeypatch.setattr(ctxmod.fcntl, "flock", fake_flock)
+    with pytest.raises(SystemExit):
+        ctx.acquire_lock(wait=False)
+
+
+def test_lock_warns_where_locking_is_unsupported(make_context, monkeypatch, caplog):
+    # some NFS and overlay mounts do not implement flock at all; saying so
+    # beats pretending the run is serialised when nothing enforces it
+    caplog.set_level("INFO")
+    ctx = make_context()
+
+    def fake_flock(fd, flags):
+        raise OSError(errno.ENOLCK, "no locks available")
+
+    monkeypatch.setattr(ctxmod.fcntl, "flock", fake_flock)
+    ctx.acquire_lock()
+    assert "concurrent runs are not serialised" in caplog.text
+    assert ctxmod._HELD_LOCKS == {}
 
 
 # ---- Context basics ------------------------------------------------------- #
@@ -492,6 +605,39 @@ def test_exec_oserror_dies(make_context, monkeypatch):
 
 
 # ---- checksums ------------------------------------------------------------ #
+def test_sha256_of_files_is_independent_of_where_the_tree_lives(tmp_path):
+    # the same requirements file in two checkouts of one project must
+    # fingerprint identically -- otherwise every switch between them looks
+    # like drift and rebuilds the venv from scratch.
+    blocks = []
+    for checkout in ("coA", "coB"):
+        env_dir = tmp_path / checkout / "myenv"
+        env_dir.mkdir(parents=True)
+        (env_dir / "r.txt").write_text("packaging\n")
+        blocks.append(sha256_of_files([env_dir / "r.txt"], base=env_dir))
+    assert blocks[0] == blocks[1]
+
+
+def test_sha256_of_files_still_separates_different_files(tmp_path):
+    (tmp_path / "a.txt").write_text("same\n")
+    (tmp_path / "b.txt").write_text("same\n")
+    one = sha256_of_files([tmp_path / "a.txt"], base=tmp_path)
+    other = sha256_of_files([tmp_path / "b.txt"], base=tmp_path)
+    assert one != other
+
+
+def test_fingerprint_label_keeps_an_absolute_path_without_a_base(tmp_path):
+    assert ctxmod.fingerprint_label(tmp_path / "r.txt") == str(tmp_path / "r.txt")
+
+
+def test_fingerprint_label_reaches_outside_the_base(tmp_path):
+    # a file in an imported base env sits beside the env dir, not under it;
+    # '../' is still stable across checkouts of the same layout.
+    env_dir = tmp_path / "leaf"
+    env_dir.mkdir()
+    assert ctxmod.fingerprint_label(tmp_path / "base" / "r.txt", env_dir) == "../base/r.txt"
+
+
 def test_sha256_of_files(tmp_path):
     f = tmp_path / "a.txt"
     f.write_text("hello")
