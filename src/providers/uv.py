@@ -387,14 +387,19 @@ class UvProvider(Provider):
                 args.append(entry)
         return args, command_outputs
 
-    def _requirements_checksum(self, files, command_outputs):
+    def _requirements_checksum(self, ctx, files, command_outputs):
         """sha256_of_files(files), plus each 'install-args:' command's captured output hashed in too.
 
         Both must feed the same checksum (compared by _ensure_venv, stored by
         _store_checksums) so drift in either a requirements *file* or a
         command's *output* is detected the same way.
+
+        Files are named relative to the env dir, so the same requirements at
+        a different absolute path (a second checkout, a renamed directory, a
+        git worktree) are not mistaken for changed ones -- see
+        context.fingerprint_label.
         """
-        blob = sha256_of_files(files)
+        blob = sha256_of_files(files, base=ctx.env_dir)
         for i, output in enumerate(command_outputs):
             blob += f"\n{hashlib.sha256(output.encode()).hexdigest()}  <install-args command #{i}>"
         return blob
@@ -459,7 +464,7 @@ class UvProvider(Provider):
         # still count as "seen before" instead of recreating its venv on
         # every single run.
         previous = checksum_path.read_text() if checksum_path.is_file() else None
-        current = self._requirements_checksum(checksum_files, command_outputs)
+        current = self._requirements_checksum(ctx, checksum_files, command_outputs)
 
         if previous is None:
             recreate = True  # first run (or never completed): be safe
@@ -699,7 +704,7 @@ class UvProvider(Provider):
         another stage's own checksum file.
         """
         checksum_path = venv_dir / f"{self.stage}-checksums.txt"
-        ctx.write_text(checksum_path, self._requirements_checksum(checksum_files, command_outputs))
+        ctx.write_text(checksum_path, self._requirements_checksum(ctx, checksum_files, command_outputs))
 
     def _freeze(self, ctx, cfg, uv):
         """Write the venv's fully-resolved `uv pip freeze` output to 'freeze-to:', if configured."""
