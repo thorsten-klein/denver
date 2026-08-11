@@ -1092,6 +1092,7 @@ def reinvoke_command(
     fast=False,
     force=False,
     ci=False,
+    no_wait=False,
     start_time=None,
 ):
     """Re-invoke denver (skipping ``wrapper_stage_ids``) so setup providers run in the wrapper.
@@ -1154,7 +1155,11 @@ def reinvoke_command(
     for stage_id in (*skip_stages, *wrapper_stage_ids):
         filter_flags += ["--skip", stage_id]
     extra_flags = (
-        (["-q"] * quiet) + (["--fast"] if fast else []) + (["--force"] if force else []) + (["--ci"] if ci else [])
+        (["-q"] * quiet)
+        + (["--fast"] if fast else [])
+        + (["--force"] if force else [])
+        + (["--ci"] if ci else [])
+        + (["--no-wait"] if no_wait else [])
     )
     if start_time is not None:
         extra_flags += ["--start-time", repr(start_time)]
@@ -1238,7 +1243,7 @@ def _collect_stage_scripts(ctx, stage_ids, name):
 
 
 def run_named_scripts(
-    env_dir, config, config_path, name, *, until_stage=None, skip_stages=(), quiet=False, dry_run=False
+    env_dir, config, config_path, name, *, until_stage=None, skip_stages=(), quiet=False, dry_run=False, no_wait=False
 ):
     """Run every (filtered) stage's ``scripts: <name>:`` entries, each in the context it actually needs.
 
@@ -1269,6 +1274,7 @@ def run_named_scripts(
 
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
     config, ctx = resolve_full_config(env_dir, config, config_path, quiet=quiet, dry_run=dry_run)
+    ctx.acquire_lock(wait=not no_wait)
     run_hook(ctx, config_path, "env")
     ctx.apply_env_map(config.get("env"))
 
@@ -1396,6 +1402,7 @@ def run_stages(
     force=False,
     ci=False,
     dry_run=False,
+    no_wait=False,
     start_time=None,
 ):
     """Build/enter the environment via its stages, then exec the command.
@@ -1437,6 +1444,8 @@ def run_stages(
     config, ctx = resolve_full_config(
         env_dir, config, config_path, quiet=quiet, fast=fast, force=force, ci=ci, dry_run=dry_run
     )
+    # before any stage touches shared state, and before the wrapper relocates
+    ctx.acquire_lock(wait=not no_wait)
 
     # hooks.env sources a script once, before anything else -- its exports
     # (and the declarative 'env:' map applied right after) are visible to
@@ -1496,6 +1505,7 @@ def run_stages(
             fast=fast,
             force=force,
             ci=ci,
+            no_wait=no_wait,
             start_time=start_time,
         )
     else:
@@ -1555,6 +1565,7 @@ def _run_stages_via_wrapper(
     fast,
     force,
     ci,
+    no_wait,
     start_time,
 ):
     """Host side: prepare the wrapper(s), then relocate execution into them (see run_stages)."""
@@ -1600,6 +1611,7 @@ def _run_stages_via_wrapper(
             fast=fast,
             force=force,
             ci=ci,
+            no_wait=no_wait,
             start_time=start_time,
         )
     else:
@@ -1810,6 +1822,11 @@ def build_arg_parser():
         "--ci", action="store_true", help="CI mode: swap in narrower/faster args (e.g. a shallow `west update`)"
     )
     parser.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="fail instead of waiting when another denver run already holds this env",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="show what each stage would run instead of running it: no command is executed for its effect, "
@@ -1989,6 +2006,7 @@ def _run_cli(argv=None):
             skip_stages=args.skip,
             quiet=args.quiet,
             dry_run=args.dry_run,
+            no_wait=args.no_wait,
         )
         return
 
@@ -2013,6 +2031,7 @@ def _run_cli(argv=None):
         force=args.force,
         ci=args.ci,
         dry_run=args.dry_run,
+        no_wait=args.no_wait,
         start_time=args.start_time,
     )
 

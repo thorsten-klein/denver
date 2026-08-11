@@ -383,6 +383,27 @@ That symmetry is deliberate: the host and container paths run the same
 stages from the same config, so "does it work without Docker?" is one flag
 away rather than a separate code path.
 
+## One run per environment at a time
+
+Every part of an environment's state is shared between concurrent runs, and
+several steps *rebuild* rather than update: the conan provider wipes its whole
+install tree before installing, and the uv provider removes and recreates a
+venv whose requirements changed — potentially while another run is using
+exactly that. There is no useful way to merge two such runs, so denver
+serialises them with an exclusive lock on `<DENVER_ENV_WORKDIR>/.lock`.
+
+A second run waits, saying whose run it is waiting for; `--no-wait` makes it
+fail instead. The lock is never released explicitly: the descriptor is closed
+by `execvpe`, so it lasts exactly as long as denver is mutating state and
+drops the moment it hands over to your command. A long-lived devshell
+therefore never holds it, and a wrapper relocation cannot deadlock against
+itself — the outer process ceases to exist at `exec`, before the inner one
+asks.
+
+`--dry-run` takes no lock, since it mutates nothing. Where the filesystem
+does not implement `flock` at all (some NFS and overlay mounts), denver warns
+and continues rather than pretending the run is serialised.
+
 ## Quiet levels
 
 - **`-q`** silences info lines, echoed commands, and the output of

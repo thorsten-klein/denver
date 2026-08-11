@@ -10,6 +10,8 @@ values. Everything specific comes from denver.yml, where values may
 reference denver built-ins and each other through ``${VAR}`` interpolation.
 """
 
+import errno
+import fcntl
 import hashlib
 import logging
 import os
@@ -26,6 +28,39 @@ from typing import NoReturn
 # follows it ('+', '?', '~', '.', '!') says which kind of line it is -- see
 # dry_run_legend(), which states the same key to the user once per run.
 DRY_PREFIX = "[dry-run]"
+
+# One denver run per env at a time -- see Context.acquire_lock.
+LOCK_FILE_NAME = ".lock"
+
+# Lock files this *process* already holds, path -> fd. flock associates a lock
+# with the open file description rather than the process, so a second open() of
+# the same path blocks against the first even from within one process. The
+# hazard being guarded against is another *process*, so a path already held
+# here is simply kept: re-locking it would deadlock against ourselves.
+_HELD_LOCKS = {}
+
+
+def _boot_id():
+    """This boot's identifier, or "?" where the kernel does not publish one.
+
+    Stamped into the lock file so a leftover from before a reboot is
+    recognisable: pids are reused freely across boots, so "pid 1234 holds it"
+    is otherwise unfalsifiable.
+    """
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:  # pragma: no cover - Linux-only file
+        return "?"
+
+
+def _lock_holder(path):
+    """Describe whoever holds the lock, for a message -- best effort."""
+    try:
+        stamp = Path(path).read_text().split()
+    except OSError:  # pragma: no cover - the file exists; we just locked it
+        stamp = []
+    return " ".join(stamp) or "unknown"
+
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger("denver")
@@ -252,6 +287,8 @@ class Context:
         # the warning explaining that is printed once per tool instead of
         # once per lookup (every stage re-resolves its own defaults).
         self._dry_missing_tools = set()
+        # holds this env's run lock open for the process's lifetime (acquire_lock)
+        self._lock_fd = None
         # this stage's position in the overall pipeline, for banner()'s
         # '[i/n]' -- 1/1 by default so a provider driven directly (e.g. in
         # tests) without going through denver.py's run_stages() still gets a
@@ -382,6 +419,65 @@ class Context:
         leaf = ".venv" if not name else f".venv-{name}"
         venv = self.env_workdir / leaf
         return venv if self.in_docker else Path(str(venv) + ".host")
+
+    # ---- serialising concurrent runs ------------------------------------ #
+    def acquire_lock(self, *, wait=True):
+        """Take this env's exclusive run lock, so two runs cannot corrupt each other's state.
+
+        Every piece of an env's state is shared between concurrent runs, and
+        several steps rebuild rather than update: the conan provider wipes its
+        whole install tree before installing, and the uv provider removes and
+        recreates a venv whose requirements changed -- both potentially while
+        another run is sourcing or using exactly that. There is no useful way
+        to merge two such runs, so they are serialised.
+
+        Deliberately *not* released explicitly: the lock fd is closed by
+        ``os.execvpe`` (Python creates file descriptors non-inheritable --
+        PEP 446), so the lock lasts exactly as long as denver is mutating
+        state and drops the moment it hands over to the user's command. A
+        long-lived devshell therefore never holds it, and a wrapper
+        relocation cannot deadlock against itself: the outer process ceases
+        to exist at exec, before the inner one asks.
+
+        Skipped entirely under --dry-run, which mutates nothing.
+        """
+        if self.dry_run:
+            return
+        path = self.env_workdir / LOCK_FILE_NAME
+        if str(path) in _HELD_LOCKS:
+            return  # already ours -- see _HELD_LOCKS
+        self.mkdir(path.parent)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+        if not self._flock(fd, path, wait=wait):
+            os.close(fd)
+            return
+        # stamped for diagnosis only -- the lock itself is the flock, never
+        # this content. The boot id makes a stale file from before a reboot
+        # recognisable as such, since pids are reused freely across one.
+        os.ftruncate(fd, 0)
+        os.write(fd, f"pid={os.getpid()}\nboot={_boot_id()}\n".encode())
+        # kept on the instance purely to hold the descriptor open for this
+        # process's lifetime; nothing ever reads it back.
+        self._lock_fd = fd
+        _HELD_LOCKS[str(path)] = fd
+
+    def _flock(self, fd, path, *, wait):
+        """Take the flock on ``fd``, reporting a wait; False if locking is unavailable here."""
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError as exc:
+            if exc.errno not in (errno.EACCES, errno.EAGAIN):
+                # ENOLCK/EOPNOTSUPP/EINVAL: some NFS and overlay mounts do not
+                # implement flock at all. Saying so beats pretending the run
+                # is serialised when nothing is enforcing it.
+                warn(f"denver: cannot lock {path} ({exc.strerror or exc}) -- concurrent runs are not serialised")
+                return False
+        if not wait:
+            die(f"denver: another denver run holds this env ({_lock_holder(path)}); --no-wait was given")
+        info(f"denver: waiting for another denver run on this env ({_lock_holder(path)})")
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return True
 
     # ---- config access -------------------------------------------------- #
     def section(self, name):
