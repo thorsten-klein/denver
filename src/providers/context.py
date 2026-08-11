@@ -10,6 +10,8 @@ values. Everything specific comes from denver.yml, where values may
 reference denver built-ins and each other through ``${VAR}`` interpolation.
 """
 
+import errno
+import fcntl
 import hashlib
 import logging
 import os
@@ -26,6 +28,39 @@ from typing import NoReturn
 # follows it ('+', '?', '~', '.', '!') says which kind of line it is -- see
 # dry_run_legend(), which states the same key to the user once per run.
 DRY_PREFIX = "[dry-run]"
+
+# One denver run per env at a time -- see Context.acquire_lock.
+LOCK_FILE_NAME = ".lock"
+
+# Lock files this *process* already holds, path -> fd. flock associates a lock
+# with the open file description rather than the process, so a second open() of
+# the same path blocks against the first even from within one process. The
+# hazard being guarded against is another *process*, so a path already held
+# here is simply kept: re-locking it would deadlock against ourselves.
+_HELD_LOCKS = {}
+
+
+def _boot_id():
+    """This boot's identifier, or "?" where the kernel does not publish one.
+
+    Stamped into the lock file so a leftover from before a reboot is
+    recognisable: pids are reused freely across boots, so "pid 1234 holds it"
+    is otherwise unfalsifiable.
+    """
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    except OSError:  # pragma: no cover - Linux-only file
+        return "?"
+
+
+def _lock_holder(path):
+    """Describe whoever holds the lock, for a message -- best effort."""
+    try:
+        stamp = Path(path).read_text().split()
+    except OSError:  # pragma: no cover - the file exists; we just locked it
+        stamp = []
+    return " ".join(stamp) or "unknown"
+
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger("denver")
@@ -98,6 +133,27 @@ def banner(ctx, stage, message):
     else:
         line = "-" * (len(text) + 4)
         print(f"\033[93m{line}\n| {text} |\n{line}\033[39m", file=sys.stderr)
+
+
+def stage_banner(ctx, stage, provider_name):
+    """Print a single colored '[i/n] stage '<id>' (<provider>)' line to stderr, unless -qq.
+
+    Emitted centrally by denver.py right before a stage's setup() runs, so a
+    stage always announces itself even when its provider dies before
+    reaching a banner() of its own -- which several do, since they check for
+    their tool first (see e.g. ZephyrProvider.setup). Without this, such a
+    failure prints an error with no indication of which stage produced it,
+    and the stage id is exactly what the user needs to pass to --skip next.
+
+    One line rather than banner()'s boxed frame: this marks *entering* a
+    stage, while the boxes below it are the sub-steps that stage actually
+    performs. Naming the provider too, because a stage id is only a label --
+    an env may run the same provider twice under different ids.
+    """
+    if _quiet_level >= 2:
+        return
+    text = f"[{ctx.stage_index}/{ctx.stage_count}] stage '{stage}' ({provider_name})"
+    print(f"\033[93m-- {text}\033[39m", file=sys.stderr)
 
 
 def skip_banner(ctx, stage, reason):
@@ -256,6 +312,8 @@ class Context:
         # order -- the summary denver prints just before launching the
         # command (see denver._print_stage_summary).
         self.stage_timings = []
+        # holds this env's run lock open for the process's lifetime (acquire_lock)
+        self._lock_fd = None
         # this stage's position in the overall pipeline, for banner()'s
         # '[i/n]' -- 1/1 by default so a provider driven directly (e.g. in
         # tests) without going through denver.py's run_stages() still gets a
@@ -386,6 +444,65 @@ class Context:
         leaf = ".venv" if not name else f".venv-{name}"
         venv = self.env_workdir / leaf
         return venv if self.in_docker else Path(str(venv) + ".host")
+
+    # ---- serialising concurrent runs ------------------------------------ #
+    def acquire_lock(self, *, wait=True):
+        """Take this env's exclusive run lock, so two runs cannot corrupt each other's state.
+
+        Every piece of an env's state is shared between concurrent runs, and
+        several steps rebuild rather than update: the conan provider wipes its
+        whole install tree before installing, and the uv provider removes and
+        recreates a venv whose requirements changed -- both potentially while
+        another run is sourcing or using exactly that. There is no useful way
+        to merge two such runs, so they are serialised.
+
+        Deliberately *not* released explicitly: the lock fd is closed by
+        ``os.execvpe`` (Python creates file descriptors non-inheritable --
+        PEP 446), so the lock lasts exactly as long as denver is mutating
+        state and drops the moment it hands over to the user's command. A
+        long-lived devshell therefore never holds it, and a wrapper
+        relocation cannot deadlock against itself: the outer process ceases
+        to exist at exec, before the inner one asks.
+
+        Skipped entirely under --dry-run, which mutates nothing.
+        """
+        if self.dry_run:
+            return
+        path = self.env_workdir / LOCK_FILE_NAME
+        if str(path) in _HELD_LOCKS:
+            return  # already ours -- see _HELD_LOCKS
+        self.mkdir(path.parent)
+        fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
+        if not self._flock(fd, path, wait=wait):
+            os.close(fd)
+            return
+        # stamped for diagnosis only -- the lock itself is the flock, never
+        # this content. The boot id makes a stale file from before a reboot
+        # recognisable as such, since pids are reused freely across one.
+        os.ftruncate(fd, 0)
+        os.write(fd, f"pid={os.getpid()}\nboot={_boot_id()}\n".encode())
+        # kept on the instance purely to hold the descriptor open for this
+        # process's lifetime; nothing ever reads it back.
+        self._lock_fd = fd
+        _HELD_LOCKS[str(path)] = fd
+
+    def _flock(self, fd, path, *, wait):
+        """Take the flock on ``fd``, reporting a wait; False if locking is unavailable here."""
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError as exc:
+            if exc.errno not in (errno.EACCES, errno.EAGAIN):
+                # ENOLCK/EOPNOTSUPP/EINVAL: some NFS and overlay mounts do not
+                # implement flock at all. Saying so beats pretending the run
+                # is serialised when nothing is enforcing it.
+                warn(f"denver: cannot lock {path} ({exc.strerror or exc}) -- concurrent runs are not serialised")
+                return False
+        if not wait:
+            die(f"denver: another denver run holds this env ({_lock_holder(path)}); --no-wait was given")
+        info(f"denver: waiting for another denver run on this env ({_lock_holder(path)})")
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        return True
 
     # ---- config access -------------------------------------------------- #
     def section(self, name):
@@ -518,14 +635,25 @@ class Context:
             run_kwargs["stderr"] = subprocess.DEVNULL
         if input is not None:
             run_kwargs["input"] = input
-        return subprocess.run(
-            [str(c) for c in cmd],
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            check=check,
-            text=True,
-            **run_kwargs,
-        )
+        try:
+            return subprocess.run(
+                [str(c) for c in cmd],
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                check=check,
+                text=True,
+                **run_kwargs,
+            )
+        except OSError as exc:
+            # The command could not be started at all -- a configured 'exe:'
+            # naming a file that isn't there, a script without the execute
+            # bit, an unreadable cwd. That is a denver.yml problem, but
+            # Popen raises before check= ever applies, so main()'s
+            # CalledProcessError handler never sees it and the user gets a
+            # traceback whose frames name subprocess.py rather than the key
+            # at fault. Reported here instead, naming the stage and command.
+            stage = f"stage '{self.stage_id}': " if self.stage_id else ""
+            die(f"{stage}cannot run {printable}: {exc.strerror or exc}")
 
     def _dry_run_command(self, cmd, printable, *, cwd, env, capture, input):
         """Report ``cmd`` under --dry-run: print-and-skip it, or really run it if it's a query (see Context.run)."""
@@ -712,11 +840,39 @@ class Context:
             die(f"failed to exec {cmd[0]}: {exc}")
 
 
-def sha256_of_files(paths):
-    """Stable checksum block for a set of files (missing files are tolerated)."""
+def fingerprint_label(path, base=None):
+    """How ``path`` is named inside a fingerprint: relative to ``base`` where possible.
+
+    A fingerprint exists to answer "did the inputs change since last run",
+    so it must not also change when the same inputs sit at a different
+    absolute path -- which is the normal state of affairs with two checkouts
+    of one project, a renamed directory, or a git worktree. Naming a file
+    relative to the env dir keeps the answer about content and layout, not
+    about where the tree happens to live.
+
+    Anything not reachable relatively (a different drive, or no ``base`` at
+    all) keeps its absolute path: that is still stable for the run it
+    describes, and it is better to over-invalidate than to conflate two
+    genuinely different files.
+    """
+    path = Path(path)
+    if base is None:
+        return str(path)
+    try:
+        return str(Path(os.path.relpath(path, base)))
+    except ValueError:  # pragma: no cover - Windows-only (paths on different drives)
+        return str(path)
+
+
+def sha256_of_files(paths, base=None):
+    """Stable checksum block for a set of files (missing files are tolerated).
+
+    ``base`` makes the block independent of where the tree lives -- see
+    fingerprint_label.
+    """
     lines = []
     for path in paths:
         p = Path(path)
         digest = hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "0" * 64
-        lines.append(f"{digest}  {p}")
+        lines.append(f"{digest}  {fingerprint_label(p, base)}")
     return "\n".join(lines)

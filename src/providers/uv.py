@@ -3,7 +3,8 @@
 Everything is configured from denver.yml -> ``uv:``:
 
     uv:
-      python: "3.12.3"            # interpreter version for the venv
+      python: "3.12.3"            # interpreter version for the venv (optional;
+                                   # unset => no '-p', uv's own discovery decides)
       uv: uv                      # uv executable (default: uv on PATH)
       requirements:               # -r files, installed together
       - path/to/requirements.txt
@@ -63,6 +64,16 @@ list is kept in ``<DENVER_DIR>/.envs/<env>/.logs/<stage>-install-args.json``,
 outside the venv itself (so it survives a checksum-triggered venv
 recreation); delete the file to reset it.
 
+One venv holds exactly one interpreter, and the one it already has wins: an
+existing venv is reused rather than silently rebuilt because ``python:``
+changed (that would discard everything installed into it too), and a
+``python:`` contradicting it is an error naming both ways out -- ``--force``
+to recreate it, or a ``venv:`` of this stage's own to keep both. The same
+rule covers several stages sharing a venv, so a later stage disagreeing is
+reported rather than silently ignored. A venv whose base interpreter has
+disappeared is the one case denver recreates unasked: it is broken rather
+than reusable. See ``doc/providers/uv.md``.
+
 Several uv stages may share one venv (via an unset/identical 'venv:') --
 e.g. so `west`'s own extension commands (imported into the *same* running
 `west` process) can see packages a later stage installs on top of what an
@@ -110,6 +121,67 @@ _VALUE_FLAGS = ("-r", "--override", "--find-links")
 _LOCK_KEYS = ("create", "sync")
 
 
+def _pyvenv_cfg(venv_dir):
+    """Parse ``<venv>/pyvenv.cfg`` into a dict, or {} when there isn't one.
+
+    Written by every venv creator (uv's own, and the stdlib's), and the only
+    record of which interpreter a venv was built on that can be read without
+    executing anything inside it.
+    """
+    path = Path(venv_dir) / "pyvenv.cfg"
+    if not path.is_file():
+        return {}
+    values = {}
+    for line in path.read_text().splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key.strip()] = value.strip()
+    return values
+
+
+def _venv_python_version(venv_dir):
+    """The Python version an existing venv was built on, or None if that can't be read.
+
+    ``version_info`` is what uv writes; ``version`` is the stdlib's spelling
+    of the same thing.
+    """
+    cfg = _pyvenv_cfg(venv_dir)
+    return cfg.get("version_info") or cfg.get("version")
+
+
+def _venv_base_interpreter_missing(venv_dir):
+    """True when a venv exists but the interpreter it was built on no longer does.
+
+    Only ever True for a venv that really is there and really does name a
+    ``home``: an absent pyvenv.cfg means there's no venv to judge, which is
+    the "create it" case rather than the "it's broken" one.
+    """
+    home = _pyvenv_cfg(venv_dir).get("home")
+    return bool(home) and not Path(home).is_dir()
+
+
+def _is_release_number(value):
+    """True if ``value`` is a plain dotted release number (``3.12``, ``3.12.3``).
+
+    'python:' is passed to uv, which also accepts forms denver cannot compare
+    against a venv's recorded version without re-implementing uv's own
+    resolution (``cpython@3.12``, ``>=3.11``, a path to an interpreter). Those
+    are left alone rather than guessed at.
+    """
+    parts = str(value).split(".")
+    return all(part.isdigit() for part in parts)
+
+
+def _release_matches(wanted, actual):
+    """True if ``actual`` (a full version) satisfies ``wanted``, compared component-wise.
+
+    A prefix, so ``3.12`` accepts 3.12.7 exactly as uv itself would, while
+    ``3.12.3`` does not accept 3.12.4.
+    """
+    wanted_parts = str(wanted).split(".")
+    return str(actual).split(".")[: len(wanted_parts)] == wanted_parts
+
+
 class UvProvider(Provider):
     """A generic Python virtualenv managed with uv -- see module docstring for denver.yml keys."""
 
@@ -135,7 +207,11 @@ class UvProvider(Provider):
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
         """Resolve python/uv/no-index/skip-if/venv-patcher defaults -- see module docstring."""
         resolved = dict(cfg)
-        resolved["python"] = str(cfg.get("python") or "3.12.3")
+        # No default: denver does not pick an interpreter nobody wrote down.
+        # Unset means uv's own discovery decides (see _ensure_venv), and
+        # --show-config shows it as null rather than as a version that looks
+        # like configuration.
+        resolved["python"] = str(cfg["python"]) if cfg.get("python") else None
         # dry_fallback: under --dry-run an unavailable uv still renders every
         # command below it, instead of aborting the preview (see Context.which).
         resolved["uv"] = cfg.get("uv") or ctx.which("uv", dry_fallback=True)
@@ -224,7 +300,7 @@ class UvProvider(Provider):
 
         uv = cfg.get("uv")
         if not uv:
-            die("uv provider needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
+            die(f"uv[{self.stage}]: needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
 
         # 'lock: sync:'s lockfile is an install *input*, like a requirements
         # file, so drift in it recreates the venv the same way; 'lock:
@@ -311,20 +387,32 @@ class UvProvider(Provider):
                 args.append(entry)
         return args, command_outputs
 
-    def _requirements_checksum(self, files, command_outputs):
+    def _requirements_checksum(self, ctx, files, command_outputs):
         """sha256_of_files(files), plus each 'install-args:' command's captured output hashed in too.
 
         Both must feed the same checksum (compared by _ensure_venv, stored by
         _store_checksums) so drift in either a requirements *file* or a
         command's *output* is detected the same way.
+
+        Files are named relative to the env dir, so the same requirements at
+        a different absolute path (a second checkout, a renamed directory, a
+        git worktree) are not mistaken for changed ones -- see
+        context.fingerprint_label.
         """
-        blob = sha256_of_files(files)
+        blob = sha256_of_files(files, base=ctx.env_dir)
         for i, output in enumerate(command_outputs):
             blob += f"\n{hashlib.sha256(output.encode()).hexdigest()}  <install-args command #{i}>"
         return blob
 
     def _ensure_python(self, ctx, uv, version):
-        """Make interpreter ``version`` available to uv: verified offline in docker, installed otherwise."""
+        """Make interpreter ``version`` available to uv: verified offline in docker, installed otherwise.
+
+        A no-op when no ``python:`` is configured: uv's own discovery then
+        decides which interpreter the venv is built on, and there is nothing
+        for denver to install or assert.
+        """
+        if not version:
+            return
         if ctx.in_docker:
             # in docker the interpreter is fixed (baked into the image); we can't
             # install a different one, so just assert it matches what uv.python
@@ -359,10 +447,14 @@ class UvProvider(Provider):
         """
         ensured = getattr(ctx, "_uv_venvs_ensured_this_run", None)
         if ensured is None:
-            ensured = ctx._uv_venvs_ensured_this_run = set()
+            ensured = ctx._uv_venvs_ensured_this_run = {}
         if venv_dir in ensured:
+            # a later stage sharing this venv: it is whatever the first stage
+            # left, so its own 'python:' is checked against that decision
+            # rather than against the filesystem (under --dry-run nothing was
+            # actually created, and the venv on disk may be the old one).
+            self._check_python_matches(ctx, ensured[venv_dir], version, f"the venv this run built at {venv_dir}")
             return
-        ensured.add(venv_dir)
 
         recreate = ctx.force
         checksum_path = venv_dir / f"{self.stage}-checksums.txt"
@@ -372,13 +464,30 @@ class UvProvider(Provider):
         # still count as "seen before" instead of recreating its venv on
         # every single run.
         previous = checksum_path.read_text() if checksum_path.is_file() else None
-        current = self._requirements_checksum(checksum_files, command_outputs)
+        current = self._requirements_checksum(ctx, checksum_files, command_outputs)
 
         if previous is None:
             recreate = True  # first run (or never completed): be safe
         elif previous != current:
             info("uv: requirement checksums changed; recreating venv")
             recreate = True
+
+        # A venv whose base interpreter has gone (a distro upgrade moved
+        # python3, a uv-managed interpreter pruned) is broken rather than
+        # reusable, and there is no configured value it could contradict --
+        # the one place recreating without being asked is right.
+        if not recreate and _venv_base_interpreter_missing(venv_dir):
+            info(f"uv[{self.stage}]: {venv_dir}'s base interpreter is gone; recreating venv")
+            recreate = True
+
+        # An existing venv's interpreter is authoritative: it is never
+        # silently rebuilt just because 'python:' changed, because that would
+        # also silently discard everything installed into it. Contradicting
+        # it is an error the user resolves deliberately -- see
+        # _check_python_matches.
+        if not recreate:
+            self._check_python_matches(ctx, _venv_python_version(venv_dir), version, f"the venv at {venv_dir}")
+        ensured[venv_dir] = version
 
         if recreate and venv_dir.exists():
             info(f"uv: removing {venv_dir}")
@@ -389,7 +498,31 @@ class UvProvider(Provider):
         # not whether it is still on disk, or the `uv venv` that a real run
         # would follow the removal with would go missing from the preview.
         if not venv_dir.exists() or (ctx.dry_run and recreate):
-            ctx.run([uv, "venv", "-p", version, str(venv_dir)])
+            # no '-p' without a configured 'python:': uv's own discovery
+            # (UV_PYTHON, a .python-version file, then the system) decides,
+            # rather than denver picking a version nobody wrote down.
+            version_args = ["-p", version] if version else []
+            ctx.run([uv, "venv", *version_args, str(venv_dir)])
+
+    def _check_python_matches(self, ctx, actual, wanted, where):
+        """Die when a configured 'python:' contradicts the interpreter a venv already has.
+
+        Silent whenever there is nothing to compare: no ``python:`` at all
+        (uv decides), no readable version for the venv, or a ``python:`` that
+        isn't a plain release number (uv also accepts ``cpython@3.12``, a
+        path, ...) and so can't be compared without re-implementing uv's own
+        resolution. ``--force`` is exempt: it recreates the venv, which *is*
+        the resolution this would otherwise ask for.
+        """
+        if ctx.force or not wanted or not actual or not _is_release_number(wanted):
+            return
+        if _release_matches(wanted, actual):
+            return
+        die(
+            f"uv[{self.stage}]: {where} is Python {actual}, but 'python: {wanted}' is configured. "
+            f"Re-run with --force to recreate it at {wanted}, or give this stage its own 'venv:' "
+            f"to keep both interpreters (one venv holds exactly one interpreter)."
+        )
 
     def _activate(self, ctx, venv_dir):
         """Activate the venv purely via env vars (equivalent to `activate`)."""
@@ -571,7 +704,7 @@ class UvProvider(Provider):
         another stage's own checksum file.
         """
         checksum_path = venv_dir / f"{self.stage}-checksums.txt"
-        ctx.write_text(checksum_path, self._requirements_checksum(checksum_files, command_outputs))
+        ctx.write_text(checksum_path, self._requirements_checksum(ctx, checksum_files, command_outputs))
 
     def _freeze(self, ctx, cfg, uv):
         """Write the venv's fully-resolved `uv pip freeze` output to 'freeze-to:', if configured."""

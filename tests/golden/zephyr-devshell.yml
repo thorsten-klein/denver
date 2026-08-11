@@ -76,7 +76,7 @@ uv:
   lock: null
   no-index: false
   overrides: null
-  python: 3.12.3
+  python: null
   requirements: null
   skip-if: []
   uv: /usr/bin/uv
@@ -113,7 +113,7 @@ uv-zephyr:
   lock: null
   no-index: false
   overrides: null
-  python: 3.12.3
+  python: null
   requirements: null
   skip-if: []
   uv: /usr/bin/uv

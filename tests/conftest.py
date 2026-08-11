@@ -14,8 +14,26 @@ from pathlib import Path
 import pytest
 import yaml
 
+import denver
 from providers import Context
 from providers.context import set_quiet
+
+
+@pytest.fixture(autouse=True)
+def _isolated_state_dir(tmp_path, monkeypatch):
+    """Point denver's state root at this test's own tmp_path.
+
+    denver.DENVER_DIR is the checkout root when running from a checkout,
+    which is what the test suite does -- so anything reaching run_stages()
+    wrote its venvs/caches into the real repository, and every test shared
+    one directory per env *name*. Harmless while nothing was serialised;
+    with a per-env run lock (Context.acquire_lock) it means xdist workers
+    block on each other's locks instead of running.
+
+    tmp_path/"denver" specifically, so it matches what make_context() below
+    passes as denver_dir and the paths tests already assert on.
+    """
+    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
 
 
 @pytest.fixture(autouse=True)
