@@ -110,6 +110,14 @@ needs 'conan' on PATH`.
 
 ## Design notes
 
+- **When a `custom` stage is enough.** For a *single* prebuilt archive with
+  no dependencies, `curl` + `sha256sum -c` + `tar` in a `custom` stage is an
+  honest twenty lines and needs no conan on `PATH` — see "Bringing a
+  prebuilt binary in by hand" in [`custom.md`](custom.md), which
+  [`examples/howto-env`](../../examples/howto-env) deliberately shows right
+  next to a conan stage doing the same job. What conan adds is the per-tool
+  cost: a url and a checksum instead of a script, plus a cache shared across
+  envs and checkouts, and dependencies between tools.
 - **Monorepo pattern.** Recipes commonly live in the same repository as the
   project using them, not a separate recipes repo — see "Monorepo" in
   [`../philosophy.md`](../philosophy.md). A unit's `recipe-dirs:` just points at wherever they

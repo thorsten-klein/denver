@@ -1,9 +1,10 @@
 """The test `denver examples/howto-env` runs by default.
 
 It asserts what each stage of the pipeline promised: the OS from the docker
-stage, the interpreter and packages from the uv stage, the pinned tools from
-the conan stage, and the exported variable from the custom stage. A green run
-means the whole environment really was built, not just configured.
+stage, the interpreter and packages from the uv stage, the hand-installed
+release from the first custom stage, the pinned tools from the conan stage,
+and the exported variable from the second custom stage. A green run means the
+whole environment really was built, not just configured.
 """
 
 import os
@@ -28,6 +29,17 @@ def test_uv_stage_gave_us_python_3_12_and_pytest():
     import pytest
 
     assert pytest.__version__ == "9.1.1"
+
+
+def test_custom_stage_put_the_hand_installed_nvim_on_path():
+    """The prebuilt release nvim/install.sh unpacked, reachable via nvim/activate.sh's PATH entry."""
+    nvim = subprocess.run(["nvim", "--version"], capture_output=True, text=True, check=True)
+    assert "NVIM v0.12.4" in nvim.stdout
+
+    # not some nvim the host happens to have: the one under this env's own
+    # state dir, where nvim/nvim.env pins it
+    workdir = Path(os.environ["DENVER_ENV_WORKDIR"])
+    assert shutil.which("nvim") == str(workdir / "nvim" / "0.12.4" / "bin" / "nvim")
 
 
 def test_conan_stage_gave_us_the_pinned_tool_versions():

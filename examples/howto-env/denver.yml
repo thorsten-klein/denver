@@ -7,8 +7,9 @@ denver-version: ">=1.1.0"
 stages:
 - docker-with-tools   # 1. Ubuntu 24.04 + the apt packages + uv
 - uv-packages         # 2. the python 3.12 venv
-- tools-from-internet # 3. cmake 3.31.9 and the ARM toolchain 15.3, exactly
-- best-practices      # 4. the team's PYTEST_ADDOPTS convention
+- nvim-by-hand        # 3. one prebuilt release, fetched by hand
+- tools-from-internet # 4. cmake 3.31.9 and the ARM toolchain 15.3, exactly
+- best-practices      # 5. the team's PYTEST_ADDOPTS convention
 
 # what the finished environment starts when no command follows '--'
 command: bash
@@ -41,11 +42,29 @@ uv-packages:
   requirements:
   - requirements.txt
 
+nvim-by-hand:
+  provider: custom
+  description:
+  - Brings one prebuilt binary release (neovim 0.12.4) into the environment
+    the manual way -- download, checksum, unpack, PATH -- so the stage below
+    can be read as what conan does with that same job.
+  # the build step: an isolated subprocess, so it prints what it does and is
+  # skipped by --fast. It inherits denver's working directory (wherever the
+  # user was), hence ${DENVER_ENV_DIR} rather than a relative path.
+  cmd: bash ${DENVER_ENV_DIR}/nvim/install.sh
+  # the activation: sourced, so its PATH entry survives into every later
+  # stage and the final command. Resolved relative to this denver.yml.
+  # (Both halves in one sourced script would work too -- see doc/how-to.md;
+  # split here because the two jobs are worth seeing apart.)
+  source: nvim/activate.sh
+
 tools-from-internet:
   provider: conan
   description:
   - Downloads cmake and the ARM toolchain at exactly the pinned versions and
     puts them on PATH. One unit -- a conanfile plus the recipes it installs.
+    The same job as 'nvim-by-hand' above, minus the shell script -- conan
+    owns the download, the checksum, the cache and the PATH.
   conanfiles:
   - path: conan/conanfile.py
     recipe-dirs:
