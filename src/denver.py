@@ -1189,6 +1189,7 @@ def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, fo
         DENVER_DIR,
         env_dir,
         config,
+        config_path=config_path,
         import_dirs=import_dirs,
         quiet=quiet,
         fast=fast,
@@ -1280,6 +1281,7 @@ def run_named_scripts(
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
     config, ctx = resolve_full_config(env_dir, config, config_path, quiet=quiet, dry_run=dry_run)
     ctx.acquire_lock(wait=not no_wait)
+    ctx.ensure_state_dir()
     run_hook(ctx, config_path, "env")
     ctx.apply_env_map(config.get("env"))
 
@@ -1515,6 +1517,8 @@ def run_stages(
     )
     # before any stage touches shared state, and before the wrapper relocates
     ctx.acquire_lock(wait=not no_wait)
+
+    ctx.ensure_state_dir()
 
     # hooks.env sources a script once, before anything else -- its exports
     # (and the declarative 'env:' map applied right after) are visible to

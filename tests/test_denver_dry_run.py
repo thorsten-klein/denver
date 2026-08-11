@@ -422,10 +422,10 @@ def test_run_stages_dry_run_records_no_performance_trace(tmp_path, exec_recorder
     config = {"stages": ["hello"], "hello": {"provider": "custom", "cmd": "echo hello"}}
     env_dir, cfg_path = _env(tmp_path, config)
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], dry_run=True)
-    assert not (tmp_path / "denver" / ".envs" / "env" / "performance.jsonl").exists()
+    assert not (tmp_path / "env" / ".denver" / "denver" / "performance.jsonl").exists()
 
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
-    events = (tmp_path / "denver" / ".envs" / "env" / "performance.jsonl").read_text().splitlines()
+    events = (tmp_path / "env" / ".denver" / "denver" / "performance.jsonl").read_text().splitlines()
     assert [json.loads(e) for e in events if json.loads(e).get("ph") == "X"]
 
 

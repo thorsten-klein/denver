@@ -891,7 +891,7 @@ def test_run_stages_records_performance_trace(tmp_path, fake_providers, exec_rec
     assert "fakesetup" in err
     assert "finished in" in err
 
-    perf_path = tmp_path / "denver" / ".envs" / "env" / "performance.jsonl"
+    perf_path = tmp_path / "env" / ".denver" / "denver" / "performance.jsonl"
     events = [json.loads(line) for line in perf_path.read_text().splitlines()]
     stage_events = [e for e in events if e.get("ph") == "X"]
     assert len(stage_events) == 1
@@ -908,7 +908,7 @@ def test_run_stages_appends_performance_across_runs(tmp_path, fake_providers, ex
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
-    perf_path = tmp_path / "denver" / ".envs" / "env" / "performance.jsonl"
+    perf_path = tmp_path / "env" / ".denver" / "denver" / "performance.jsonl"
     events = [json.loads(line) for line in perf_path.read_text().splitlines()]
     stage_events = [e for e in events if e.get("ph") == "X"]
     assert len(stage_events) == 2
@@ -924,7 +924,7 @@ def test_run_stages_tolerates_pre_existing_garbage_in_performance_file(
 ):
     monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     env_dir, cfg_path = _env(tmp_path, {})
-    perf_path = tmp_path / "denver" / ".envs" / "env" / "performance.jsonl"
+    perf_path = tmp_path / "env" / ".denver" / "denver" / "performance.jsonl"
     perf_path.parent.mkdir(parents=True)
     perf_path.write_text("not json\n")
 

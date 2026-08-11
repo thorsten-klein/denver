@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -234,6 +235,87 @@ def test_lock_warns_where_locking_is_unsupported(make_context, monkeypatch, capl
     ctx.acquire_lock()
     assert "concurrent runs are not serialised" in caplog.text
     assert ctxmod._HELD_LOCKS == {}
+
+
+# ---- where an env's state lives ------------------------------------------- #
+def test_state_dir_lives_under_the_env_dir(tmp_path):
+    env_dir = tmp_path / "myenv"
+    env_dir.mkdir()
+    got = ctxmod.state_dir_for(env_dir, env_dir / "denver.yml", tmp_path / "fallback", env={})
+    assert got == env_dir / ".denver" / "denver"
+
+
+def test_state_dir_separates_variants_in_one_folder(tmp_path):
+    # a folder holding denver.debug.yml and denver.release.yml holds two
+    # environments, not one -- they must not share a venv.
+    env_dir = tmp_path / "myenv"
+    env_dir.mkdir()
+    debug = ctxmod.state_dir_for(env_dir, env_dir / "denver.debug.yml", tmp_path / "f", env={})
+    release = ctxmod.state_dir_for(env_dir, env_dir / "denver.release.yml", tmp_path / "f", env={})
+    assert debug != release
+
+
+def test_state_dir_separates_two_checkouts_of_one_project(tmp_path):
+    # the case the old name-keyed layout always collided on
+    dirs = []
+    for checkout in ("coA", "coB"):
+        env_dir = tmp_path / checkout / "myenv"
+        env_dir.mkdir(parents=True)
+        dirs.append(ctxmod.state_dir_for(env_dir, env_dir / "denver.yml", tmp_path / "f", env={}))
+    assert dirs[0] != dirs[1]
+
+
+def test_state_dir_honours_an_explicit_root(tmp_path):
+    env_dir = tmp_path / "myenv"
+    env_dir.mkdir()
+    got = ctxmod.state_dir_for(
+        env_dir, env_dir / "denver.yml", tmp_path / "f", env={ctxmod.STATE_DIR_VAR: str(tmp_path / "elsewhere")}
+    )
+    assert got.parent == (tmp_path / "elsewhere")
+    assert got.name.startswith("myenv-")
+
+
+def test_state_dir_falls_back_when_the_env_dir_is_read_only(tmp_path):
+    env_dir = tmp_path / "myenv"
+    env_dir.mkdir()
+    env_dir.chmod(0o500)
+    try:
+        got = ctxmod.state_dir_for(env_dir, env_dir / "denver.yml", tmp_path / "fallback", env={})
+    finally:
+        env_dir.chmod(0o700)
+    assert got.parent == (tmp_path / "fallback")
+    assert got.name.startswith("myenv-")
+
+
+def test_ensure_state_dir_makes_the_state_ignore_itself(make_context):
+    ctx = make_context()
+    ctx.ensure_state_dir()
+    marker = ctx.env_workdir.parent / ".gitignore"
+    assert marker.read_text().endswith("*\n")
+
+
+def test_ensure_state_dir_keeps_an_edited_gitignore(make_context):
+    ctx = make_context()
+    ctx.ensure_state_dir()
+    marker = ctx.env_workdir.parent / ".gitignore"
+    marker.write_text("mine\n")
+    ctx.ensure_state_dir()
+    assert marker.read_text() == "mine\n"
+
+
+def test_ensure_state_dir_writes_no_marker_under_a_shared_root(make_context, tmp_path, monkeypatch):
+    monkeypatch.setenv(ctxmod.STATE_DIR_VAR, str(tmp_path / "shared"))
+    ctx = make_context()
+    ctx.ensure_state_dir()
+    assert not (ctx.env_workdir.parent / ".gitignore").exists()
+
+
+def test_cache_dir_defaults_and_is_overridable(make_context):
+    ctx = make_context()
+    assert ctx.cache_dir == Path("~/.cache/denver").expanduser()
+    assert ctx.env["DENVER_CACHE_DIR"] == str(ctx.cache_dir)
+    other = make_context(env={ctxmod.CACHE_DIR_VAR: "/tmp/shared-cache"})
+    assert other.env["DENVER_CACHE_DIR"] == "/tmp/shared-cache"
 
 
 # ---- Context basics ------------------------------------------------------- #

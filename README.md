@@ -465,14 +465,50 @@ Helpful: The result of this is stored under:
 
 ## Environment variables
 
-denver reads exactly one environment variable of its own:
+denver reads two environment variables of its own:
 
-- **`DENVER_STATE_DIR`** — where denver writes its per-env state (venvs,
-  conan caches, `performance.jsonl`, ...) when running from an installed
-  package rather than a checkout. Defaults to `~/.denver`. Running from a
-  source checkout (or an editable install) instead uses the checkout root,
-  matching every example above — this variable only matters once denver is
-  installed as a regular (non-editable) package.
+- **`DENVER_STATE_DIR`** — an explicit root for denver's per-env state
+  (venv, install trees, fingerprints, logs, `performance.jsonl`), overriding
+  the default location described in **Where an environment's state lives**
+  below. Useful to put that state on a larger or faster disk.
+- **`DENVER_CACHE_DIR`** — the shared *cache* root denver exports as
+  `${DENVER_CACHE_DIR}` for an env to point a tool's own download cache at
+  (e.g. `CONAN_HOME`). Defaults to `~/.cache/denver`. denver never creates
+  or reads it; it only offers the location, because such caches are
+  content-addressed, safe to share between envs and checkouts, and expensive
+  to duplicate.
+
+### Where an environment's state lives
+
+By default, **inside the environment's own directory**:
+
+```
+my-project/env/
+├── denver.yml
+└── .denver/            # denver's state, ignores itself via its own .gitignore
+    └── denver/         # one subdirectory per denver*.yml in this folder
+        ├── .venv.host
+        ├── .conan/
+        └── performance.jsonl
+```
+
+State belongs with the environment that owns it: deleting a checkout deletes
+exactly its own state, two checkouts of one project can never share (or
+destroy) each other's, and a `docker` stage carries it into the container
+for free, since the workspace is already bind-mounted there.
+
+The `<denver.yml stem>` level exists because one folder may hold several
+variants (`denver.debug.yml`, `denver.release.yml`) — those are *different*
+environments sharing a folder, and must not share a venv.
+
+denver falls back to `~/.denver/<env>-<hash>` when it cannot write to the
+env directory (a read-only mount, a vendored base env, an env shipped inside
+an image), and `DENVER_STATE_DIR` overrides both.
+
+> **Upgrading:** state used to live in `<checkout-or-~/.denver>/.envs/<env
+> name>`, keyed on the directory's bare name. Those old directories are simply
+> no longer read — delete them when convenient; everything in them is a cache
+> denver rebuilds on the next run.
 
 Every other flag (`--force`, `--ci`, ...) is set purely by its own CLI flag,
 never inherited from a same-named real environment variable — see `denver
