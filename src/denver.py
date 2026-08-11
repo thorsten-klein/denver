@@ -163,7 +163,7 @@ def print_logo():
     contaminates output a caller might parse. A docker-wrapped env reinvokes
     itself inside the container (see reinvoke_command); the banner only
     shows on the host process relocating into it, not a second time once
-    already inside (ctx.in_docker). Silently does nothing if the asset is
+    already inside (ctx.in_container). Silently does nothing if the asset is
     missing (e.g. a packaging edge case) -- a startup banner is cosmetic,
     never worth dying over.
     """
@@ -1286,7 +1286,7 @@ def run_named_scripts(
     stages = [make_stage(stage_id, config) for stage_id in stage_ids]
     wrappers = [s for s in stages if s.kind == "wrapper"]
     setups = [s for s in stages if s.kind != "wrapper"]
-    active_wrappers = [] if ctx.in_docker else wrappers
+    active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
     def run_for(scoped_stage_ids):
         for stage_id, script in _collect_stage_scripts(ctx, scoped_stage_ids, name):
@@ -1330,6 +1330,7 @@ def run_named_scripts(
         cmd += ["--skip", stage_id]
     for w in active_wrappers:
         cmd += ["--skip", w.stage]
+    _mark_relocated(ctx, active_wrappers)
     for w in reversed(active_wrappers):
         ctx.stage_index, ctx.stage_count = stage_index[w.stage], len(stages)
         ctx.stage_id = w.stage
@@ -1545,7 +1546,7 @@ def run_stages(
     # A wrapper (e.g. docker) is active only on the host: skip it yourself
     # (e.g. `--skip docker`) to run on the host instead, or it's already
     # excluded above by stage filtering; also inactive once already inside it.
-    active_wrappers = [] if ctx.in_docker else wrappers
+    active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
     # a stage past the --until cut-off was dropped by --until; a stage that
     # survived --until/--skip filtering (still in stage_ids) but is missing
@@ -1594,6 +1595,38 @@ def run_stages(
             quiet=quiet,
             start_time=start_time,
         )
+
+
+def _wrappers_inactive(ctx):
+    """True when no wrapper stage may relocate from here, whatever the env declares.
+
+    Two independent reasons, deliberately OR-ed:
+
+    * denver already relocated this process (``ctx.relocated``) -- its own
+      bookkeeping, stated by the outer run, and true for wrapper kinds no
+      filesystem marker could reveal (a ``custom`` stage's ``launcher:``);
+    * this is a container somebody else started (``ctx.in_container``), where
+      relocating again would mean starting a container inside a container.
+
+    The second is deliberately *unscoped*: an env launched from inside a
+    devshell builds right there rather than starting a second container, even
+    though nothing relocated *this* env. Scoping it per-env would turn that
+    into docker-in-docker.
+    """
+    return bool(ctx.relocated) or ctx.in_container
+
+
+def _mark_relocated(ctx, wrappers):
+    """Record which wrapper stages are relocating this run, for the denver that lands inside.
+
+    Set before the wrappers' ``wrap()`` runs, so a wrapper that has to carry
+    the environment across a boundary itself (docker, via ``-e``) can read it
+    off ctx.env; a wrapper whose child simply inherits the environment (a
+    ``custom`` launcher) needs no such help.
+    """
+    from providers.context import RELOCATED_VAR
+
+    ctx.set(RELOCATED_VAR, ",".join(w.stage for w in wrappers))
 
 
 class _StageSkipState:
@@ -1710,6 +1743,7 @@ def _run_stages_via_wrapper(
         # skipped_setups were already shown in pipeline position by the walk
         # above, since nothing will re-invoke to show them.
         cmd = resolve_command(config, forwarded)
+    _mark_relocated(ctx, active_wrappers)
     for w in reversed(active_wrappers):
         ctx.stage_index, ctx.stage_count = skip_state.stage_index[w.stage], skip_state.total
         ctx.stage_id = w.stage
@@ -1740,11 +1774,13 @@ def _run_stages_directly(
     # '[2/4] b skipped', and -- worse -- loses the skip lines entirely when an
     # earlier stage dies, which is exactly when they explain the most.
     #
-    # skipped_wrappers is shown only on the host: once inside the
-    # wrapper (ctx.in_docker), a wrapper stage's absence here is either
-    # it having already run for real (outer process) or reinvoke_command's
-    # own forced --skip (never a genuine user --until/--skip) -- neither
-    # should print a second, spurious "skipped by --skip" banner.
+    # skipped_wrappers is shown only where a user's own --until/--skip is what
+    # removed them. In a process denver relocated (ctx.relocated), a wrapper
+    # stage's absence is either it having already run for real in the outer
+    # process or reinvoke_command's own forced --skip -- neither should print
+    # a second, spurious "skipped by --skip" banner. Keyed on denver's own
+    # bookkeeping rather than on being in a container: a hand-started
+    # container where the user really did type --skip should still say so.
     setup_ids = {n.stage for n in setups}
     skipped_wrapper_ids = {s.stage for s in skipped_wrappers}
     skipped_setup_ids = {s.stage for s in skipped_setups}
@@ -1759,7 +1795,7 @@ def _run_stages_directly(
                 stage_index=skip_state.stage_index[stage.stage],
                 stage_count=skip_state.total,
             )
-        elif stage.stage in skipped_setup_ids or (stage.stage in skipped_wrapper_ids and not ctx.in_docker):
+        elif stage.stage in skipped_setup_ids or (stage.stage in skipped_wrapper_ids and not ctx.relocated):
             _show_skipped(ctx, [stage], skip_state)
     if quiet < 2:
         _print_env_started(ctx, start_time)

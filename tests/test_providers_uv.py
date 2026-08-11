@@ -132,29 +132,29 @@ def test_setup_custom_venv_name_gives_distinct_dir(make_context, run_recorder, w
 
 
 # ---- _ensure_python ----------------------------------------------------------#
-def test_ensure_python_in_docker_matching_version(make_context, run_recorder, which):
+def test_ensure_python_in_container_matching_version(make_context, run_recorder, which):
     run_recorder.responses["python3 --version"] = lambda cmd: type(
         "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
     )()
     config = {"uv": {"python": "3.12.3"}}
-    ctx = make_context(config=config, in_docker=True)
+    ctx = make_context(config=config, in_container=True)
     run_uv(config, ctx)
     assert any("uv python find 3.12.3" in c for c in run_recorder.commands())
 
 
-def test_ensure_python_in_docker_mismatch_dies(make_context, run_recorder, which):
+def test_ensure_python_in_container_mismatch_dies(make_context, run_recorder, which):
     run_recorder.responses["python3 --version"] = lambda cmd: type(
         "R", (), {"stdout": "Python 3.9.0\n", "returncode": 0}
     )()
     config = {"uv": {"python": "3.12.3"}}
-    ctx = make_context(config=config, in_docker=True)
+    ctx = make_context(config=config, in_container=True)
     with pytest.raises(SystemExit):
         run_uv(config, ctx)
 
 
 def test_ensure_python_host_installs(make_context, run_recorder, which):
     config = {"uv": {"python": "3.12.3"}}
-    ctx = make_context(config=config, in_docker=False)
+    ctx = make_context(config=config, in_container=False)
     run_uv(config, ctx)
     assert any("uv python install 3.12.3" in c for c in run_recorder.commands())
 
@@ -459,7 +459,7 @@ def test_install_force_ignores_skip_if(make_context, run_recorder, which):
 
 
 @pytest.mark.parametrize(
-    "no_index, in_docker, expect_present",
+    "no_index, in_container, expect_present",
     [
         (None, True, False),  # default is off, in docker as much as on the host
         (None, False, False),
@@ -469,20 +469,20 @@ def test_install_force_ignores_skip_if(make_context, run_recorder, which):
         (False, True, False),  # explicit False wins even in-docker
     ],
     ids=[
-        "default-in-docker",
+        "default-in-container",
         "default-on-host",
-        "auto-in-docker",
+        "auto-in-container",
         "auto-on-host",
         "explicit-true",
-        "explicit-false-in-docker",
+        "explicit-false-in-container",
     ],
 )
-def test_install_no_index(make_context, run_recorder, which, no_index, in_docker, expect_present):
+def test_install_no_index(make_context, run_recorder, which, no_index, in_container, expect_present):
     uv_cfg = {"requirements": ["r.txt"]}
     if no_index is not None:
         uv_cfg["no-index"] = no_index
     config = {"uv": uv_cfg}
-    ctx = make_context(config=config, in_docker=in_docker)
+    ctx = make_context(config=config, in_container=in_container)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
     install_cmd = next(c for c in run_recorder.commands() if "uv pip install" in c)

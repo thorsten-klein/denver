@@ -37,9 +37,9 @@ def write_compose(ctx, name="docker-compose.yml"):
 
 
 # ---- guard clauses -------------------------------------------------------------#
-def test_already_in_docker_dies(make_context):
+def test_already_in_container_dies(make_context):
     config = {"docker": docker_cfg()}
-    ctx = make_context(config=config, in_docker=True)
+    ctx = make_context(config=config, in_container=True)
     with pytest.raises(SystemExit):
         run_docker(config, ctx)
 
@@ -591,6 +591,28 @@ def test_wrap_builds_run_command(make_context, run_recorder, which):
     assert "-it" in cmd
     assert cmd[-2:] == ["fish", "-l"]
     assert cmd[cmd.index("--workdir") + 1] == str(Path.cwd())
+
+
+def test_wrap_tells_the_inner_denver_it_is_in_a_container(make_context, run_recorder, which):
+    # a container's environment comes from the image and the compose file,
+    # not from this process, so it has to be handed across explicitly --
+    # otherwise the inner denver infers it from a runtime marker file that
+    # only docker is guaranteed to write.
+    config = {"docker": docker_cfg()}
+    ctx = make_context(config=config)
+    write_compose(ctx)
+    ctx, n = run_docker(config, ctx)
+    cmd = n.wrap(ctx, ["fish"])
+    assert cmd[cmd.index("-e") + 1] == "DENVER_IN_CONTAINER=1"
+
+
+def test_wrap_forwards_the_relocating_stage_ids(make_context, run_recorder, which):
+    config = {"docker": docker_cfg()}
+    ctx = make_context(config=config)
+    write_compose(ctx)
+    ctx, n = run_docker(config, ctx)
+    ctx.set("DENVER_RELOCATED", "docker")
+    assert "DENVER_RELOCATED=docker" in n.wrap(ctx, ["fish"])
 
 
 def test_wrap_shows_run_banner(make_context, run_recorder, which, capsys):

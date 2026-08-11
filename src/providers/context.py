@@ -271,6 +271,48 @@ def _drop_bundled_library_path(env):
         env["LD_LIBRARY_PATH"] = original
 
 
+# Set by denver on the process it relocates into a wrapper (see denver.py's
+# reinvoke_command and DockerProvider.wrap): the wrapper stage ids that put
+# it there. Denver's own bookkeeping, never a fact about the machine -- which
+# is why it is stated rather than detected.
+RELOCATED_VAR = "DENVER_RELOCATED"
+
+# Set by a wrapper that relocates into a container, so the process inside
+# never has to infer it. The probes below only have to cover the container
+# denver did *not* create -- one a user started by hand.
+IN_CONTAINER_VAR = "DENVER_IN_CONTAINER"
+
+# Files a container runtime leaves behind, most common first. Deliberately
+# not /proc/self/cgroup string-matching: under cgroup v2 that file is often
+# just '0::/' whether containerised or not, so it answers nothing.
+_CONTAINER_MARKERS = (
+    "/.dockerenv",  # docker
+    "/run/.containerenv",  # podman
+    "/run/systemd/container",  # systemd-nspawn and friends
+)
+
+
+def in_container(env=None):
+    """True when this process is running inside a container.
+
+    Answers a question about the *machine*: is the filesystem/interpreter
+    here a container's rather than the host's. That is what decides whether
+    an interpreter can be installed, whether an offline install makes sense,
+    and which venv directory to use -- none of which are the same question
+    as "did a denver wrapper relocate me" (see Context.relocated).
+
+    An explicit ``DENVER_IN_CONTAINER`` from a wrapper wins; otherwise the
+    runtime's own marker file, or the ``container`` variable podman,
+    systemd-nspawn and lxc set. ``env`` defaults to the real environment.
+    """
+    env = os.environ if env is None else env
+    if env.get(IN_CONTAINER_VAR):
+        return True
+    if env.get("container"):
+        return True
+    return any(Path(marker).exists() for marker in _CONTAINER_MARKERS)
+
+
 class Context:
     """Everything a provider needs to do its job."""
 
@@ -338,7 +380,7 @@ class Context:
         set_quiet(quiet)
 
         self.env_name = self.env_dir.name
-        self.in_docker = Path("/.dockerenv").exists()
+        self.in_container = in_container()
 
         # denver-owned working area for this env (caches, venv, logs, ...)
         self.env_workdir = self.denver_dir / ".envs" / self.env_name
@@ -368,6 +410,30 @@ class Context:
         # stale value of the same name already in the real environment
         self.env.update(builtins)
         self._prefix_prompt()
+
+    @property
+    def in_docker(self):
+        """Deprecated alias for :attr:`in_container`.
+
+        Kept for one release so out-of-tree code reading it keeps working.
+        Read-only on purpose: assigning it used to be how a caller faked
+        "inside a container", and that must now go to ``in_container`` so it
+        cannot silently stop having an effect.
+        """
+        return self.in_container
+
+    @property
+    def relocated(self):
+        """The wrapper stage ids that relocated this denver into where it is running, or [].
+
+        denver's own bookkeeping, stated by the process doing the relocating
+        (see denver.py's reinvoke_command) rather than inferred from the
+        environment -- so it is equally true for a wrapper that relocates
+        into something which is *not* a container, e.g. a `custom` stage with
+        a ``launcher:``, which no filesystem marker could ever reveal.
+        """
+        value = self.env.get(RELOCATED_VAR, "")
+        return [stage for stage in value.split(",") if stage]
 
     @property
     def prompt_prefix(self):
@@ -443,7 +509,7 @@ class Context:
         """Path of a (named) venv; host and in-docker venvs are kept apart."""
         leaf = ".venv" if not name else f".venv-{name}"
         venv = self.env_workdir / leaf
-        return venv if self.in_docker else Path(str(venv) + ".host")
+        return venv if self.in_container else Path(str(venv) + ".host")
 
     # ---- serialising concurrent runs ------------------------------------ #
     def acquire_lock(self, *, wait=True):

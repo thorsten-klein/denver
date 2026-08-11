@@ -937,15 +937,15 @@ def test_run_stages_tolerates_pre_existing_garbage_in_performance_file(
     assert len(stage_events) == 1
 
 
-def test_run_stages_in_docker_skips_wrapper(tmp_path, fake_providers, exec_recorder, monkeypatch):
+def test_run_stages_in_container_skips_wrapper(tmp_path, fake_providers, exec_recorder, monkeypatch):
     import providers.context as ctxmod
 
-    # simulate running inside a container: in_docker becomes True post-init
+    # simulate running inside a container: in_container becomes True post-init
     orig_init = ctxmod.Context.__init__
 
     def patched_init(self, *a, **kw):
         orig_init(self, *a, **kw)
-        self.in_docker = True
+        self.in_container = True
 
     monkeypatch.setattr(ctxmod.Context, "__init__", patched_init)
 
@@ -972,10 +972,10 @@ def test_run_stages_no_logo_for_pure_wrapper(tmp_path, fake_providers, exec_reco
     assert denver.LOGO_PATH.read_text().splitlines()[0] not in err
 
 
-def test_run_stages_logo_shown_even_when_already_in_docker(
+def test_run_stages_logo_shown_even_when_already_in_container(
     tmp_path, fake_providers, exec_recorder, monkeypatch, capsys
 ):
-    """The non-wrapper branch's print_logo() isn't gated on ctx.in_docker,
+    """The non-wrapper branch's print_logo() isn't gated on ctx.in_container,
     so it shows here too -- this is also the path taken when a docker-
     wrapped env reinvokes itself inside the container."""
     import providers.context as ctxmod
@@ -984,7 +984,7 @@ def test_run_stages_logo_shown_even_when_already_in_docker(
 
     def patched_init(self, *a, **kw):
         orig_init(self, *a, **kw)
-        self.in_docker = True
+        self.in_container = True
 
     monkeypatch.setattr(ctxmod.Context, "__init__", patched_init)
 
