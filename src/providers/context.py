@@ -100,6 +100,27 @@ def banner(ctx, stage, message):
         print(f"\033[93m{line}\n| {text} |\n{line}\033[39m", file=sys.stderr)
 
 
+def stage_banner(ctx, stage, provider_name):
+    """Print a single colored '[i/n] stage '<id>' (<provider>)' line to stderr, unless -qq.
+
+    Emitted centrally by denver.py right before a stage's setup() runs, so a
+    stage always announces itself even when its provider dies before
+    reaching a banner() of its own -- which several do, since they check for
+    their tool first (see e.g. ZephyrProvider.setup). Without this, such a
+    failure prints an error with no indication of which stage produced it,
+    and the stage id is exactly what the user needs to pass to --skip next.
+
+    One line rather than banner()'s boxed frame: this marks *entering* a
+    stage, while the boxes below it are the sub-steps that stage actually
+    performs. Naming the provider too, because a stage id is only a label --
+    an env may run the same provider twice under different ids.
+    """
+    if _quiet_level >= 2:
+        return
+    text = f"[{ctx.stage_index}/{ctx.stage_count}] stage '{stage}' ({provider_name})"
+    print(f"\033[93m-- {text}\033[39m", file=sys.stderr)
+
+
 def skip_banner(ctx, stage, reason):
     """Print a single colored '[i/n] stage '<id>' <reason>' line to stderr, unless -qq.
 
@@ -514,14 +535,25 @@ class Context:
             run_kwargs["stderr"] = subprocess.DEVNULL
         if input is not None:
             run_kwargs["input"] = input
-        return subprocess.run(
-            [str(c) for c in cmd],
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            check=check,
-            text=True,
-            **run_kwargs,
-        )
+        try:
+            return subprocess.run(
+                [str(c) for c in cmd],
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                check=check,
+                text=True,
+                **run_kwargs,
+            )
+        except OSError as exc:
+            # The command could not be started at all -- a configured 'exe:'
+            # naming a file that isn't there, a script without the execute
+            # bit, an unreadable cwd. That is a denver.yml problem, but
+            # Popen raises before check= ever applies, so main()'s
+            # CalledProcessError handler never sees it and the user gets a
+            # traceback whose frames name subprocess.py rather than the key
+            # at fault. Reported here instead, naming the stage and command.
+            stage = f"stage '{self.stage_id}': " if self.stage_id else ""
+            die(f"{stage}cannot run {printable}: {exc.strerror or exc}")
 
     def _dry_run_command(self, cmd, printable, *, cwd, env, capture, input):
         """Report ``cmd`` under --dry-run: print-and-skip it, or really run it if it's a query (see Context.run)."""

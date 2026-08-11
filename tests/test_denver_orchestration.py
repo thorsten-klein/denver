@@ -557,6 +557,93 @@ def test_run_stages_numbers_by_full_declared_stage_list(tmp_path, exec_recorder,
     assert "[3/3] fakesetup3 - run" in err
 
 
+def test_run_stages_shows_skipped_stages_in_pipeline_order(tmp_path, exec_recorder, capsys):
+    # the trail must read as the pipeline it describes: a skipped stage
+    # reports in its own position, not batched after every stage that ran.
+    class Fake(Provider):
+        name = "fakesetup"
+        kind = "setup"
+
+        def setup(self, ctx):
+            from providers.context import banner
+
+            banner(ctx, self.stage, "run")
+
+    import providers as providers_module
+
+    providers_module.PROVIDERS["fakesetup"] = Fake
+    try:
+        env_dir, cfg_path = _env(tmp_path, {})
+        config = {
+            "stages": ["one", "two", "three", "four"],
+            "one": {"provider": "fakesetup"},
+            "two": {"provider": "fakesetup"},
+            "three": {"provider": "fakesetup"},
+            "four": {"provider": "fakesetup"},
+        }
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["two", "three"])
+    finally:
+        del providers_module.PROVIDERS["fakesetup"]
+    err = capsys.readouterr().err
+    positions = [
+        err.index("[1/4] one - run"),
+        err.index("[2/4] stage 'two' skipped by --skip"),
+        err.index("[3/4] stage 'three' skipped by --skip"),
+        err.index("[4/4] four - run"),
+    ]
+    assert positions == sorted(positions)
+
+
+def test_run_stages_shows_earlier_skips_before_a_stage_that_dies(tmp_path, exec_recorder, capsys):
+    # the moment the skip lines explain the most is when a later stage fails:
+    # reporting them only after every stage ran lost them entirely.
+    class Dies(Provider):
+        name = "fakedies"
+        kind = "setup"
+
+        def setup(self, ctx):
+            from providers.context import die
+
+            die("boom")
+
+    import providers as providers_module
+
+    providers_module.PROVIDERS["fakedies"] = Dies
+    try:
+        env_dir, cfg_path = _env(tmp_path, {})
+        config = {
+            "stages": ["skipped-one", "boomer"],
+            "skipped-one": {"provider": "fakedies"},
+            "boomer": {"provider": "fakedies"},
+        }
+        with pytest.raises(SystemExit):
+            denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["skipped-one"])
+    finally:
+        del providers_module.PROVIDERS["fakedies"]
+    err = capsys.readouterr().err
+    assert err.index("[1/2] stage 'skipped-one' skipped by --skip") < err.index("[2/2] stage 'boomer' (fakedies)")
+
+
+def test_run_stages_announces_each_stage_before_its_provider_runs(tmp_path, exec_recorder, capsys):
+    # providers that check for their tool before their first banner() call
+    # would otherwise fail with nothing on screen naming the stage -- and the
+    # stage id is exactly what --skip takes.
+    class Silent(Provider):
+        name = "fakesilent"
+        kind = "setup"
+
+    import providers as providers_module
+
+    providers_module.PROVIDERS["fakesilent"] = Silent
+    try:
+        env_dir, cfg_path = _env(tmp_path, {})
+        config = {"stages": ["quiet-stage"], "quiet-stage": {"provider": "fakesilent"}}
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    finally:
+        del providers_module.PROVIDERS["fakesilent"]
+    assert "[1/1] stage 'quiet-stage' (fakesilent)" in capsys.readouterr().err
+
+
 def test_run_stages_shows_skipped_by_until_reason(tmp_path, fake_providers, exec_recorder, capsys):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {

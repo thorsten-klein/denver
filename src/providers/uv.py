@@ -224,7 +224,7 @@ class UvProvider(Provider):
 
         uv = cfg.get("uv")
         if not uv:
-            die("uv provider needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
+            die(f"uv[{self.stage}]: needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
 
         # 'lock: sync:'s lockfile is an install *input*, like a requirements
         # file, so drift in it recreates the venv the same way; 'lock:
