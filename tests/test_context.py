@@ -18,6 +18,7 @@ from providers.context import (
     set_quiet,
     sha256_of_files,
     skip_banner,
+    stage_banner,
     warn,
 )
 
@@ -74,6 +75,42 @@ def test_skip_banner_shows_stage_and_reason(make_context, capsys):
     skip_banner(ctx, "uv-zephyr", "skipped by --skip")
     err = capsys.readouterr().err
     assert "[5/5] stage 'uv-zephyr' skipped by --skip" in err
+
+
+def test_stage_banner_shows_stage_and_provider(make_context, capsys):
+    ctx = make_context()
+    ctx.stage_index, ctx.stage_count = 4, 5
+    stage_banner(ctx, "uv-zephyr", "uv")
+    err = capsys.readouterr().err
+    assert "[4/5] stage 'uv-zephyr' (uv)" in err
+
+
+def test_stage_banner_hidden_at_quiet_level_2(make_context, capsys):
+    ctx = make_context()
+    set_quiet(2)
+    stage_banner(ctx, "uv-zephyr", "uv")
+    assert capsys.readouterr().err == ""
+    set_quiet(0)
+
+
+def test_run_reports_an_unstartable_command_instead_of_raising(make_context, caplog):
+    # a configured 'exe:' naming a file that isn't there: Popen raises before
+    # check= applies, so main()'s CalledProcessError handler never sees it.
+    caplog.set_level("INFO")
+    ctx = make_context()
+    ctx.stage_id = "native-tools"
+    with pytest.raises(SystemExit):
+        ctx.run(["/nonexistent/conan", "config", "home"])
+    assert "stage 'native-tools': cannot run /nonexistent/conan config home" in caplog.text
+
+
+def test_run_reports_an_unstartable_command_without_a_stage(make_context, caplog):
+    # the same call outside any stage (a provider driven directly, e.g. in
+    # tests) still reports the command rather than raising.
+    caplog.set_level("INFO")
+    with pytest.raises(SystemExit):
+        make_context().run(["/nonexistent/tool"])
+    assert "cannot run /nonexistent/tool" in caplog.text
 
 
 def test_skip_banner_hidden_at_quiet_level_2(make_context, capsys):

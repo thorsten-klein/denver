@@ -152,7 +152,7 @@ class ZephyrProvider(Provider):
         # the bare name still renders this stage (see Context.which).
         west = ctx.which("west", dry_fallback=True)
         if not west:
-            die("zephyr provider needs 'west' on PATH (installed by the uv provider)")
+            die(f"zephyr[{self.stage}]: needs 'west' on PATH -- normally installed by an earlier uv stage")
 
         west_yml = Path(cfg["west-yml"])
         zephyr_base = Path(cfg["base"])
