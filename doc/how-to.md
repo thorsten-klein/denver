@@ -191,10 +191,12 @@ Background: Dynamic values a compose file cannot compute itself (host UID/GID, u
 ```bash
 #!/bin/bash -e
 SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+HOST_HOME=$HOME
 (
     echo HOST_UID=$(id -u)
     echo HOST_GID=$(id -g)
-    echo HOST_HOME=$HOME
+    echo HOST_HOME=$HOST_HOME
+    echo HOME=$HOST_HOME
 ) > $SELF_DIR/.env
 ```
 

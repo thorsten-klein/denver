@@ -6,10 +6,7 @@ meant to teach.
 
 They are real, not illustrative. Every `denver.yml` here has its
 `--show-config` output pinned as a golden-file fixture under `tests/golden/`,
-so an example that drifted out of sync with the code fails the build. Three of
-them — `simple-env`, `raspberry-pico` and `zephyr-devshell-4.3.1` — are
-additionally run end-to-end by the `Examples` workflow on `develop`; that last
-one exercises `zephyr-devshell` and `zephyr-docker` through its import chain.
+so an example that drifted out of sync with the code fails the build.
 
 ## Start here
 
