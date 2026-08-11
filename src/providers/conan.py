@@ -131,7 +131,6 @@ Full key reference, worked examples and design notes: ``doc/providers/conan.md``
 """
 
 import json
-import shutil
 from pathlib import Path
 
 from .base import Provider, fill_unset
@@ -235,7 +234,10 @@ class ConanProvider(Provider):
         See module docstring.
         """
         resolved = dict(cfg)
-        resolved["exe"] = cfg.get("exe") or ctx.which("conan")
+        # dry_fallback: under --dry-run the uv stage that installs conan only
+        # printed its commands, so conan legitimately isn't on PATH yet and
+        # the bare name still renders this stage (see Context.which).
+        resolved["exe"] = cfg.get("exe") or ctx.which("conan", dry_fallback=True)
         resolved["recipes-exporter"] = str(
             ctx.resolve_path(cfg.get("recipes-exporter") or CONAN_SCRIPTS_DIR / "recipes.py")
         )
@@ -432,8 +434,8 @@ class ConanProvider(Provider):
     def _write_remotes_json(self, ctx, remotes):
         """Serialize the resolved 'remotes:' config to a JSON file recipes.py's --remotes-json can read."""
         path = ctx.env_workdir / CONAN_INSTALL_DIRNAME / "remotes.json"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(remotes))
+        ctx.mkdir(path.parent)
+        ctx.write_text(path, json.dumps(remotes))
         return path
 
     def _install_config(self, ctx, conan, cfg):
@@ -461,6 +463,12 @@ class ConanProvider(Provider):
         further down, so say it here instead.
         """
         venv = ctx.env.get("VIRTUAL_ENV")
+        # a bare name only ever reaches here from --dry-run's stand-in for a
+        # conan no stage has installed yet (see Context.which): it names no
+        # location at all, so there is nothing to compare against the venv,
+        # and resolving it would silently make it cwd-relative.
+        if ctx.dry_run and not Path(conan).is_absolute():
+            return
         if not venv or Path(conan).resolve().is_relative_to(Path(venv).resolve()):
             return
         warn(
@@ -482,11 +490,18 @@ class ConanProvider(Provider):
         result = ctx.run([conan, "config", "home"], capture=True, echo=False, check=False)
         if result.returncode != 0:
             conan_home = ctx.env.get("CONAN_HOME") or "<unset -- conan's own default, usually ~/.conan2>"
-            die(
-                f"conan[{self.stage}]: `{conan} config home` failed (exit {result.returncode}) -- "
-                f"conan cannot use its home (CONAN_HOME={conan_home}):\n"
-                f"{(result.stderr or '').rstrip()}"
-            )
+            if not ctx.dry_run:
+                die(
+                    f"conan[{self.stage}]: `{conan} config home` failed (exit {result.returncode}) -- "
+                    f"conan cannot use its home (CONAN_HOME={conan_home}):\n"
+                    f"{(result.stderr or '').rstrip()}"
+                )
+            # a dry run reports and carries on: a conan that isn't installed
+            # yet (an earlier uv stage would have) can't answer this, and
+            # aborting here would hide every conan command below.
+            warn(f"conan[{self.stage}]: `{conan} config home` failed -- showing profile detection as if it were needed")
+            ctx.run([conan, "profile", "detect"])
+            return
         home = result.stdout.strip()
         if not (Path(home) / "profiles" / "default").is_file():
             ctx.run([conan, "profile", "detect"])
@@ -499,9 +514,9 @@ class ConanProvider(Provider):
         overall_buildenv = install_root / CONANBUILDENV_NAME
 
         # start from a clean install tree, then aggregate each conanbuildenv.sh
-        shutil.rmtree(install_root, ignore_errors=True)
-        install_root.mkdir(parents=True, exist_ok=True)
-        overall_buildenv.touch()
+        ctx.rmtree(install_root)
+        ctx.mkdir(install_root)
+        ctx.touch(overall_buildenv)
 
         no_auth = cfg["no-auth"]
 
@@ -521,7 +536,7 @@ class ConanProvider(Provider):
 
         for index, conanfile in enumerate(conanfiles):
             out_dir = install_root / f"conanfile-{index}"
-            out_dir.mkdir(parents=True, exist_ok=True)
+            ctx.mkdir(out_dir)
             ctx.run(
                 [
                     conan,
@@ -538,5 +553,4 @@ class ConanProvider(Provider):
                 # conan packages must be standalone: don't leak host PYTHONPATH
                 extra_env={"PYTHONPATH": ""},
             )
-            with overall_buildenv.open("a") as fh:
-                fh.write(f"source {out_dir / CONANBUILDENV_NAME}\n")
+            ctx.append_text(overall_buildenv, f"source {out_dir / CONANBUILDENV_NAME}\n")

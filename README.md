@@ -394,6 +394,9 @@ denver examples/zephyr-devshell-4.3.1 -- echo 123
 # don't use docker; run the same stack directly on your host
 denver examples/zephyr-devshell-4.3.1 --skip docker
 
+# show what the stages would run, without running any of it
+denver examples/zephyr-devshell-4.3.1 --dry-run
+
 # stop after a given stage: that stage and every stage before it runs.
 # (there is no "run just this one stage" -- a stage practically always
 # needs its predecessors: uv needs conan's tools, zephyr needs uv's west)
@@ -528,6 +531,32 @@ behavior isn't obvious from a one-line description.
 - **`--ci`** swaps in narrower/faster args a provider judges appropriate
   for a CI runner (currently just zephyr's `west update`, adding a shallow-clone
   strategy on top of whatever `update-args:` already configures).
+- **`--dry-run`** shows what each stage *would* do instead of doing it: no
+  command is executed for its effect, no file is written, and the final
+  command is printed rather than launched. Useful for answering "what does
+  this env actually run?" without waiting for (or committing to) a real
+  build. Every line is prefixed `[dry-run]`:
+
+  | marker | meaning |
+  | --- | --- |
+  | `+` | a command that would run (skipped) |
+  | `?` | a read-only query, **really run** — its output is what decides the commands below it |
+  | `~` | a file or directory write that would happen (skipped) |
+  | `.` | a script sourced into the environment, **really done** |
+  | `!` | a note about what this preview cannot show |
+
+  The two "really" rows are the deliberate limit. A dry run has to answer
+  questions like *is the image already cached?*, *which conan home?*, *what
+  does `west list` say?* to render the commands that follow — so those
+  read-only queries execute, and scripts are still sourced (that is how
+  denver computes the environment a command is rendered against). Two
+  further consequences worth knowing: the preview reflects the state your
+  machine is in *now*, so an already-built env legitimately shows fewer
+  commands than a clean one (that is what a real run would do too); and a
+  wrapper stage (`docker`) can't be previewed past its own boundary, since
+  entering the container is itself one of the commands not being run —
+  denver says so and points you at `--skip docker` to preview those stages
+  on the host instead.
 - **`--version`** prints the running denver's version and exits — derived
   from the checkout's git tags when denver runs from a checkout (script or
   editable install), otherwise from the installed package's metadata. A

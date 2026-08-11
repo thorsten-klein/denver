@@ -93,7 +93,6 @@ Full key reference, worked examples and design notes: ``doc/providers/uv.md``.
 
 import hashlib
 import json
-import shutil
 from pathlib import Path
 
 from .base import Provider, fill_unset
@@ -137,7 +136,9 @@ class UvProvider(Provider):
         """Resolve python/uv/no-index/skip-if/venv-patcher defaults -- see module docstring."""
         resolved = dict(cfg)
         resolved["python"] = str(cfg.get("python") or "3.12.3")
-        resolved["uv"] = cfg.get("uv") or ctx.which("uv")
+        # dry_fallback: under --dry-run an unavailable uv still renders every
+        # command below it, instead of aborting the preview (see Context.which).
+        resolved["uv"] = cfg.get("uv") or ctx.which("uv", dry_fallback=True)
         no_index = cfg.get("no-index", False)
         resolved["no-index"] = ctx.in_docker if no_index == "auto" else bool(no_index)
         resolved["link-mode"] = cfg.get("link-mode", "copy")
@@ -283,7 +284,7 @@ class UvProvider(Provider):
             if requirements or install_args:
                 self._install(ctx, uv, cfg, requirements, overrides, install_args)
         self._apply_patches(ctx, cfg)
-        self._store_checksums(venv_dir, checksum_files, command_outputs)
+        self._store_checksums(ctx, venv_dir, checksum_files, command_outputs)
         self._freeze(ctx, cfg, uv)
 
     def _resolve_install_args(self, ctx, cfg):
@@ -329,9 +330,12 @@ class UvProvider(Provider):
             # install a different one, so just assert it matches what uv.python
             # asks for, then let uv find (not install) it.
             result = ctx.run(["python3", "--version"], capture=True, echo=False)
-            installed = result.stdout.split()[-1]
-            if installed != version:
-                die(f"docker provides Python {installed}, but uv.python={version}")
+            installed = result.stdout.split()
+            # no output at all only happens when that query couldn't run --
+            # under --dry-run, where a failed query is reported, not fatal
+            # (see Context.run); there is simply no version to compare then.
+            if installed and installed[-1] != version:
+                die(f"docker provides Python {installed[-1]}, but uv.python={version}")
             ctx.run([uv, "python", "find", version])
         else:
             # on the host, uv is free to download/install the requested version itself.
@@ -378,9 +382,13 @@ class UvProvider(Provider):
 
         if recreate and venv_dir.exists():
             info(f"uv: removing {venv_dir}")
-            shutil.rmtree(venv_dir, ignore_errors=True)
+            ctx.rmtree(venv_dir)
 
-        if not venv_dir.exists():
+        # under --dry-run the removal above only *reported* itself, so an
+        # existing venv is still there -- ask whether it would have survived,
+        # not whether it is still on disk, or the `uv venv` that a real run
+        # would follow the removal with would go missing from the preview.
+        if not venv_dir.exists() or (ctx.dry_run and recreate):
             ctx.run([uv, "venv", "-p", version, str(venv_dir)])
 
     def _activate(self, ctx, venv_dir):
@@ -429,7 +437,12 @@ class UvProvider(Provider):
             return
         project = self._project_dir(lock_sync, "sync")
         if not Path(lock_sync).is_file():
-            die(f"uv: 'lock: sync:' file not found: {lock_sync} -- set 'lock: create:' to generate it first")
+            # under --dry-run a 'lock: create:' above only printed its `uv
+            # lock`, so its output legitimately isn't there -- show the sync
+            # that would follow it rather than stopping the preview here.
+            if not ctx.dry_run:
+                die(f"uv: 'lock: sync:' file not found: {lock_sync} -- set 'lock: create:' to generate it first")
+            info(f"uv: 'lock: sync:' file {lock_sync} does not exist (yet)")
         # --active:  sync into the venv this stage just activated, not the
         #            project's own .venv;
         # --frozen:  install the lockfile exactly as it is, never silently
@@ -516,8 +529,8 @@ class UvProvider(Provider):
                     merged_units.append(unit)
                     seen.add(unit)
 
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps([list(u) for u in merged_units]))
+        ctx.mkdir(path.parent)
+        ctx.write_text(path, json.dumps([list(u) for u in merged_units]))
         return [token for unit in merged_units for token in unit]
 
     def _skip_if_satisfied(self, ctx, scripts):
@@ -550,7 +563,7 @@ class UvProvider(Provider):
             return
         ctx.run([patcher, "apply", "-f", patches])
 
-    def _store_checksums(self, venv_dir, checksum_files, command_outputs):
+    def _store_checksums(self, ctx, venv_dir, checksum_files, command_outputs):
         """Record this stage's requirements checksum, so a later run can detect drift and reinstall.
 
         Namespaced by stage id (see 'venv:' sharing, module docstring), so a
@@ -558,7 +571,7 @@ class UvProvider(Provider):
         another stage's own checksum file.
         """
         checksum_path = venv_dir / f"{self.stage}-checksums.txt"
-        checksum_path.write_text(self._requirements_checksum(checksum_files, command_outputs))
+        ctx.write_text(checksum_path, self._requirements_checksum(checksum_files, command_outputs))
 
     def _freeze(self, ctx, cfg, uv):
         """Write the venv's fully-resolved `uv pip freeze` output to 'freeze-to:', if configured."""
@@ -571,5 +584,5 @@ class UvProvider(Provider):
             "# This file is auto-generated by the uv provider!\n"
             "# To update versions: edit the source requirements and re-run with --force.\n"
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(header + frozen)
+        ctx.mkdir(target.parent)
+        ctx.write_text(target, header + frozen)

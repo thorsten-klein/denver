@@ -179,7 +179,10 @@ class DockerProvider(Provider):
         cfg = self.config_section(ctx)
 
         exe = cfg["exe"]
-        if not ctx.which(exe):
+        # dry_fallback: --dry-run never starts a container, so previewing an
+        # env's docker stage on a machine without docker is legitimate and
+        # shouldn't abort before the compose commands are shown.
+        if not ctx.which(exe, dry_fallback=True):
             die(f"docker provider needs '{exe}' on PATH")
 
         compose = cfg["compose"]

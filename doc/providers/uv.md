@@ -125,3 +125,9 @@ when `venv-patcher:` names its `patches:` file explicitly.
   without `--fast` first.
 - **`--force`** recreates the venv from scratch unconditionally and
   bypasses every `skip-if:` script.
+- **`--dry-run`** prints the `uv` commands (and the checksum/`freeze-to:`
+  writes) instead of performing them; an existing venv is never removed. Two
+  things still really happen, because the preview depends on them: each
+  `skip-if:` script runs (its exit code is what decides whether an install
+  would be shown at all), and each `$(...)` entry in `install-args:` runs
+  (its output *is* part of the `uv pip install` line being shown).

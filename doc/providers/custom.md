@@ -57,3 +57,7 @@ command.
   skipping it would break the very propagation it exists for. `launcher:`
   is likewise never skipped under `--fast` — relocating the command isn't
   a build step either.
+- **`--dry-run`** prints `cmd:` instead of running it. `source:` is still
+  sourced, for the same reason it survives `--fast`: its exports are what
+  every later stage's commands are rendered against, so skipping it would
+  make the preview show `${...}` values a real run would never use.
