@@ -936,6 +936,11 @@ def run_hook(ctx, config_path, name):
 
 PERFORMANCE_FILE_NAME = "performance.jsonl"
 
+# what argparse stores for a bare '--run' (no name): list the names this env
+# defines rather than running one. A sentinel object, not a string, so it can
+# never collide with a name an env actually uses.
+LIST_SCRIPTS = object()
+
 
 def _append_trace_event(path, event):
     """Append one JSON-encoded ``event`` to ``path`` as its own line, in a single atomic write.
@@ -1330,6 +1335,40 @@ def run_named_scripts(
         ctx.stage_id = w.stage
         cmd = w.wrap(ctx, cmd)
     ctx.exec(cmd)
+
+
+def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()):
+    """Print every ``scripts: <name>:`` an env defines, grouped by name -- ``denver <env> --run``.
+
+    ``--run``'s names are deliberately open-ended (see run_named_scripts):
+    any string an env's ``scripts:`` sections happen to use, with ``setup``
+    and ``login`` conventions rather than a fixed set. That makes an env's
+    own names unguessable, and they stack across the whole ``import:``
+    chain, so reading one file does not answer it either.
+
+    Deliberately resolved from the *raw* sections (whole-file and
+    section-level ``import:`` applied, nothing else) rather than through
+    resolve_provider_defaults: 'scripts:' is a generic stage key, and full
+    resolution runs every provider's existence checks, so "which scripts
+    exist?" would fail for reasons having nothing to do with scripts.
+    """
+    config = load_config(config_path)
+    config, _ = expand_section_imports(config, env_dir)
+    stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
+
+    by_name = {}
+    for stage_id in stage_ids:
+        scripts = (config.get(stage_id) or {}).get("scripts") or {}
+        for name, entries in scripts.items():
+            by_name.setdefault(name, []).append((stage_id, len(entries or [])))
+
+    if not by_name:
+        print(f"env '{env_dir.name}' defines no 'scripts:' entries -- nothing to --run", file=sys.stderr)
+        return
+    print(f"available --run names for env '{env_dir.name}':", file=sys.stderr)
+    for name in sorted(by_name):
+        stages = ", ".join(f"{stage} ({count} script{'s' if count != 1 else ''})" for stage, count in by_name[name])
+        print(f"  {name:<12} {stages}", file=sys.stderr)
 
 
 def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1, stage_count=1):
@@ -1840,7 +1879,12 @@ def build_arg_parser():
     parser.add_argument("--license", action="store_true", help="show denver's LICENSE (Apache-2.0) and exit")
     parser.add_argument("--show-config", action="store_true", help="print the final deep-merged denver.yml and exit")
     parser.add_argument(
-        "--run", metavar="NAME", help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login')"
+        "--run",
+        metavar="NAME",
+        nargs="?",
+        const=LIST_SCRIPTS,
+        help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login'); "
+        "with no NAME, list the names this env defines",
     )
     parser.add_argument(
         "-q",
@@ -2041,6 +2085,10 @@ def _run_cli(argv=None):
 
     if args.show_config:
         show_config(env_dir, config, config_path, until_stage=args.until, skip_stages=args.skip)
+        return
+
+    if args.run == LIST_SCRIPTS:
+        list_named_scripts(env_dir, config_path, until_stage=args.until, skip_stages=args.skip)
         return
 
     if args.run:
