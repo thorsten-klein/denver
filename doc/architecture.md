@@ -383,6 +383,31 @@ That symmetry is deliberate: the host and container paths run the same
 stages from the same config, so "does it work without Docker?" is one flag
 away rather than a separate code path.
 
+### How the inner run knows where it is
+
+Two separate questions, answered separately rather than by one guess:
+
+- **"Did a wrapper relocate me?"** is denver's own bookkeeping, so it is
+  *stated*, not detected: the relocating run sets `DENVER_RELOCATED` to the
+  wrapper stage ids that put the inner process there. Being denver's own
+  variable, it works for a wrapper that relocates into something which is
+  not a container at all — a `custom` stage with a `launcher:` — which no
+  amount of probing the filesystem could reveal. It is what stops a
+  denver-forced `--skip` from being reported as if the user had typed it.
+- **"Am I inside a container?"** is a fact about the machine — it decides
+  whether an interpreter can be installed, whether an offline install makes
+  sense, and which venv directory is used. A wrapper that relocates into a
+  container sets `DENVER_IN_CONTAINER` so the inner run never has to infer
+  it; failing that, denver probes `/.dockerenv`, `/run/.containerenv`, the
+  `container` variable and `/run/systemd/container`, which covers a
+  container someone started by hand. (Not `/proc/self/cgroup`: under cgroup
+  v2 it commonly reads `0::/` either way, so it answers nothing.)
+
+Being inside a container at all — however denver learned it — is enough to
+stop a wrapper stage relocating again, deliberately without regard to
+*which* env put you there: starting an env from inside a devshell builds
+right there rather than starting a second container.
+
 ## Quiet levels
 
 - **`-q`** silences info lines, echoed commands, and the output of

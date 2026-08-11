@@ -268,7 +268,7 @@ def test_uv_in_docker_skips_the_version_check_when_python3_cannot_answer(make_co
     # only reachable under --dry-run, where a failed query is reported rather
     # than fatal: there is simply no version to compare then.
     config = {"uv": {"python": "3.12.3"}}
-    ctx = make_context(config=config, dry_run=True, in_docker=True)
+    ctx = make_context(config=config, dry_run=True, in_container=True)
     run_recorder.responses["python3 --version"] = type("R", (), {"stdout": "", "returncode": 127})()
 
     _run_uv(config, ctx)

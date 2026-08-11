@@ -140,7 +140,7 @@ class UvProvider(Provider):
         # command below it, instead of aborting the preview (see Context.which).
         resolved["uv"] = cfg.get("uv") or ctx.which("uv", dry_fallback=True)
         no_index = cfg.get("no-index", False)
-        resolved["no-index"] = ctx.in_docker if no_index == "auto" else bool(no_index)
+        resolved["no-index"] = ctx.in_container if no_index == "auto" else bool(no_index)
         resolved["link-mode"] = cfg.get("link-mode", "copy")
         resolved["append-mode"] = cfg.get("append-mode", False)
 
@@ -325,8 +325,8 @@ class UvProvider(Provider):
 
     def _ensure_python(self, ctx, uv, version):
         """Make interpreter ``version`` available to uv: verified offline in docker, installed otherwise."""
-        if ctx.in_docker:
-            # in docker the interpreter is fixed (baked into the image); we can't
+        if ctx.in_container:
+            # in a container the interpreter is fixed (baked into the image); we can't
             # install a different one, so just assert it matches what uv.python
             # asks for, then let uv find (not install) it.
             result = ctx.run(["python3", "--version"], capture=True, echo=False)

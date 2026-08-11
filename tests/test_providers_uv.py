@@ -134,7 +134,7 @@ def test_ensure_python_in_docker_matching_version(make_context, run_recorder, wh
         "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
     )()
     config = {"uv": {"python": "3.12.3"}}
-    ctx = make_context(config=config, in_docker=True)
+    ctx = make_context(config=config, in_container=True)
     run_uv(config, ctx)
     assert any("uv python find 3.12.3" in c for c in run_recorder.commands())
 
@@ -144,14 +144,14 @@ def test_ensure_python_in_docker_mismatch_dies(make_context, run_recorder, which
         "R", (), {"stdout": "Python 3.9.0\n", "returncode": 0}
     )()
     config = {"uv": {"python": "3.12.3"}}
-    ctx = make_context(config=config, in_docker=True)
+    ctx = make_context(config=config, in_container=True)
     with pytest.raises(SystemExit):
         run_uv(config, ctx)
 
 
 def test_ensure_python_host_installs(make_context, run_recorder, which):
     config = {"uv": {"python": "3.12.3"}}
-    ctx = make_context(config=config, in_docker=False)
+    ctx = make_context(config=config, in_container=False)
     run_uv(config, ctx)
     assert any("uv python install 3.12.3" in c for c in run_recorder.commands())
 
@@ -348,7 +348,7 @@ def test_install_no_index(make_context, run_recorder, which, no_index, in_docker
     if no_index is not None:
         uv_cfg["no-index"] = no_index
     config = {"uv": uv_cfg}
-    ctx = make_context(config=config, in_docker=in_docker)
+    ctx = make_context(config=config, in_container=in_docker)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
     install_cmd = next(c for c in run_recorder.commands() if "uv pip install" in c)

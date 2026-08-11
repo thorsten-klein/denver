@@ -124,14 +124,62 @@ def test_interpolate_variants():
 
 
 # ---- Context basics ------------------------------------------------------- #
+# ---- container detection / relocation bookkeeping ------------------------- #
+def test_in_container_via_explicit_variable(monkeypatch):
+    # what a wrapper hands across the boundary, so the process inside never
+    # has to infer it from a runtime's marker file
+    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", ())
+    assert ctxmod.in_container({ctxmod.IN_CONTAINER_VAR: "1"}) is True
+
+
+def test_in_container_via_runtime_variable(monkeypatch):
+    # podman/systemd-nspawn/lxc set this themselves
+    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", ())
+    assert ctxmod.in_container({"container": "podman"}) is True
+
+
+def test_in_container_via_marker_file(monkeypatch, tmp_path):
+    marker = tmp_path / ".containerenv"
+    marker.write_text("")
+    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", (str(marker),))
+    assert ctxmod.in_container({}) is True
+
+
+def test_in_container_false_without_any_signal(monkeypatch):
+    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", ())
+    assert ctxmod.in_container({}) is False
+
+
+def test_in_docker_is_a_read_only_alias(make_context):
+    ctx = make_context(in_container=True)
+    assert ctx.in_docker is True
+    # assigning it used to be how callers faked "inside a container"; that has
+    # to fail loudly now rather than silently stop having an effect
+    with pytest.raises(AttributeError):
+        ctx.in_docker = False
+
+
+def test_relocated_lists_the_wrapper_stages(make_context):
+    ctx = make_context()
+    assert ctx.relocated == []
+    ctx.set(ctxmod.RELOCATED_VAR, "docker,launcher")
+    assert ctx.relocated == ["docker", "launcher"]
+
+
+def test_relocated_ignores_an_empty_value(make_context):
+    ctx = make_context()
+    ctx.set(ctxmod.RELOCATED_VAR, "")
+    assert ctx.relocated == []
+
+
 def test_builtins_host(make_context):
-    ctx = make_context(in_docker=False)
+    ctx = make_context(in_container=False)
     assert ctx.env["DENVER_ENV_NAME"] == "myenv"
     assert ctx.venv_dir.name.endswith(".venv.host")
 
 
 def test_builtins_docker_venv(make_context):
-    ctx = make_context(in_docker=True)
+    ctx = make_context(in_container=True)
     assert ctx.venv_dir.name == ".venv"
 
 

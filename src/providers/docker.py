@@ -109,6 +109,31 @@ from .base import Provider, fill_unset
 from .context import banner, die
 
 
+def _relocation_env(ctx):
+    """``docker compose run -e`` flags telling the denver inside where it is.
+
+    A container's environment comes from the image and the compose file, not
+    from this process, so both facts have to be handed across the boundary
+    explicitly:
+
+    * ``DENVER_IN_CONTAINER`` -- so the inner denver never has to infer it
+      from a runtime's marker file. ``/.dockerenv`` is docker's; podman
+      writes something else, and other runtimes write nothing at all, which
+      would leave the inner run believing it was on the host and trying to
+      relocate a second time.
+    * ``DENVER_RELOCATED`` -- which wrapper stage ids put it there (see
+      denver.py's _mark_relocated), so a wrapper stage's absence inside is
+      known to be denver's own doing rather than a user's ``--skip``.
+    """
+    from .context import IN_CONTAINER_VAR, RELOCATED_VAR
+
+    flags = ["-e", f"{IN_CONTAINER_VAR}=1"]
+    relocated = ctx.env.get(RELOCATED_VAR)
+    if relocated:
+        flags += ["-e", f"{RELOCATED_VAR}={relocated}"]
+    return flags
+
+
 def _relocation_mounts(ctx):
     """``docker compose run -v`` flags making the running denver reachable inside the container.
 
@@ -168,7 +193,7 @@ class DockerProvider(Provider):
 
     def setup(self, ctx):
         """Validate the compose files/exe, run env-scripts, and build the image if not found locally/remotely."""
-        if ctx.in_docker:
+        if ctx.in_container:
             die("docker provider: already running inside a container")
 
         # seed convenience variables BEFORE the config section is interpolated,
@@ -249,6 +274,7 @@ class DockerProvider(Provider):
             *self._compose_args,
             "run",
             *self._run_args,
+            *_relocation_env(ctx),
             *_relocation_mounts(ctx),
             # land in the directory denver was invoked from (bind-mounted at
             # the same absolute path in the container), not the image's WORKDIR

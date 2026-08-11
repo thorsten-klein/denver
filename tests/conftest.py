@@ -154,13 +154,13 @@ def make_env(tmp_path):
 
 @pytest.fixture
 def make_context(tmp_path, monkeypatch):
-    """Factory to build a Context with controllable in_docker / env."""
+    """Factory to build a Context with controllable in_container / env."""
 
     def _make(
         env_dir=None,
         config=None,
         import_dirs=None,
-        in_docker=False,
+        in_container=False,
         env=None,
         quiet=0,
         fast=False,
@@ -186,7 +186,7 @@ def make_context(tmp_path, monkeypatch):
             ci=ci,
             dry_run=dry_run,
         )
-        ctx.in_docker = in_docker
+        ctx.in_container = in_container
         ctx.venv_dir = ctx.venv_dir_for(None)
         return ctx
 
