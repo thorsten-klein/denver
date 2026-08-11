@@ -14,9 +14,11 @@ SELF_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CONAN_HOME=$SELF_DIR/.conan2
 mkdir -p "$CONAN_HOME"
 
+HOST_HOME=$HOME
 (
     echo HOST_UID=$(id -u)
     echo HOST_GID=$(id -g)
-    echo HOST_HOME=$HOME
+    echo HOST_HOME=$HOST_HOME
+    echo HOME=$HOST_HOME
     echo CONAN_HOME=$CONAN_HOME
 ) > $SELF_DIR/.env
