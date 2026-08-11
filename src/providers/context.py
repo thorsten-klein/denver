@@ -708,11 +708,39 @@ class Context:
             die(f"failed to exec {cmd[0]}: {exc}")
 
 
-def sha256_of_files(paths):
-    """Stable checksum block for a set of files (missing files are tolerated)."""
+def fingerprint_label(path, base=None):
+    """How ``path`` is named inside a fingerprint: relative to ``base`` where possible.
+
+    A fingerprint exists to answer "did the inputs change since last run",
+    so it must not also change when the same inputs sit at a different
+    absolute path -- which is the normal state of affairs with two checkouts
+    of one project, a renamed directory, or a git worktree. Naming a file
+    relative to the env dir keeps the answer about content and layout, not
+    about where the tree happens to live.
+
+    Anything not reachable relatively (a different drive, or no ``base`` at
+    all) keeps its absolute path: that is still stable for the run it
+    describes, and it is better to over-invalidate than to conflate two
+    genuinely different files.
+    """
+    path = Path(path)
+    if base is None:
+        return str(path)
+    try:
+        return str(Path(os.path.relpath(path, base)))
+    except ValueError:  # pragma: no cover - Windows-only (paths on different drives)
+        return str(path)
+
+
+def sha256_of_files(paths, base=None):
+    """Stable checksum block for a set of files (missing files are tolerated).
+
+    ``base`` makes the block independent of where the tree lives -- see
+    fingerprint_label.
+    """
     lines = []
     for path in paths:
         p = Path(path)
         digest = hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "0" * 64
-        lines.append(f"{digest}  {p}")
+        lines.append(f"{digest}  {fingerprint_label(p, base)}")
     return "\n".join(lines)

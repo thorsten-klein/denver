@@ -492,6 +492,39 @@ def test_exec_oserror_dies(make_context, monkeypatch):
 
 
 # ---- checksums ------------------------------------------------------------ #
+def test_sha256_of_files_is_independent_of_where_the_tree_lives(tmp_path):
+    # the same requirements file in two checkouts of one project must
+    # fingerprint identically -- otherwise every switch between them looks
+    # like drift and rebuilds the venv from scratch.
+    blocks = []
+    for checkout in ("coA", "coB"):
+        env_dir = tmp_path / checkout / "myenv"
+        env_dir.mkdir(parents=True)
+        (env_dir / "r.txt").write_text("packaging\n")
+        blocks.append(sha256_of_files([env_dir / "r.txt"], base=env_dir))
+    assert blocks[0] == blocks[1]
+
+
+def test_sha256_of_files_still_separates_different_files(tmp_path):
+    (tmp_path / "a.txt").write_text("same\n")
+    (tmp_path / "b.txt").write_text("same\n")
+    one = sha256_of_files([tmp_path / "a.txt"], base=tmp_path)
+    other = sha256_of_files([tmp_path / "b.txt"], base=tmp_path)
+    assert one != other
+
+
+def test_fingerprint_label_keeps_an_absolute_path_without_a_base(tmp_path):
+    assert ctxmod.fingerprint_label(tmp_path / "r.txt") == str(tmp_path / "r.txt")
+
+
+def test_fingerprint_label_reaches_outside_the_base(tmp_path):
+    # a file in an imported base env sits beside the env dir, not under it;
+    # '../' is still stable across checkouts of the same layout.
+    env_dir = tmp_path / "leaf"
+    env_dir.mkdir()
+    assert ctxmod.fingerprint_label(tmp_path / "base" / "r.txt", env_dir) == "../base/r.txt"
+
+
 def test_sha256_of_files(tmp_path):
     f = tmp_path / "a.txt"
     f.write_text("hello")

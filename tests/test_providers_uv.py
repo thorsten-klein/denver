@@ -173,7 +173,7 @@ def test_ensure_venv_checksum_unchanged_skips_venv_creation(make_context, run_re
     ctx.venv_dir.mkdir(parents=True)
     from providers.context import sha256_of_files
 
-    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"]))
+    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
     run_recorder.calls.clear()
 
     run_uv(config, ctx)
@@ -202,7 +202,7 @@ def test_ensure_venv_force_recreates_existing(make_context, run_recorder, which)
     ctx.venv_dir.mkdir(parents=True)
     from providers.context import sha256_of_files
 
-    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"]))
+    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
     ctx.force = True
 
     run_uv(config, ctx)
@@ -260,7 +260,7 @@ def test_install_skips_when_all_skip_if_scripts_pass(make_context, run_recorder,
     from providers.context import sha256_of_files
 
     ctx.venv_dir.mkdir(parents=True)
-    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"]))
+    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
     run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
 
     run_uv(config, ctx)
@@ -413,7 +413,7 @@ def test_install_args_command_entry_checksum_unchanged_skips_venv_creation(make_
     ctx = make_context(config=config)
     run_recorder.responses["echo foo==1.0"] = lambda cmd: type("R", (), {"stdout": "foo==1.0\n", "returncode": 0})()
 
-    checksum = UvProvider(config)._requirements_checksum([], ["foo==1.0\n"])
+    checksum = UvProvider(config)._requirements_checksum(ctx, [], ["foo==1.0\n"])
     ctx.venv_dir.mkdir(parents=True)
     (ctx.venv_dir / "uv-checksums.txt").write_text(checksum)
     run_recorder.calls.clear()
@@ -692,7 +692,7 @@ def test_lock_skipped_by_skip_if(make_context, run_recorder, which):
     ctx.venv_dir.mkdir(parents=True)
     from providers.context import sha256_of_files
 
-    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "py" / "uv.lock"]))
+    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "py" / "uv.lock"], base=ctx.env_dir))
 
     run_uv(config, ctx)
     assert not any("uv sync" in c for c in run_recorder.commands())

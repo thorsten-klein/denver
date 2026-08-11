@@ -50,7 +50,7 @@ import os
 from pathlib import Path
 
 from .base import Provider, fill_unset
-from .context import banner, die, find_in_parents, find_outermost_in_parents, info
+from .context import banner, die, find_in_parents, find_outermost_in_parents, fingerprint_label, info
 
 # extra `west update` args added on top of 'update-args:' whenever ctx.ci --
 # a fixed shallow-clone strategy, not a denver.yml key (see module docstring).
@@ -209,8 +209,14 @@ class ZephyrProvider(Provider):
             ensure(key, str(value))
 
     def _west_info(self, ctx, west, top, west_yml, zephyr_base):
-        """Build a fingerprint string (west-yml path, zephyr commit, resolved manifest) to detect workspace drift."""
-        lines = [f"west-yml: {west_yml}"]
+        """Build a fingerprint string (west-yml path, zephyr commit, resolved manifest) to detect workspace drift.
+
+        The manifest is named relative to the env dir: a fingerprint must
+        answer "did the workspace change", not "did this tree move", and an
+        absolute path makes a second checkout of the same project look like
+        drift and re-run `west update` in full (see context.fingerprint_label).
+        """
+        lines = [f"west-yml: {fingerprint_label(west_yml, ctx.env_dir)}"]
         commit = ctx.run(
             ["git", "-C", str(zephyr_base), "rev-parse", "HEAD"],
             capture=True,
