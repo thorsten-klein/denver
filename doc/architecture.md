@@ -151,16 +151,25 @@ name is already exported:
   `denver.yml`).
 - **`DENVER_ENV_NAME`** — that directory's name.
 - **`DENVER_ENV_WORKDIR`** — denver's own working area for this environment
-  (`<DENVER_DIR>/.envs/<env>`): venvs, caches, logs, `performance.jsonl`.
+  (`<env dir>/.denver/<denver.yml stem>/` by default): venv, install trees,
+  fingerprints, logs, `performance.jsonl`. Per environment and never shared
+  — see "Where an environment's state lives" in the top-level
+  [`../README.md`](../README.md).
+- **`DENVER_CACHE_DIR`** — the *shared* cache root (`~/.cache/denver` by
+  default), offered for an env to point a tool's own download cache at, e.g.
+  `env: {CONAN_HOME: "${DENVER_CACHE_DIR}/conan2"}`. Safe to share across
+  envs and checkouts because the tools owning such caches lock them
+  themselves; denver writes nothing there itself.
 - **`SHELL_PROMPT_PREFIX`** — `(<env>) `: the text marking a shell as
   running inside this environment, so a prompt reads
   `(raspberry-pico) dev@host:~/ws$`. fish reads this natively from **fish
   4.8.0** onwards (see below).
 
 These are exported into the environment too, so scripts, compose files and
-the final command can read them as ordinary variables. `DENVER_STATE_DIR` —
-the one variable denver *reads* rather than sets — is documented in the
-top-level [`../README.md`](../README.md).
+the final command can read them as ordinary variables. `DENVER_STATE_DIR`
+and `DENVER_CACHE_DIR` — the two variables denver *reads* rather than sets,
+and where an env's state lives by default — are documented in the top-level
+[`../README.md`](../README.md).
 
 ### The prompt marker
 

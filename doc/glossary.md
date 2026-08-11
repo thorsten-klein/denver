@@ -120,7 +120,15 @@ individual stages, and a stage's own `disabled: true` opts it out by default.
 output while keeping each stage's banner and summary; `-qq` silences those
 too, leaving only the launched command's own output. Errors always print.
 
-**`DENVER_STATE_DIR`** — the one environment variable denver itself *reads*:
-where it writes per-environment state when running from an installed package.
-Defaults to `~/.denver`. Full explanation in the top-level
+**State directory** — where denver keeps everything it builds for one
+environment (venv, install trees, fingerprints, logs, `performance.jsonl`):
+`<env dir>/.denver/<denver.yml stem>/`, inside the environment's own
+directory and ignoring itself via a `.gitignore` denver writes there. Keyed on
+the config file, so two variants in one folder — and two checkouts of one
+project — never share it.
+
+**`DENVER_STATE_DIR` / `DENVER_CACHE_DIR`** — the two environment variables
+denver itself *reads*: an explicit root for the state directory above, and
+the shared cache root denver exports for an env to point a tool's own
+download cache at. Full explanation in the top-level
 [`../README.md`](../README.md).

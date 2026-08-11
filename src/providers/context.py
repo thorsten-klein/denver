@@ -313,11 +313,71 @@ def in_container(env=None):
     return any(Path(marker).exists() for marker in _CONTAINER_MARKERS)
 
 
+# denver's own state directory inside an env: <env dir>/.denver/<config stem>.
+STATE_DIRNAME = ".denver"
+
+# explicit override for where per-env state goes, and the shared,
+# content-addressed cache tier (see state_dir_for / Context._init_builtins).
+STATE_DIR_VAR = "DENVER_STATE_DIR"
+CACHE_DIR_VAR = "DENVER_CACHE_DIR"
+
+
+def env_state_key(env_dir, config_path):
+    """A collision-free directory name for one env, for use under a shared root.
+
+    The env dir's *name* alone is what used to key this, which collides
+    whenever two projects have an env folder of the same name -- and always
+    collides for two checkouts of one project, since both contain the same
+    folder. The resolved config path is what actually identifies an env, so
+    it is hashed in; the readable name is kept as a prefix so the directory
+    is still recognisable.
+    """
+    digest = hashlib.sha256(str(Path(config_path).resolve()).encode()).hexdigest()[:8]
+    return f"{Path(env_dir).name}-{digest}"
+
+
+def state_dir_for(env_dir, config_path, fallback_root, env=None):
+    """Where this env's state (venv, caches, logs, fingerprints) lives.
+
+    Under the env's own directory by default -- state belongs with the env
+    that owns it, so deleting a checkout deletes exactly its own state, two
+    checkouts cannot share one, and a wrapper that bind-mounts the workspace
+    carries it across without anything extra.
+
+    ``<config stem>`` is a level of its own because one directory may hold
+    several variants (``denver.debug.yml``, ``denver.release.yml``), and
+    those are different environments sharing a folder -- not one.
+
+    Two escapes, in order: ``DENVER_STATE_DIR`` names a root explicitly (a
+    larger or faster disk); otherwise an env dir denver cannot write to -- a
+    read-only mount, a vendored base env, an env shipped inside an image --
+    falls back to the same root the tool used before. Both keep envs apart by
+    ``env_state_key``, since a shared root has to.
+    """
+    env = os.environ if env is None else env
+    override = env.get(STATE_DIR_VAR)
+    if override:
+        return Path(override).expanduser().resolve() / env_state_key(env_dir, config_path)
+    if os.access(env_dir, os.W_OK):
+        return Path(env_dir) / STATE_DIRNAME / Path(config_path).stem
+    return Path(fallback_root) / env_state_key(env_dir, config_path)
+
+
 class Context:
     """Everything a provider needs to do its job."""
 
     def __init__(
-        self, denver_dir, env_dir, config, import_dirs=None, quiet=0, fast=False, force=False, ci=False, dry_run=False
+        self,
+        denver_dir,
+        env_dir,
+        config,
+        import_dirs=None,
+        quiet=0,
+        fast=False,
+        force=False,
+        ci=False,
+        dry_run=False,
+        config_path=None,
     ):
         """Compute every built-in path/flag a provider might need, and seed ``self.env`` with them.
 
@@ -382,8 +442,13 @@ class Context:
         self.env_name = self.env_dir.name
         self.in_container = in_container()
 
-        # denver-owned working area for this env (caches, venv, logs, ...)
-        self.env_workdir = self.denver_dir / ".envs" / self.env_name
+        # denver-owned working area for this env (venv, caches, logs, ...),
+        # keyed on the config file rather than on the env dir's bare name --
+        # see state_dir_for. config_path defaults to the conventional
+        # denver.yml so a provider driven directly (e.g. in tests) still gets
+        # a sensible location.
+        self.config_path = Path(config_path) if config_path else self.env_dir / "denver.yml"
+        self.env_workdir = state_dir_for(self.env_dir, self.config_path, self.denver_dir / ".envs")
         self.logs_dir = self.env_workdir / ".logs"
 
         # venv lives under the workdir; host and in-docker venvs are kept apart.
@@ -404,6 +469,12 @@ class Context:
             "DENVER_ENV_DIR": str(self.env_dir),
             "DENVER_ENV_NAME": self.env_name,
             "DENVER_ENV_WORKDIR": str(self.env_workdir),
+            # The shared, content-addressed tier: a download cache several
+            # envs (and several checkouts) can safely share, because the
+            # tools that own it -- conan, uv, west -- do their own locking.
+            # Anything denver itself writes belongs in DENVER_ENV_WORKDIR
+            # instead, which is per env and never shared.
+            "DENVER_CACHE_DIR": str(self.cache_dir),
             "SHELL_PROMPT_PREFIX": self.prompt_prefix,
         }
         # denver-owned identifiers always reflect the current run, even over a
@@ -434,6 +505,46 @@ class Context:
         """
         value = self.env.get(RELOCATED_VAR, "")
         return [stage for stage in value.split(",") if stage]
+
+    @property
+    def cache_dir(self):
+        """The shared cache root (``DENVER_CACHE_DIR``, default ``~/.cache/denver``).
+
+        Only ever a *pointer* denver exports for an env to aim a tool's own
+        cache at (e.g. ``CONAN_HOME``); denver neither creates nor reads it.
+        Unlike ``env_workdir`` it is deliberately shared across envs and
+        checkouts -- the tools that own such caches do their own locking, and
+        duplicating them per checkout is expensive for no benefit.
+        """
+        configured = self.env.get(CACHE_DIR_VAR)
+        return Path(configured).expanduser() if configured else Path("~/.cache/denver").expanduser()
+
+    def ensure_state_dir(self):
+        """Create this env's state directory, and keep it out of the project's git history.
+
+        A ``.gitignore`` holding a single ``*`` makes the directory ignore
+        itself, so no project has to add anything to its own ``.gitignore``
+        for state denver put inside the working tree. Written once, when the
+        directory is created, and never rewritten -- an author who edits it
+        keeps their version.
+        """
+        legacy = self.denver_dir / ".envs" / self.env_name
+        if legacy != self.env_workdir and legacy.is_dir() and not self.env_workdir.exists():
+            # Deliberately not migrated automatically: that old directory was
+            # keyed on the env dir's bare name, so it may hold the state of a
+            # *different* env of the same name (which is the bug this move
+            # fixes). Moving it could hand one env another's venv, so it is
+            # reported and left for the user to delete.
+            info(
+                f"denver: this env's state now lives in {self.env_workdir}; "
+                f"{legacy} is no longer used and can be deleted (it will be rebuilt on this run)"
+            )
+        self.mkdir(self.env_workdir)
+        if self.env_workdir.parent.name != STATE_DIRNAME:
+            return  # a shared root (DENVER_STATE_DIR, or a read-only env dir)
+        marker = self.env_workdir.parent / ".gitignore"
+        if not marker.exists():
+            self.write_text(marker, "# denver's own state for this env -- not part of the project.\n*\n")
 
     @property
     def prompt_prefix(self):
