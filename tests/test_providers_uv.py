@@ -9,17 +9,20 @@ from providers.uv import UvProvider
 
 @pytest.fixture(autouse=True)
 def _venv_creates_dir(run_recorder):
-    """'uv venv -p <version> <dir>' has the real side effect of creating <dir>;
-    subsequent steps (checksums, skip-if) depend on it existing.
+    """'uv venv [-p <version>] <dir>' has the real side effect of creating <dir>;
+    subsequent steps (checksums, skip-if) depend on it existing. Keyed on
+    'uv venv' rather than 'venv -p', since '-p' is only passed when the stage
+    actually configures a 'python:' (there is no default -- see
+    UvProvider.resolve_defaults).
     Also default 'python3 --version' (used for the in-docker version check) to
-    match the uv.python default so tests only need to override it explicitly
-    when they want a mismatch."""
+    match the version those tests configure, so they only need to override it
+    explicitly when they want a mismatch."""
 
     def create_venv_dir(cmd):
         Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
         return run_recorder.default
 
-    run_recorder.responses["venv -p"] = create_venv_dir
+    run_recorder.responses["uv venv"] = create_venv_dir
     run_recorder.responses["python3 --version"] = lambda cmd: type(
         "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
     )()
@@ -154,6 +157,137 @@ def test_ensure_python_host_installs(make_context, run_recorder, which):
     ctx = make_context(config=config, in_docker=False)
     run_uv(config, ctx)
     assert any("uv python install 3.12.3" in c for c in run_recorder.commands())
+
+
+def _write_pyvenv_cfg(venv_dir, version, home=None):
+    """Give ``venv_dir`` the pyvenv.cfg a real venv creator would have written."""
+    venv_dir.mkdir(parents=True, exist_ok=True)
+    home = venv_dir if home is None else home
+    (venv_dir / "pyvenv.cfg").write_text(f"home = {home}\nimplementation = CPython\nversion_info = {version}\n")
+
+
+# ---- 'python:' is optional, and an existing venv's interpreter wins ----------#
+def test_no_python_configured_passes_no_dash_p(make_context, run_recorder, which):
+    # denver picks no interpreter of its own: uv's discovery decides.
+    config = {"uv": {}}
+    ctx = make_context(config=config)
+    run_uv(config, ctx)
+    venv_cmd = next(c for c in run_recorder.commands() if " venv " in c)
+    assert "-p" not in venv_cmd.split()
+    assert not any("python install" in c for c in run_recorder.commands())
+
+
+def test_no_python_configured_shows_as_null(make_context, which):
+    resolved = UvProvider.resolve_defaults(make_context(), {}, {})
+    assert resolved["python"] is None
+
+
+def test_existing_venv_with_matching_python_is_reused(make_context, run_recorder, which):
+    config = {"uv": {"python": "3.12.3"}}
+    ctx = make_context(config=config)
+    _write_pyvenv_cfg(ctx.venv_dir, "3.12.3")
+    (ctx.venv_dir / "uv-checksums.txt").write_text("")
+    run_uv(config, ctx)
+    assert not any(" venv " in c for c in run_recorder.commands())
+
+
+def test_existing_venv_accepts_a_partial_python_version(make_context, run_recorder, which):
+    # a prefix, exactly as uv resolves it: '3.12' is satisfied by 3.12.7
+    config = {"uv": {"python": "3.12"}}
+    ctx = make_context(config=config)
+    _write_pyvenv_cfg(ctx.venv_dir, "3.12.7")
+    (ctx.venv_dir / "uv-checksums.txt").write_text("")
+    run_uv(config, ctx)
+    assert not any(" venv " in c for c in run_recorder.commands())
+
+
+def test_existing_venv_with_a_different_python_dies(make_context, run_recorder, which, caplog):
+    caplog.set_level("INFO")
+    config = {"uv": {"python": "3.11.14"}}
+    ctx = make_context(config=config)
+    _write_pyvenv_cfg(ctx.venv_dir, "3.12.3")
+    (ctx.venv_dir / "uv-checksums.txt").write_text("")
+    with pytest.raises(SystemExit):
+        run_uv(config, ctx)
+    assert "is Python 3.12.3, but 'python: 3.11.14' is configured" in caplog.text
+    assert "--force" in caplog.text and "'venv:'" in caplog.text
+
+
+def test_a_patch_version_is_not_satisfied_by_another(make_context, run_recorder, which):
+    config = {"uv": {"python": "3.12.3"}}
+    ctx = make_context(config=config)
+    _write_pyvenv_cfg(ctx.venv_dir, "3.12.4")
+    (ctx.venv_dir / "uv-checksums.txt").write_text("")
+    with pytest.raises(SystemExit):
+        run_uv(config, ctx)
+
+
+def test_force_recreates_instead_of_reporting_a_mismatch(make_context, run_recorder, which):
+    # --force is the resolution the mismatch error asks for, so it is exempt
+    config = {"uv": {"python": "3.11.14"}}
+    ctx = make_context(config=config, force=True)
+    _write_pyvenv_cfg(ctx.venv_dir, "3.12.3")
+    run_uv(config, ctx)
+    assert any("uv venv -p 3.11.14" in c for c in run_recorder.commands())
+
+
+def test_a_non_release_python_is_not_compared(make_context, run_recorder, which):
+    # uv also accepts 'cpython@3.12', a path, ... -- denver does not
+    # re-implement uv's resolution to second-guess those.
+    config = {"uv": {"python": "cpython@3.12"}}
+    ctx = make_context(config=config)
+    _write_pyvenv_cfg(ctx.venv_dir, "3.9.0")
+    (ctx.venv_dir / "uv-checksums.txt").write_text("")
+    run_uv(config, ctx)
+    assert not any(" venv " in c for c in run_recorder.commands())
+
+
+def test_venv_without_a_pyvenv_cfg_is_not_judged(make_context, run_recorder, which):
+    config = {"uv": {"python": "3.12.3"}}
+    ctx = make_context(config=config)
+    ctx.venv_dir.mkdir(parents=True)
+    (ctx.venv_dir / "uv-checksums.txt").write_text("")
+    run_uv(config, ctx)
+    assert not any(" venv " in c for c in run_recorder.commands())
+
+
+def test_venv_whose_base_interpreter_vanished_is_recreated(make_context, run_recorder, which, caplog):
+    # broken rather than reusable, and no configured value to contradict --
+    # the one place recreating unasked is right.
+    caplog.set_level("INFO")
+    config = {"uv": {}}
+    ctx = make_context(config=config)
+    _write_pyvenv_cfg(ctx.venv_dir, "3.12.3", home=ctx.env_dir / "gone")
+    (ctx.venv_dir / "uv-checksums.txt").write_text("")
+    run_uv(config, ctx)
+    assert "base interpreter is gone" in caplog.text
+    assert any(" venv " in c for c in run_recorder.commands())
+
+
+def test_two_stages_sharing_a_venv_must_agree_on_python(make_context, run_recorder, which, caplog):
+    # previously silently ignored: the second stage installed its interpreter
+    # and the venv kept the first stage's.
+    caplog.set_level("INFO")
+    config = {
+        "uv-a": {"provider": "uv", "python": "3.12.3"},
+        "uv-b": {"provider": "uv", "python": "3.11.14"},
+    }
+    ctx = make_context(config=config)
+    run_uv(config, ctx, stage="uv-a")
+    with pytest.raises(SystemExit):
+        run_uv(config, ctx, stage="uv-b")
+    assert "'python: 3.11.14' is configured" in caplog.text
+
+
+def test_two_stages_sharing_a_venv_may_agree_on_python(make_context, run_recorder, which):
+    config = {
+        "uv-a": {"provider": "uv", "python": "3.12.3"},
+        "uv-b": {"provider": "uv", "python": "3.12"},
+    }
+    ctx = make_context(config=config)
+    run_uv(config, ctx, stage="uv-a")
+    run_uv(config, ctx, stage="uv-b")
+    assert sum(1 for c in run_recorder.commands() if " venv " in c) == 1
 
 
 # ---- _ensure_venv checksum/recreate logic ------------------------------------#

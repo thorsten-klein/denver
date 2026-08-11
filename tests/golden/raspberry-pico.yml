@@ -25,7 +25,7 @@ uv:
   lock: null
   no-index: false
   overrides: null
-  python: 3.12.3
+  python: null
   requirements:
   - requirements.txt
   skip-if: []
