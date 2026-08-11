@@ -1,6 +1,7 @@
 """Tests for denver.py orchestration: hooks, stacking, run_stages."""
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -555,6 +556,49 @@ def test_run_stages_numbers_by_full_declared_stage_list(tmp_path, exec_recorder,
     assert "[1/3] fakesetup - run" in err
     assert "[2/3] stage 'fakesetup2' skipped by --skip" in err
     assert "[3/3] fakesetup3 - run" in err
+
+
+def test_run_stages_prints_a_stage_summary(tmp_path, fake_providers, exec_recorder, capsys):
+    # the per-stage "finished in Ns" lines are scattered through a run's
+    # output, often thousands of lines of build noise apart -- restated as one
+    # block right before the command launches.
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["one", "two"],
+        "one": {"provider": "fakesetup"},
+        "two": {"provider": "fakesetup"},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    err = capsys.readouterr().err
+    assert re.search(r"one\s+\d+\.\d+s", err)
+    assert re.search(r"two\s+\d+\.\d+s", err)
+
+
+def test_run_stages_summary_keeps_a_row_for_a_skipped_stage(tmp_path, fake_providers, exec_recorder, capsys):
+    # a stage that did not run keeps its row, carrying the reason instead of
+    # a duration, so the summary matches the '[i/n]' trail above it
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["one", "two"],
+        "one": {"provider": "fakesetup"},
+        "two": {"provider": "fakesetup"},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["two"])
+    assert re.search(r"two\s+skipped by --skip", capsys.readouterr().err)
+
+
+def test_stage_summary_prints_nothing_without_stages(make_context, capsys):
+    # a Context driven directly (a provider under test, say) has no pipeline
+    # behind it; the summary must not assume one
+    denver._print_stage_summary(make_context())
+    assert capsys.readouterr().err == ""
+
+
+def test_run_stages_summary_silent_at_quiet_level_2(tmp_path, fake_providers, exec_recorder, capsys):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {"stages": ["one"], "one": {"provider": "fakesetup"}}
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], quiet=2)
+    assert "one" not in capsys.readouterr().err
 
 
 def test_run_stages_shows_skipped_by_until_reason(tmp_path, fake_providers, exec_recorder, capsys):
