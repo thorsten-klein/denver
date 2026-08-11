@@ -963,6 +963,45 @@ def test_main_until_flag_unknown_stage_dies(tmp_path):
         denver.main([str(env_dir), "--until", "typo-stage"])
 
 
+def test_main_run_without_a_name_lists_them(tmp_path, capsys):
+    # --run's names are open-ended, and 'scripts:' stacks across the whole
+    # import chain -- so reading one file does not answer "which names?"
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        "stages: [a, b]\n"
+        "a:\n  provider: custom\n  cmd: x\n  scripts:\n    setup: [one.sh, two.sh]\n"
+        "b:\n  provider: custom\n  cmd: x\n  scripts:\n    setup: [three.sh]\n    login: [l.sh]\n"
+    )
+    assert denver.main([str(env_dir), "--run"]) == 0
+    err = capsys.readouterr().err
+    assert "available --run names" in err
+    assert "setup" in err and "a (2 scripts)" in err and "b (1 script)" in err
+    assert "login" in err
+
+
+def test_main_run_without_a_name_says_when_there_are_none(tmp_path, capsys):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text("stages: [a]\na:\n  provider: custom\n  cmd: x\n")
+    assert denver.main([str(env_dir), "--run"]) == 0
+    assert "defines no 'scripts:' entries" in capsys.readouterr().err
+
+
+def test_main_run_listing_does_not_resolve_provider_defaults(tmp_path, capsys):
+    # a listing must not fail over an unrelated missing path: full resolution
+    # runs every provider's existence checks, which have nothing to do with
+    # which scripts an env declares.
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        "stages: [d]\nd:\n  provider: docker\n  compose:\n    file: no-such-compose.yml\n"
+        "  scripts:\n    login: [l.sh]\n"
+    )
+    assert denver.main([str(env_dir), "--run"]) == 0
+    assert "login" in capsys.readouterr().err
+
+
 def test_main_unknown_stage_section_key_dies(tmp_path):
     env_dir = tmp_path / "e"
     env_dir.mkdir()

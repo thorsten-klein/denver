@@ -285,7 +285,16 @@ actions that are *not* part of the normal pipeline: any stage's section can
 declare `scripts: <name>: [...]`, and `denver <env> --run <name>` runs
 every stage's own `<name>` entries, then exits without doing anything else.
 Nothing about `<name>` is fixed — `setup` and `login` are just conventions,
-not flags of their own. This is where one-time host setup belongs: installing
+not flags of their own. Which is why `denver <env> --run`, with no name at
+all, lists the names that env actually defines: they are unguessable by
+design, and `scripts:` stacks across the whole `import:` chain, so reading
+one file does not answer it either.
+
+```
+$ denver examples/zephyr-devshell-4.3.1 --run
+available --run names for env 'zephyr-devshell-4.3.1':
+  setup        docker (1 script), zephyr (1 script)
+``` This is where one-time host setup belongs: installing
 Docker itself, `udev` rules for flashing a board, a registry login — things
 that must not run on every start.
 
