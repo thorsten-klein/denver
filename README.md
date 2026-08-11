@@ -506,12 +506,9 @@ env directory (a read-only mount, a vendored base env, an env shipped inside
 an image), and `DENVER_STATE_DIR` overrides both.
 
 > **Upgrading:** state used to live in `<checkout-or-~/.denver>/.envs/<env
-> name>`, keyed on the directory's bare name — which collided whenever two
-> projects had an env folder of the same name, and *always* collided for two
-> checkouts of one project. Those old directories are not migrated
-> automatically, precisely because one of them may hold a different
-> environment's state; denver points at the leftover once and rebuilds. Delete
-> it when convenient.
+> name>`, keyed on the directory's bare name. Those old directories are simply
+> no longer read — delete them when convenient; everything in them is a cache
+> denver rebuilds on the next run.
 
 Every other flag (`--force`, `--ci`, ...) is set purely by its own CLI flag,
 never inherited from a same-named real environment variable — see `denver

@@ -528,17 +528,6 @@ class Context:
         directory is created, and never rewritten -- an author who edits it
         keeps their version.
         """
-        legacy = self.denver_dir / ".envs" / self.env_name
-        if legacy != self.env_workdir and legacy.is_dir() and not self.env_workdir.exists():
-            # Deliberately not migrated automatically: that old directory was
-            # keyed on the env dir's bare name, so it may hold the state of a
-            # *different* env of the same name (which is the bug this move
-            # fixes). Moving it could hand one env another's venv, so it is
-            # reported and left for the user to delete.
-            info(
-                f"denver: this env's state now lives in {self.env_workdir}; "
-                f"{legacy} is no longer used and can be deleted (it will be rebuilt on this run)"
-            )
         self.mkdir(self.env_workdir)
         if self.env_workdir.parent.name != STATE_DIRNAME:
             return  # a shared root (DENVER_STATE_DIR, or a read-only env dir)

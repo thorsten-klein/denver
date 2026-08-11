@@ -310,18 +310,6 @@ def test_ensure_state_dir_writes_no_marker_under_a_shared_root(make_context, tmp
     assert not (ctx.env_workdir.parent / ".gitignore").exists()
 
 
-def test_ensure_state_dir_reports_a_leftover_legacy_directory(make_context, caplog):
-    caplog.set_level("INFO")
-    ctx = make_context()
-    legacy = ctx.denver_dir / ".envs" / ctx.env_name
-    legacy.mkdir(parents=True)
-    ctx.ensure_state_dir()
-    # never migrated automatically: that directory was keyed on the env dir's
-    # bare name, so it may hold a *different* env's state
-    assert "no longer used and can be deleted" in caplog.text
-    assert legacy.is_dir()
-
-
 def test_cache_dir_defaults_and_is_overridable(make_context):
     ctx = make_context()
     assert ctx.cache_dir == Path("~/.cache/denver").expanduser()
