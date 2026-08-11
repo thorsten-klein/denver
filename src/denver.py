@@ -1412,6 +1412,7 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     start = time.time()
     provider.setup(ctx)
     duration = time.time() - start
+    ctx.stage_timings.append((provider.stage, f"{duration:.1f}s"))
     if quiet < 2:
         print(
             f"\033[94mINFO: stage '{provider.stage}' ({provider.name}) finished in {duration:.2f}s\033[39m",
@@ -1421,6 +1422,25 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     run_hook(ctx, config_path, f"post-{provider.stage}")
 
 
+def _print_stage_summary(ctx):
+    """Print what each stage cost, in pipeline order, right above the 'env started' line.
+
+    The per-stage 'finished in Ns' lines are scattered through a run's output
+    -- often thousands of lines of build noise apart -- so the question they
+    answer ("why did this take four minutes?") is only answerable by
+    scrolling. Restated here as one block, in the order the stages ran.
+
+    Stages that did not run keep their row, carrying the reason instead of a
+    duration, so the summary matches the '[i/n]' trail above rather than
+    silently shrinking.
+    """
+    if not ctx.stage_timings:
+        return
+    width = max(len(stage) for stage, _ in ctx.stage_timings)
+    for stage, outcome in ctx.stage_timings:
+        print(f"\033[94m  {stage:<{width}}  {outcome}\033[39m", file=sys.stderr)
+
+
 def _print_env_started(ctx, start_time):
     """Print a boxed, blue 'INFO: env <name> started in Ns' line to stderr, right before the resolved command launches.
 
@@ -1428,6 +1448,7 @@ def _print_env_started(ctx, start_time):
     cost of printing commands, not of running them -- so it says what
     actually happened instead of quoting a meaningless duration.
     """
+    _print_stage_summary(ctx)
     if ctx.dry_run:
         text = f"INFO: env {ctx.env_name} NOT started (--dry-run)"
     else:
@@ -1603,6 +1624,7 @@ def _show_skipped(ctx, skipped, skip_state):
             past_cutoff = skip_state.cutoff is not None and skip_state.all_stage_ids.index(s.stage) > skip_state.cutoff
             reason = "skipped by --until" if past_cutoff else "skipped by --skip"
         ctx.stage_index, ctx.stage_count = skip_state.stage_index[s.stage], skip_state.total
+        ctx.stage_timings.append((s.stage, reason))
         skip_banner(ctx, s.stage, reason)
 
 

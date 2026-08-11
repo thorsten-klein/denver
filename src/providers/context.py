@@ -308,6 +308,10 @@ class Context:
         # the warning explaining that is printed once per tool instead of
         # once per lookup (every stage re-resolves its own defaults).
         self._dry_missing_tools = set()
+        # (stage id, duration or skip reason) per declared stage, in pipeline
+        # order -- the summary denver prints just before launching the
+        # command (see denver._print_stage_summary).
+        self.stage_timings = []
         # holds this env's run lock open for the process's lifetime (acquire_lock)
         self._lock_fd = None
         # this stage's position in the overall pipeline, for banner()'s
