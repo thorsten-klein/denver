@@ -131,3 +131,10 @@ needs 'conan' on PATH`.
   exist yet.
 - **`--force`** recreates the conan/workspace setup steps' own on-disk
   state unconditionally.
+- **`--dry-run`** prints the `conan`/recipes-exporter commands instead of
+  running them, and leaves the install tree (which a real run wipes first)
+  untouched. `conan config home` still runs — it is a read-only query whose
+  answer decides whether `conan profile detect` would be shown; when conan
+  isn't installed yet (an earlier `uv` stage would have), that query simply
+  fails, and denver warns and previews the detection anyway rather than
+  stopping there.

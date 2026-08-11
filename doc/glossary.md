@@ -97,6 +97,14 @@ contents, recipe content, workspace state, ...) and skip its own expensive
 step. This is what makes a repeat run take seconds instead of minutes.
 `--force` bypasses it; `--fast` skips the build step without even checking.
 
+**Dry run** — `--dry-run` walks the pipeline for its description instead of
+its effect: each stage's commands and file writes are printed (prefixed
+`[dry-run]`) rather than performed, and the final command is printed rather
+than launched. Read-only queries (`?`) and sourced scripts (`.`) still run —
+they are what the printed commands are derived from. A wrapper stage can't
+be previewed past its own boundary; see
+[`architecture.md`](architecture.md#previewing-a-run---dry-run).
+
 **Stage filtering** — restricting which stages run: `--until <stage>`
 truncates the pipeline after the named stage, `--skip <stage>` removes
 individual stages, and a stage's own `disabled: true` opts it out by default.

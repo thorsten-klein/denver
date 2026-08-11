@@ -166,6 +166,7 @@ def make_context(tmp_path, monkeypatch):
         fast=False,
         force=False,
         ci=False,
+        dry_run=False,
     ):
         denver_dir = tmp_path / "denver"
         denver_dir.mkdir(parents=True, exist_ok=True)
@@ -175,7 +176,15 @@ def make_context(tmp_path, monkeypatch):
         for key, val in (env or {}).items():
             monkeypatch.setenv(key, val)
         ctx = Context(
-            denver_dir, env_dir, config or {}, import_dirs=import_dirs, quiet=quiet, fast=fast, force=force, ci=ci
+            denver_dir,
+            env_dir,
+            config or {},
+            import_dirs=import_dirs,
+            quiet=quiet,
+            fast=fast,
+            force=force,
+            ci=ci,
+            dry_run=dry_run,
         )
         ctx.in_docker = in_docker
         ctx.venv_dir = ctx.venv_dir_for(None)

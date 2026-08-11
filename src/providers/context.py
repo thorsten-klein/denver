@@ -21,6 +21,12 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
+# Every line a --dry-run emits starts with this, so the whole preview can be
+# grepped/filtered out of a terminal session in one go. The marker that
+# follows it ('+', '?', '~', '.', '!') says which kind of line it is -- see
+# dry_run_legend(), which states the same key to the user once per run.
+DRY_PREFIX = "[dry-run]"
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger("denver")
 
@@ -109,6 +115,26 @@ def skip_banner(ctx, stage, reason):
     print(f"\033[93m-- {text}\033[39m", file=sys.stderr)
 
 
+def dry_run_legend():
+    """Print the one-off ``[dry-run]`` marker legend to stderr, before the first stage runs.
+
+    The markers mean genuinely different things -- skipped, really run,
+    skipped filesystem write (see Context.run) -- and a preview that doesn't
+    say which is which invites reading a '?' line as "would run", i.e. as
+    the opposite of what it reports. So the key is stated once, up front,
+    rather than left to the documentation.
+    """
+    print(
+        f"\033[93m{DRY_PREFIX} no command below is executed for its effect. Legend:\n"
+        f"{DRY_PREFIX}   +  command that would run\n"
+        f"{DRY_PREFIX}   ?  read-only query, really run (its output decides what follows)\n"
+        f"{DRY_PREFIX}   ~  file/directory write that would happen\n"
+        f"{DRY_PREFIX}   .  script sourced into the environment, really done\n"
+        f"{DRY_PREFIX}   !  note about what this preview cannot show\033[39m",
+        file=sys.stderr,
+    )
+
+
 def die(message) -> NoReturn:
     """Log ``message`` as an error and exit the process with status 1."""
     logger.error(message)
@@ -192,17 +218,20 @@ def _drop_bundled_library_path(env):
 class Context:
     """Everything a provider needs to do its job."""
 
-    def __init__(self, denver_dir, env_dir, config, import_dirs=None, quiet=0, fast=False, force=False, ci=False):
+    def __init__(
+        self, denver_dir, env_dir, config, import_dirs=None, quiet=0, fast=False, force=False, ci=False, dry_run=False
+    ):
         """Compute every built-in path/flag a provider might need, and seed ``self.env`` with them.
 
         ``quiet`` is a level (0 normal, 1 = -q, 2+ = -qq -- see
         set_quiet()/banner()), not a bool, though a bare ``True``/``False``
         still works (``bool`` is an ``int`` subclass: ``True`` behaves as
-        level 1, ``False`` as level 0). ``force``/``ci`` are plain flags
-        (denver's own ``--force``/``--ci``, see denver.py) -- unlike every
-        other provider-facing toggle, these are never read back out of a
-        real environment variable; ``ctx.force``/``ctx.ci`` reflect exactly
-        what was passed in here, nothing else.
+        level 1, ``False`` as level 0). ``force``/``ci``/``dry_run`` are
+        plain flags (denver's own ``--force``/``--ci``/``--dry-run``, see
+        denver.py) -- unlike every other provider-facing toggle, these are
+        never read back out of a real environment variable;
+        ``ctx.force``/``ctx.ci``/``ctx.dry_run`` reflect exactly what was
+        passed in here, nothing else.
         """
         self.denver_dir = Path(denver_dir).resolve()
         # where denver's own code lives (this file's directory, containing
@@ -218,6 +247,11 @@ class Context:
         self.fast = fast
         self.force = force
         self.ci = ci
+        self.dry_run = dry_run
+        # names ctx.which() already had to invent a dry-run stand-in for, so
+        # the warning explaining that is printed once per tool instead of
+        # once per lookup (every stage re-resolves its own defaults).
+        self._dry_missing_tools = set()
         # this stage's position in the overall pipeline, for banner()'s
         # '[i/n]' -- 1/1 by default so a provider driven directly (e.g. in
         # tests) without going through denver.py's run_stages() still gets a
@@ -415,6 +449,16 @@ class Context:
         for key, value in interpolate(mapping or {}, self.variables).items():
             self.set(key, value)
 
+    # ---- dry-run reporting ---------------------------------------------- #
+    def dry_note(self, marker, message):
+        """Print one ``[dry-run] <marker> <message>`` line to stderr (see Context.run for the markers).
+
+        Always printed, even under --quiet: in a dry run these lines *are*
+        the output -- silencing them would leave the run with nothing to
+        show at all.
+        """
+        print(f"{DRY_PREFIX} {marker} {message}", file=sys.stderr)
+
     # ---- process helpers ------------------------------------------------ #
     def run(self, cmd, *, cwd=None, check=True, echo=True, capture=False, extra_env=None, input=None, step=None):
         """Run a subprocess using the context environment.
@@ -424,6 +468,20 @@ class Context:
         printed anyway -- the subprocess's own stdout/stderr are discarded
         rather than inherited, so only the final launched command (which
         goes through Context.exec, not Context.run) is ever visible.
+
+        Under --dry-run (``ctx.dry_run``) a command that exists for its
+        *effect* is printed as ``[dry-run] + cmd`` and not run at all,
+        standing in as an immediately-successful, output-less call. A
+        ``capture=True`` call is different: it exists for its *output*, which
+        some provider is about to branch on (is the image cached? which conan
+        home? what does `west list` say?), so a dry run would have nothing to
+        decide with and would stop reflecting what a real run does. Those are
+        genuinely executed -- they are the reads, not the writes -- and
+        reported as ``[dry-run] ? cmd`` so the preview still says so.
+        A missing executable is not fatal in that case either: half the point
+        of a dry run is previewing an env whose tools an earlier (skipped)
+        stage would have installed, so it degrades to the same empty,
+        non-zero result rather than raising.
 
         ``input``, if given, is fed to the subprocess's stdin (e.g. a secret
         piped into ``docker login --password-stdin`` without it ever
@@ -444,6 +502,8 @@ class Context:
         if extra_env:
             env.update({k: str(v) for k, v in extra_env.items()})
         printable = " ".join(str(c) for c in cmd)
+        if self.dry_run:
+            return self._dry_run_command(cmd, printable, cwd=cwd, env=env, capture=capture, input=input)
         if echo and not self.quiet:
             print(f"+ {printable}", file=sys.stderr)
         run_kwargs = {}
@@ -463,19 +523,126 @@ class Context:
             **run_kwargs,
         )
 
-    def which(self, name):
-        """Find an executable, honouring the context PATH (e.g. the venv)."""
-        return shutil.which(name, path=self.env.get("PATH"))
+    def _dry_run_command(self, cmd, printable, *, cwd, env, capture, input):
+        """Report ``cmd`` under --dry-run: print-and-skip it, or really run it if it's a query (see Context.run)."""
+        if not capture:
+            self.dry_note("+", printable)
+            return subprocess.CompletedProcess([str(c) for c in cmd], 0, "", "")
+        self.dry_note("?", printable)
+        try:
+            result = subprocess.run(
+                [str(c) for c in cmd],
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                check=False,  # a dry run reports, it never aborts on a query
+                text=True,
+                capture_output=True,
+                input=input,
+            )
+        except OSError as exc:
+            # e.g. the tool an earlier stage would have installed isn't
+            # there: report it and let the caller see an ordinary failure.
+            self.dry_note("?", f"{cmd[0]}: not available ({exc.strerror or exc}) -- assuming it would fail")
+            return subprocess.CompletedProcess([str(c) for c in cmd], 127, "", "")
+        if result.returncode != 0:
+            # a query that failed answered nothing, so whatever the caller
+            # derives from it below (which args to pass, whether a step is
+            # needed) is a guess. Said out loud: a real run would have had
+            # an answer here, and silence would let the preview look
+            # authoritative where it is least so.
+            self.dry_note("?", f"{cmd[0]}: exited {result.returncode} -- what follows may not match a real run")
+        return result
+
+    def which(self, name, *, dry_fallback=False):
+        """Find an executable, honouring the context PATH (e.g. the venv).
+
+        ``dry_fallback`` marks a tool an *earlier stage* is expected to
+        install (west, conan, uv, docker): under --dry-run that stage only
+        printed its commands, so the tool legitimately isn't there yet, and
+        returning None would abort the preview at exactly the stage the user
+        wanted to see. The bare name is returned instead -- enough to render
+        every command below it -- with a one-off warning saying so.
+        """
+        found = shutil.which(name, path=self.env.get("PATH"))
+        if found is None and self.dry_run and dry_fallback:
+            if name not in self._dry_missing_tools:
+                self._dry_missing_tools.add(name)
+                warn(f"dry-run: '{name}' is not on PATH -- showing commands as if it were")
+            return name
+        return found
+
+    # ---- filesystem helpers (--dry-run aware) ---------------------------- #
+    #
+    # Providers write and delete real files outside of any subprocess
+    # (checksum stamps, generated listings, a wiped venv/conan tree). Those
+    # go through these helpers rather than pathlib/shutil directly, so
+    # --dry-run has one place to intercept them: printing that a subprocess
+    # was skipped while still deleting the venv it would have rebuilt would
+    # be worse than not offering a dry run at all.
+    def mkdir(self, path, *, parents=True, exist_ok=True):
+        """Create ``path`` as a directory (no-op, reported, under --dry-run)."""
+        if self.dry_run:
+            if not Path(path).is_dir():
+                self.dry_note("~", f"mkdir {path}")
+            return
+        Path(path).mkdir(parents=parents, exist_ok=exist_ok)
+
+    def write_text(self, path, text):
+        """Write ``text`` to ``path``, replacing it (no-op, reported, under --dry-run)."""
+        if self.dry_run:
+            self.dry_note("~", f"write {path}")
+            return
+        Path(path).write_text(text)
+
+    def append_text(self, path, text):
+        """Append ``text`` to ``path`` (no-op, reported, under --dry-run)."""
+        if self.dry_run:
+            self.dry_note("~", f"append to {path}")
+            return
+        with Path(path).open("a") as fh:
+            fh.write(text)
+
+    def touch(self, path):
+        """Create ``path`` as an empty file if missing (no-op, reported, under --dry-run)."""
+        if self.dry_run:
+            self.dry_note("~", f"touch {path}")
+            return
+        Path(path).touch()
+
+    def unlink(self, path, *, missing_ok=False):
+        """Delete the file ``path`` (no-op, reported, under --dry-run)."""
+        if self.dry_run:
+            self.dry_note("~", f"rm {path}")
+            return
+        Path(path).unlink(missing_ok=missing_ok)
+
+    def rmtree(self, path):
+        """Delete the directory tree ``path``, tolerating a missing one (no-op, reported, under --dry-run)."""
+        if self.dry_run:
+            self.dry_note("~", f"rm -r {path}")
+            return
+        shutil.rmtree(path, ignore_errors=True)
 
     def source(self, *scripts):
         """Source bash script(s) and fold the resulting exports into env.
 
         This is how denver 'activates' things that are only expressible as
         bash (venv activate, conan's conanbuildenv.sh, hook scripts).
+
+        Still done under --dry-run, and reported as ``[dry-run] . script``:
+        sourcing is how denver *computes* the environment, and a command
+        rendered without it would show empty ``${...}`` values and a PATH
+        missing every tool an earlier stage put there -- i.e. not the
+        commands a real run would use. A script that doesn't exist yet
+        (a venv's activate, conan's conanbuildenv.sh) is skipped in a dry
+        run exactly as it is in a real one, silently.
         """
         scripts = [str(s) for s in scripts if s and Path(s).exists()]
         if not scripts:
             return
+        if self.dry_run:
+            for script in scripts:
+                self.dry_note(".", script)
         sentinel = "__DENVER_ENV_SENTINEL__"
         source_cmds = " && ".join(f". {shlex.quote(s)}" for s in scripts)
         script = f'{source_cmds}; printf "%s\\0" "{sentinel}"; env -0'
@@ -501,7 +668,12 @@ class Context:
             self.env[key] = value
 
     def exec(self, cmd):
-        """Replace the current process with ``cmd`` using the context env."""
+        """Replace the current process with ``cmd`` using the context env.
+
+        Under --dry-run the command is reported and this returns normally
+        instead -- every caller treats exec() as the last thing it does, so
+        returning simply ends the run the way the real one ends the process.
+        """
         cmd = [str(c) for c in cmd]
         # a resolved command is always denver's own doing (default_command()/
         # resolve_command(), a wrapper's wrap(), or a script's own argv) --
@@ -513,6 +685,10 @@ class Context:
             die(f"exec: empty or invalid command: {cmd!r}")
         if any("\0" in arg for arg in cmd):
             die(f"exec: command arguments must not contain NUL bytes: {cmd!r}")
+        if self.dry_run:
+            sys.stdout.flush()
+            self.dry_note("+", f"exec: {' '.join(cmd)}")
+            return
         # Flush stdout *before* logging "exec:" (and again right before the
         # actual os.execvpe() below): print() output (e.g. the startup logo,
         # a stage's "finished in Xs" line) isn't always line-buffered --

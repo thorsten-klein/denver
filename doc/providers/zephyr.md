@@ -63,3 +63,9 @@ west reads it itself, no provider-specific handling needed.
 - **`--force`** always reruns `west update` (even if this stage's own
   drift check found nothing new) and recreates the workspace setup steps'
   own on-disk state unconditionally.
+- **`--dry-run`** prints the `west` commands instead of running them, and
+  writes neither `.west/config`, the drift fingerprint, nor `blobs-cache:`.
+  The read-only queries this stage branches on (`west config -l`, `west
+  manifest --resolve`, `west list`, `git rev-parse`) do still run: they are
+  what decide which `west config` keys differ, whether `west update` would
+  be skipped as unchanged, and which projects carry a `patches.yml`.

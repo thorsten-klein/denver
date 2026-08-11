@@ -313,6 +313,47 @@ change based on what happens to be exported in the calling shell.
 Each provider's page under [`providers/`](providers/) documents exactly what
 `--fast` and `--force` mean for that provider.
 
+## Previewing a run (`--dry-run`)
+
+`--dry-run` runs the pipeline for its *description* instead of its effect:
+every stage still runs in order and still resolves its own config, but each
+command is printed rather than executed, each file write is reported rather
+than performed, and the final command is printed rather than launched.
+
+This works because providers never call `subprocess`/`pathlib` for effect
+directly — every subprocess goes through `Context.run`/`Context.exec`, and
+every write through `Context.write_text`/`mkdir`/`rmtree`/… . One flag on
+`Context` is therefore enough to intercept all of it in one place, which is
+also what makes the guarantee checkable: a provider reaching around those
+helpers is a review-visible mistake, not a silent hole in `--dry-run`.
+
+Two categories deliberately still execute, because the preview is derived
+from them:
+
+- **read-only queries** — a `Context.run(..., capture=True)` call exists for
+  its *output*, which the provider immediately branches on (`docker image
+  inspect`, `conan config home`, `west list`, a `skip-if:` script). Skipping
+  those would leave a dry run with nothing to decide with, and it would stop
+  reflecting what a real run does. They are reported with a `?` marker, and a
+  missing executable degrades to a failed query instead of aborting.
+- **sourced scripts** — `Context.source()` is how denver *computes* the
+  environment. Without it, every rendered command would show empty `${...}`
+  values and a PATH missing whatever an earlier stage put there.
+
+Two limits follow from the design rather than from the implementation:
+
+- A dry run describes what would happen **given the machine's current
+  state**. An already-built env legitimately previews fewer commands than a
+  clean one — that is exactly what a real run would do too (see "Fast by
+  default" above).
+- A **wrapper** stage can't be previewed past its own boundary. Setup stages
+  run inside the container via a re-invocation (see
+  [Wrapper / relocation](#wrapper--relocation) below), and
+  that re-invocation is itself one of the commands not being run — passing
+  `--dry-run` inward would mean really starting the wrapper, which is what
+  the run promised not to do. denver prints an explicit `!` note there
+  naming the `--skip <wrapper>` that previews those stages on the host.
+
 ## Stage filtering
 
 - **`--until <stage>`** truncates the pipeline: every stage up to and
@@ -359,3 +400,7 @@ Every stage's runtime is appended to
 Format events. Concatenate them into a `{"traceEvents": [...]}` document to
 load in `chrome://tracing` or <https://ui.perfetto.dev> and see where a slow
 first run actually spent its time.
+
+A `--dry-run` records nothing here: no stage did its work, so its durations
+would measure printing commands rather than running them, and mixing those
+into the file would poison the very timings it exists to answer.

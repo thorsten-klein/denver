@@ -101,6 +101,16 @@ isn't the right one.
   locally-cached `image:` hit, though a `registries:` entry that already
   has it still wins over a forced local rebuild — a rebuild only actually
   happens if none of the configured registries have it either.
+- **`--dry-run`** prints the `env-scripts:`, `docker compose build` and
+  `docker compose run` commands instead of running them; no container is
+  ever started. The local/`registries:` existence checks still run (they're
+  the read-only queries deciding whether a build would be shown at all),
+  but the `docker login` that would precede a private-registry check does
+  not — so a private entry may report a miss it wouldn't report for real.
+  The bigger limit is structural: since the container is never entered,
+  the setup stages that run *inside* it can't be previewed. denver prints
+  a note saying so; use `--skip <docker stage>` to preview that same stack
+  on the host instead.
 - **Multi-registry check, local-first, never pulling in `setup()`.** When
   several places might already have the image — a shared registry, a
   personal mirror, whatever a CI run pushed to — `registries:` lets denver

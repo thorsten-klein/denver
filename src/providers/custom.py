@@ -43,6 +43,10 @@ build step, so skipping it would break the very propagation it exists for.
 ``launcher`` is likewise never skipped under --fast -- relocating the command
 isn't a build step either.
 
+Under --dry-run ``cmd`` is printed rather than run, while ``source`` is still
+sourced -- for the same reason it survives --fast: its exports are what every
+later stage's commands are rendered against.
+
 Full key reference, worked examples and design notes: ``doc/providers/custom.md``.
 """
 

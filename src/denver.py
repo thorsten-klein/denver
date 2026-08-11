@@ -20,6 +20,13 @@ instead.
 to a YAML config file (any name, e.g. denver.debug.yml -- lets one folder
 hold several denver.xxx.yml variants).
 
+--dry-run answers "what does this env actually run?" without running it:
+every stage is walked in order, but its commands and file writes are printed
+(prefixed '[dry-run]') instead of performed, and the final command is printed
+instead of launched. Read-only queries and sourced scripts do still run --
+they are what the printed commands are derived from; see README.md for the
+full marker legend and the wrapper-boundary caveat.
+
 Run `denver --help` to see every flag, and README.md for the full
 behavioural reference (-c's dotted-path/+= syntax, --run's 'scripts:'
 mechanism, the wrapper relocation model, ...).
@@ -959,7 +966,14 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
     One line per event (rather than one read-modify-write of a single JSON
     document) is what makes concurrent appends safe -- see
     _append_trace_event.
+
+    Skipped entirely under --dry-run: no stage actually did its work, so the
+    durations measured here are of printing commands, not of running them --
+    recording those would quietly poison the very timings this file exists
+    to answer questions about.
     """
+    if ctx.dry_run:
+        return
     path = ctx.env_workdir / PERFORMANCE_FILE_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -1148,7 +1162,7 @@ def reinvoke_command(
     return [*launcher, str(config_path), *filter_flags, *extra_flags, *command]
 
 
-def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, force=False, ci=False):
+def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, force=False, ci=False, dry_run=False):
     """Fully resolve an env's config for actual use.
 
     Section-level ('docker: import:') stacking, then every provider's
@@ -1161,7 +1175,17 @@ def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, fo
 
     config, extra_dirs = expand_section_imports(config, env_dir)
     import_dirs = collect_import_dirs(config_path) + extra_dirs
-    ctx = Context(DENVER_DIR, env_dir, config, import_dirs=import_dirs, quiet=quiet, fast=fast, force=force, ci=ci)
+    ctx = Context(
+        DENVER_DIR,
+        env_dir,
+        config,
+        import_dirs=import_dirs,
+        quiet=quiet,
+        fast=fast,
+        force=force,
+        ci=ci,
+        dry_run=dry_run,
+    )
     resolve_provider_defaults(config, ctx)
     return config, ctx
 
@@ -1213,7 +1237,9 @@ def _collect_stage_scripts(ctx, stage_ids, name):
     return resolved
 
 
-def run_named_scripts(env_dir, config, config_path, name, *, until_stage=None, skip_stages=(), quiet=False):
+def run_named_scripts(
+    env_dir, config, config_path, name, *, until_stage=None, skip_stages=(), quiet=False, dry_run=False
+):
     """Run every (filtered) stage's ``scripts: <name>:`` entries, each in the context it actually needs.
 
     This is ``denver <env> --run <name>``; ``name`` is open-ended -- any
@@ -1230,11 +1256,19 @@ def run_named_scripts(env_dir, config, config_path, name, *, until_stage=None, s
     and denver is re-invoked `--skip <that wrapper stage> --run <name>`
     inside it for the setup stages' own entries -- mirroring run_stages()'s
     own host/wrapper relocation exactly.
+
+    Under ``dry_run`` each entry is printed rather than executed, with the
+    same wrapper caveat as run_stages(): the reinvocation that would carry
+    the setup stages' entries into the wrapper is itself not run.
     """
     from providers import make_stage
+    from providers.context import dry_run_legend
+
+    if dry_run:
+        dry_run_legend()
 
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
-    config, ctx = resolve_full_config(env_dir, config, config_path, quiet=quiet)
+    config, ctx = resolve_full_config(env_dir, config, config_path, quiet=quiet, dry_run=dry_run)
     run_hook(ctx, config_path, "env")
     ctx.apply_env_map(config.get("env"))
 
@@ -1258,6 +1292,17 @@ def run_named_scripts(env_dir, config, config_path, name, *, until_stage=None, s
 
     if not _collect_stage_scripts(ctx, [s.stage for s in setups], name):
         return  # nothing to relocate into the wrapper for
+
+    # same limit as run_stages(): the reinvocation carrying these entries
+    # into the wrapper is itself not run under --dry-run, so they can't be
+    # previewed -- see _run_stages_via_wrapper for why not.
+    if ctx.dry_run:
+        ctx.dry_note(
+            "!",
+            f"'{name}' scripts of stages {', '.join(s.stage for s in setups)} run inside "
+            f"{', '.join(w.stage for w in active_wrappers)} and are not previewed -- "
+            f"re-run with --skip {' --skip '.join(w.stage for w in active_wrappers)} to see them",
+        )
 
     stage_index = {s.stage: i for i, s in enumerate(stages, 1)}
     for w in active_wrappers:
@@ -1324,8 +1369,16 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
 
 
 def _print_env_started(ctx, start_time):
-    """Print a boxed, blue 'INFO: env <name> started in Ns' line to stderr, right before the resolved command launches."""
-    text = f"INFO: env {ctx.env_name} started in {time.time() - start_time:.2f}s"
+    """Print a boxed, blue 'INFO: env <name> started in Ns' line to stderr, right before the resolved command launches.
+
+    Under --dry-run the env was never started and the elapsed time is the
+    cost of printing commands, not of running them -- so it says what
+    actually happened instead of quoting a meaningless duration.
+    """
+    if ctx.dry_run:
+        text = f"INFO: env {ctx.env_name} NOT started (--dry-run)"
+    else:
+        text = f"INFO: env {ctx.env_name} started in {time.time() - start_time:.2f}s"
     line = "-" * (len(text) + 4)
     print(f"\033[94m{line}\n| {text} |\n{line}\033[39m", file=sys.stderr)
 
@@ -1342,6 +1395,7 @@ def run_stages(
     fast=False,
     force=False,
     ci=False,
+    dry_run=False,
     start_time=None,
 ):
     """Build/enter the environment via its stages, then exec the command.
@@ -1361,15 +1415,28 @@ def run_stages(
     plumbing (unlike start_time): both the outer and any reinvoked inner
     denver derive it identically, straight from the *same* denver.yml's
     'stages:' list, which --until/--skip never changes.
+
+    Under ``dry_run`` every stage still runs in order and still resolves its
+    own config -- only the commands and file writes it would perform are
+    printed instead of performed (see Context.run). The one thing a dry run
+    cannot show is what happens *inside* an active wrapper: relocating into
+    it is itself one of the commands not being run, so
+    _run_stages_via_wrapper stops at the reinvocation and says so.
     """
     from providers import make_stage
+    from providers.context import dry_run_legend
 
     if start_time is None:
         start_time = time.time()
 
+    if dry_run:
+        dry_run_legend()
+
     all_stage_ids = config.get("stages") or []
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
-    config, ctx = resolve_full_config(env_dir, config, config_path, quiet=quiet, fast=fast, force=force, ci=ci)
+    config, ctx = resolve_full_config(
+        env_dir, config, config_path, quiet=quiet, fast=fast, force=force, ci=ci, dry_run=dry_run
+    )
 
     # hooks.env sources a script once, before anything else -- its exports
     # (and the declarative 'env:' map applied right after) are visible to
@@ -1506,6 +1573,23 @@ def _run_stages_via_wrapper(
         # setup providers run *inside* the wrapper: re-invoke denver there
         # -- it recomputes skipped_setups identically (same denver.yml,
         # same --until/--skip) and shows those banners itself.
+        #
+        # Under --dry-run that reinvocation is one of the commands *not*
+        # being run, so those stages are never reached and can't be
+        # previewed here. Nor could they be by passing --dry-run inward:
+        # getting inside the wrapper means really starting it, which is
+        # exactly what this run promised not to do (and its image may be
+        # something an earlier printed-not-run `compose build` would have
+        # produced). Said out loud rather than left as a silently short
+        # pipeline -- run `--skip <wrapper>` to preview those stages on the
+        # host instead.
+        if ctx.dry_run:
+            ctx.dry_note(
+                "!",
+                f"stages {', '.join(s.stage for s in setups)} run inside "
+                f"{', '.join(w.stage for w in active_wrappers)} and are not previewed -- "
+                f"re-run with --skip {' --skip '.join(w.stage for w in active_wrappers)} to see them",
+            )
         cmd = reinvoke_command(
             config_path,
             forwarded,
@@ -1726,6 +1810,13 @@ def build_arg_parser():
         "--ci", action="store_true", help="CI mode: swap in narrower/faster args (e.g. a shallow `west update`)"
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what each stage would run instead of running it: no command is executed for its effect, "
+        "nothing is written, and the final command is printed rather than launched (read-only queries and "
+        "sourced scripts do still run -- they are what the shown commands are derived from)",
+    )
+    parser.add_argument(
         "-c",
         "--config",
         action="append",
@@ -1897,6 +1988,7 @@ def _run_cli(argv=None):
             until_stage=args.until,
             skip_stages=args.skip,
             quiet=args.quiet,
+            dry_run=args.dry_run,
         )
         return
 
@@ -1920,6 +2012,7 @@ def _run_cli(argv=None):
         fast=args.fast,
         force=args.force,
         ci=args.ci,
+        dry_run=args.dry_run,
         start_time=args.start_time,
     )
 
