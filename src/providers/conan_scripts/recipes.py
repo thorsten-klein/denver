@@ -25,6 +25,7 @@ import functools
 import getpass
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -389,22 +390,67 @@ def test(recipe_path, pref):
     )
 
 
+# Every option this module ever puts on conan's command line, spelled out:
+# anything else that would reach conan's parser as an option is, by
+# definition, not one of ours. Add to this when a call site below grows a new
+# flag -- that is the point, the list is the thing being enforced.
+_CONAN_CLI_OPTIONS = frozenset({'--name', '--version', '--user', '--channel', '--test-missing', '-r'})
+
+# A value: a subcommand, a recipe path, a package reference, a remote name --
+# or the '<value>' half of '--name=<value>'. It may not begin with '-', that
+# being exactly the shape that gets a path or a reference read as *another
+# option* by conan's own parser, which is the injection this guards against.
+# It may not contain a control character either: NUL is rejected by exec()
+# itself anyway, and the rest have no business in a conan reference or in a
+# path denver was pointed at.
+_CONAN_CLI_VALUE = re.compile(r'[^-\x00-\x1f][^\x00-\x1f]*')
+
+
+def _validated_conan_arg(arg):
+    """Raise ValueError unless ``arg`` is one argv element of the shape this module builds (see below)."""
+    if not isinstance(arg, str):
+        raise ValueError(f"invalid conan CLI arguments: not a string: {arg!r}")
+    if not arg.startswith('-'):
+        if not _CONAN_CLI_VALUE.fullmatch(arg):
+            raise ValueError(f"invalid conan CLI arguments: not a usable value: {arg!r}")
+        return
+    # option-shaped: it has to be one of ours ('--test-missing', bare, or
+    # '--name=<value>' / '-r=<value>', whose value is checked like any other)
+    option, sep, value = arg.partition('=')
+    if option not in _CONAN_CLI_OPTIONS:
+        raise ValueError(f"invalid conan CLI arguments: not an option this module passes: {arg!r}")
+    if sep and not _CONAN_CLI_VALUE.fullmatch(value):
+        raise ValueError(f"invalid conan CLI arguments: not a usable value for {option}: {value!r}")
+
+
+def _validated_conan_argv(args):
+    """Return ``['conan', *args]``, every element of it checked by _validated_conan_arg() first.
+
+    Validation happens on the assembled argv rather than on ``args`` alone:
+    what matters is the list that is about to be executed, argv[0] included.
+
+    The elements are built by this module's own callers (create()'s
+    ``--name=``/``--version=``/``--user=``/``--channel=``, sourced from a
+    RecipeReference; upload()'s ``-r=``, a remote name checked against the
+    ones conan has configured), never taken verbatim from raw CLI/network
+    input. Checking them here regardless is what keeps that true: a value
+    that arrived malformed -- a recipe path, a catalog entry, a --remote --
+    or one a future call site passes through unexamined cannot reach conan's
+    parser as an option denver never meant to pass. It fails here instead,
+    with the offending element named.
+    """
+    cmd = ['conan', *args]
+    for arg in cmd:
+        _validated_conan_arg(arg)
+    return cmd
+
+
 def _run_conan_cli(*args):
     """Run `conan <args...>` as a subprocess, raising on a non-zero exit.
 
     TODO: replace with conan's own python API, if/when one covers this.
     """
-    # args are built by this module's own callers (create()'s --name=/
-    # --version=/--user=/--channel=, sourced from a RecipeReference), never
-    # taken verbatim from raw CLI/network input -- but validated here all
-    # the same, so a malformed recipe reference fails with a clear error
-    # instead of reaching subprocess.run() as a mystery argument. Checked on
-    # the assembled argv rather than on args alone: what matters is the list
-    # that is about to be executed, argv[0] included.
-    cmd = ['conan', *args]
-    if any(not isinstance(arg, str) or not arg or "\0" in arg for arg in cmd):
-        raise ValueError(f"invalid conan CLI arguments: {args!r}")
-    subprocess.run(cmd, check=True)
+    subprocess.run(_validated_conan_argv(args), check=True)
 
 
 def _validate_remote_name(remote_name):

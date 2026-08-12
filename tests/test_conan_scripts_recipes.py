@@ -805,6 +805,38 @@ def test_run_conan_cli_rejects_nul_byte_in_arg(monkeypatch):
         recipes._run_conan_cli("create", "foo\0bar")
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("create", "/recipes/foo/1.0/conanfile.py", "--name=foo", "--version=1.0", "--test-missing"),
+        ("upload", "-r=conancenter", "foo/1.0@denver/snapshot#rev:pkgid#prev"),
+        # a path is whatever the filesystem allows -- spaces, dots, '+',
+        # a Windows drive -- and none of it is option-shaped
+        ("create", "/home/some one/recipes/foo+bar/1.0/conanfile.py"),
+        ("create", r"C:\recipes\foo\1.0\conanfile.py"),
+    ],
+)
+def test_validated_conan_argv_passes_what_this_module_builds(args):
+    assert recipes._validated_conan_argv(args) == ["conan", *args]
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        "--config-install=evil",  # an option denver never passes, smuggled in as a value
+        "-r=--config-install",  # ... or as one of denver's own options' values
+        "--name=--version",
+        "--name=",  # an option denver does pass, with nothing behind it
+        "",  # not an argument at all
+        "\x1b[31m",  # control characters: not a reference, not a path
+        "foo\nbar",
+    ],
+)
+def test_validated_conan_argv_rejects_anything_option_shaped_or_unprintable(arg):
+    with pytest.raises(ValueError, match="invalid conan CLI arguments"):
+        recipes._validated_conan_argv(("create", arg))
+
+
 def test_reject_option_like_passes_through_normal_value():
     assert recipes._reject_option_like("/some/path", "recipe path") == "/some/path"
 
