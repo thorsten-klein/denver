@@ -398,10 +398,13 @@ def _run_conan_cli(*args):
     # --version=/--user=/--channel=, sourced from a RecipeReference), never
     # taken verbatim from raw CLI/network input -- but validated here all
     # the same, so a malformed recipe reference fails with a clear error
-    # instead of reaching subprocess.run() as a mystery argument.
-    if any(not isinstance(arg, str) or not arg or "\0" in arg for arg in args):
+    # instead of reaching subprocess.run() as a mystery argument. Checked on
+    # the assembled argv rather than on args alone: what matters is the list
+    # that is about to be executed, argv[0] included.
+    cmd = ['conan', *args]
+    if any(not isinstance(arg, str) or not arg or "\0" in arg for arg in cmd):
         raise ValueError(f"invalid conan CLI arguments: {args!r}")
-    subprocess.run(['conan', *args], check=True)
+    subprocess.run(cmd, check=True)
 
 
 def _validate_remote_name(remote_name):
