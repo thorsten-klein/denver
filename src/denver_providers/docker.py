@@ -104,6 +104,7 @@ Full key reference, worked examples and design notes: ``doc/providers/docker.md`
 import os
 import sys
 from pathlib import Path
+from typing import cast
 
 from .base import Provider, fill_unset
 from .context import banner, die
@@ -292,13 +293,15 @@ class DockerProvider(Provider):
         if self._exe is None:
             die(f"docker provider: wrap() called before setup() for stage '{self.stage}' -- this is a denver bug")
         banner(ctx, self.stage, "run")
+        # setup() stashes _compose_args/_run_args alongside _exe (see __init__),
+        # so the guard above already establishes they're real lists too.
         return [
             self._exe,
             "compose",
             *self._compose_file_args(),
-            *self._compose_args,
+            *cast(list, self._compose_args),
             "run",
-            *self._run_args,
+            *cast(list, self._run_args),
             *_relocation_env(ctx),
             *_relocation_mounts(ctx),
             # land in the directory denver was invoked from (bind-mounted at
@@ -333,7 +336,7 @@ class DockerProvider(Provider):
             banner(ctx, self.stage, already_available)
         elif image and compose["build"]:
             ctx.run(
-                [exe, "compose", *self._compose_file_args(), *self._compose_args, "build", self._service],
+                [exe, "compose", *self._compose_file_args(), *cast(list, self._compose_args), "build", self._service],
                 step="build",
             )
         else:
@@ -394,7 +397,7 @@ class DockerProvider(Provider):
     def _compose_file_args(self):
         """Turn ``self._compose_files`` into repeated `-f <file>` flags, in order."""
         args = []
-        for f in self._compose_files:
+        for f in cast(list, self._compose_files):
             args += ["-f", str(f)]
         return args
 

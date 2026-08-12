@@ -7,6 +7,7 @@ run in order. Providers are generic -- all project specifics come from config.
 import importlib.util
 import re
 import sys
+from typing import cast
 
 from .base import Provider
 from .conan import ConanProvider
@@ -144,6 +145,8 @@ def _register_extension_provider(py_file):
     # stable across re-imports.
     mod_name = "denver_extension_provider_" + re.sub(r"\W+", "_", str(py_file.with_suffix("")).strip("/"))
     spec = importlib.util.spec_from_file_location(mod_name, py_file)
+    if spec is None or spec.loader is None:  # pragma: no cover - spec_from_file_location always finds a loader here
+        die(f"'extensions.providers:' failed to load {py_file}: could not create a module spec")
     module = importlib.util.module_from_spec(spec)
     # registered *before* exec_module, per importlib's own recipe: a module
     # missing from sys.modules breaks anything that looks itself back up
@@ -151,13 +154,16 @@ def _register_extension_provider(py_file):
     # and does so only later, from inside the provider, not here.
     sys.modules[mod_name] = module
     try:
-        spec.loader.exec_module(module)
+        # importlib.abc.Loader deliberately omits exec_module from its own
+        # signature (backward-compat hasattr checks -- see its own docstring)
+        # even though spec_from_file_location's loader always has it.
+        spec.loader.exec_module(module)  # pyright: ignore[reportAttributeAccessIssue]
     except Exception as exc:  # surfaced as a denver.yml config error, not a crash
         del sys.modules[mod_name]
         die(f"'extensions.providers:' failed to load {py_file}: {exc}")
     _loaded_extension_files.add(str(py_file))
     provider_cls = _extension_provider_class(module, py_file)
-    PROVIDERS[provider_cls.name] = provider_cls
+    PROVIDERS[cast(str, provider_cls.name)] = provider_cls
 
 
 def _extension_provider_class(module, py_file):
