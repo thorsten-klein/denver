@@ -41,6 +41,7 @@ denver = "denver:main"
 
 [dependency-groups]
 lint = [
+    "complexipy>=7.0.0",
     "mypy~=1.14",
     "pre-commit>=4.3.0",
     "ruff~=0.13",
@@ -137,6 +138,13 @@ line-ending = "lf"
 # Enable preview mode for Github Annotations added in 0.13.3
 preview = true
 
+[tool.complexipy]
+paths = ["src", "tests"]
+max-complexity-allowed = 23
+failed = true
+color = "auto"
+sort = "asc"
+
 [tool.mypy]
 python_version = "3.9"
 files = ["src"]
@@ -155,10 +163,11 @@ module = ["conan.*", "colorama.*"]
 ignore_missing_imports = true
 
 [tool.poe.tasks]
-all = ["lint", "format", "mypy", "test"]
+all = ["lint", "format", "mypy", "complexity", "test"]
 format = "ruff format ."
 lint = "ruff check ."
 mypy = "mypy"
+complexity = "complexipy"
 test = {cmd = "pytest -v -n=auto --cov-config=pyproject.toml --cov=denver --cov=denver_providers --junitxml=junit.xml -o junit_family=legacy --cov-report=term-missing --cov-report=html --cov-report=xml --cov-fail-under=100", env = {PYTHONIOENCODING = "utf-8"}}
 
 clean = "rm -rf dist/ build/ *.egg-info src/*.egg-info htmlcov/ .coverage coverage.xml"
