@@ -37,7 +37,7 @@ different venvs) at different points of the pipeline.
 
 ### Top-level keys
 
-Exactly eight keys are recognised at the top level; everything else at that
+The following keys are recognised at the top level; everything else at that
 level must be a stage id declared in `stages:` (anything else is an error —
 see "Fail loud" in [`philosophy.md`](philosophy.md)).
 
@@ -69,6 +69,9 @@ see "Fail loud" in [`philosophy.md`](philosophy.md)).
   right after the `env` hook, before any stage runs.
 - **`hooks`** — scripts sourced at fixed points in the pipeline. See "Hooks"
   below.
+- **`extensions`** — own, project-local `Provider` subclasses to register
+  alongside the built-ins (`uv`, `conan`, `zephyr`, `docker`, `custom`), no
+  denver fork required. See "Extension providers" below.
 
 ### Requiring a denver version
 
@@ -306,6 +309,75 @@ available --run names for env 'zephyr-devshell-4.3.1':
 ``` This is where one-time host setup belongs: installing
 Docker itself, `udev` rules for flashing a board, a registry login — things
 that must not run on every start.
+
+## Extension providers
+
+The built-in providers (`uv`, `conan`, `zephyr`, `docker`, `custom`) cover
+the common cases, but a project may need its own — driving an internal
+build tool or deploy step with the same `resolve_defaults`/`setup`/`wrap`
+lifecycle a built-in provider gets, rather than squeezing it into a single
+`custom: cmd:` line. `extensions: providers: dirs:` registers one without
+maintaining a fork of denver:
+
+```yaml
+extensions:
+  providers:
+    dirs:
+    - my_providers   # resolved like conan's base-classes: env dir, then imported base envs
+```
+
+Every `*.py` file directly inside each listed dir — except those whose name
+starts with `_` — is imported and must define `PROVIDER`, a
+`denver_providers.Provider` subclass:
+
+```python
+# my_providers/acme.py
+from denver_providers import Provider
+
+
+class AcmeProvider(Provider):
+    name = "acme"  # the 'provider: acme' name a stage's section sets
+    KEYS = ("target",)  # denver.yml keys this provider reads
+
+    def setup(self, ctx):
+        cfg = self.config_section(ctx)
+        ctx.run(["acme-build", "--target", cfg["target"]])
+
+
+PROVIDER = AcmeProvider
+```
+
+Once registered, any stage can set `provider: acme` exactly like a built-in
+one:
+
+```yaml
+stages: [build]
+build:
+  provider: acme
+  target: release
+```
+
+A provider too big for one file puts its shared code in a `_`-prefixed file
+(`_helpers.py`, or an `__init__.py` making the dir a package): those are
+skipped rather than required to be providers of their own. The dir itself
+goes on `sys.path`, appended — never prepended, so an extension dir cannot
+shadow the stdlib or denver's own modules — which is what makes
+`import _helpers` work from a provider module next to it.
+
+Registration happens once per resolved config, before any stage is
+instantiated, so an extension provider is indistinguishable from a built-in
+one everywhere else — `--show-config`, `--fast`, `-c` overrides, `import:`
+layering (the `dirs:` list itself follows the normal list-merge rule, so a
+derived env only needs to list the dirs it adds). A `name` colliding with an
+existing provider (built-in or from another extension dir) is a hard error,
+as is an unknown key under `extensions:` itself — the same "fail loud" rule
+every other config mistake gets, never a silent override and never a typo
+that quietly disables the whole mechanism.
+
+Loading an extension provider runs its module's code, so an env's
+`denver.yml` is only ever as trustworthy as the repository it lives in —
+the same already-true statement as for `hooks:`, `custom: cmd:` and a
+sourced `source:` script, not a new trust boundary.
 
 ## Fast by default
 

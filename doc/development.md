@@ -90,6 +90,12 @@ a tooling limitation, not a way to hit 100% faster.
 
 ## Adding a new provider
 
+This is for contributing a provider *into denver itself* — one generic
+enough that other projects would want it too. A provider specific to your
+own project (an internal build tool, a deploy step) doesn't need any of
+this or a fork: see "Extension providers" in
+[`architecture.md`](architecture.md) instead.
+
 1. Subclass `Provider` (`src/denver_providers/base.py`): set `name`, `KEYS` (every
    `denver.yml` key your section understands), and `kind` if it's a wrapper
    (default: `setup`).

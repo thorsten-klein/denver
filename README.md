@@ -158,6 +158,11 @@ should use. A stage exists only because your `denver.yml` lists it:
 Those five built-in providers are the *code that knows how to run* a kind of
 stage; `custom` is the escape hatch for everything else, and a one-stage
 `custom` env is as legitimate as the five-stage one walked through below.
+Need more than `custom` can express — your own provider with real
+`setup()`/`wrap()` lifecycle behavior? `extensions: providers: dirs:`
+registers one from a directory in your own repo, no denver fork required —
+see "Extension providers" in
+[`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md).
 
 Run `denver --help` for every flag, see
 [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)

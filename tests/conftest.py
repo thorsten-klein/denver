@@ -8,6 +8,7 @@ orchestration/config logic can be exercised deterministically.
 from __future__ import annotations
 
 import subprocess
+import sys
 import types
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 import yaml
 
 import denver
+import denver_providers as providers
 from denver_providers import Context
 from denver_providers.context import set_quiet
 
@@ -50,6 +52,31 @@ def _reset_quiet_level():
     """
     yield
     set_quiet(0)
+
+
+@pytest.fixture(autouse=True)
+def _reset_provider_registry():
+    """Undo any 'extensions.providers.dirs:' registration a test made, process-wide.
+
+    load_extension_providers() mutates shared state directly: the
+    providers.PROVIDERS registry, the set of already-imported provider
+    files, sys.modules and sys.path. Without a reset, one test's extension
+    provider (all of it keyed by a tmp_path that the next test won't share)
+    would leak into every test running after it in the same worker process.
+    """
+    before_providers = dict(providers.PROVIDERS)
+    before_files = set(providers._loaded_extension_files)
+    before_modules = set(sys.modules)
+    before_path = list(sys.path)
+    yield
+    providers.PROVIDERS.clear()
+    providers.PROVIDERS.update(before_providers)
+    providers._loaded_extension_files.clear()
+    providers._loaded_extension_files.update(before_files)
+    for name in set(sys.modules) - before_modules:
+        if name.startswith("denver_extension_provider_"):
+            del sys.modules[name]
+    sys.path[:] = before_path
 
 
 # --------------------------------------------------------------------------- #

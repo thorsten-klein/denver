@@ -29,9 +29,10 @@ flag list.
   `denver.yml` schema (every top-level key, every generic stage key), how a
   config is resolved (`import:` chain → merge rules → central default
   resolution), the mechanisms that make it flexible (layering, hooks,
-  `-c`/`-cf` overrides, `${...}` interpolation) and fast (fingerprints,
-  `--fast`/`--force`), plus stage filtering and the wrapper/relocation model.
-  This is the doc to read before writing your own `denver.yml`.
+  extension providers, `-c`/`-cf` overrides, `${...}` interpolation) and fast
+  (fingerprints, `--fast`/`--force`), plus stage filtering and the
+  wrapper/relocation model. This is the doc to read before writing your own
+  `denver.yml`.
 
 - **[`providers/`](providers/)** — one page per provider: a full key
   reference for that provider's `denver.yml` section (every key, what it
@@ -49,6 +50,9 @@ flag list.
   Each provider's module docstring (`src/denver_providers/<name>.py`) carries the
   same key list as a terse lookup table kept next to the code, and points
   here for the full explanation, worked examples and rationale.
+
+  A project can also register its own provider, without a denver fork —
+  see "Extension providers" in [`architecture.md`](architecture.md).
 
 ## Background
 
