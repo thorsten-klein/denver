@@ -4,7 +4,7 @@ denver-version: ">=1.1.0"
 
 # Dummy example: stage-to-stage env propagation via the custom provider's
 # 'source:' key -- scoped to the 'set-vars' stage's own section, not the
-# global hooks: mechanism (see src/providers/custom.py's module docstring
+# global hooks: mechanism (see src/denver_providers/custom.py's module docstring
 # for 'source:', and src/denver.py's own module docstring for 'hooks:').
 #
 # Why not just 'cmd:' on 'set-vars': a 'provider: custom' stage's own 'cmd:'

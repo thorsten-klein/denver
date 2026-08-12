@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 import denver
-import providers.zephyr as zephyr_provider
+import denver_providers.zephyr as zephyr_provider
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_DIR = Path(__file__).resolve().parent / "golden"

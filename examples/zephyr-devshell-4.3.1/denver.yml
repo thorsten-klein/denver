@@ -62,7 +62,7 @@ zephyr:
 
 # `west packages pip` supplies its own requirements dynamically; this only
 # needs the same override pins the main uv stage uses (not inherited
-# automatically -- see src/providers/uv.py's module docstring).
+# automatically -- see src/denver_providers/uv.py's module docstring).
 uv-zephyr:
   # same offline install as the 'uv' stage above -- and, like everything
   # else here, it has to say so itself rather than inherit it from that stage.

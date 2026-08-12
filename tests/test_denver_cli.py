@@ -215,8 +215,8 @@ def test_main_reports_a_failing_command_instead_of_a_traceback(tmp_path, monkeyp
     # a provider's subprocess failing is an ordinary outcome, not a denver
     # bug: the user must get the command and its exit status, not a stack of
     # frames whose only content is the last one.
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "failer"
@@ -263,8 +263,8 @@ def test_command_failure_message_handles_a_string_command():
 
 
 def test_main_dispatches_to_providers(tmp_path, monkeypatch, exec_recorder, capsys):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "fakesetup"
@@ -314,8 +314,8 @@ def test_main_unrecognised_flag_dies_immediately_even_in_show_config_mode(tmp_pa
 
 
 def test_main_skip_flag_disables_wrapper(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class FakeWrap(Provider):
         name = "fakewrap"
@@ -353,8 +353,8 @@ def test_main_skip_flag_disables_wrapper(tmp_path, monkeypatch, exec_recorder):
 
 
 def test_main_quiet_flag_consumed(tmp_path, monkeypatch, capsys, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "fakesetup"
@@ -377,14 +377,14 @@ def test_main_quiet_flag_consumed(tmp_path, monkeypatch, capsys, exec_recorder):
     assert "finished in" in err
     assert "▄" not in err  # the block-art wordmark logo itself is still gone
     # a later non-quiet run resets the shared logger/flag for other tests
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     ctxmod.set_quiet(False)
 
 
 def test_main_fast_flag_consumed(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "fakesetup"
@@ -404,8 +404,8 @@ def test_main_fast_flag_consumed(tmp_path, monkeypatch, exec_recorder):
 
 
 def test_main_force_flag_consumed(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "fakesetup"
@@ -424,8 +424,8 @@ def test_main_force_flag_consumed(tmp_path, monkeypatch, exec_recorder):
 
 
 def test_main_no_force_flag_ctx_force_false(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "fakesetup"
@@ -444,8 +444,8 @@ def test_main_no_force_flag_ctx_force_false(tmp_path, monkeypatch, exec_recorder
 
 
 def test_main_ci_flag_consumed(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "fakesetup"
@@ -466,8 +466,8 @@ def test_main_ci_flag_consumed(tmp_path, monkeypatch, exec_recorder):
 def test_main_real_ci_env_var_does_not_leak_into_ctx_ci(tmp_path, monkeypatch, exec_recorder):
     # ctx.ci must only ever reflect --ci; a real CI=true/ON in the actual
     # process environment (e.g. set by a CI runner itself) must not leak in.
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "fakesetup"
@@ -487,9 +487,9 @@ def test_main_real_ci_env_var_does_not_leak_into_ctx_ci(tmp_path, monkeypatch, e
 
 
 def test_main_single_q_keeps_banner_visible(tmp_path, monkeypatch, capsys, exec_recorder):
-    import providers
-    from providers.base import Provider
-    from providers.context import banner
+    import denver_providers as providers
+    from denver_providers.base import Provider
+    from denver_providers.context import banner
 
     class Fake(Provider):
         name = "fakesetup"
@@ -506,15 +506,15 @@ def test_main_single_q_keeps_banner_visible(tmp_path, monkeypatch, capsys, exec_
     denver.main([str(env_dir), "-q", "--", "echo", "hi"])
     assert "visible" in capsys.readouterr().err
     # a later non-quiet run resets the shared logger/flag for other tests
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     ctxmod.set_quiet(0)
 
 
 def test_main_double_q_hides_banner_too(tmp_path, monkeypatch, capsys, exec_recorder):
-    import providers
-    from providers.base import Provider
-    from providers.context import banner
+    import denver_providers as providers
+    from denver_providers.base import Provider
+    from denver_providers.context import banner
 
     class Fake(Provider):
         name = "fakesetup"
@@ -531,7 +531,7 @@ def test_main_double_q_hides_banner_too(tmp_path, monkeypatch, capsys, exec_reco
     denver.main([str(env_dir), "-qq", "--", "echo", "hi"])
     assert capsys.readouterr().err == ""
     # a later non-quiet run resets the shared logger/flag for other tests
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     ctxmod.set_quiet(0)
 
@@ -735,8 +735,8 @@ def test_main_show_config_skip_drops_stage_and_section(tmp_path, capsys, which):
 
 
 def test_main_show_config_does_not_start_environment(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class Fake(Provider):
         name = "fakesetup"
@@ -838,8 +838,8 @@ def test_main_config_flag_missing_argument_dies(tmp_path):
 
 
 def test_main_until_flag_truncates_stages(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class FakeA(Provider):
         name = "fakea"
@@ -871,8 +871,8 @@ def test_main_until_flag_truncates_stages(tmp_path, monkeypatch, exec_recorder):
 
 
 def test_main_skip_flag_excludes_stage(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class FakeA(Provider):
         name = "fakea"
@@ -902,8 +902,8 @@ def test_main_skip_flag_excludes_stage(tmp_path, monkeypatch, exec_recorder):
 
 
 def test_main_skip_flag_accepts_equals_syntax(tmp_path, monkeypatch, exec_recorder):
-    import providers
-    from providers.base import Provider
+    import denver_providers as providers
+    from denver_providers.base import Provider
 
     class FakeA(Provider):
         name = "fakea"

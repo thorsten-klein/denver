@@ -21,7 +21,7 @@ import yaml
 from conan.api.model import PkgReference, RecipeReference, Remote
 from conan.internal.errors import AuthenticationException, ConanConnectionError, NotFoundException
 
-from providers.conan_scripts import recipes
+from denver_providers.conan_scripts import recipes
 
 
 # --------------------------------------------------------------------------- #

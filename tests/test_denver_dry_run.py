@@ -16,11 +16,11 @@ import pytest
 import yaml
 
 import denver
-import providers
-from providers.conan import ConanProvider
-from providers.context import DRY_PREFIX
-from providers.uv import UvProvider
-from providers.zephyr import ZephyrProvider
+import denver_providers as providers
+from denver_providers.conan import ConanProvider
+from denver_providers.context import DRY_PREFIX
+from denver_providers.uv import UvProvider
+from denver_providers.zephyr import ZephyrProvider
 
 
 def dry_lines(capsys, marker=None):
@@ -369,7 +369,7 @@ def test_zephyr_dry_run_previews_a_forced_workspace_reset_without_doing_it(make_
 
 # ---- docker provider ---------------------------------------------------------#
 def test_docker_dry_run_previews_without_docker_on_path(make_context, run_recorder, which, capsys):
-    from providers.docker import DockerProvider
+    from denver_providers.docker import DockerProvider
 
     which["docker"] = None
     config = {"docker": {"image": "img:dev", "compose": {"file": "docker-compose.yml"}}}

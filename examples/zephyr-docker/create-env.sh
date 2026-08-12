@@ -1,7 +1,7 @@
 #!/bin/bash -e
 # Renders the docker-compose .env file consumed by docker-compose.yml.
 # Called by denver's docker provider as an 'env-scripts' entry before
-# 'docker compose build/run' -- see src/providers/docker.py's module
+# 'docker compose build/run' -- see src/denver_providers/docker.py's module
 # docstring for how DENVER_DOCKER_IMAGE and env-scripts fit together.
 
 ENV_FILE_TARGET=${1:-}

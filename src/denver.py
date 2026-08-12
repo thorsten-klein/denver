@@ -78,33 +78,33 @@ CONFIG_NAME = "denver.yml"
 
 
 # where denver's own code lives (this file's directory, containing denver.py
-# and providers/) -- always correct in both a checkout and an installed
+# and denver_providers/) -- always correct in both a checkout and an installed
 # package, unlike DENVER_DIR below (per-run state, not code).
 DENVER_PKG_DIR = Path(__file__).resolve().parent
 
-# conan_scripts ships alongside this module's providers/ package, not
+# conan_scripts ships alongside this module's denver_providers/ package, not
 # DENVER_DIR, so it's still found when denver is installed via pip (no
 # repo-root layout).
-CONAN_SCRIPTS_DIR = DENVER_PKG_DIR / "providers" / "conan_scripts"
+CONAN_SCRIPTS_DIR = DENVER_PKG_DIR / "denver_providers" / "conan_scripts"
 
-# terminal-friendly rendition of assets/logo.svg (an SVG can't be drawn in a
-# plain terminal); kept alongside it under assets/ so both stay in sync when
-# the wordmark changes. Same DENVER_PKG_DIR-relative resolution as
+# terminal-friendly rendition of denver_assets/logo.svg (an SVG can't be drawn
+# in a plain terminal); kept alongside it under denver_assets/ so both stay in
+# sync when the wordmark changes. Same DENVER_PKG_DIR-relative resolution as
 # CONAN_SCRIPTS_DIR, so it's found in both a checkout and an installed package.
-LOGO_PATH = DENVER_PKG_DIR / "assets" / "logo.txt"
+LOGO_PATH = DENVER_PKG_DIR / "denver_assets" / "logo.txt"
 
 
 def checkout_root():
     """The source checkout denver itself is running out of, or None.
 
     True whenever DENVER_PKG_DIR is a ``<checkout>/src`` holding
-    ``providers/`` -- i.e. both when running the script directly
+    ``denver_providers/`` -- i.e. both when running the script directly
     (``src/denver.py``) and under an editable install (``uv pip install
     -e .``), which keeps DENVER_PKG_DIR pointing into the checkout's
     ``src/``. Installed any other way (e.g. a built wheel), DENVER_PKG_DIR is
     wherever the package manager put it (site-packages) and this is None.
     """
-    if DENVER_PKG_DIR.name == "src" and (DENVER_PKG_DIR / "providers").is_dir():
+    if DENVER_PKG_DIR.name == "src" and (DENVER_PKG_DIR / "denver_providers").is_dir():
         return DENVER_PKG_DIR.parent
     return None
 
@@ -778,7 +778,7 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     run_stages's 'disabled:' handling), not part of any one provider's own
     KEYS, so they belong here, not in Provider.resolve_defaults's default.
     """
-    from providers.base import fill_unset
+    from denver_providers.base import fill_unset
 
     validate_stage_section_keys(stage, raw_section)
     section = type(stage).resolve_defaults(ctx, raw_section, config)
@@ -806,7 +806,7 @@ def resolve_provider_defaults(config, ctx):
     because from here on ``config[stage_id]`` is the resolved section and
     nothing else may reach back into what it was resolved from.
     """
-    from providers import make_stage
+    from denver_providers import make_stage
 
     for stage_id in config.get("stages") or []:
         stage = make_stage(stage_id, config)
@@ -1181,7 +1181,7 @@ def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, fo
     so they can never drift apart -- a provider's setup() never guesses a
     default itself, it just reads what's already there. Returns (config, ctx).
     """
-    from providers import Context
+    from denver_providers import Context
 
     config, extra_dirs = expand_section_imports(config, env_dir)
     import_dirs = collect_import_dirs(config_path) + extra_dirs
@@ -1272,8 +1272,8 @@ def run_named_scripts(
     same wrapper caveat as run_stages(): the reinvocation that would carry
     the setup stages' entries into the wrapper is itself not run.
     """
-    from providers import make_stage
-    from providers.context import dry_run_legend
+    from denver_providers import make_stage
+    from denver_providers.context import dry_run_legend
 
     if dry_run:
         dry_run_legend()
@@ -1382,7 +1382,7 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     ``stage_index``/``stage_count`` (this stage's position among the stages
     running in *this* process -- see run_stages()) feed banner()'s '[i/n]'.
     """
-    from providers.context import stage_banner
+    from denver_providers.context import stage_banner
 
     ctx.stage_index = stage_index
     ctx.stage_count = stage_count
@@ -1501,8 +1501,8 @@ def run_stages(
     it is itself one of the commands not being run, so
     _run_stages_via_wrapper stops at the reinvocation and says so.
     """
-    from providers import make_stage
-    from providers.context import dry_run_legend
+    from denver_providers import make_stage
+    from denver_providers.context import dry_run_legend
 
     if start_time is None:
         start_time = time.time()
@@ -1631,7 +1631,7 @@ def _mark_relocated(ctx, wrappers):
     off ctx.env; a wrapper whose child simply inherits the environment (a
     ``custom`` launcher) needs no such help.
     """
-    from providers.context import RELOCATED_VAR
+    from denver_providers.context import RELOCATED_VAR
 
     ctx.set(RELOCATED_VAR, ",".join(w.stage for w in wrappers))
 
@@ -1669,7 +1669,7 @@ class _RunOptions:
 
 def _show_skipped(ctx, skipped, skip_state):
     """Print a "skipped by ..." banner for each stage in ``skipped`` (disabled: true, --until, or --skip)."""
-    from providers.context import skip_banner
+    from denver_providers.context import skip_banner
 
     for s in skipped:
         if s.stage in skip_state.stage_ids:

@@ -15,7 +15,7 @@ import types
 import pytest
 import yaml
 
-from providers.conan_scripts import get_rrev
+from denver_providers.conan_scripts import get_rrev
 
 
 # --------------------------------------------------------------------------- #
@@ -308,7 +308,7 @@ def test_get_rrev_missing_md5_after_all_branches_raises(tmp_path, monkeypatch):
     _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[src])
     _stub_git_tracked(monkeypatch, {str(recipe_dir / src)})
 
-    import providers.conan_scripts.get_rrev as mod
+    import denver_providers.conan_scripts.get_rrev as mod
 
     monkeypatch.setattr(mod, "md5sum", lambda p: "")
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from providers.conan import ConanProvider
+from denver_providers.conan import ConanProvider
 
 
 def run_conan(config, ctx, stage="conan"):

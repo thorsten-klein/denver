@@ -1,6 +1,6 @@
 # denver
 
-<img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/assets/logo.svg" alt="logo" width="80%"/>
+<img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="logo" width="80%"/>
 
 **Development Environments as code — reproducible, flexible, simple and fast.**
 
@@ -453,7 +453,7 @@ not a meal.)
   reference under [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) — e.g.
   [`doc/providers/docker.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md) for every `docker:` key —
   and a terser lookup table in its module docstring next to the code
-  (`src/providers/docker.py`).
+  (`src/denver_providers/docker.py`).
 
 ## You wanna set up your own environment?
 

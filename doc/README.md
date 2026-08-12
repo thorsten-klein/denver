@@ -46,7 +46,7 @@ flag list.
   | [`zephyr`](providers/zephyr.md) | Manage a West (Zephyr RTOS) workspace |
   | [`custom`](providers/custom.md) | Escape hatch: an arbitrary command, sourced script or launcher |
 
-  Each provider's module docstring (`src/providers/<name>.py`) carries the
+  Each provider's module docstring (`src/denver_providers/<name>.py`) carries the
   same key list as a terse lookup table kept next to the code, and points
   here for the full explanation, worked examples and rationale.
 

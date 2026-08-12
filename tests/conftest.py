@@ -15,8 +15,8 @@ import pytest
 import yaml
 
 import denver
-from providers import Context
-from providers.context import set_quiet
+from denver_providers import Context
+from denver_providers.context import set_quiet
 
 
 @pytest.fixture(autouse=True)
@@ -120,7 +120,7 @@ def which(monkeypatch):
             return table[name]
         return f"/usr/bin/{name}"
 
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     monkeypatch.setattr(ctxmod.shutil, "which", fake_which)
     return table
@@ -136,7 +136,7 @@ def exec_recorder(monkeypatch):
         captured["args"] = args
         captured["env"] = env
 
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     monkeypatch.setattr(ctxmod.os, "execvpe", fake_execvpe)
     # exec() resolves the program against the env's PATH before handing it

@@ -53,14 +53,14 @@ conan:
   cleanup-remotes: true
   conanfiles: []
   config: null
-  deployer: <REPO>/src/providers/conan_scripts/extensions/symlink.py
+  deployer: <REPO>/src/denver_providers/conan_scripts/extensions/symlink.py
   exe: /usr/bin/conan
   install-args: null
   no-auth: false
   profiles:
     build: []
     host: []
-  recipes-exporter: <REPO>/src/providers/conan_scripts/recipes.py
+  recipes-exporter: <REPO>/src/denver_providers/conan_scripts/recipes.py
   remotes: {}
   user: denver
 uv:

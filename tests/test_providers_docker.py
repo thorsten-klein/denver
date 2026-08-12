@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from providers.docker import DockerProvider
+from denver_providers.docker import DockerProvider
 
 
 def run_docker(config, ctx, stage="docker"):

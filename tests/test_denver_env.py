@@ -10,7 +10,7 @@ import denver
 # ---- _default_denver_dir --------------------------------------------------- #
 def test_default_denver_dir_checkout_layout(monkeypatch, tmp_path):
     pkg_dir = tmp_path / "checkout" / "src"
-    (pkg_dir / "providers").mkdir(parents=True)
+    (pkg_dir / "denver_providers").mkdir(parents=True)
     monkeypatch.setattr(denver, "DENVER_PKG_DIR", pkg_dir)
     assert denver._default_denver_dir() == pkg_dir.parent
 
