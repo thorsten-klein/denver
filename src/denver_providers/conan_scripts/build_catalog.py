@@ -117,7 +117,8 @@ class Recipe:
 
     def add_dependency(self, kind, recipe):
         """Add ``recipe`` to this recipe's ``kind`` ("requires"/"tool_requires") list, deduped by name+version."""
-        assert kind in ["requires", "tool_requires"]
+        # internal call-site invariant (both callers pass a literal), not a security check
+        assert kind in ["requires", "tool_requires"]  # nosec B101
 
         def find(in_list, recipe):
             return any(r.name == recipe.name and r.version == recipe.version for r in in_list)

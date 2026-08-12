@@ -41,6 +41,7 @@ denver = "denver:main"
 
 [dependency-groups]
 lint = [
+    "bandit>=1.8.0",
     "complexipy>=7.0.0",
     "mypy~=1.14",
     "pre-commit>=4.3.0",
@@ -114,10 +115,10 @@ exclude_lines = [
 [tool.ruff]
 line-length = 120
 indent-width = 4
-# examples/**/*.py and bak/ are project-specific conan recipes and legacy
+# examples/**/*.py are project-specific conan recipes and legacy
 # scratch, not denver's own package -- linting/formatting them is out of
 # scope here. .envs is denver's own runtime state dir (venvs, conan caches).
-extend-exclude = ["examples", "bak", ".envs"]
+extend-exclude = ["examples", ".envs"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "PTH", "RET", "ARG", "C4", "RUF", "D"]
@@ -167,12 +168,29 @@ ignore_missing_imports = true
 pythonVersion = "3.9"
 include = ["src"]
 
+[tool.bandit]
+# scope to denver's own package, same as pyright/mypy
+exclude_dirs = ["examples", ".envs", "tests"]
+# denver's whole job is orchestrating other tools (git/docker/conan/sudo/bash)
+# as subprocesses -- these three fire on every single one of those call sites:
+#   B404 -- merely importing subprocess
+#   B603 -- subprocess.run/check_output called with a list argv and no shell=True
+#           (that's the *safe* pattern these checks exist to push people towards)
+#   B607 -- invoking a PATH-resolved executable ("git", "sudo", "bash", ...) rather
+#           than a hardcoded absolute path, which would break on every dev machine
+#   B606 -- os.execvpe() replacing the current process with a PATH-resolved
+#           executable, same reasoning as B607
+# Genuine subprocess-input risks are reviewed case by case instead (see e.g. the
+# url-scheme check next to get_rrev.py's urlretrieve call).
+skips = ["B404", "B603", "B606", "B607"]
+
 [tool.poe.tasks]
-all = ["lint", "format", "mypy", "pyright", "complexity", "test"]
+all = ["lint", "format", "mypy", "pyright", "bandit", "complexity", "test"]
 format = "ruff format ."
 lint = "ruff check ."
 mypy = "mypy"
 pyright = "pyright"
+bandit = "bandit -c pyproject.toml -r src"
 complexity = "complexipy"
 test = {cmd = "pytest -v -n=auto --cov-config=pyproject.toml --cov=denver --cov=denver_providers --junitxml=junit.xml -o junit_family=legacy --cov-report=term-missing --cov-report=html --cov-report=xml --cov-fail-under=100", env = {PYTHONIOENCODING = "utf-8"}}
 

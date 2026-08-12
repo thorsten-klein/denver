@@ -16,6 +16,7 @@ import shlex
 import subprocess
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlparse
 from urllib.request import urlretrieve
 
 import yaml
@@ -113,12 +114,15 @@ def _fetch_export_source(
         )
         subprocess.run(shlex.split(custom), check=True, cwd=conanfile_dir)
     elif url:
+        if urlparse(url).scheme not in ("http", "https"):
+            raise GetRREVError(f"Error: 'url' must be http(s), got: {url!r}")
         print(
             f"Warning: no md5 pinned for '{exports_source}' in '{conandata_yml}' -- downloading "
             f"'{url}' and trusting its content as the reference md5 for the first time. Review "
             "this conandata.yml diff before committing it."
         )
-        urlretrieve(url, exports_source_abs)
+        # scheme validated above -- file:/ and other non-http(s) schemes are rejected
+        urlretrieve(url, exports_source_abs)  # nosec B310
     else:
         raise GetRREVError(f"Error: don't know how to get file {exports_source_abs}")
 
