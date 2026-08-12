@@ -86,17 +86,22 @@ def load_extension_providers(ctx, extensions_cfg):
     extension provider's name is instantiated (see resolve_full_config).
     """
     for entry in _extension_provider_dirs(extensions_cfg):
-        d = ctx.resolve_path(entry)
-        if not d.is_dir():
-            die(f"'extensions.providers.dirs:' directory not found: {d}")
-        # so a provider module can 'import _helpers' next to itself.
-        # Appended, not prepended: an extension dir can never shadow the
-        # stdlib or denver's own modules.
-        if str(d) not in sys.path:
-            sys.path.append(str(d))
-        for py_file in sorted(d.glob("*.py")):
-            if not py_file.name.startswith("_"):
-                _register_extension_provider(py_file)
+        _load_provider_dir(ctx, entry)
+
+
+def _load_provider_dir(ctx, entry):
+    """Import and register every provider module directly inside one 'extensions.providers.dirs:' entry."""
+    d = ctx.resolve_path(entry)
+    if not d.is_dir():
+        die(f"'extensions.providers.dirs:' directory not found: {d}")
+    # so a provider module can 'import _helpers' next to itself.
+    # Appended, not prepended: an extension dir can never shadow the
+    # stdlib or denver's own modules.
+    if str(d) not in sys.path:
+        sys.path.append(str(d))
+    for py_file in sorted(d.glob("*.py")):
+        if not py_file.name.startswith("_"):
+            _register_extension_provider(py_file)
 
 
 def _extension_provider_dirs(extensions_cfg):
@@ -109,7 +114,11 @@ def _extension_provider_dirs(extensions_cfg):
     if not isinstance(providers_cfg, dict):
         die(f"'extensions.providers:' must be a mapping, got {type(providers_cfg).__name__}")
     _validate_keys(providers_cfg, _EXTENSION_PROVIDER_KEYS, "extensions.providers")
-    dirs = providers_cfg.get("dirs")
+    return _validated_dirs(providers_cfg.get("dirs"))
+
+
+def _validated_dirs(dirs):
+    """Return the 'extensions.providers.dirs:' list itself, checked to be a list of strings (empty if unset)."""
     if dirs is None:
         return []
     if not isinstance(dirs, list) or not all(isinstance(entry, str) for entry in dirs):
@@ -147,6 +156,12 @@ def _register_extension_provider(py_file):
         del sys.modules[mod_name]
         die(f"'extensions.providers:' failed to load {py_file}: {exc}")
     _loaded_extension_files.add(str(py_file))
+    provider_cls = _extension_provider_class(module, py_file)
+    PROVIDERS[provider_cls.name] = provider_cls
+
+
+def _extension_provider_class(module, py_file):
+    """Return the Provider subclass ``module`` registers as PROVIDER, or die saying what's wrong with it."""
     provider_cls = getattr(module, "PROVIDER", None)
     if not (isinstance(provider_cls, type) and issubclass(provider_cls, Provider)):
         die(
@@ -156,14 +171,14 @@ def _register_extension_provider(py_file):
     name = provider_cls.name
     if not name:
         die(f"'extensions.providers:' {py_file}: its PROVIDER class must set a 'name'")
-    # a given file is imported at most once (see above), so this can only be
-    # a *different* provider already holding the name -- built-in or from
-    # another extension dir. Never a silent override.
+    # a given file is imported at most once (see the caller), so this can
+    # only be a *different* provider already holding the name -- built-in or
+    # from another extension dir. Never a silent override.
     if name in PROVIDERS:
         die(
             f"'extensions.providers:' provider '{name}' from {py_file} conflicts with an existing provider of that name"
         )
-    PROVIDERS[name] = provider_cls
+    return provider_cls
 
 
 def make_stage(stage_id, config):

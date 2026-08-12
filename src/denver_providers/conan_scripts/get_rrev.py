@@ -120,22 +120,51 @@ def _fetch_export_source(
         raise GetRREVError(f"Error: don't know how to get file {exports_source_abs}")
 
 
+def _reconcile_tracked_entry(entry: dict, exports_source_abs: Path) -> bool:
+    """Re-pin a git-tracked source's md5 from disk (``entry`` mutated in place). Returns True if changed."""
+    changed = entry.pop("url", None) is not None  # url on a tracked file doesn't make sense
+    if not exports_source_abs.exists():
+        return changed
+    file_md5 = md5sum(exports_source_abs)
+    if entry.get("md5") == file_md5:
+        return changed
+    entry["md5"] = file_md5
+    return True
+
+
 def _reconcile_export_source_entry(
     conanfile_dir: Path, exports_source: str, entry: dict, exports_source_abs: Path
 ) -> bool:
     """Sync ``entry``'s git-tracked/url bookkeeping to match reality (mutated in place). Returns True if changed."""
-    changed = False
     if _is_git_tracked(conanfile_dir, exports_source_abs):
-        if entry.pop("url", None) is not None:  # url on a tracked file doesn't make sense
-            changed = True
-        if exports_source_abs.exists():
-            file_md5 = md5sum(exports_source_abs)
-            if entry.get("md5") != file_md5:
-                entry["md5"] = file_md5
-                changed = True
-    elif not entry.get("url") and not entry.get("custom"):
+        return _reconcile_tracked_entry(entry, exports_source_abs)
+    if not entry.get("url") and not entry.get("custom"):
         raise GetRREVError(f"Error: 'url' must be specified for {exports_source} in {conanfile_dir}")
-    return changed
+    return False
+
+
+def _validate_pinned_md5(md5: str, exports_source: str, conandata_yml: Path) -> None:
+    """Reject a pinned md5 that isn't a real 32-char hex digest.
+
+    A raised error, not an assert, so the shape is enforced even under
+    ``python -O`` (which strips assert statements).
+    """
+    if len(md5) != 32:
+        raise GetRREVError(
+            f"Error: md5 '{md5}' for '{exports_source}' in '{conandata_yml}' is not a valid "
+            "md5 (expected 32 hex characters)."
+        )
+
+
+def _pin_fetched_md5(
+    conanfile_dir: Path, exports_source: str, entry: dict, exports_source_abs: Path, conandata_yml: Path
+) -> str:
+    """Fetch the source if it isn't there yet, then compute and pin its md5 into ``entry``."""
+    if not exports_source_abs.exists():
+        _fetch_export_source(conanfile_dir, exports_source, entry, conandata_yml, exports_source_abs)
+    md5 = md5sum(exports_source_abs)
+    entry["md5"] = md5
+    return md5
 
 
 def _ensure_md5(
@@ -143,22 +172,11 @@ def _ensure_md5(
 ) -> tuple[str, bool]:
     """Validate ``entry``'s pinned md5, or fetch the source and compute+pin one. Returns ``(md5, changed)``."""
     md5 = entry.get("md5")
+    changed = not md5
     if md5:
-        # validate the pinned md5's shape (a real 32-char hex digest) -- a raised
-        # error here, not assert, so this is enforced even under `python -O`
-        # (which strips assert statements)
-        if len(md5) != 32:
-            raise GetRREVError(
-                f"Error: md5 '{md5}' for '{exports_source}' in '{conandata_yml}' is not a valid "
-                "md5 (expected 32 hex characters)."
-            )
-        changed = False
+        _validate_pinned_md5(md5, exports_source, conandata_yml)
     else:
-        if not exports_source_abs.exists():
-            _fetch_export_source(conanfile_dir, exports_source, entry, conandata_yml, exports_source_abs)
-        md5 = md5sum(exports_source_abs)
-        entry["md5"] = md5
-        changed = True
+        md5 = _pin_fetched_md5(conanfile_dir, exports_source, entry, exports_source_abs, conandata_yml)
 
     if not md5:
         raise GetRREVError(
@@ -192,15 +210,48 @@ def _sync_export_source(
     return md5, changed or entry_changed or md5_changed
 
 
+def _sync_export_sources(
+    conanfile_dir: Path, exports_sources: list, yml_data: dict, conandata_yml: Path
+) -> list[tuple[str, str]]:
+    """Pin every managed export source, rewriting conandata.yml if any pin changed.
+
+    Only entries named in 'exports_sources' are denver's to manage. A recipe
+    is free to pin sources in conandata.yml that it fetches itself at build
+    time (conan's own `get()`) instead of staging the archive next to the
+    recipe -- a bare conan recipe with no 'exports_sources' at all is the
+    extreme case. Those entries are left exactly as written rather than
+    deleted as "obsolete": conandata.yml belongs to the recipe author, and
+    silently dropping what they put there would break such a recipe.
+
+    Returns the manifest (filename, md5) entries the export sources contribute.
+    """
+    yml_sources = yml_data.get("sources") or {}
+    yml_data["sources"] = yml_sources  # linked to yml_data, so a save() below keeps it
+    entries = []
+    changed = False
+
+    for exports_source in exports_sources:  # NOTE: wildcard '*' entries aren't (yet) expanded; synced literally
+        md5, source_changed = _sync_export_source(conanfile_dir, exports_source, yml_sources, conandata_yml)
+        changed = changed or source_changed
+        entries.append((f"export_source/{exports_source}", md5))
+
+    if changed:
+        save(conandata_yml, yaml.safe_dump(yml_data, default_flow_style=False))
+    return entries
+
+
+def _summary_hash(manifest_entries: list[tuple[str, str]]) -> str:
+    """The conanmanifest.txt summary hash over ``manifest_entries``."""
+    manifest_str = "\n".join(f"{f}: {md5}" for f, md5 in manifest_entries) + "\n"  # trailing \n, as conan writes it
+    return FileTreeManifest.loads("1\n" + manifest_str).summary_hash
+
+
 def compute_rrev(conanfile_dir):
     """Compute (name, version, RREV) for the recipe at ``conanfile_dir``, ensuring its sources/md5s are pinned."""
     conanfile_dir = Path(conanfile_dir).resolve()  # ensure absolute path
     conanfile_py = conanfile_dir / "conanfile.py"
 
     conan_inspect = inspect(conanfile_py, ["name", "version", "exports_sources"])
-    name = conan_inspect["name"]
-    version = conan_inspect["version"]
-    exports_sources = conan_inspect["exports_sources"] or []
 
     conandata_yml = conanfile_dir / "conandata.yml"
     if not conandata_yml.exists():
@@ -209,33 +260,13 @@ def compute_rrev(conanfile_dir):
     # ----------------------------------
     # replicate the conanmanifest.txt
     # ----------------------------------
-    relevant_md5_sums = _base_manifest_entries(conanfile_py, conandata_yml)
-
     yml_data = yaml.safe_load(load(conandata_yml)) or {}
-    yml_sources = yml_data.get("sources") or {}
-    yml_data["sources"] = yml_sources  # linked to yml_data, so a save() below keeps it
-    changed = False
+    manifest_entries = _base_manifest_entries(conanfile_py, conandata_yml)
+    manifest_entries += _sync_export_sources(
+        conanfile_dir, conan_inspect["exports_sources"] or [], yml_data, conandata_yml
+    )
 
-    # Only entries named in 'exports_sources' are denver's to manage. A recipe
-    # is free to pin sources in conandata.yml that it fetches itself at build
-    # time (conan's own `get()`) instead of staging the archive next to the
-    # recipe -- a bare conan recipe with no 'exports_sources' at all is the
-    # extreme case. Those entries are left exactly as written rather than
-    # deleted as "obsolete": conandata.yml belongs to the recipe author, and
-    # silently dropping what they put there would break such a recipe.
-    for exports_source in exports_sources:  # NOTE: wildcard '*' entries aren't (yet) expanded; synced literally
-        md5, source_changed = _sync_export_source(conanfile_dir, exports_source, yml_sources, conandata_yml)
-        changed = changed or source_changed
-        relevant_md5_sums.append((f"export_source/{exports_source}", md5))
-
-    if changed:
-        save(conandata_yml, yaml.safe_dump(yml_data, default_flow_style=False))
-
-    # create the manifest (added \n in the end)
-    manifest_str = "\n".join(f"{f}: {md5}" for f, md5 in relevant_md5_sums) + "\n"
-    manifest = FileTreeManifest.loads("1\n" + manifest_str)
-
-    return name, version, manifest.summary_hash
+    return conan_inspect["name"], conan_inspect["version"], _summary_hash(manifest_entries)
 
 
 if __name__ == "__main__":

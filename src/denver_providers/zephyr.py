@@ -82,6 +82,30 @@ class ZephyrProvider(Provider):
         "update-args",
     )
 
+    @staticmethod
+    def _resolved_west_yml(ctx, west_yml):
+        """The manifest path: the configured 'west-yml:' if there is one, else the super-repo's own west.yml."""
+        if west_yml:
+            return str(ctx.resolve_path(west_yml))
+        # anchored on the env dir (where the env being launched lives),
+        # not ctx.denver_dir (where denver itself is installed/keeps
+        # state) -- those have no relationship when denver is installed.
+        super_root = find_outermost_in_parents(ctx.env_dir, ".git")
+        if not super_root:
+            die("zephyr: no west-yml configured and no enclosing git repo found")
+        return str(Path(super_root) / "west.yml")
+
+    @staticmethod
+    def _resolved_committer(cfg):
+        """The identity used when applying project patches: denver's own, overridden by 'patch-committer:'."""
+        committer = {
+            "GIT_COMMITTER_NAME": "denver",
+            "GIT_COMMITTER_EMAIL": "denver@denver",
+            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00",
+        }
+        committer.update(cfg.get("patch-committer") or {})
+        return committer
+
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
         """Resolve west-yml/base/blobs-fetch-args/patch-committer -- see module docstring."""
@@ -94,29 +118,10 @@ class ZephyrProvider(Provider):
         ctx.env.setdefault("WEST_TOPDIR", str(top) if top else "")
 
         resolved = dict(cfg)
-
-        west_yml = cfg.get("west-yml")
-        if west_yml:
-            resolved["west-yml"] = str(ctx.resolve_path(west_yml))
-        else:
-            # anchored on the env dir (where the env being launched lives),
-            # not ctx.denver_dir (where denver itself is installed/keeps
-            # state) -- those have no relationship when denver is installed.
-            super_root = find_outermost_in_parents(ctx.env_dir, ".git")
-            if not super_root:
-                die("zephyr: no west-yml configured and no enclosing git repo found")
-            resolved["west-yml"] = str(Path(super_root) / "west.yml")
-
+        resolved["west-yml"] = cls._resolved_west_yml(ctx, cfg.get("west-yml"))
         resolved["base"] = str(ctx.resolve_path(cfg.get("base") or "${WEST_TOPDIR}/zephyr-rtos"))
         resolved["blobs-fetch-args"] = cfg.get("blobs-fetch-args") or ["--auto-accept"]
-
-        committer = {
-            "GIT_COMMITTER_NAME": "denver",
-            "GIT_COMMITTER_EMAIL": "denver@denver",
-            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00",
-        }
-        committer.update(cfg.get("patch-committer") or {})
-        resolved["patch-committer"] = committer
+        resolved["patch-committer"] = cls._resolved_committer(cfg)
 
         return fill_unset(resolved, cls.KEYS)
 
@@ -162,6 +167,18 @@ class ZephyrProvider(Provider):
         self._update(ctx, cfg, west, top, west_yml, zephyr_base)
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _needs_west_config(ctx, west_config, removed):
+        """Whether the empty .west/config still has to be (re)created.
+
+        Under --dry-run the removal only *reported* itself, so ask whether
+        the file would have survived, not whether it is still on disk --
+        otherwise its recreation goes missing from the preview.
+        """
+        if removed and ctx.dry_run:
+            return True
+        return not west_config.exists()
+
     def _ensure_workspace(self, ctx, top):
         """Create an empty .west/config at ``top`` if missing (or --force), so `west` recognizes the workspace."""
         # bannered first (even though there's nothing to echo/run here today)
@@ -169,32 +186,32 @@ class ZephyrProvider(Provider):
         # the way _configure/_update's own info() lines used to.
         banner(ctx, self.stage, "prepare")
         west_config = top / ".west" / "config"
-        if ctx.force and west_config.exists():
+        removed = ctx.force and west_config.exists()
+        if removed:
             ctx.unlink(west_config)
-        # under --dry-run the removal above only *reported* itself, so ask
-        # whether the file would have survived, not whether it is still on
-        # disk -- otherwise its recreation goes missing from the preview.
-        if not west_config.exists() or (ctx.dry_run and ctx.force):
+        if self._needs_west_config(ctx, west_config, removed):
             ctx.mkdir(west_config.parent)
             ctx.touch(west_config)
         info(f"zephyr: workspace at {west_config}")
+
+    @staticmethod
+    def _current_config_value(listing, key):
+        """The value ``west config -l`` currently reports for ``key``, or None if it has none."""
+        for line in listing.splitlines():
+            if line.startswith(f"{key}="):
+                return line.split("=", 1)[1]
+        return None
+
+    def _ensure_config(self, ctx, west, top, listing, key, value):
+        """Run `west config <key> <value>` only when the value differs -- no write (or log line) on every run."""
+        if self._current_config_value(listing, key) != value:
+            ctx.run([west, "config", key, value], cwd=top)
+        info(f"zephyr: west config {key}={value}")
 
     def _configure(self, ctx, cfg, west, top, west_yml, zephyr_base):
         """Set every `west config` key that differs from its current value (manifest.path/file, zephyr.base, ...)."""
         banner(ctx, self.stage, "west config")
         current = ctx.run([west, "config", "-l"], cwd=top, capture=True, echo=False, check=False).stdout
-
-        def ensure(key, value):
-            # only actually run `west config` when the value differs --
-            # avoids an unnecessary write (and its log line) on every run.
-            existing = None
-            for line in current.splitlines():
-                if line.startswith(f"{key}="):
-                    existing = line.split("=", 1)[1]
-                    break
-            if existing != value:
-                ctx.run([west, "config", key, value], cwd=top)
-            info(f"zephyr: west config {key}={value}")
 
         # computed from the (already-resolved) west-yml/base, then any
         # extra/overriding entries from denver.yml -- these three are workspace
@@ -206,7 +223,7 @@ class ZephyrProvider(Provider):
         }
         west_config.update(cfg.get("west-config") or {})
         for key, value in west_config.items():
-            ensure(key, str(value))
+            self._ensure_config(ctx, west, top, current, key, str(value))
 
     def _west_info(self, ctx, west, top, west_yml, zephyr_base):
         """Build a fingerprint string (west-yml path, zephyr commit, resolved manifest) to detect workspace drift.

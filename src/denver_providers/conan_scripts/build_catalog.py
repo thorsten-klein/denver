@@ -209,26 +209,66 @@ class Catalog:
             f"Error: Could not find any dependency '{ref_name}/{ref_version}' (used in {recipe.conandata_yml.path}"
         )
 
+    @staticmethod
+    def _references_of(recipe, kind):
+        """The raw ``kind`` ("requires"/"tool_requires") reference strings in ``recipe``'s conandata.yml."""
+        if not recipe.conandata_yml:
+            return []
+        return recipe.conandata_yml.data.get(kind) or []
+
+    def _link_dependency(self, recipe, kind, reference):
+        """Link one ``kind`` reference of ``recipe`` to the loaded Recipe it names, in both directions."""
+        ref_name, ref_version = _reference_name_version(reference)
+        dep_recipe = self.find_recipe(ref_name, ref_version)
+        if not dep_recipe:
+            raise self._dependency_not_found_error(recipe, kind, ref_name, ref_version)
+
+        dep_recipe.users.setdefault(kind, []).append(recipe)
+        self.resolve_dependencies_recursively(dep_recipe)
+        recipe.add_dependency(kind, dep_recipe)
+
     def resolve_dependencies_recursively(self, recipe):
         """Link ``recipe``'s requires/tool_requires (from its conandata.yml) to their loaded Recipe objects."""
-        if not recipe.conandata_yml:
-            return
         for kind in ["requires", "tool_requires"]:
-            if kind not in recipe.conandata_yml.data:
-                continue
+            for reference in self._references_of(recipe, kind):
+                self._link_dependency(recipe, kind, reference)
 
-            for reference in recipe.conandata_yml.data[kind]:
-                ref_name, ref_version = _reference_name_version(reference)
-                dep_recipe = self.find_recipe(ref_name, ref_version)
-                if not dep_recipe:
-                    raise self._dependency_not_found_error(recipe, kind, ref_name, ref_version)
-                if kind not in dep_recipe.users:
-                    dep_recipe.users[kind] = []
+    @staticmethod
+    def _pinned_entry(user_dependencies, recipe):
+        """The one entry in ``user_dependencies`` naming ``recipe``, whatever RREV it currently pins.
 
-                dep_recipe.users[kind] += [recipe]
-                self.resolve_dependencies_recursively(dep_recipe)
+        There must be exactly one, since resolve_dependencies_recursively
+        already matched this user to this recipe via that same reference.
+        Matched on the parsed (name, version) tuple, not a startswith()
+        prefix, so e.g. 'bar/1.0' can never accidentally match a coexisting
+        'bar/1.0.1@...' entry.
+        """
+        (entry,) = [x for x in user_dependencies if _reference_name_version(x) == (recipe.name, recipe.version)]
+        return entry
 
-                recipe.add_dependency(kind, dep_recipe)
+    def _repin_user(self, user, kind, recipe, recipe_reference):
+        """Point ``user``'s ``kind`` entry for ``recipe`` at ``recipe_reference``, sorted. True if it changed."""
+        do_save = False
+        user_dependencies = user.conandata_yml.data[kind]
+        user_dependency = self._pinned_entry(user_dependencies, recipe)
+        if user_dependency != recipe_reference:
+            do_save = True
+            print(f"Info: updated {recipe_reference} in {user.conandata_yml.path}")
+            user_dependencies.remove(user_dependency)  # remove old
+            user_dependencies.append(recipe_reference)  # add new
+        if user_dependencies != sorted(user_dependencies):
+            print(f"Info: {user.conandata_yml.path} needs to be re-generated")
+            do_save = True
+        user.conandata_yml.data[kind] = sorted(user_dependencies)  # ensure it is sorted
+        return do_save
+
+    def _propagate_rrev(self, recipe, kind, users, _visited):
+        """Re-pin every recipe in ``users`` to ``recipe``'s current reference, recursing into the ones that moved."""
+        recipe_reference = recipe.get_full_reference(rrev=True)
+        for user in users:
+            if self._repin_user(user, kind, recipe, recipe_reference):
+                user.conandata_yml.save_file()
+                self.update_rrevs_recursively(user, _visited)  # update its users to apply changes
 
     def update_rrevs_recursively(self, recipe, _visited=None):
         """Recompute ``recipe``'s RREV and propagate it into every dependent recipe's conandata.yml, recursively.
@@ -250,33 +290,7 @@ class Catalog:
         recipe.rrev = recipe.calculate_rrev()
 
         for kind, users in recipe.users.items():
-            recipe_reference = recipe.get_full_reference(rrev=True)
-
-            for user in users:
-                do_save = False
-                user_dependencies = user.conandata_yml.data[kind]
-                # find *the* entry for this recipe by its exact (name, version)
-                # (ignoring whatever RREV it currently pins) -- there must be
-                # exactly one, since resolve_dependencies_recursively already
-                # matched this user to this recipe via that same reference.
-                # Matched on the parsed tuple, not a startswith() prefix, so
-                # e.g. 'bar/1.0' can never accidentally match a coexisting
-                # 'bar/1.0.1@...' entry.
-                (user_dependency,) = [
-                    x for x in user_dependencies if _reference_name_version(x) == (recipe.name, recipe.version)
-                ]
-                if user_dependency != recipe_reference:
-                    do_save = True
-                    print(f"Info: updated {recipe_reference} in {user.conandata_yml.path}")
-                    user_dependencies.remove(user_dependency)  # remove old
-                    user_dependencies.append(recipe_reference)  # add new
-                if user_dependencies != sorted(user_dependencies):
-                    print(f"Info: {user.conandata_yml.path} needs to be re-generated")
-                    do_save = True
-                user.conandata_yml.data[kind] = sorted(user_dependencies)  # ensure it is sorted
-                if do_save:
-                    user.conandata_yml.save_file()
-                    self.update_rrevs_recursively(user, _visited)  # update its users to apply changes
+            self._propagate_rrev(recipe, kind, users, _visited)
 
     def update_all_rrevs(self):
         """update_rrevs_recursively() for every loaded recipe."""

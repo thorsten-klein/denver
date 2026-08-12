@@ -67,18 +67,46 @@ class CustomProvider(Provider):
         """'wrapper' if this stage's own section sets a (non-empty) 'launcher:', else the default 'setup'."""
         return "wrapper" if (self.config.get(self.stage) or {}).get("launcher") else "setup"
 
+    def _validate_str(self, value, key):
+        """Die unless ``key``'s value is unset or a non-empty string."""
+        if value is None:
+            return
+        if not isinstance(value, str) or not value.strip():
+            die(f"custom[{self.stage}]: '{key}' must be a non-empty string")
+
+    def _validate_launcher(self, launcher):
+        """Die unless 'launcher:' is unset or a list of non-empty strings."""
+        if launcher is None:
+            return
+        if not isinstance(launcher, list) or not all(isinstance(w, str) and w.strip() for w in launcher):
+            die(f"custom[{self.stage}]: 'launcher' must be a list of non-empty strings")
+
     def _validate_cfg(self, cmd, source, launcher):
         """Die unless cmd/source/launcher are well-typed and at least one is given."""
-        if cmd is not None and (not isinstance(cmd, str) or not cmd.strip()):
-            die(f"custom[{self.stage}]: 'cmd' must be a non-empty string")
-        if source is not None and (not isinstance(source, str) or not source.strip()):
-            die(f"custom[{self.stage}]: 'source' must be a non-empty string")
-        if launcher is not None and (
-            not isinstance(launcher, list) or not all(isinstance(w, str) and w.strip() for w in launcher)
-        ):
-            die(f"custom[{self.stage}]: 'launcher' must be a list of non-empty strings")
+        self._validate_str(cmd, "cmd")
+        self._validate_str(source, "source")
+        self._validate_launcher(launcher)
         if not cmd and not source and not launcher:
             die(f"custom[{self.stage}]: at least one of 'cmd'/'source'/'launcher' must be given")
+
+    def _run_cmd(self, ctx, cmd):
+        """Run 'cmd:' via bash -c -- or, under --fast, report it as skipped instead."""
+        if not cmd:
+            return
+        if ctx.fast:
+            info(f"custom[{self.stage}]: --fast skips '{cmd}'")
+            return
+        ctx.run(["bash", "-c", cmd])
+
+    def _source_script(self, ctx, source):
+        """Source 'source:' into ctx.env -- always, --fast and --dry-run included (see module docstring)."""
+        if not source:
+            return
+        path = ctx.resolve_path(source)
+        if not path.is_file():
+            die(f"custom[{self.stage}]: 'source' script not found: {path}")
+        info(f"custom[{self.stage}]: source {path}")
+        ctx.source(path)
 
     def setup(self, ctx):
         """Run 'cmd:' via bash -c (unless --fast) and/or source 'source:' (always)."""
@@ -89,16 +117,8 @@ class CustomProvider(Provider):
         self._validate_cfg(cmd, source, launcher)
 
         banner(ctx, self.stage, "run")
-        if cmd and ctx.fast:
-            info(f"custom[{self.stage}]: --fast skips '{cmd}'")
-        elif cmd:
-            ctx.run(["bash", "-c", cmd])
-        if source:
-            path = ctx.resolve_path(source)
-            if not path.is_file():
-                die(f"custom[{self.stage}]: 'source' script not found: {path}")
-            info(f"custom[{self.stage}]: source {path}")
-            ctx.source(path)
+        self._run_cmd(ctx, cmd)
+        self._source_script(ctx, source)
 
     def wrap(self, ctx, cmd):
         """Prepend every 'launcher:' entry's shell-split tokens, in order, to cmd."""

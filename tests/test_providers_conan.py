@@ -34,6 +34,16 @@ def _ensure_default_conanfile(ctx, config, unit=None):
     conan_cfg["conanfiles"] = [{"path": "conan/conanfile.py", **(unit or {})}]
 
 
+def _flag_values(argv, flag):
+    """Every value directly following ``flag`` in ``argv``, in order."""
+    return [argv[i + 1] for i, word in enumerate(argv) if word == flag]
+
+
+def _argv_with(run_recorder, word):
+    """The first recorded argv containing ``word``."""
+    return next(a for a in run_recorder.argvs() if word in a)
+
+
 def default_profile_ok(run_recorder, home="/home/dev/.conan2"):
     """conan config home + a pre-existing default profile: no 'profile detect'."""
     run_recorder.responses["config home"] = lambda cmd: type("R", (), {"stdout": f"{home}\n", "returncode": 0})()
@@ -833,11 +843,8 @@ def test_multiple_base_classes_passed_in_order(make_context, run_recorder, which
 
     run_conan(config, ctx)
     expected = [str(ctx.env_dir / "bc-own"), str(ctx.env_dir / "bc-shared")]
-    for argv in (
-        next(a for a in run_recorder.argvs() if "--prepare" in a),
-        next(a for a in run_recorder.argvs() if "--export" in a),
-    ):
-        assert [argv[i + 1] for i, word in enumerate(argv) if word == "--base-classes-dir"] == expected
+    assert _flag_values(_argv_with(run_recorder, "--prepare"), "--base-classes-dir") == expected
+    assert _flag_values(_argv_with(run_recorder, "--export"), "--base-classes-dir") == expected
 
 
 def test_base_classes_omitted_when_unset(make_context, run_recorder, which):

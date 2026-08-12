@@ -89,6 +89,16 @@ class FakeProc:
         self.stderr = stderr
 
 
+def _cmd_parts(cmd):
+    """A command as a list of argv entries, whether it arrived as a list or a string."""
+    return list(cmd) if isinstance(cmd, (list, tuple)) else [cmd]
+
+
+def _cmd_joined(cmd):
+    """A command as one string, for substring matching and assertions."""
+    return " ".join(str(p) for p in _cmd_parts(cmd))
+
+
 class RunRecorder:
     """Records subprocess.run calls and returns configurable responses.
 
@@ -105,28 +115,31 @@ class RunRecorder:
         self.responses = {}
         self.default = FakeProc()
 
-    def __call__(self, cmd, *args, **kwargs):
-        self.calls.append(types.SimpleNamespace(cmd=cmd, args=args, kwargs=kwargs))
-        parts = cmd if isinstance(cmd, (list, tuple)) else [cmd]
-        joined = " ".join(str(c) for c in parts)
+    def _matching_response(self, joined):
+        """The first configured response whose key is a substring of ``joined``."""
         for key, resp in self.responses.items():
             if key in joined:
-                return resp(cmd) if callable(resp) else resp
-        if len(parts) >= 2 and parts[0] == "bash" and parts[1] == "-c":
+                return resp
+        return None
+
+    def __call__(self, cmd, *args, **kwargs):
+        self.calls.append(types.SimpleNamespace(cmd=cmd, args=args, kwargs=kwargs))
+        resp = self._matching_response(_cmd_joined(cmd))
+        if callable(resp):
+            return resp(cmd)
+        if resp is not None:
+            return resp
+        if _cmd_parts(cmd)[:2] == ["bash", "-c"]:
             return self._real_run(cmd, *args, **kwargs)
         return self.default
 
     def commands(self):
         """List of joined command strings, for assertions."""
-        out = []
-        for c in self.calls:
-            parts = c.cmd if isinstance(c.cmd, (list, tuple)) else [c.cmd]
-            out.append(" ".join(str(p) for p in parts))
-        return out
+        return [_cmd_joined(c.cmd) for c in self.calls]
 
     def argvs(self):
         """List of argv lists (str-coerced), for precise flag/value assertions."""
-        return [[str(p) for p in (c.cmd if isinstance(c.cmd, (list, tuple)) else [c.cmd])] for c in self.calls]
+        return [[str(p) for p in _cmd_parts(c.cmd)] for c in self.calls]
 
 
 @pytest.fixture
