@@ -139,6 +139,12 @@ def exec_recorder(monkeypatch):
     import providers.context as ctxmod
 
     monkeypatch.setattr(ctxmod.os, "execvpe", fake_execvpe)
+    # exec() resolves the program against the env's PATH before handing it
+    # over, and these tests exec synthetic names ('WRAPPED', 'fish', ...)
+    # that exist on no machine -- so the lookup answers "found, unchanged"
+    # here. A test that wants the not-found path drives shutil.which itself
+    # (see test_exec_unresolvable_command_dies).
+    monkeypatch.setattr(ctxmod.shutil, "which", lambda name, path=None: name)
     return captured
 
 

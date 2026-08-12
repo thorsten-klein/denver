@@ -427,14 +427,10 @@ def test_registry_login_password_from_env_var(make_context, run_recorder, which)
     config = {
         "docker": docker_cfg(
             image="myapp:dev",
-            **{
-                "registries": [
-                    {"url": "registry1.example.com", "username": "myuser", "password": "${DOCKER_PASSWORD_SDD}"}
-                ]
-            },
+            **{"registries": [{"url": "docker.io", "username": "myuser", "password": "${DOCKER_PASSWORD_DOCKERHUB}"}]},
         )
     }
-    ctx = make_context(config=config, env={"DOCKER_PASSWORD_SDD": "from-env-secret"})
+    ctx = make_context(config=config, env={"DOCKER_PASSWORD_DOCKERHUB": "from-env-secret"})
     write_compose(ctx)
     run_recorder.responses["image inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
 

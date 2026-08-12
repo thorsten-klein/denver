@@ -729,12 +729,43 @@ def test_exec_option_like_command_dies(make_context):
         ctx.exec(["-c", "echo hi"])
 
 
+def test_exec_unresolvable_command_dies(make_context, monkeypatch, exec_recorder):
+    ctx = make_context()
+    import providers.context as ctxmod
+
+    monkeypatch.setattr(ctxmod.shutil, "which", lambda name, path=None: None)
+    with pytest.raises(SystemExit):
+        ctx.exec(["nosuchtool"])
+    assert exec_recorder == {}
+
+
+def test_exec_resolves_the_program_against_the_envs_path(make_context, monkeypatch, exec_recorder):
+    ctx = make_context()
+    ctx.env["PATH"] = "/opt/toolchain/bin"
+    import providers.context as ctxmod
+
+    seen = {}
+
+    def fake_which(name, path=None):
+        seen["name"], seen["path"] = name, path
+        return "/opt/toolchain/bin/gcc"
+
+    monkeypatch.setattr(ctxmod.shutil, "which", fake_which)
+    ctx.exec(["gcc", "--version"])
+    assert seen == {"name": "gcc", "path": "/opt/toolchain/bin"}
+    # resolved for the kernel, but argv[0] stays what the user asked for
+    assert exec_recorder["file"] == "/opt/toolchain/bin/gcc"
+    assert exec_recorder["args"] == ["gcc", "--version"]
+
+
 def test_exec_oserror_dies(make_context, monkeypatch):
     ctx = make_context()
 
     def boom(*a, **k):
         raise OSError("nope")
 
+    # resolvable, so exec() gets past the PATH lookup and as far as execvpe
+    monkeypatch.setattr(ctxmod.shutil, "which", lambda name, path=None: f"/usr/bin/{name}")
     monkeypatch.setattr(ctxmod.os, "execvpe", boom)
     with pytest.raises(SystemExit):
         ctx.exec(["missing-binary"])
