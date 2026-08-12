@@ -2,8 +2,8 @@
 
 import pytest
 
-import providers
-from providers.base import Provider
+import denver_providers as providers
+from denver_providers.base import Provider
 
 
 def test_provider_default_stage_is_name():

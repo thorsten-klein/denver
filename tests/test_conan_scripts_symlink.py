@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import types
 
-from providers.conan_scripts.extensions import symlink
+from denver_providers.conan_scripts.extensions import symlink
 
 
 class _Req:

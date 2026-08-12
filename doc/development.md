@@ -90,7 +90,7 @@ a tooling limitation, not a way to hit 100% faster.
 
 ## Adding a new provider
 
-1. Subclass `Provider` (`src/providers/base.py`): set `name`, `KEYS` (every
+1. Subclass `Provider` (`src/denver_providers/base.py`): set `name`, `KEYS` (every
    `denver.yml` key your section understands), and `kind` if it's a wrapper
    (default: `setup`).
 2. Implement `resolve_defaults(cls, ctx, cfg, config)` — a classmethod, and
@@ -104,7 +104,7 @@ a tooling limitation, not a way to hit 100% faster.
    I/O) happens, reading `self.config_section(ctx)` for the
    already-resolved config.
 4. Register it: add `"<name>": YourProvider` to `PROVIDERS` in
-   `src/providers/__init__.py`.
+   `src/denver_providers/__init__.py`.
 5. Write tests: unit tests driving your provider directly against a fake
    `Context` (`make_context` fixture) with `run_recorder`/`which` mocking
    whatever it shells out to — see any existing `tests/test_providers_*.py`

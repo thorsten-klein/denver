@@ -12,7 +12,7 @@ denver-version: ">=1.1.0"
 # Not directly runnable: only inherited via 'import:', never started on its own.
 runnable: false
 
-# Pipeline stages, run in this order (see src/providers/). conan runs before uv
+# Pipeline stages, run in this order (see src/denver_providers/). conan runs before uv
 # so the python-cache it provides (UV_FIND_LINKS) is available to the offline
 # install. uv-zephyr runs after zephyr (needs the workspace `west
 # packages pip` inspects to already be updated) and shares the 'uv' stage's

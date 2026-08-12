@@ -3,7 +3,7 @@ version: 1.0
 denver-version: ">=1.1.0"
 
 # Runs the command inside a docker compose service. The 'docker' provider
-# (src/providers/docker.py) runs env-scripts, builds the image and runs the
+# (src/denver_providers/docker.py) runs env-scripts, builds the image and runs the
 # service.
 stages:
 - docker

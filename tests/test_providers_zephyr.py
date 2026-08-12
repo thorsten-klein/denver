@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from providers.zephyr import ZephyrProvider, west_topdir
+from denver_providers.zephyr import ZephyrProvider, west_topdir
 
 
 # ---- west_topdir -------------------------------------------------------------#

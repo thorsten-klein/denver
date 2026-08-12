@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 
 import denver
-import providers
-from providers.base import Provider
+import denver_providers as providers
+from denver_providers.base import Provider
 
 
 # ---- collect_import_dirs --------------------------------------------------#
@@ -534,11 +534,11 @@ def test_run_stages_numbers_by_full_declared_stage_list(tmp_path, exec_recorder,
         kind = "setup"
 
         def setup(self, ctx):
-            from providers.context import banner
+            from denver_providers.context import banner
 
             banner(ctx, self.stage, "run")
 
-    import providers as providers_module
+    import denver_providers as providers_module
 
     providers_module.PROVIDERS["fakesetup"] = Fake
     try:
@@ -609,11 +609,11 @@ def test_run_stages_shows_skipped_stages_in_pipeline_order(tmp_path, exec_record
         kind = "setup"
 
         def setup(self, ctx):
-            from providers.context import banner
+            from denver_providers.context import banner
 
             banner(ctx, self.stage, "run")
 
-    import providers as providers_module
+    import denver_providers as providers_module
 
     providers_module.PROVIDERS["fakesetup"] = Fake
     try:
@@ -646,11 +646,11 @@ def test_run_stages_shows_earlier_skips_before_a_stage_that_dies(tmp_path, exec_
         kind = "setup"
 
         def setup(self, ctx):
-            from providers.context import die
+            from denver_providers.context import die
 
             die("boom")
 
-    import providers as providers_module
+    import denver_providers as providers_module
 
     providers_module.PROVIDERS["fakedies"] = Dies
     try:
@@ -676,7 +676,7 @@ def test_run_stages_announces_each_stage_before_its_provider_runs(tmp_path, exec
         name = "fakesilent"
         kind = "setup"
 
-    import providers as providers_module
+    import denver_providers as providers_module
 
     providers_module.PROVIDERS["fakesilent"] = Silent
     try:
@@ -938,7 +938,7 @@ def test_run_stages_tolerates_pre_existing_garbage_in_performance_file(
 
 
 def test_run_stages_in_container_skips_wrapper(tmp_path, fake_providers, exec_recorder, monkeypatch):
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     # simulate running inside a container: in_container becomes True post-init
     orig_init = ctxmod.Context.__init__
@@ -978,7 +978,7 @@ def test_run_stages_logo_shown_even_when_already_in_container(
     """The non-wrapper branch's print_logo() isn't gated on ctx.in_container,
     so it shows here too -- this is also the path taken when a docker-
     wrapped env reinvokes itself inside the container."""
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     orig_init = ctxmod.Context.__init__
 
@@ -1007,7 +1007,7 @@ def test_run_stages_reresolves_stage_defaults_before_setup(tmp_path, run_recorde
     before running it, not just rely on the upfront resolve_full_config()
     snapshot -- otherwise a tool an earlier stage just installed would still
     look 'missing' to a later stage."""
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     which_calls = {"n": 0}
 
@@ -1051,7 +1051,7 @@ def test_run_stages_reresolves_over_a_default_it_already_found(tmp_path, run_rec
     keys, so its own output reads as an explicit choice), which is why the
     refresh starts from the raw section instead.
     """
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     def fake_which(name, path=None):
         if name != "uv":
@@ -1095,7 +1095,7 @@ def test_run_stages_reresolves_over_a_default_it_already_found(tmp_path, run_rec
 def test_run_stages_refresh_keeps_an_explicit_value(tmp_path, run_recorder, exec_recorder, monkeypatch):
     # the refresh re-runs the resolver, so what the author actually wrote
     # has to survive it -- a PATH lookup must never overrule an explicit key
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     monkeypatch.setattr(ctxmod.shutil, "which", lambda name, path=None: f"/usr/bin/{name}")
 

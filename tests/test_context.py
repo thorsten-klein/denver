@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-import providers.context as ctxmod
-from providers.context import (
+import denver_providers.context as ctxmod
+from denver_providers.context import (
     banner,
     die,
     find_in_parents,
@@ -732,7 +732,7 @@ def test_exec_option_like_command_dies(make_context):
 
 def test_exec_unresolvable_command_dies(make_context, monkeypatch, exec_recorder):
     ctx = make_context()
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     monkeypatch.setattr(ctxmod.shutil, "which", lambda name, path=None: None)
     with pytest.raises(SystemExit):
@@ -743,7 +743,7 @@ def test_exec_unresolvable_command_dies(make_context, monkeypatch, exec_recorder
 def test_exec_resolves_the_program_against_the_envs_path(make_context, monkeypatch, exec_recorder):
     ctx = make_context()
     ctx.env["PATH"] = "/opt/toolchain/bin"
-    import providers.context as ctxmod
+    import denver_providers.context as ctxmod
 
     seen = {}
 

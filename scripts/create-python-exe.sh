@@ -105,13 +105,13 @@ echo ">>> installing denver + pyinstaller==$PYINSTALLER_VERSION"
 #   importlib.metadata finds no package -- `denver --version` and every
 #   'denver-version:' pin in a denver.yml would go unanswerable. This ships
 #   the dist-info that answers them (see denver.py's package_version).
-# --collect-data assets: logo.txt, read from disk at runtime (print_logo).
-# --collect-submodules providers: denver imports providers lazily, from
+# --collect-data denver_assets: logo.txt, read from disk at runtime (print_logo).
+# --collect-submodules denver_providers: denver imports providers lazily, from
 #   inside functions, and picks the class by name out of the PROVIDERS
 #   registry -- a static analyser sees neither.
 # --add-data conan_scripts/docker_scripts: these are *not* imported, they are
 #   handed to conan/docker as script paths and run standalone by another
-#   interpreter (see providers/conan_scripts/__init__.py). So they have to
+#   interpreter (see denver_providers/conan_scripts/__init__.py). So they have to
 #   exist as real files, not as modules frozen into the archive -- which is
 #   also why --collect-submodules above does not already cover them.
 echo ">>> freezing"
@@ -124,10 +124,10 @@ echo ">>> freezing"
     --workpath "$BUILD_DIR/work" \
     --specpath "$BUILD_DIR/work" \
     --copy-metadata denver-tool \
-    --collect-data assets \
-    --collect-submodules providers \
-    --add-data "$REPO_ROOT/src/providers/conan_scripts:providers/conan_scripts" \
-    --add-data "$REPO_ROOT/src/providers/docker_scripts:providers/docker_scripts" \
+    --collect-data denver_assets \
+    --collect-submodules denver_providers \
+    --add-data "$REPO_ROOT/src/denver_providers/conan_scripts:denver_providers/conan_scripts" \
+    --add-data "$REPO_ROOT/src/denver_providers/docker_scripts:denver_providers/docker_scripts" \
     "$REPO_ROOT/src/denver.py"
 
 # Smoke test before packaging: --version and --license both prove the

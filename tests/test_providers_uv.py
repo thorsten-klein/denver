@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from providers.uv import UvProvider
+from denver_providers.uv import UvProvider
 
 
 @pytest.fixture(autouse=True)
@@ -306,7 +306,7 @@ def test_ensure_venv_checksum_unchanged_skips_venv_creation(make_context, run_re
 
     # first run creates the venv dir + checksums.txt
     ctx.venv_dir.mkdir(parents=True)
-    from providers.context import sha256_of_files
+    from denver_providers.context import sha256_of_files
 
     (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
     run_recorder.calls.clear()
@@ -335,7 +335,7 @@ def test_ensure_venv_force_recreates_existing(make_context, run_recorder, which)
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     ctx.venv_dir.mkdir(parents=True)
-    from providers.context import sha256_of_files
+    from denver_providers.context import sha256_of_files
 
     (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
     ctx.force = True
@@ -392,7 +392,7 @@ def test_install_skips_when_all_skip_if_scripts_pass(make_context, run_recorder,
     (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
     # checksums must already match, otherwise _ensure_venv recreates the venv
     # before _install ever runs the skip-if scripts
-    from providers.context import sha256_of_files
+    from denver_providers.context import sha256_of_files
 
     ctx.venv_dir.mkdir(parents=True)
     (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
@@ -542,7 +542,7 @@ def test_install_args_command_entry_and_requirements_file_combine(make_context, 
 
 
 def test_install_args_command_entry_checksum_unchanged_skips_venv_creation(make_context, run_recorder, which):
-    from providers.uv import UvProvider
+    from denver_providers.uv import UvProvider
 
     config = {"uv": {"install-args": ["$(echo foo==1.0)"]}}
     ctx = make_context(config=config)
@@ -825,7 +825,7 @@ def test_lock_skipped_by_skip_if(make_context, run_recorder, which):
     run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
     # checksums must already match, otherwise the venv is recreated first
     ctx.venv_dir.mkdir(parents=True)
-    from providers.context import sha256_of_files
+    from denver_providers.context import sha256_of_files
 
     (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "py" / "uv.lock"], base=ctx.env_dir))
 

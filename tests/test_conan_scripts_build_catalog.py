@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from providers.conan_scripts import build_catalog
+from denver_providers.conan_scripts import build_catalog
 
 
 # --------------------------------------------------------------------------- #

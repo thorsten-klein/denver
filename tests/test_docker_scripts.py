@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from providers.docker_scripts import configure_proxy_client, configure_proxy_daemon, configure_user
+from denver_providers.docker_scripts import configure_proxy_client, configure_proxy_daemon, configure_user
 
 
 # --------------------------------------------------------------------------- #

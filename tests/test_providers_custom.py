@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from providers.custom import CustomProvider
+from denver_providers.custom import CustomProvider
 
 
 def run_custom(config, ctx, stage="custom"):
