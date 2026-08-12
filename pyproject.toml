@@ -44,6 +44,7 @@ lint = [
     "bandit>=1.8.0",
     "complexipy>=7.0.0",
     "mypy~=1.14",
+    "pip-audit>=2.9.0",
     "pre-commit>=4.3.0",
     "pyright~=1.1",
     "ruff~=0.13",
@@ -185,12 +186,13 @@ exclude_dirs = ["examples", ".envs", "tests"]
 skips = ["B404", "B603", "B606", "B607"]
 
 [tool.poe.tasks]
-all = ["lint", "format", "mypy", "pyright", "bandit", "complexity", "test"]
+all = ["lint", "format", "mypy", "pyright", "bandit", "pip-audit", "complexity", "test"]
 format = "ruff format ."
 lint = "ruff check ."
 mypy = "mypy"
 pyright = "pyright"
 bandit = "bandit -c pyproject.toml -r src"
+"pip-audit" = "pip-audit --skip-editable"
 complexity = "complexipy"
 test = {cmd = "pytest -v -n=auto --cov-config=pyproject.toml --cov=denver --cov=denver_providers --junitxml=junit.xml -o junit_family=legacy --cov-report=term-missing --cov-report=html --cov-report=xml --cov-fail-under=100", env = {PYTHONIOENCODING = "utf-8"}}
 
