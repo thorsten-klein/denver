@@ -200,6 +200,19 @@ def test_get_rrev_untracked_downloads_via_url(tmp_path, monkeypatch):
     assert downloaded == [("http://example/x", recipe_dir / src)]
 
 
+def test_get_rrev_untracked_rejects_non_http_url(tmp_path, monkeypatch):
+    recipe_dir = _recipe_dir(tmp_path)
+    src = "external.tar"
+    (recipe_dir / "conandata.yml").write_text(yaml.safe_dump({"sources": {src: {"url": "file:///etc/passwd"}}}))
+    _stub_inspect(monkeypatch, name="foo", version="1.0", exports_sources=[src])
+    _stub_git_tracked(monkeypatch, set())
+
+    monkeypatch.setattr(get_rrev, "urlretrieve", lambda *a: pytest.fail("must not download"))
+
+    with pytest.raises(get_rrev.GetRREVError, match="must be http"):
+        get_rrev.compute_rrev(recipe_dir)
+
+
 def test_get_rrev_untracked_downloads_via_custom_command(tmp_path, monkeypatch):
     recipe_dir = _recipe_dir(tmp_path)
     src = "external.tar"
