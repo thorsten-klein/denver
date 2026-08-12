@@ -454,7 +454,7 @@ def _run_conan_cli(*args):
 
 
 def _validate_remote_name(remote_name):
-    """Return ``remote_name`` if conan has a remote of that name configured, else raise ValueError.
+    """Return conan's own name for the remote called ``remote_name``, or raise ValueError if it has no such remote.
 
     A remote name is the one value here that comes from outside this module
     -- denver.yml's ``conan.remotes:`` keys, or ``--remote`` on this
@@ -464,20 +464,27 @@ def _validate_remote_name(remote_name):
     a remote conan knows about (``conan remote list``, enabled or not).
     Anything else -- a typo, or a value shaped to smuggle a second argument
     past conan's parser -- is not in that list and never reaches the CLI.
+
+    What comes back is conan's own ``Remote.name``, not the string that was
+    passed in; they compare equal, that being what was just checked. Callers
+    are expected to use it, so that the name reaching conan's command line
+    is one conan itself reported rather than one this script was handed.
     """
     known = conan_remotes_list()
-    if remote_name not in known:
+    remote = known.get(remote_name)
+    if remote is None:
         raise ValueError(f"not a configured conan remote: {remote_name!r} (known: {sorted(known)})")
-    return remote_name
+    return remote.name
 
 
 def _reject_option_like(value, what):
-    """Refuse a ``value`` headed for conan as a bare (non ``--flag=``) argument if it could pass as a CLI option.
+    """Refuse a ``value`` headed for conan's command line if it could pass as a CLI option.
 
-    ``create()``'s recipe path and ``upload()``'s package reference are both
-    positional, not `--name=`-style -- so, unlike those, a value starting
-    with '-' would be read by conan's own arg parser as an option rather
-    than the path/reference it actually is. Neither can genuinely produce
+    ``create()``'s recipe path and ``upload()``'s package reference are
+    positional, and ``upload()``'s remote name is interpolated into
+    ``-r=<name>``: in every one of those a value starting with '-' would be
+    read by conan's own arg parser as an option rather than as the
+    path/reference/name it actually is. None of them can genuinely produce
     that shape today (see call sites), but this is the one place that can
     still say so plainly instead of letting a future change reach conan as
     an injected flag.
@@ -509,7 +516,7 @@ def create(recipe_path, pref):
 def upload(pref, remote_name):
     """Upload ``pref`` to ``remote_name``, unless it's already there."""
     print_banner(f"Upload: {pref!r}")
-    _validate_remote_name(remote_name)
+    remote_name = _reject_option_like(_validate_remote_name(remote_name), 'remote name')
     found, _ = find_pref(pref, remotes=[remote_name])
     if found:
         return
@@ -791,7 +798,10 @@ def main():
     # after it, and with the list of names that would have worked
     if args.remote is not None:
         try:
-            _validate_remote_name(args.remote)
+            # conan's own name for that remote replaces the one from argv
+            # (see there), so everything downstream -- run_ci()'s lookups,
+            # upload()'s '-r=' -- works with the registry's string
+            args.remote = _validate_remote_name(args.remote)
         except ValueError as exc:
             parser.error(str(exc))
 
