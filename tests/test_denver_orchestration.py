@@ -1040,6 +1040,32 @@ def test_run_stages_reresolves_stage_defaults_before_setup(tmp_path, run_recorde
     assert exec_recorder["args"] == ["echo", "hi"]
 
 
+def _venv_creating_response(run_recorder):
+    """A run_recorder response that materialises the venv dir ``uv venv`` was asked for."""
+
+    def _respond(cmd):
+        Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
+        return run_recorder.default
+
+    return _respond
+
+
+def _python_version_response(version="3.12.3"):
+    """A run_recorder response answering `python3 --version`."""
+    return lambda cmd: type("R", (), {"stdout": f"Python {version}\n", "returncode": 0})()
+
+
+def _uv_from_venv_or_host(name, path=None):
+    """shutil.which stub: the venv's uv once it is on the lookup PATH, the host's before that.
+
+    venv_dir_for(None) outside docker is '.venv.host', so its presence in
+    ``path`` is what distinguishes an activated venv from the bare host.
+    """
+    if name != "uv":
+        return f"/usr/bin/{name}"
+    return "/venv/bin/uv" if ".venv.host" in (path or "") else "/usr/bin/uv"
+
+
 def test_run_stages_reresolves_over_a_default_it_already_found(tmp_path, run_recorder, exec_recorder, monkeypatch):
     """The upfront pass finding *something* must not freeze that answer.
 
@@ -1053,25 +1079,9 @@ def test_run_stages_reresolves_over_a_default_it_already_found(tmp_path, run_rec
     """
     import denver_providers.context as ctxmod
 
-    def fake_which(name, path=None):
-        if name != "uv":
-            return f"/usr/bin/{name}"
-        # the host's copy upfront; the venv's once an earlier stage
-        # activated it (venv_dir_for(None) outside docker -> '.venv.host')
-        return "/venv/bin/uv" if ".venv.host" in (path or "") else "/usr/bin/uv"
-
-    monkeypatch.setattr(ctxmod.shutil, "which", fake_which)
-
-    def create_venv_dir(cmd):
-        from pathlib import Path
-
-        Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
-        return run_recorder.default
-
-    run_recorder.responses["venv -p"] = create_venv_dir
-    run_recorder.responses["python3 --version"] = lambda cmd: type(
-        "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
-    )()
+    monkeypatch.setattr(ctxmod.shutil, "which", _uv_from_venv_or_host)
+    run_recorder.responses["venv -p"] = _venv_creating_response(run_recorder)
+    run_recorder.responses["python3 --version"] = _python_version_response()
 
     # two uv stages: the first activates the venv (putting it on PATH), so
     # the second's own refresh must resolve to the venv's uv, not the host's

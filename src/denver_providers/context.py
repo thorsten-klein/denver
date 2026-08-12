@@ -220,22 +220,73 @@ def find_outermost_in_parents(start, name):
 _VAR_RE = re.compile(r"\$\{([A-Za-z_]\w*)(?::-([^}]*))?\}")
 
 
+def _expand_str(value, variables):
+    """Expand every ``${VAR}`` / ``${VAR:-default}`` occurrence in one string."""
+
+    def repl(match):
+        name, default = match.group(1), match.group(2)
+        if variables.get(name) is not None:
+            return str(variables[name])
+        return default if default is not None else ""
+
+    return _VAR_RE.sub(repl, value)
+
+
+def _expand_list(value, variables):
+    """Expand every entry of a list."""
+    return [interpolate(v, variables) for v in value]
+
+
+def _expand_dict(value, variables):
+    """Expand every value of a mapping (its keys are left alone)."""
+    return {k: interpolate(v, variables) for k, v in value.items()}
+
+
 def interpolate(value, variables):
     """Expand ``${VAR}`` / ``${VAR:-default}`` in strings, lists and dicts."""
     if isinstance(value, str):
-
-        def repl(match):
-            name, default = match.group(1), match.group(2)
-            if name in variables and variables[name] is not None:
-                return str(variables[name])
-            return default if default is not None else ""
-
-        return _VAR_RE.sub(repl, value)
+        return _expand_str(value, variables)
     if isinstance(value, list):
-        return [interpolate(v, variables) for v in value]
+        return _expand_list(value, variables)
     if isinstance(value, dict):
-        return {k: interpolate(v, variables) for k, v in value.items()}
+        return _expand_dict(value, variables)
     return value
+
+
+def _argv(cmd):
+    """A command with every element stringified, the way subprocess/os.exec want it."""
+    return [str(c) for c in cmd]
+
+
+def _printable(cmd):
+    """A command as the single string denver echoes and reports it as."""
+    return " ".join(str(c) for c in cmd)
+
+
+def _existing_scripts(scripts):
+    """The scripts that are actually on disk -- a missing one is skipped silently (see Context.source)."""
+    return [str(s) for s in scripts if s and Path(s).exists()]
+
+
+def _validate_exec_cmd(cmd):
+    """Die on a command os.execvpe() could only fail at confusingly.
+
+    A resolved command is always denver's own doing (default_command()/
+    resolve_command(), a wrapper's wrap(), or a script's own argv) -- sourced
+    from the same invoking user's own denver.yml/CLI, not a remote or
+    otherwise privileged party -- but a malformed 'command:'/script entry
+    (e.g. an empty string) must not reach os.execvpe() as a bare, confusing
+    OSError, and cmd[0] looking like a CLI flag (e.g. a stray '-c' from a
+    mistyped 'command:') would be taken as the literal program name by
+    execvpe anyway, so catching it here names the actual problem instead of a
+    baffling "no such file".
+    """
+    if not cmd or not cmd[0]:
+        die(f"exec: empty or invalid command: {cmd!r}")
+    if cmd[0].startswith("-"):
+        die(f"exec: command must not look like a CLI option: {cmd[0]!r}")
+    if any("\0" in arg for arg in cmd):
+        die(f"exec: command arguments must not contain NUL bytes: {cmd!r}")
 
 
 def _drop_bundled_library_path(env):
@@ -696,7 +747,12 @@ class Context:
         p = Path(value).expanduser()
         if p.is_absolute():
             return p
-        base = Path(base) if base else self.env_dir
+        found = self._existing_under(p, Path(base) if base else self.env_dir)
+        # default to env-dir-relative even if missing (caller may create it)
+        return found if found else (self.env_dir / p).resolve()
+
+    def _existing_under(self, p, base):
+        """The first existing candidate for a relative path -- under ``base``, else an imported env dir. None if none."""
         primary = base / p
         if primary.exists():
             return primary.resolve()
@@ -704,8 +760,7 @@ class Context:
             candidate = d / p
             if candidate.exists():
                 return candidate.resolve()
-        # default to env-dir-relative even if missing (caller may create it)
-        return (self.env_dir / p).resolve()
+        return None
 
     # ---- env manipulation ----------------------------------------------- #
     def set(self, key, value):
@@ -785,14 +840,30 @@ class Context:
         """
         if step is not None:
             banner(self, self.stage_id, step)
+        env = self._child_env(extra_env)
+        printable = _printable(cmd)
+        if self.dry_run:
+            return self._dry_run_command(cmd, printable, cwd=cwd, env=env, capture=capture, input=input)
+        self._echo_command(printable, echo)
+        try:
+            return self._spawn(cmd, cwd=cwd, env=env, check=check, capture=capture, input=input)
+        except OSError as exc:
+            self._die_unstartable(printable, exc)
+
+    def _child_env(self, extra_env):
+        """ctx.env plus this call's own ``extra_env`` overrides, every value stringified."""
         env = dict(self.env)
         if extra_env:
             env.update({k: str(v) for k, v in extra_env.items()})
-        printable = " ".join(str(c) for c in cmd)
-        if self.dry_run:
-            return self._dry_run_command(cmd, printable, cwd=cwd, env=env, capture=capture, input=input)
+        return env
+
+    def _echo_command(self, printable, echo):
+        """Print the '+ cmd' echo, unless the caller or --quiet asked for silence."""
         if echo and not self.quiet:
             print(f"+ {printable}", file=sys.stderr)
+
+    def _run_kwargs(self, *, capture, input):
+        """The subprocess.run kwargs implied by ``capture``, --quiet, and an ``input`` payload."""
         run_kwargs = {}
         if capture:
             run_kwargs["capture_output"] = True
@@ -801,47 +872,57 @@ class Context:
             run_kwargs["stderr"] = subprocess.DEVNULL
         if input is not None:
             run_kwargs["input"] = input
-        try:
-            return subprocess.run(
-                [str(c) for c in cmd],
-                cwd=str(cwd) if cwd else None,
-                env=env,
-                check=check,
-                text=True,
-                **run_kwargs,
-            )
-        except OSError as exc:
-            # The command could not be started at all -- a configured 'exe:'
-            # naming a file that isn't there, a script without the execute
-            # bit, an unreadable cwd. That is a denver.yml problem, but
-            # Popen raises before check= ever applies, so main()'s
-            # CalledProcessError handler never sees it and the user gets a
-            # traceback whose frames name subprocess.py rather than the key
-            # at fault. Reported here instead, naming the stage and command.
-            stage = f"stage '{self.stage_id}': " if self.stage_id else ""
-            die(f"{stage}cannot run {printable}: {exc.strerror or exc}")
+        return run_kwargs
+
+    def _spawn(self, cmd, *, cwd, env, check, capture, input):
+        """The actual subprocess.run() of a real (non-dry) run -- OSError is the caller's to report."""
+        return subprocess.run(
+            _argv(cmd),
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            check=check,
+            text=True,
+            **self._run_kwargs(capture=capture, input=input),
+        )
+
+    def _die_unstartable(self, printable, exc):
+        """Report a command that could not be started at all.
+
+        A configured 'exe:' naming a file that isn't there, a script without
+        the execute bit, an unreadable cwd. That is a denver.yml problem, but
+        Popen raises before check= ever applies, so main()'s
+        CalledProcessError handler never sees it and the user gets a
+        traceback whose frames name subprocess.py rather than the key at
+        fault. Reported here instead, naming the stage and command.
+        """
+        stage = f"stage '{self.stage_id}': " if self.stage_id else ""
+        die(f"{stage}cannot run {printable}: {exc.strerror or exc}")
+
+    def _dry_query(self, cmd, *, cwd, env, input):
+        """Really run a ``capture=True`` query under --dry-run (see Context.run) -- it never aborts on failure."""
+        return subprocess.run(
+            _argv(cmd),
+            cwd=str(cwd) if cwd else None,
+            env=env,
+            check=False,  # a dry run reports, it never aborts on a query
+            text=True,
+            capture_output=True,
+            input=input,
+        )
 
     def _dry_run_command(self, cmd, printable, *, cwd, env, capture, input):
         """Report ``cmd`` under --dry-run: print-and-skip it, or really run it if it's a query (see Context.run)."""
         if not capture:
             self.dry_note("+", printable)
-            return subprocess.CompletedProcess([str(c) for c in cmd], 0, "", "")
+            return subprocess.CompletedProcess(_argv(cmd), 0, "", "")
         self.dry_note("?", printable)
         try:
-            result = subprocess.run(
-                [str(c) for c in cmd],
-                cwd=str(cwd) if cwd else None,
-                env=env,
-                check=False,  # a dry run reports, it never aborts on a query
-                text=True,
-                capture_output=True,
-                input=input,
-            )
+            result = self._dry_query(cmd, cwd=cwd, env=env, input=input)
         except OSError as exc:
             # e.g. the tool an earlier stage would have installed isn't
             # there: report it and let the caller see an ordinary failure.
             self.dry_note("?", f"{cmd[0]}: not available ({exc.strerror or exc}) -- assuming it would fail")
-            return subprocess.CompletedProcess([str(c) for c in cmd], 127, "", "")
+            return subprocess.CompletedProcess(_argv(cmd), 127, "", "")
         if result.returncode != 0:
             # a query that failed answered nothing, so whatever the caller
             # derives from it below (which args to pass, whether a step is
@@ -935,12 +1016,16 @@ class Context:
         (a venv's activate, conan's conanbuildenv.sh) is skipped in a dry
         run exactly as it is in a real one, silently.
         """
-        scripts = [str(s) for s in scripts if s and Path(s).exists()]
+        scripts = _existing_scripts(scripts)
         if not scripts:
             return
         if self.dry_run:
             for script in scripts:
                 self.dry_note(".", script)
+        self._absorb_env(self._sourced_env(scripts))
+
+    def _sourced_env(self, scripts):
+        """Source ``scripts`` in a bash subprocess and return the ``env -0`` blob they leave behind."""
         sentinel = "__DENVER_ENV_SENTINEL__"
         source_cmds = " && ".join(f". {shlex.quote(s)}" for s in scripts)
         script = f'{source_cmds}; printf "%s\\0" "{sentinel}"; env -0'
@@ -954,6 +1039,10 @@ class Context:
         if result.returncode != 0:
             die(f"failed to source {scripts}: {result.stderr.strip()}")
         _, _, env_blob = result.stdout.partition(f"{sentinel}\0")
+        return env_blob
+
+    def _absorb_env(self, env_blob):
+        """Fold a ``env -0`` blob's NUL-separated ``KEY=value`` entries into ctx.env."""
         for entry in env_blob.split("\0"):
             # skip the trailing '' after the last \0-terminated entry (and
             # any malformed entry with no '=') -- always exercised (every
@@ -972,22 +1061,8 @@ class Context:
         instead -- every caller treats exec() as the last thing it does, so
         returning simply ends the run the way the real one ends the process.
         """
-        cmd = [str(c) for c in cmd]
-        # a resolved command is always denver's own doing (default_command()/
-        # resolve_command(), a wrapper's wrap(), or a script's own argv) --
-        # sourced from the same invoking user's own denver.yml/CLI, not a
-        # remote or otherwise privileged party -- but a malformed
-        # 'command:'/script entry (e.g. an empty string) must not reach
-        # os.execvpe() as a bare, confusing OSError, and cmd[0] looking like a
-        # CLI flag (e.g. a stray '-c' from a mistyped 'command:') would be
-        # taken as the literal program name by execvpe anyway, so catching it
-        # here names the actual problem instead of a baffling "no such file".
-        if not cmd or not cmd[0]:
-            die(f"exec: empty or invalid command: {cmd!r}")
-        if cmd[0].startswith("-"):
-            die(f"exec: command must not look like a CLI option: {cmd[0]!r}")
-        if any("\0" in arg for arg in cmd):
-            die(f"exec: command arguments must not contain NUL bytes: {cmd!r}")
+        cmd = _argv(cmd)
+        _validate_exec_cmd(cmd)
         if self.dry_run:
             sys.stdout.flush()
             self.dry_note("+", f"exec: {' '.join(cmd)}")

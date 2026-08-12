@@ -203,6 +203,25 @@ class UvProvider(Provider):
         "append-mode",
     )
 
+    @staticmethod
+    def _resolved_no_index(ctx, cfg):
+        """'no-index:' as a bool -- 'auto' means "offline inside a container, online on the host"."""
+        no_index = cfg.get("no-index", False)
+        if no_index == "auto":
+            return ctx.in_container
+        return bool(no_index)
+
+    @classmethod
+    def _resolve_optional_sections(cls, ctx, cfg, resolved):
+        """Fill 'lock:'/'venv-patcher:' into ``resolved`` only when the env configured them at all."""
+        lock_cfg = cls._resolve_lock_defaults(ctx, cfg)
+        if lock_cfg is not None:
+            resolved["lock"] = lock_cfg
+
+        vp_cfg = cls._resolve_venv_patcher_defaults(ctx, cfg)
+        if vp_cfg is not None:
+            resolved["venv-patcher"] = vp_cfg
+
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
         """Resolve python/uv/no-index/skip-if/venv-patcher defaults -- see module docstring."""
@@ -215,8 +234,7 @@ class UvProvider(Provider):
         # dry_fallback: under --dry-run an unavailable uv still renders every
         # command below it, instead of aborting the preview (see Context.which).
         resolved["uv"] = cfg.get("uv") or ctx.which("uv", dry_fallback=True)
-        no_index = cfg.get("no-index", False)
-        resolved["no-index"] = ctx.in_container if no_index == "auto" else bool(no_index)
+        resolved["no-index"] = cls._resolved_no_index(ctx, cfg)
         resolved["link-mode"] = cfg.get("link-mode", "copy")
         resolved["append-mode"] = cfg.get("append-mode", False)
 
@@ -225,15 +243,22 @@ class UvProvider(Provider):
         # is checked at run time, right before we'd run it (_skip_if_satisfied).
         resolved["skip-if"] = [str(ctx.resolve_path(s)) for s in cfg.get("skip-if") or []]
 
-        lock_cfg = cls._resolve_lock_defaults(ctx, cfg)
-        if lock_cfg is not None:
-            resolved["lock"] = lock_cfg
-
-        vp_cfg = cls._resolve_venv_patcher_defaults(ctx, cfg)
-        if vp_cfg is not None:
-            resolved["venv-patcher"] = vp_cfg
+        cls._resolve_optional_sections(ctx, cfg, resolved)
 
         return fill_unset(resolved, cls.KEYS)
+
+    @staticmethod
+    def _resolved_lock_path(ctx, key, value):
+        """One 'lock:' entry resolved to an absolute uv.lock path -- None when that key is unset."""
+        if not value:
+            return None
+        path = ctx.resolve_path(value)
+        # uv only ever reads/writes '<project>/uv.lock', so a path
+        # naming anything else could never be the file uv acts on --
+        # say so here rather than silently acting on a different one.
+        if path.name != "uv.lock":
+            die(f"uv: 'lock: {key}:' must name a 'uv.lock' file, got: {path}")
+        return str(path)
 
     @classmethod
     def _resolve_lock_defaults(cls, ctx, cfg):
@@ -245,17 +270,7 @@ class UvProvider(Provider):
         if unknown:
             die(f"uv: unknown 'lock:' key(s) {', '.join(unknown)} -- known: {', '.join(_LOCK_KEYS)}")
         for key in _LOCK_KEYS:
-            value = lock_cfg.get(key)
-            if not value:
-                lock_cfg[key] = None
-                continue
-            path = ctx.resolve_path(value)
-            # uv only ever reads/writes '<project>/uv.lock', so a path
-            # naming anything else could never be the file uv acts on --
-            # say so here rather than silently acting on a different one.
-            if path.name != "uv.lock":
-                die(f"uv: 'lock: {key}:' must name a 'uv.lock' file, got: {path}")
-            lock_cfg[key] = str(path)
+            lock_cfg[key] = cls._resolved_lock_path(ctx, key, lock_cfg.get(key))
         return lock_cfg
 
     @classmethod
@@ -274,6 +289,38 @@ class UvProvider(Provider):
         vp_cfg["exe"] = vp_cfg.get("exe") or ctx.which("venv-patcher")
         return vp_cfg
 
+    @staticmethod
+    def _resolved_paths(ctx, cfg, key):
+        """``cfg[key]``'s entries resolved to paths (an empty list when the key is unset)."""
+        return [ctx.resolve_path(p) for p in (cfg.get(key) or [])]
+
+    def _install_inputs(self, ctx, cfg):
+        """Everything this stage installs from, as one dict: requirements/overrides/install-args/lock/checksums."""
+        requirements = self._resolved_paths(ctx, cfg, "requirements")
+        overrides = self._resolved_paths(ctx, cfg, "overrides")
+        install_args, command_outputs = self._resolve_install_args(ctx, cfg)
+        lock_cfg = cfg.get("lock") or {}
+        lock_sync = lock_cfg.get("sync")
+        return {
+            "requirements": requirements,
+            "overrides": overrides,
+            "install_args": install_args,
+            "command_outputs": command_outputs,
+            "lock_create": lock_cfg.get("create"),
+            "lock_sync": lock_sync,
+            # 'lock: sync:'s lockfile is an install *input*, like a
+            # requirements file, so drift in it recreates the venv the same
+            # way; 'lock: create:'s is an output this run writes itself (like
+            # 'freeze-to:'), and would otherwise invalidate its own checksum
+            # every time.
+            "checksum_files": requirements + overrides + ([Path(lock_sync)] if lock_sync else []),
+        }
+
+    @staticmethod
+    def _installs_anything(inputs):
+        """Whether this stage installs anything at all, or only creates the venv."""
+        return bool(inputs["requirements"] or inputs["install_args"] or inputs["lock_create"] or inputs["lock_sync"])
+
     def setup(self, ctx):
         """Create/activate the venv, install requirements (unless --fast), and apply venv patches."""
         cfg = self.config_section(ctx)
@@ -288,44 +335,21 @@ class UvProvider(Provider):
         banner(ctx, self.stage, "install")
 
         python_version = cfg["python"]
-
-        requirements = [ctx.resolve_path(r) for r in (cfg.get("requirements") or [])]
-        overrides = [ctx.resolve_path(o) for o in (cfg.get("overrides") or [])]
-        install_args, command_outputs = self._resolve_install_args(ctx, cfg)
-        lock_cfg = cfg.get("lock") or {}
-        lock_create, lock_sync = lock_cfg.get("create"), lock_cfg.get("sync")
-
-        if not requirements and not install_args and not lock_create and not lock_sync:
+        inputs = self._install_inputs(ctx, cfg)
+        installs_anything = self._installs_anything(inputs)
+        if not installs_anything:
             info(f"uv[{self.stage}]: no requirements configured; only creating the venv")
 
         uv = cfg.get("uv")
         if not uv:
             die(f"uv[{self.stage}]: needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
 
-        # 'lock: sync:'s lockfile is an install *input*, like a requirements
-        # file, so drift in it recreates the venv the same way; 'lock:
-        # create:'s is an output this run writes itself (like 'freeze-to:'),
-        # and would otherwise invalidate its own checksum every time.
-        checksum_files = requirements + overrides + ([Path(lock_sync)] if lock_sync else [])
-
         self._ensure_python(ctx, uv, python_version)
-        self._ensure_venv(ctx, uv, venv_dir, python_version, checksum_files, command_outputs)
+        self._ensure_venv(ctx, uv, venv_dir, python_version, inputs["checksum_files"], inputs["command_outputs"])
         self._activate(ctx, venv_dir)
 
-        if requirements or install_args or lock_create or lock_sync:
-            self._install_and_patch(
-                ctx,
-                uv,
-                cfg,
-                venv_dir,
-                requirements,
-                overrides,
-                install_args,
-                lock_create,
-                lock_sync,
-                checksum_files,
-                command_outputs,
-            )
+        if installs_anything:
+            self._install_and_patch(ctx, uv, cfg, venv_dir, inputs)
 
     # ------------------------------------------------------------------ #
     def _setup_fast(self, ctx, venv_dir):
@@ -336,31 +360,22 @@ class UvProvider(Provider):
         banner(ctx, self.stage, "activate")
         self._activate(ctx, venv_dir)
 
-    def _install_and_patch(
-        self,
-        ctx,
-        uv,
-        cfg,
-        venv_dir,
-        requirements,
-        overrides,
-        install_args,
-        lock_create,
-        lock_sync,
-        checksum_files,
-        command_outputs,
-    ):
+    def _install_everything(self, ctx, uv, cfg, inputs):
+        """Run the lock/sync/`uv pip install` commands this stage's own inputs call for."""
+        self._lock(ctx, uv, cfg, inputs["lock_create"])
+        self._sync(ctx, uv, cfg, inputs["lock_sync"])
+        if inputs["requirements"] or inputs["install_args"]:
+            self._install(ctx, uv, cfg, inputs["requirements"], inputs["overrides"], inputs["install_args"])
+
+    def _install_and_patch(self, ctx, uv, cfg, venv_dir, inputs):
         """Install requirements/lockfile (unless skip-if says otherwise), apply venv patches, record checksums."""
         skip_if = cfg["skip-if"]
         if not ctx.force and skip_if and self._skip_if_satisfied(ctx, skip_if):
             info("uv: skip-if scripts all exited 0; skipping install")
         else:
-            self._lock(ctx, uv, cfg, lock_create)
-            self._sync(ctx, uv, cfg, lock_sync)
-            if requirements or install_args:
-                self._install(ctx, uv, cfg, requirements, overrides, install_args)
+            self._install_everything(ctx, uv, cfg, inputs)
         self._apply_patches(ctx, cfg)
-        self._store_checksums(ctx, venv_dir, checksum_files, command_outputs)
+        self._store_checksums(ctx, venv_dir, inputs["checksum_files"], inputs["command_outputs"])
         self._freeze(ctx, cfg, uv)
 
     def _resolve_install_args(self, ctx, cfg):
@@ -379,13 +394,19 @@ class UvProvider(Provider):
         args = []
         command_outputs = []
         for entry in cfg.get("install-args") or []:
-            if entry.startswith("$(") and entry.endswith(")"):
-                output = ctx.run(["bash", "-c", entry[2:-1]], capture=True, echo=False).stdout
+            entry_args, output = self._expand_install_arg(ctx, entry)
+            args += entry_args
+            if output is not None:
                 command_outputs.append(output)
-                args += output.split()
-            else:
-                args.append(entry)
         return args, command_outputs
+
+    @staticmethod
+    def _expand_install_arg(ctx, entry):
+        """One 'install-args:' entry as ``(args, output)``: a '$(cmd)' entry is run and split, anything else is literal."""
+        if not (entry.startswith("$(") and entry.endswith(")")):
+            return [entry], None
+        output = ctx.run(["bash", "-c", entry[2:-1]], capture=True, echo=False).stdout
+        return output.split(), output
 
     def _requirements_checksum(self, ctx, files, command_outputs):
         """sha256_of_files(files), plus each 'install-args:' command's captured output hashed in too.
@@ -414,20 +435,27 @@ class UvProvider(Provider):
         if not version:
             return
         if ctx.in_container:
-            # in a container the interpreter is fixed (baked into the image); we can't
-            # install a different one, so just assert it matches what uv.python
-            # asks for, then let uv find (not install) it.
-            result = ctx.run(["python3", "--version"], capture=True, echo=False)
-            installed = result.stdout.split()
-            # no output at all only happens when that query couldn't run --
-            # under --dry-run, where a failed query is reported, not fatal
-            # (see Context.run); there is simply no version to compare then.
-            if installed and installed[-1] != version:
-                die(f"docker provides Python {installed[-1]}, but uv.python={version}")
-            ctx.run([uv, "python", "find", version])
-        else:
-            # on the host, uv is free to download/install the requested version itself.
-            ctx.run([uv, "python", "install", version])
+            self._find_container_python(ctx, uv, version)
+            return
+        # on the host, uv is free to download/install the requested version itself.
+        ctx.run([uv, "python", "install", version])
+
+    @staticmethod
+    def _find_container_python(ctx, uv, version):
+        """Assert the container's baked-in interpreter is ``version``, then let uv find (not install) it.
+
+        In a container the interpreter is fixed by the image; denver can't
+        install a different one, so a mismatch is an error rather than
+        something to resolve.
+        """
+        result = ctx.run(["python3", "--version"], capture=True, echo=False)
+        installed = result.stdout.split()
+        # no output at all only happens when that query couldn't run --
+        # under --dry-run, where a failed query is reported, not fatal
+        # (see Context.run); there is simply no version to compare then.
+        if installed and installed[-1] != version:
+            die(f"docker provides Python {installed[-1]}, but uv.python={version}")
+        ctx.run([uv, "python", "find", version])
 
     def _ensure_venv(self, ctx, uv, venv_dir, version, checksum_files, command_outputs):
         """Create the venv if missing, or recreate it if forced or its requirements changed since last run.
@@ -445,9 +473,7 @@ class UvProvider(Provider):
         comparing it here is what lets an unchanged env skip both the
         recreate and the (often slow) reinstall on every single run.
         """
-        ensured = getattr(ctx, "_uv_venvs_ensured_this_run", None)
-        if ensured is None:
-            ensured = ctx._uv_venvs_ensured_this_run = {}
+        ensured = self._venvs_ensured_this_run(ctx)
         if venv_dir in ensured:
             # a later stage sharing this venv: it is whatever the first stage
             # left, so its own 'python:' is checked against that decision
@@ -456,29 +482,7 @@ class UvProvider(Provider):
             self._check_python_matches(ctx, ensured[venv_dir], version, f"the venv this run built at {venv_dir}")
             return
 
-        recreate = ctx.force
-        checksum_path = venv_dir / f"{self.stage}-checksums.txt"
-        # None (no file at all) rather than "": a stage whose install has no
-        # checksummable *files* (e.g. only 'lock: create:', or only literal
-        # 'install-args:') legitimately stores an empty checksum, and must
-        # still count as "seen before" instead of recreating its venv on
-        # every single run.
-        previous = checksum_path.read_text() if checksum_path.is_file() else None
-        current = self._requirements_checksum(ctx, checksum_files, command_outputs)
-
-        if previous is None:
-            recreate = True  # first run (or never completed): be safe
-        elif previous != current:
-            info("uv: requirement checksums changed; recreating venv")
-            recreate = True
-
-        # A venv whose base interpreter has gone (a distro upgrade moved
-        # python3, a uv-managed interpreter pruned) is broken rather than
-        # reusable, and there is no configured value it could contradict --
-        # the one place recreating without being asked is right.
-        if not recreate and _venv_base_interpreter_missing(venv_dir):
-            info(f"uv[{self.stage}]: {venv_dir}'s base interpreter is gone; recreating venv")
-            recreate = True
+        recreate = self._needs_recreate(ctx, venv_dir, checksum_files, command_outputs)
 
         # An existing venv's interpreter is authoritative: it is never
         # silently rebuilt just because 'python:' changed, because that would
@@ -489,19 +493,74 @@ class UvProvider(Provider):
             self._check_python_matches(ctx, _venv_python_version(venv_dir), version, f"the venv at {venv_dir}")
         ensured[venv_dir] = version
 
+        self._create_venv(ctx, uv, venv_dir, version, recreate)
+
+    @staticmethod
+    def _venvs_ensured_this_run(ctx):
+        """The ``{venv_dir: python version}`` map of venvs this run has already decided about."""
+        ensured = getattr(ctx, "_uv_venvs_ensured_this_run", None)
+        if ensured is None:
+            ensured = ctx._uv_venvs_ensured_this_run = {}
+        return ensured
+
+    def _stored_checksum(self, venv_dir):
+        """This stage's requirements checksum from its last completed install, or None if there is none.
+
+        None (no file at all) rather than "": a stage whose install has no
+        checksummable *files* (e.g. only 'lock: create:', or only literal
+        'install-args:') legitimately stores an empty checksum, and must
+        still count as "seen before" instead of recreating its venv on
+        every single run.
+        """
+        checksum_path = venv_dir / f"{self.stage}-checksums.txt"
+        if not checksum_path.is_file():
+            return None
+        return checksum_path.read_text()
+
+    def _needs_recreate(self, ctx, venv_dir, checksum_files, command_outputs):
+        """Whether the venv has to be rebuilt from scratch: --force, drifted requirements, or a dead base."""
+        if ctx.force:
+            return True
+
+        previous = self._stored_checksum(venv_dir)
+        if previous is None:
+            return True  # first run (or never completed): be safe
+        if previous != self._requirements_checksum(ctx, checksum_files, command_outputs):
+            info("uv: requirement checksums changed; recreating venv")
+            return True
+
+        # A venv whose base interpreter has gone (a distro upgrade moved
+        # python3, a uv-managed interpreter pruned) is broken rather than
+        # reusable, and there is no configured value it could contradict --
+        # the one place recreating without being asked is right.
+        if _venv_base_interpreter_missing(venv_dir):
+            info(f"uv[{self.stage}]: {venv_dir}'s base interpreter is gone; recreating venv")
+            return True
+        return False
+
+    @staticmethod
+    def _venv_still_needed(ctx, venv_dir, recreate):
+        """Whether `uv venv` still has to run after a (possible) removal.
+
+        Under --dry-run the removal only *reported* itself, so an existing
+        venv is still there -- ask whether it would have survived, not
+        whether it is still on disk, or the `uv venv` that a real run would
+        follow the removal with goes missing from the preview.
+        """
+        if ctx.dry_run and recreate:
+            return True
+        return not venv_dir.exists()
+
+    def _create_venv(self, ctx, uv, venv_dir, version, recreate):
+        """Remove the venv if it is being recreated, then create it unless one is (or would be) there."""
         if recreate and venv_dir.exists():
             info(f"uv: removing {venv_dir}")
             ctx.rmtree(venv_dir)
-
-        # under --dry-run the removal above only *reported* itself, so an
-        # existing venv is still there -- ask whether it would have survived,
-        # not whether it is still on disk, or the `uv venv` that a real run
-        # would follow the removal with would go missing from the preview.
-        if not venv_dir.exists() or (ctx.dry_run and recreate):
-            # no '-p' without a configured 'python:': uv's own discovery
-            # (UV_PYTHON, a .python-version file, then the system) decides,
-            # rather than denver picking a version nobody wrote down.
-            version_args = ["-p", version] if version else []
+        # no '-p' without a configured 'python:': uv's own discovery
+        # (UV_PYTHON, a .python-version file, then the system) decides,
+        # rather than denver picking a version nobody wrote down.
+        version_args = ["-p", version] if version else []
+        if self._venv_still_needed(ctx, venv_dir, recreate):
             ctx.run([uv, "venv", *version_args, str(venv_dir)])
 
     def _check_python_matches(self, ctx, actual, wanted, where):
@@ -652,19 +711,31 @@ class UvProvider(Provider):
         fresh_units = self._group_args(args)
         path = self._install_args_path(ctx)
 
-        merged_units = list(fresh_units)
+        merged_units = fresh_units
         if append_mode:
-            stored_units = [tuple(u) for u in json.loads(path.read_text())] if path.is_file() else []
-            seen = set(stored_units)
-            merged_units = list(stored_units)
-            for unit in fresh_units:
-                if unit not in seen:
-                    merged_units.append(unit)
-                    seen.add(unit)
+            merged_units = self._appended(self._stored_install_units(path), fresh_units)
 
         ctx.mkdir(path.parent)
         ctx.write_text(path, json.dumps([list(u) for u in merged_units]))
         return [token for unit in merged_units for token in unit]
+
+    @staticmethod
+    def _stored_install_units(path):
+        """The (flag, value) units a previous run of this stage stored at ``path`` -- empty if it never ran."""
+        if not path.is_file():
+            return []
+        return [tuple(u) for u in json.loads(path.read_text())]
+
+    @staticmethod
+    def _appended(stored_units, fresh_units):
+        """``stored_units`` in their original order, with only the genuinely new ``fresh_units`` appended."""
+        merged = list(stored_units)
+        seen = set(stored_units)
+        for unit in fresh_units:
+            if unit not in seen:
+                merged.append(unit)
+                seen.add(unit)
+        return merged
 
     def _skip_if_satisfied(self, ctx, scripts):
         """True if every 'skip-if' script exits 0 (install is skipped).

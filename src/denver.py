@@ -380,11 +380,7 @@ def deep_merge(base, override, _path=""):
     place.
     """
     if isinstance(base, dict) and isinstance(override, dict):
-        result = dict(base)
-        for key, value in override.items():
-            child_path = f"{_path}.{key}" if _path else str(key)
-            result[key] = deep_merge(result.get(key, _UNSET), value, child_path)
-        return result
+        return _merge_dicts(base, override, _path)
 
     if isinstance(base, list) and isinstance(override, list):
         return _merge_lists(base, override)
@@ -392,15 +388,32 @@ def deep_merge(base, override, _path=""):
     return _merge_scalar(base, override, _path)
 
 
+def _merge_dicts(base, override, _path):
+    """``deep_merge``'s mapping case: every key of ``override`` merged one layer deeper."""
+    result = dict(base)
+    for key, value in override.items():
+        child_path = f"{_path}.{key}" if _path else str(key)
+        result[key] = deep_merge(result.get(key, _UNSET), value, child_path)
+    return result
+
+
+def _has_reset_marker(override):
+    """Whether a layer's list carries a ``!``/``<overwrite>`` marker, dropping every lower-layer entry."""
+    return any(isinstance(entry, str) and (entry.startswith("!") or entry == "<overwrite>") for entry in override)
+
+
+def _strip_reset_marker(entry):
+    """One list entry with its leading ``!`` escape removed (anything else is returned unchanged)."""
+    if isinstance(entry, str) and entry.startswith("!"):
+        return entry[1:]
+    return entry
+
+
 def _merge_lists(base, override):
     """``deep_merge``'s list case: appended, unless ``override`` carries a ``!``/``<overwrite>`` reset marker."""
-    if any(isinstance(entry, str) and (entry.startswith("!") or entry == "<overwrite>") for entry in override):
-        return [
-            entry[1:] if isinstance(entry, str) and entry.startswith("!") else entry
-            for entry in override
-            if entry != "<overwrite>"
-        ]
-    return base + override
+    if not _has_reset_marker(override):
+        return base + override
+    return [_strip_reset_marker(entry) for entry in override if entry != "<overwrite>"]
 
 
 def _merge_scalar(base, override, path):
@@ -444,12 +457,7 @@ def load_config(config_path, _seen=None):
     _seen.add(config_path)
 
     raw = load_yaml(config_path)
-    base_dir = config_path.parent
-
-    merged = {}
-    for entry in raw.get("import", []) or []:
-        imported_path = resolve_import(entry, base_dir)
-        merged = deep_merge(merged, load_config(imported_path, _seen))
+    merged = _merged_imports(raw, config_path.parent, _seen)
 
     # 'runnable' marks one specific denver.yml (e.g. a shared base meant only
     # to be imported, never started directly) -- it must never leak from an
@@ -460,9 +468,21 @@ def load_config(config_path, _seen=None):
     # here keeps --show-config's output consistent with that.
     merged.pop("runnable", None)
 
-    # 'import' is a directive, not inheritable data: drop it from the result.
-    overlay = {k: v for k, v in raw.items() if k != "import"}
-    return deep_merge(merged, overlay)
+    return deep_merge(merged, _without_import(raw))
+
+
+def _without_import(mapping):
+    """A config layer's own keys, minus the 'import:' directive -- it isn't inheritable data."""
+    return {k: v for k, v in mapping.items() if k != "import"}
+
+
+def _merged_imports(raw, base_dir, _seen):
+    """Every 'import:' entry of ``raw``, loaded and merged in order -- the base its own keys overlay."""
+    merged = {}
+    for entry in raw.get("import", []) or []:
+        imported_path = resolve_import(entry, base_dir)
+        merged = deep_merge(merged, load_config(imported_path, _seen))
+    return merged
 
 
 def parse_config_override_spec(spec):
@@ -494,15 +514,31 @@ def _combine_config_override(current, op, value, path):
     """
     if op == "=" or current is _UNSET or current is None:
         return value
-    if isinstance(current, list):
-        return current + (value if isinstance(value, list) else [value])
-    if isinstance(current, bool) or isinstance(value, bool):
+    combined = _appended_config_value(current, value)
+    if combined is None:
         die(f"--config: cannot += onto '{path}' ({current!r} += {value!r}): not a list, string or number")
-    if isinstance(current, (int, float)) and isinstance(value, (int, float)):
+    return combined
+
+
+def _as_list(value):
+    """``value`` as a list, wrapping a lone (non-list) value in one."""
+    return value if isinstance(value, list) else [value]
+
+
+def _both_are(current, value, types):
+    """Whether both sides are of ``types`` -- and neither is a bool (a bool is an int, but += onto one never means this)."""
+    if isinstance(current, bool) or isinstance(value, bool):
+        return False
+    return isinstance(current, types) and isinstance(value, types)
+
+
+def _appended_config_value(current, value):
+    """``+=``'s result for a path that already has a value, or None if the two cannot be combined at all."""
+    if isinstance(current, list):
+        return current + _as_list(value)
+    if _both_are(current, value, (int, float)) or _both_are(current, value, str):
         return current + value
-    if isinstance(current, str) and isinstance(value, str):
-        return current + value
-    die(f"--config: cannot += onto '{path}' ({current!r} += {value!r}): not a list, string or number")
+    return None
 
 
 def apply_config_override(config, spec):
@@ -647,17 +683,20 @@ def parse_version_spec(spec):
     Comma-separated specifiers are ANDed (``">=1.0.3, <2"``). A specifier
     with no operator means ">=".
     """
-    requirements = []
-    for part in str(spec).split(","):
-        match = _SPEC_RE.fullmatch(part)
-        wanted = parse_version(match.group(2)) if match else None
-        if wanted is None:
-            die(
-                f"denver.yml: invalid 'denver-version: {spec}' -- {part.strip()!r} is not a version requirement "
-                f"(expected e.g. \">=1.0.3\", \"1.0.3\" or \">=1.0.3, <2\")."
-            )
-        requirements.append((match.group(1) or ">=", wanted, f"{match.group(1) or '>='}{match.group(2)}"))
-    return requirements
+    return [_parse_version_requirement(part, spec) for part in str(spec).split(",")]
+
+
+def _parse_version_requirement(part, spec):
+    """One comma-separated specifier as ``(operator, parsed_version, text)``, or die naming the whole spec."""
+    match = _SPEC_RE.fullmatch(part)
+    wanted = parse_version(match.group(2)) if match else None
+    if wanted is None:
+        die(
+            f"denver.yml: invalid 'denver-version: {spec}' -- {part.strip()!r} is not a version requirement "
+            f"(expected e.g. \">=1.0.3\", \"1.0.3\" or \">=1.0.3, <2\")."
+        )
+    operator = match.group(1) or ">="
+    return operator, wanted, f"{operator}{match.group(2)}"
 
 
 def validate_denver_version(config):
@@ -698,16 +737,21 @@ def validate_denver_version(config):
         )
         return
 
-    unmet = [
-        text
-        for operator, wanted, text in requirements
-        if not _SPEC_OPERATORS[operator](compare_versions(parsed, wanted))
-    ]
+    unmet = _unmet_requirements(requirements, parsed)
     if unmet:
         die(
             f"denver.yml requires 'denver-version: {spec}', but this denver is {running} "
             f"(unmet: {', '.join(unmet)}) -- upgrade it, e.g. `pip install --upgrade {DISTRIBUTION_NAME}`."
         )
+
+
+def _unmet_requirements(requirements, parsed):
+    """The requirement texts the running version ``parsed`` does not satisfy."""
+    return [
+        text
+        for operator, wanted, text in requirements
+        if not _SPEC_OPERATORS[operator](compare_versions(parsed, wanted))
+    ]
 
 
 def validate_stage_filters(config, until_stage, skip_stages):
@@ -864,21 +908,34 @@ def collect_import_dirs(config_path, _seen=None):
     layer's own file always wins over one further up the chain, and a layer
     that doesn't have one simply falls through to the next.
     """
+    config_path, _seen = _register_seen(config_path, _seen)
+    imported = _imported_paths(load_yaml(config_path), config_path.parent)
+
+    dirs = [p.parent for p in imported]
+    for imported_path in imported:
+        dirs += collect_import_dirs(imported_path, _seen)
+    return dirs
+
+
+def _register_seen(config_path, _seen):
+    """Resolve ``config_path`` and record it in ``_seen``, dying on a circular import.
+
+    Returns ``(config_path, _seen)`` -- both walkers over the whole-file
+    ``import:`` chain start with exactly this, and ``_seen`` is created on
+    the first (top-level) call.
+    """
     config_path = config_path.resolve()
     if _seen is None:
         _seen = set()
     if config_path in _seen:
         die(f"circular import detected at {config_path}")
     _seen.add(config_path)
+    return config_path, _seen
 
-    raw = load_yaml(config_path)
-    base_dir = config_path.parent
-    imported = [resolve_import(entry, base_dir) for entry in (raw.get("import", []) or [])]
 
-    dirs = [p.parent for p in imported]
-    for imported_path in imported:
-        dirs += collect_import_dirs(imported_path, _seen)
-    return dirs
+def _imported_paths(raw, base_dir):
+    """Every whole-file 'import:' entry of ``raw``, resolved to the denver.yml it names."""
+    return [resolve_import(entry, base_dir) for entry in (raw.get("import", []) or [])]
 
 
 def collect_hook_entries(config_path, name, _seen=None):
@@ -894,27 +951,23 @@ def collect_hook_entries(config_path, name, _seen=None):
     (or ``hooks/<name>.user.sh``) sitting next to a ``denver.yml`` is only
     ever run if that ``denver.yml`` actually lists it.
     """
-    config_path = config_path.resolve()
-    if _seen is None:
-        _seen = set()
-    if config_path in _seen:
-        die(f"circular import detected at {config_path}")
-    _seen.add(config_path)
-
+    config_path, _seen = _register_seen(config_path, _seen)
     raw = load_yaml(config_path)
     base_dir = config_path.parent
+
     entries = []
-
-    for entry in raw.get("import", []) or []:
-        imported_path = resolve_import(entry, base_dir)
+    for imported_path in _imported_paths(raw, base_dir):
         entries += collect_hook_entries(imported_path, name, _seen)
+    return entries + _own_hook_entries(raw, base_dir, name)
 
+
+def _own_hook_entries(raw, base_dir, name):
+    """One layer's own ``hooks: <name>:`` scripts as (base_dir, script) pairs -- a bare string counts as one."""
     own = (raw.get("hooks") or {}).get(name)
-    if own:
-        own_scripts = [own] if isinstance(own, str) else own
-        entries += [(base_dir, script) for script in own_scripts]
-
-    return entries
+    if not own:
+        return []
+    own_scripts = [own] if isinstance(own, str) else own
+    return [(base_dir, script) for script in own_scripts]
 
 
 def run_hook(ctx, config_path, name):
@@ -1051,16 +1104,27 @@ def expand_section_imports(config, env_dir):
     for key, value in config.items():
         if not (isinstance(value, dict) and value.get("import")):
             continue
-        merged = {}
-        for ref in value["import"]:
-            path, section = parse_section_import_ref(ref)
-            src_path = resolve_import(path, env_dir)
-            src_config = load_config(src_path)
-            merged = deep_merge(merged, src_config.get(section or key) or {})
-            extra_dirs.append(src_path.parent)
-        overlay = {k: v for k, v in value.items() if k != "import"}
-        result[key] = deep_merge(merged, overlay)
+        merged, dirs = _stacked_section(value, key, env_dir)
+        extra_dirs += dirs
+        result[key] = deep_merge(merged, _without_import(value))
     return result, extra_dirs
+
+
+def _stacked_section(value, key, env_dir):
+    """Merge every section-level 'import:' entry of one section, base-first.
+
+    Returns ``(merged, extra_dirs)``, the extra dirs being each source env's
+    own directory (so its relative paths still resolve, see the caller).
+    """
+    merged = {}
+    extra_dirs = []
+    for ref in value["import"]:
+        path, section = parse_section_import_ref(ref)
+        src_path = resolve_import(path, env_dir)
+        src_config = load_config(src_path)
+        merged = deep_merge(merged, src_config.get(section or key) or {})
+        extra_dirs.append(src_path.parent)
+    return merged, extra_dirs
 
 
 def default_command(config):
@@ -1149,28 +1213,35 @@ def reinvoke_command(
     outer denver's own wrapper-stage work), not just the inner process's
     own, much shorter, wall-clock.
     """
-    # the interpreter+script pair to re-run denver with, or the frozen
-    # executable on its own -- see this function's docstring
-    if getattr(sys, "frozen", False):
-        launcher = [str(Path(sys.executable).resolve())]
-    else:
-        launcher = ["python3", str(Path(__file__).resolve())]
     filter_flags = []
     if until_stage:
         filter_flags += ["--until", until_stage]
     for stage_id in (*skip_stages, *wrapper_stage_ids):
         filter_flags += ["--skip", stage_id]
-    extra_flags = (
-        (["-q"] * quiet)
-        + (["--fast"] if fast else [])
-        + (["--force"] if force else [])
-        + (["--ci"] if ci else [])
-        + (["--no-wait"] if no_wait else [])
-    )
-    if start_time is not None:
-        extra_flags += ["--start-time", repr(start_time)]
+    extra_flags = _reinvoke_flags(quiet=quiet, fast=fast, force=force, ci=ci, no_wait=no_wait, start_time=start_time)
     command = ["--", *forwarded] if forwarded else []
-    return [*launcher, str(config_path), *filter_flags, *extra_flags, *command]
+    return [*_denver_launcher(), str(config_path), *filter_flags, *extra_flags, *command]
+
+
+def _denver_launcher():
+    """The interpreter+script pair to re-run denver with, or the frozen executable on its own.
+
+    See reinvoke_command's docstring for why a frozen build re-invokes itself.
+    """
+    if getattr(sys, "frozen", False):
+        return [str(Path(sys.executable).resolve())]
+    return ["python3", str(Path(__file__).resolve())]
+
+
+def _reinvoke_flags(*, quiet, fast, force, ci, no_wait, start_time):
+    """The denver-own flags re-passed to the inner denver: -q once per level, then each flag that is set."""
+    flags = ["-q"] * quiet
+    for flag, enabled in (("--fast", fast), ("--force", force), ("--ci", ci), ("--no-wait", no_wait)):
+        if enabled:
+            flags.append(flag)
+    if start_time is not None:
+        flags += ["--start-time", repr(start_time)]
+    return flags
 
 
 def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, force=False, ci=False, dry_run=False):
@@ -1216,17 +1287,28 @@ def filtered_stage_ids(config, env_dir, until_stage, skip_stages):
     validity of the given stage ids was already checked in main() against the
     same (unfiltered) 'stages:' list.
     """
-    stage_ids = config.get("stages") or []
+    stage_ids = _declared_stage_ids(config)
     if not stage_ids:
         die(f"env '{env_dir.name}' declares no 'stages:'")
-    if until_stage:
-        stage_ids = stage_ids[: stage_ids.index(until_stage) + 1]
-    if skip_stages:
-        drop = set(skip_stages)
-        stage_ids = [s for s in stage_ids if s not in drop]
+    stage_ids = _apply_stage_filters(stage_ids, until_stage, skip_stages)
     if not stage_ids:
         die("--until/--skip filtered out every stage -- nothing left to run")
     return stage_ids
+
+
+def _declared_stage_ids(config):
+    """Every stage id the env declares in 'stages:', in order (empty when it declares none)."""
+    return config.get("stages") or []
+
+
+def _apply_stage_filters(stage_ids, until_stage, skip_stages):
+    """``stage_ids`` truncated after --until's stage (which still runs), then with --skip's ids dropped."""
+    if until_stage:
+        stage_ids = stage_ids[: stage_ids.index(until_stage) + 1]
+    if not skip_stages:
+        return stage_ids
+    drop = set(skip_stages)
+    return [s for s in stage_ids if s not in drop]
 
 
 def _collect_stage_scripts(ctx, stage_ids, name):
@@ -1240,17 +1322,27 @@ def _collect_stage_scripts(ctx, stage_ids, name):
     """
     resolved = []
     for stage_id in stage_ids:
-        entry = (ctx.section(stage_id).get("scripts") or {}).get(name)
-        if entry is None:
-            continue
-        if not isinstance(entry, list):
-            die(f"stage '{stage_id}': 'scripts.{name}:' must be a list of strings, got {type(entry).__name__}")
-        for script in entry:
-            path = ctx.resolve_path(script)
-            if not path.is_file():
-                die(f"stage '{stage_id}': scripts.{name} script not found: {path}")
-            resolved.append((stage_id, path))
+        for script in _stage_script_entries(ctx, stage_id, name):
+            resolved.append((stage_id, _resolved_script_path(ctx, stage_id, name, script)))
     return resolved
+
+
+def _stage_script_entries(ctx, stage_id, name):
+    """One stage's ``scripts: <name>:`` list, validated -- empty when that stage declares none."""
+    entry = (ctx.section(stage_id).get("scripts") or {}).get(name)
+    if entry is None:
+        return []
+    if not isinstance(entry, list):
+        die(f"stage '{stage_id}': 'scripts.{name}:' must be a list of strings, got {type(entry).__name__}")
+    return entry
+
+
+def _resolved_script_path(ctx, stage_id, name, script):
+    """One ``scripts: <name>:`` entry resolved to a file that exists."""
+    path = ctx.resolve_path(script)
+    if not path.is_file():
+        die(f"stage '{stage_id}': scripts.{name} script not found: {path}")
+    return path
 
 
 def run_named_scripts(
@@ -1277,57 +1369,64 @@ def run_named_scripts(
     same wrapper caveat as run_stages(): the reinvocation that would carry
     the setup stages' entries into the wrapper is itself not run.
     """
-    from denver_providers import make_stage
     from denver_providers.context import dry_run_legend
 
     if dry_run:
         dry_run_legend()
 
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
-    config, ctx = resolve_full_config(env_dir, config, config_path, quiet=quiet, dry_run=dry_run)
-    ctx.acquire_lock(wait=not no_wait)
-    ctx.ensure_state_dir()
-    run_hook(ctx, config_path, "env")
-    ctx.apply_env_map(config.get("env"))
+    config, ctx = _prepare_context(env_dir, config, config_path, no_wait=no_wait, quiet=quiet, dry_run=dry_run)
 
-    stages = [make_stage(stage_id, config) for stage_id in stage_ids]
-    wrappers = [s for s in stages if s.kind == "wrapper"]
-    setups = [s for s in stages if s.kind != "wrapper"]
+    stages = _make_stages(config, stage_ids)
+    wrappers, setups, _, _ = _partition_stages(stages, set(_stage_ids_of(stages)))
     active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
-    def run_for(scoped_stage_ids):
-        for stage_id, script in _collect_stage_scripts(ctx, scoped_stage_ids, name):
-            info(f"{name}-script '{stage_id}': {script}")
-            ctx.run([str(script)])
-
     if not active_wrappers:
-        run_for([s.stage for s in setups])
+        _run_stage_scripts(ctx, _stage_ids_of(setups), name)
         return
 
     # the wrapper's own entries (e.g. `docker login` to a private registry)
     # run here, on the host, before preparing it
-    run_for([w.stage for w in active_wrappers])
+    _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
 
-    if not _collect_stage_scripts(ctx, [s.stage for s in setups], name):
+    if not _collect_stage_scripts(ctx, _stage_ids_of(setups), name):
         return  # nothing to relocate into the wrapper for
 
     # same limit as run_stages(): the reinvocation carrying these entries
     # into the wrapper is itself not run under --dry-run, so they can't be
-    # previewed -- see _run_stages_via_wrapper for why not.
-    if ctx.dry_run:
-        ctx.dry_note(
-            "!",
-            f"'{name}' scripts of stages {', '.join(s.stage for s in setups)} run inside "
-            f"{', '.join(w.stage for w in active_wrappers)} and are not previewed -- "
-            f"re-run with --skip {' --skip '.join(w.stage for w in active_wrappers)} to see them",
-        )
+    # previewed -- see _note_not_previewed for why not.
+    _note_not_previewed(ctx, f"'{name}' scripts of stages", setups, active_wrappers)
 
-    stage_index = {s.stage: i for i, s in enumerate(stages, 1)}
+    stage_index = _stage_positions(stages)
+    _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, len(stages), quiet=quiet)
+
+    cmd = _relocated_run_cmd(
+        config_path,
+        name,
+        quiet=quiet,
+        until_stage=until_stage,
+        skip_stages=(*skip_stages, *_stage_ids_of(active_wrappers)),
+    )
+    ctx.exec(_wrap_cmd(ctx, cmd, active_wrappers, stage_index, len(stages)))
+
+
+def _run_stage_scripts(ctx, stage_ids, name):
+    """Run every ``scripts: <name>:`` entry the given stages declare, in order."""
+    for stage_id, script in _collect_stage_scripts(ctx, stage_ids, name):
+        info(f"{name}-script '{stage_id}': {script}")
+        ctx.run([str(script)])
+
+
+def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stage_count, *, quiet):
+    """Run each active wrapper stage's own setup(), so it is ready to be relocated into."""
     for w in active_wrappers:
         _run_stage_setup(
-            ctx, config, config_path, w, quiet=quiet, stage_index=stage_index[w.stage], stage_count=len(stages)
+            ctx, config, config_path, w, quiet=quiet, stage_index=stage_index[w.stage], stage_count=stage_count
         )
 
+
+def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages):
+    """The ``denver <config> --run <name>`` argv the wrapper re-invokes, this run's own filters re-passed."""
     cmd = ["python3", str(Path(__file__).resolve()), str(config_path), "--run", name]
     if quiet:
         cmd.append("-q")
@@ -1335,14 +1434,17 @@ def run_named_scripts(
         cmd += ["--until", until_stage]
     for stage_id in skip_stages:
         cmd += ["--skip", stage_id]
-    for w in active_wrappers:
-        cmd += ["--skip", w.stage]
+    return cmd
+
+
+def _wrap_cmd(ctx, cmd, active_wrappers, stage_index, stage_count):
+    """``cmd`` wrapped by every active wrapper, the outermost one applied last."""
     _mark_relocated(ctx, active_wrappers)
     for w in reversed(active_wrappers):
-        ctx.stage_index, ctx.stage_count = stage_index[w.stage], len(stages)
+        ctx.stage_index, ctx.stage_count = stage_index[w.stage], stage_count
         ctx.stage_id = w.stage
         cmd = w.wrap(ctx, cmd)
-    ctx.exec(cmd)
+    return cmd
 
 
 def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()):
@@ -1364,18 +1466,37 @@ def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()
     config, _ = expand_section_imports(config, env_dir)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
 
-    by_name = {}
-    for stage_id in stage_ids:
-        scripts = (config.get(stage_id) or {}).get("scripts") or {}
-        for name, entries in scripts.items():
-            by_name.setdefault(name, []).append((stage_id, len(entries or [])))
-
+    by_name = _scripts_by_name(config, stage_ids)
     if not by_name:
         print(f"env '{env_dir.name}' defines no 'scripts:' entries -- nothing to --run", file=sys.stderr)
         return
+    _print_script_names(env_dir, by_name)
+
+
+def _stage_scripts_section(config, stage_id):
+    """One stage's raw 'scripts:' mapping (empty when that stage declares none)."""
+    return (config.get(stage_id) or {}).get("scripts") or {}
+
+
+def _scripts_by_name(config, stage_ids):
+    """``{script name: [(stage id, entry count)]}`` across the given stages, in 'stages:' order."""
+    by_name = {}
+    for stage_id in stage_ids:
+        for name, entries in _stage_scripts_section(config, stage_id).items():
+            by_name.setdefault(name, []).append((stage_id, len(entries or [])))
+    return by_name
+
+
+def _script_count_label(stage, count):
+    """One stage's contribution to a --run name, e.g. ``uv (2 scripts)``."""
+    return f"{stage} ({count} script{'s' if count != 1 else ''})"
+
+
+def _print_script_names(env_dir, by_name):
+    """Print every --run name this env defines, with the stages contributing to it."""
     print(f"available --run names for env '{env_dir.name}':", file=sys.stderr)
     for name in sorted(by_name):
-        stages = ", ".join(f"{stage} ({count} script{'s' if count != 1 else ''})" for stage, count in by_name[name])
+        stages = ", ".join(_script_count_label(stage, count) for stage, count in by_name[name])
         print(f"  {name:<12} {stages}", file=sys.stderr)
 
 
@@ -1506,7 +1627,6 @@ def run_stages(
     it is itself one of the commands not being run, so
     _run_stages_via_wrapper stops at the reinvocation and says so.
     """
-    from denver_providers import make_stage
     from denver_providers.context import dry_run_legend
 
     if start_time is None:
@@ -1515,58 +1635,40 @@ def run_stages(
     if dry_run:
         dry_run_legend()
 
-    all_stage_ids = config.get("stages") or []
+    all_stage_ids = _declared_stage_ids(config)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
-    config, ctx = resolve_full_config(
-        env_dir, config, config_path, quiet=quiet, fast=fast, force=force, ci=ci, dry_run=dry_run
+    config, ctx = _prepare_context(
+        env_dir,
+        config,
+        config_path,
+        no_wait=no_wait,
+        quiet=quiet,
+        fast=fast,
+        force=force,
+        ci=ci,
+        dry_run=dry_run,
     )
-    # before any stage touches shared state, and before the wrapper relocates
-    ctx.acquire_lock(wait=not no_wait)
-
-    ctx.ensure_state_dir()
-
-    # hooks.env sources a script once, before anything else -- its exports
-    # (and the declarative 'env:' map applied right after) are visible to
-    # every stage and the final command, i.e. they apply to the whole devshell.
-    run_hook(ctx, config_path, "env")
-    ctx.apply_env_map(config.get("env"))
 
     # each entry in 'stages:' is a pipeline stage (a provider type + config
     # id), run in order -- so an env can order conan before uv, have several
     # uv stages, etc. Instantiated for *every* declared id (not just the
     # runnable ones) purely to learn each skipped stage's kind (wrapper vs.
     # setup) and declared position -- make_stage() itself does no I/O.
-    all_stages = [make_stage(stage_id, config) for stage_id in all_stage_ids]
-    stage_index = {s.stage: i for i, s in enumerate(all_stages, 1)}
-    total = len(all_stages)
-    # 'disabled: true' (a stage's own config, resolved above -- so this
-    # reflects import:/-c overrides too) drops a stage from the runnable set
-    # the same way --skip does, but -- unlike --skip/--until -- never drops
-    # its section from --show-config/filtered_stage_ids: it's a declarative
-    # default about the pipeline, not a per-invocation exclusion, so it stays
-    # visible and inspectable (and overridable via '-c <stage>.disabled=false').
-    runnable = {s for s in stage_ids if not (config.get(s) or {}).get("disabled")}
-
-    wrappers = [s for s in all_stages if s.kind == "wrapper" and s.stage in runnable]
-    setups = [s for s in all_stages if s.kind != "wrapper" and s.stage in runnable]
-    skipped_wrappers = [s for s in all_stages if s.kind == "wrapper" and s.stage not in runnable]
-    skipped_setups = [s for s in all_stages if s.kind != "wrapper" and s.stage not in runnable]
+    all_stages = _make_stages(config, all_stage_ids)
+    wrappers, setups, skipped_wrappers, skipped_setups = _partition_stages(
+        all_stages, _runnable_stage_ids(config, stage_ids)
+    )
 
     # A wrapper (e.g. docker) is active only on the host: skip it yourself
     # (e.g. `--skip docker`) to run on the host instead, or it's already
     # excluded above by stage filtering; also inactive once already inside it.
     active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
-    # a stage past the --until cut-off was dropped by --until; a stage that
-    # survived --until/--skip filtering (still in stage_ids) but is missing
-    # from `runnable` was dropped by its own 'disabled: true'; anything else
-    # missing from `runnable` was named by an explicit --skip.
-    cutoff = all_stage_ids.index(until_stage) if until_stage in all_stage_ids else None
     skip_state = _StageSkipState(
-        stage_index=stage_index,
-        total=total,
+        stage_index=_stage_positions(all_stages),
+        total=len(all_stages),
         stage_ids=stage_ids,
-        cutoff=cutoff,
+        cutoff=_until_cutoff(all_stage_ids, until_stage),
         all_stage_ids=all_stage_ids,
         all_stages=all_stages,
     )
@@ -1607,6 +1709,84 @@ def run_stages(
             quiet=quiet,
             start_time=start_time,
         )
+
+
+def _prepare_context(env_dir, config, config_path, *, no_wait, **resolve_kwargs):
+    """Resolve the config, take the env's lock, and apply the whole-devshell environment.
+
+    Shared by run_stages and run_named_scripts, which must set an env up the
+    same way before either runs anything: the lock is taken before any stage
+    touches shared state (and before a wrapper relocates), and hooks.env
+    sources a script once, before anything else -- its exports (and the
+    declarative 'env:' map applied right after) are visible to every stage
+    and to the final command, i.e. they apply to the whole devshell.
+    """
+    config, ctx = resolve_full_config(env_dir, config, config_path, **resolve_kwargs)
+    ctx.acquire_lock(wait=not no_wait)
+    ctx.ensure_state_dir()
+    run_hook(ctx, config_path, "env")
+    ctx.apply_env_map(config.get("env"))
+    return config, ctx
+
+
+def _make_stages(config, stage_ids):
+    """Instantiate every stage id in ``stage_ids``, in order."""
+    from denver_providers import make_stage
+
+    return [make_stage(stage_id, config) for stage_id in stage_ids]
+
+
+def _stage_positions(stages):
+    """``{stage id: 1-based position}``, feeding banner()'s '[i/n]'."""
+    return {s.stage: i for i, s in enumerate(stages, 1)}
+
+
+def _stage_ids_of(stages):
+    """The stage ids of a list of provider instances, in order."""
+    return [s.stage for s in stages]
+
+
+def _runnable_stage_ids(config, stage_ids):
+    """Which of the filtered stage ids actually run: all of them, minus any set 'disabled: true'.
+
+    'disabled: true' (a stage's own config, already resolved -- so this
+    reflects import:/-c overrides too) drops a stage from the runnable set
+    the same way --skip does, but -- unlike --skip/--until -- never drops its
+    section from --show-config/filtered_stage_ids: it's a declarative default
+    about the pipeline, not a per-invocation exclusion, so it stays visible
+    and inspectable (and overridable via '-c <stage>.disabled=false').
+    """
+    return {s for s in stage_ids if not (config.get(s) or {}).get("disabled")}
+
+
+def _partition_stages(all_stages, runnable):
+    """Split every declared stage by kind and by whether it is going to run.
+
+    Returns ``(wrappers, setups, skipped_wrappers, skipped_setups)`` -- the
+    four groups both run paths walk, each in 'stages:' order.
+    """
+    buckets = {
+        ("wrapper", True): [],
+        ("setup", True): [],
+        ("wrapper", False): [],
+        ("setup", False): [],
+    }
+    for stage in all_stages:
+        kind = "wrapper" if stage.kind == "wrapper" else "setup"
+        buckets[(kind, stage.stage in runnable)].append(stage)
+    return (
+        buckets[("wrapper", True)],
+        buckets[("setup", True)],
+        buckets[("wrapper", False)],
+        buckets[("setup", False)],
+    )
+
+
+def _until_cutoff(all_stage_ids, until_stage):
+    """The declared index --until truncated at, or None when no --until named a declared stage."""
+    if until_stage in all_stage_ids:
+        return all_stage_ids.index(until_stage)
+    return None
 
 
 def _wrappers_inactive(ctx):
@@ -1677,14 +1857,23 @@ def _show_skipped(ctx, skipped, skip_state):
     from denver_providers.context import skip_banner
 
     for s in skipped:
-        if s.stage in skip_state.stage_ids:
-            reason = "skipped (disabled: true)"
-        else:
-            past_cutoff = skip_state.cutoff is not None and skip_state.all_stage_ids.index(s.stage) > skip_state.cutoff
-            reason = "skipped by --until" if past_cutoff else "skipped by --skip"
+        reason = _skip_reason(s, skip_state)
         ctx.stage_index, ctx.stage_count = skip_state.stage_index[s.stage], skip_state.total
         ctx.stage_timings.append((s.stage, reason))
         skip_banner(ctx, s.stage, reason)
+
+
+def _skip_reason(stage, skip_state):
+    """Why ``stage`` isn't running: its own 'disabled: true', the --until cut-off, or an explicit --skip.
+
+    A stage that survived --until/--skip filtering (still in ``stage_ids``)
+    but isn't running was dropped by its own 'disabled: true'; a stage past
+    the cut-off was dropped by --until; anything else was named by --skip.
+    """
+    if stage.stage in skip_state.stage_ids:
+        return "skipped (disabled: true)"
+    past_cutoff = skip_state.cutoff is not None and skip_state.all_stage_ids.index(stage.stage) > skip_state.cutoff
+    return "skipped by --until" if past_cutoff else "skipped by --skip"
 
 
 def _run_stages_via_wrapper(
@@ -1707,67 +1896,104 @@ def _run_stages_via_wrapper(
     # and the re-invoked denver banners it there. Its skipped siblings are
     # likewise left to that inner run, unless nothing will re-invoke at all
     # (a pure wrapper), in which case this is the only chance to show them.
-    active_wrapper_ids = {w.stage for w in active_wrappers}
-    skipped_wrapper_ids = {s.stage for s in skipped_wrappers}
-    skipped_setup_ids = {s.stage for s in skipped_setups}
+    # skipped setup stages are left to the inner run too, unless nothing will
+    # re-invoke at all (a pure wrapper), in which case this is the only
+    # chance to show them.
+    report_ids = set(_stage_ids_of(skipped_wrappers))
+    if not setups:
+        report_ids |= set(_stage_ids_of(skipped_setups))
     for stage in skip_state.all_stages:
-        if stage.stage in active_wrapper_ids:
-            _run_stage_setup(
-                ctx,
-                config,
-                config_path,
-                stage,
-                quiet=run_options.quiet,
-                stage_index=skip_state.stage_index[stage.stage],
-                stage_count=skip_state.total,
-            )
-        elif stage.stage in skipped_wrapper_ids or (stage.stage in skipped_setup_ids and not setups):
-            _show_skipped(ctx, [stage], skip_state)
-    if setups:
-        # setup providers run *inside* the wrapper: re-invoke denver there
-        # -- it recomputes skipped_setups identically (same denver.yml,
-        # same --until/--skip) and shows those banners itself.
-        #
-        # Under --dry-run that reinvocation is one of the commands *not*
-        # being run, so those stages are never reached and can't be
-        # previewed here. Nor could they be by passing --dry-run inward:
-        # getting inside the wrapper means really starting it, which is
-        # exactly what this run promised not to do (and its image may be
-        # something an earlier printed-not-run `compose build` would have
-        # produced). Said out loud rather than left as a silently short
-        # pipeline -- run `--skip <wrapper>` to preview those stages on the
-        # host instead.
-        if ctx.dry_run:
-            ctx.dry_note(
-                "!",
-                f"stages {', '.join(s.stage for s in setups)} run inside "
-                f"{', '.join(w.stage for w in active_wrappers)} and are not previewed -- "
-                f"re-run with --skip {' --skip '.join(w.stage for w in active_wrappers)} to see them",
-            )
-        cmd = reinvoke_command(
+        _prepare_or_report(
+            ctx,
+            config,
             config_path,
-            forwarded,
-            [w.stage for w in active_wrappers],
-            until_stage=run_options.until_stage,
-            skip_stages=run_options.skip_stages,
+            stage,
+            run_ids=set(_stage_ids_of(active_wrappers)),
+            report_ids=report_ids,
+            skip_state=skip_state,
             quiet=run_options.quiet,
-            fast=run_options.fast,
-            force=run_options.force,
-            ci=run_options.ci,
-            no_wait=run_options.no_wait,
-            start_time=run_options.start_time,
         )
-    else:
+
+    cmd = _wrapper_target_cmd(
+        ctx, config, config_path, forwarded, active_wrappers=active_wrappers, setups=setups, run_options=run_options
+    )
+    _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, run_options, has_setups=bool(setups))
+
+
+def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, skip_state, quiet):
+    """Run ``stage``'s setup() if it is one of ``run_ids``, report it as skipped if it is one of ``report_ids``.
+
+    Anything in neither group is passed over silently -- it runs somewhere
+    else (inside the wrapper), and the denver that lands there banners it.
+    """
+    if stage.stage in run_ids:
+        _run_stage_setup(
+            ctx,
+            config,
+            config_path,
+            stage,
+            quiet=quiet,
+            stage_index=skip_state.stage_index[stage.stage],
+            stage_count=skip_state.total,
+        )
+    elif stage.stage in report_ids:
+        _show_skipped(ctx, [stage], skip_state)
+
+
+def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers, setups, run_options):
+    """What the wrapper relocates: a denver reinvocation for the setup stages, else the command itself."""
+    if not setups:
         # pure wrapper: relocate the user's command (or default) directly.
         # skipped_setups were already shown in pipeline position by the walk
         # above, since nothing will re-invoke to show them.
-        cmd = resolve_command(config, forwarded)
-    _mark_relocated(ctx, active_wrappers)
-    for w in reversed(active_wrappers):
-        ctx.stage_index, ctx.stage_count = skip_state.stage_index[w.stage], skip_state.total
-        ctx.stage_id = w.stage
-        cmd = w.wrap(ctx, cmd)
-    if not setups and run_options.quiet < 2:
+        return resolve_command(config, forwarded)
+    # setup providers run *inside* the wrapper: re-invoke denver there
+    # -- it recomputes skipped_setups identically (same denver.yml,
+    # same --until/--skip) and shows those banners itself.
+    _note_not_previewed(ctx, "stages", setups, active_wrappers)
+    return reinvoke_command(
+        config_path,
+        forwarded,
+        _stage_ids_of(active_wrappers),
+        until_stage=run_options.until_stage,
+        skip_stages=run_options.skip_stages,
+        quiet=run_options.quiet,
+        fast=run_options.fast,
+        force=run_options.force,
+        ci=run_options.ci,
+        no_wait=run_options.no_wait,
+        start_time=run_options.start_time,
+    )
+
+
+def _note_not_previewed(ctx, what, setups, active_wrappers):
+    """--dry-run: say that ``what`` runs inside the wrapper and cannot be previewed, and how to see it.
+
+    Under --dry-run the reinvocation carrying those stages into the wrapper
+    is itself one of the commands *not* being run, so they are never reached.
+    Nor could they be previewed by passing --dry-run inward: getting inside
+    the wrapper means really starting it, which is exactly what this run
+    promised not to do (and its image may be something an earlier
+    printed-not-run `compose build` would have produced). Said out loud
+    rather than left as a silently short pipeline -- run `--skip <wrapper>`
+    to preview those stages on the host instead.
+    """
+    if not ctx.dry_run:
+        return
+    inside = ", ".join(_stage_ids_of(active_wrappers))
+    skips = " --skip ".join(_stage_ids_of(active_wrappers))
+    ctx.dry_note(
+        "!",
+        f"{what} {', '.join(_stage_ids_of(setups))} run inside {inside} and are not previewed -- "
+        f"re-run with --skip {skips} to see them",
+    )
+
+
+def _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, run_options, *, has_setups):
+    """Wrap ``cmd`` through the active wrapper(s) and exec it, announcing a ready env if nothing re-invokes."""
+    cmd = _wrap_cmd(ctx, cmd, active_wrappers, skip_state.stage_index, skip_state.total)
+    # with no setup stages nothing re-invokes, so this is where the env is ready
+    if not has_setups and run_options.quiet < 2:
         _print_env_started(ctx, run_options.start_time)
     ctx.exec(cmd)
 
@@ -1800,22 +2026,20 @@ def _run_stages_directly(
     # a second, spurious "skipped by --skip" banner. Keyed on denver's own
     # bookkeeping rather than on being in a container: a hand-started
     # container where the user really did type --skip should still say so.
-    setup_ids = {n.stage for n in setups}
-    skipped_wrapper_ids = {s.stage for s in skipped_wrappers}
-    skipped_setup_ids = {s.stage for s in skipped_setups}
+    report_ids = set(_stage_ids_of(skipped_setups))
+    if not ctx.relocated:
+        report_ids |= set(_stage_ids_of(skipped_wrappers))
     for stage in skip_state.all_stages:
-        if stage.stage in setup_ids:
-            _run_stage_setup(
-                ctx,
-                config,
-                config_path,
-                stage,
-                quiet=quiet,
-                stage_index=skip_state.stage_index[stage.stage],
-                stage_count=skip_state.total,
-            )
-        elif stage.stage in skipped_setup_ids or (stage.stage in skipped_wrapper_ids and not ctx.relocated):
-            _show_skipped(ctx, [stage], skip_state)
+        _prepare_or_report(
+            ctx,
+            config,
+            config_path,
+            stage,
+            run_ids=set(_stage_ids_of(setups)),
+            report_ids=report_ids,
+            skip_state=skip_state,
+            quiet=quiet,
+        )
     if quiet < 2:
         _print_env_started(ctx, start_time)
     if not quiet:
@@ -1866,10 +2090,20 @@ def _sorted_nested(value):
     alphabetical, easy-to-scan ordering.
     """
     if isinstance(value, dict):
-        return {k: _sorted_nested(value[k]) for k in sorted(value)}
+        return _sorted_dict(value)
     if isinstance(value, list):
-        return [_sorted_nested(v) for v in value]
+        return _sorted_list(value)
     return value
+
+
+def _sorted_dict(value):
+    """A mapping's keys alphabetically, each value recursively sorted."""
+    return {k: _sorted_nested(value[k]) for k in sorted(value)}
+
+
+def _sorted_list(value):
+    """A list's entries recursively sorted (the list's own order is kept)."""
+    return [_sorted_nested(v) for v in value]
 
 
 def _ordered_stage_section(section):
@@ -1880,13 +2114,18 @@ def _ordered_stage_section(section):
     alphabetically. Each value is still recursively sorted via
     _sorted_nested -- only this section's own top level is special-cased.
     """
-    ordered = {}
-    for key in GENERIC_STAGE_KEYS:
-        if key in section:
-            ordered[key] = _sorted_nested(section[key])
-    for key in sorted(k for k in section if k not in GENERIC_STAGE_KEYS):
-        ordered[key] = _sorted_nested(section[key])
-    return ordered
+    keys = _present_generic_keys(section) + _provider_keys(section)
+    return {key: _sorted_nested(section[key]) for key in keys}
+
+
+def _present_generic_keys(section):
+    """The GENERIC_STAGE_KEYS this section actually has, in that fixed order."""
+    return [key for key in GENERIC_STAGE_KEYS if key in section]
+
+
+def _provider_keys(section):
+    """This section's provider-specific keys (everything GENERIC_STAGE_KEYS doesn't name), alphabetically."""
+    return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
 def show_config(env_dir, config, config_path, until_stage=None, skip_stages=()):
@@ -1915,23 +2154,34 @@ def show_config(env_dir, config, config_path, until_stage=None, skip_stages=()):
     """
     resolved, ctx = resolve_full_config(env_dir, config, config_path)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
-    for dropped in set(resolved.get("stages") or []) - set(stage_ids):
-        resolved.pop(dropped, None)
+    _drop_filtered_sections(resolved, stage_ids)
     resolved["stages"] = stage_ids
     resolved["hooks"] = resolve_hooks(ctx, config_path, stage_ids)
 
+    print(yaml.safe_dump(_ordered_config(resolved, stage_ids), sort_keys=False, default_flow_style=False))
+
+
+def _drop_filtered_sections(resolved, stage_ids):
+    """Drop the section of every stage --until/--skip filtered out, so the output matches that run."""
+    for dropped in set(_declared_stage_ids(resolved)) - set(stage_ids):
+        resolved.pop(dropped, None)
+
+
+def _generic_top_level_keys(resolved, stage_ids, pinned_keys):
+    """Every top-level key that is neither pinned, nor 'stages:', nor a stage's own section -- alphabetically."""
+    skip = {"stages", *pinned_keys, *stage_ids}
+    return sorted(k for k in resolved if k not in skip)
+
+
+def _ordered_config(resolved, stage_ids):
+    """The resolved config arranged into --show-config's four display groups (see show_config)."""
     pinned_keys = ("version", "denver-version")
-    generic_keys = sorted(k for k in resolved if k not in ("stages", *pinned_keys) and k not in stage_ids)
-    ordered = {}
-    for key in pinned_keys:
-        if key in resolved:
-            ordered[key] = _sorted_nested(resolved[key])
-    ordered.update((k, _sorted_nested(resolved[k])) for k in generic_keys)
+    ordered = {key: _sorted_nested(resolved[key]) for key in pinned_keys if key in resolved}
+    ordered.update((k, _sorted_nested(resolved[k])) for k in _generic_top_level_keys(resolved, stage_ids, pinned_keys))
     ordered["stages"] = resolved["stages"]
     for stage_id in stage_ids:
         ordered[stage_id] = _ordered_stage_section(resolved[stage_id])
-
-    print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
+    return ordered
 
 
 # --------------------------------------------------------------------------- #
@@ -2055,15 +2305,33 @@ def _command_failure_message(exc):
     the failure at all. A call that inherited stdout/stderr carries nothing
     here and needs nothing: it already printed where the user could see it.
     """
-    command = " ".join(str(c) for c in exc.cmd) if isinstance(exc.cmd, (list, tuple)) else str(exc.cmd)
-    lines = [f"command failed (exit {exc.returncode}): {command}"]
-    for stream in (exc.stdout, exc.stderr):
-        if not stream:
-            continue
-        text = stream.decode(errors="replace") if isinstance(stream, bytes) else str(stream)
-        if text.strip():
-            lines.append(text.rstrip())
+    lines = [f"command failed (exit {exc.returncode}): {_failed_command_text(exc.cmd)}"]
+    lines += _captured_output(exc)
     return "\n".join(lines)
+
+
+def _failed_command_text(cmd):
+    """The failing command as one string, whether subprocess held it as a list or as a string."""
+    if isinstance(cmd, (list, tuple)):
+        return " ".join(str(c) for c in cmd)
+    return str(cmd)
+
+
+def _stream_text(stream):
+    """One captured stream as text ("" when the command captured nothing there)."""
+    if isinstance(stream, bytes):
+        return stream.decode(errors="replace")
+    return str(stream or "")
+
+
+def _captured_output(exc):
+    """Whatever the failing command printed, for a call that captured it instead of showing it."""
+    texts = []
+    for stream in (exc.stdout, exc.stderr):
+        text = _stream_text(stream)
+        if text.strip():
+            texts.append(text.rstrip())
+    return texts
 
 
 def main(argv=None):
@@ -2148,49 +2416,12 @@ def _run_cli(argv=None):
         die("no environment given -- see `denver --help`")
 
     env_dir, config_path = resolve_env_dir(args.env)
-    config = load_config(config_path) if config_path.is_file() else {}
-    for config_file in args.config_file:
-        config = deep_merge(config, load_config(Path(config_file)))
-    config = apply_config_overrides(config, args.config)
-    # both version gates run before validate_top_level_keys: a file written
-    # for a newer denver may well use a key this one doesn't know, and
-    # "upgrade denver" explains that far better than "unknown top-level key".
-    validate_config_version(config)
-    validate_denver_version(config)
-    validate_top_level_keys(config)
-    validate_stage_filters(config, args.until, args.skip)
+    config = _load_cli_config(args, config_path)
 
-    if args.show_config:
-        show_config(env_dir, config, config_path, until_stage=args.until, skip_stages=args.skip)
+    if _handle_config_subcommands(args, env_dir, config, config_path):
         return
 
-    if args.run == LIST_SCRIPTS:
-        list_named_scripts(env_dir, config_path, until_stage=args.until, skip_stages=args.skip)
-        return
-
-    if args.run:
-        run_named_scripts(
-            env_dir,
-            config,
-            config_path,
-            args.run,
-            until_stage=args.until,
-            skip_stages=args.skip,
-            quiet=args.quiet,
-            dry_run=args.dry_run,
-            no_wait=args.no_wait,
-        )
-        return
-
-    # 'runnable: false' marks a shared/base env (meant to be inherited via
-    # import:, not started directly). --show-config/--setup/--login above
-    # are diagnostic, not "running", so they're exempt: inspecting a base
-    # env's resolved config is still useful.
-    if config_path.is_file() and not is_runnable_env(config_path):
-        die(f"env '{env_dir.name}' sets 'runnable: false' -- it's meant to be imported, not started directly.")
-
-    if not config.get("stages"):
-        die(f"env '{env_dir.name}' declares no 'stages:' in its {CONFIG_NAME}")
+    _require_runnable(env_dir, config, config_path)
     run_stages(
         env_dir,
         config,
@@ -2206,6 +2437,64 @@ def _run_cli(argv=None):
         no_wait=args.no_wait,
         start_time=args.start_time,
     )
+
+
+def _load_cli_config(args, config_path):
+    """The env's config as the CLI asked for it: its own file, plus -f files, plus -c overrides -- validated."""
+    config = load_config(config_path) if config_path.is_file() else {}
+    for config_file in args.config_file:
+        config = deep_merge(config, load_config(Path(config_file)))
+    config = apply_config_overrides(config, args.config)
+    # both version gates run before validate_top_level_keys: a file written
+    # for a newer denver may well use a key this one doesn't know, and
+    # "upgrade denver" explains that far better than "unknown top-level key".
+    validate_config_version(config)
+    validate_denver_version(config)
+    validate_top_level_keys(config)
+    validate_stage_filters(config, args.until, args.skip)
+    return config
+
+
+def _handle_config_subcommands(args, env_dir, config, config_path):
+    """Handle --show-config/--run, if given. Returns True if one of them ran (nothing is launched then)."""
+    if args.show_config:
+        show_config(env_dir, config, config_path, until_stage=args.until, skip_stages=args.skip)
+        return True
+
+    if args.run == LIST_SCRIPTS:
+        list_named_scripts(env_dir, config_path, until_stage=args.until, skip_stages=args.skip)
+        return True
+
+    if args.run:
+        run_named_scripts(
+            env_dir,
+            config,
+            config_path,
+            args.run,
+            until_stage=args.until,
+            skip_stages=args.skip,
+            quiet=args.quiet,
+            dry_run=args.dry_run,
+            no_wait=args.no_wait,
+        )
+        return True
+
+    return False
+
+
+def _require_runnable(env_dir, config, config_path):
+    """Die unless this env may be started directly, with stages to run.
+
+    'runnable: false' marks a shared/base env (meant to be inherited via
+    import:, not started directly). --show-config/--run are diagnostic, not
+    "running", so they're exempt: inspecting a base env's resolved config is
+    still useful.
+    """
+    if config_path.is_file() and not is_runnable_env(config_path):
+        die(f"env '{env_dir.name}' sets 'runnable: false' -- it's meant to be imported, not started directly.")
+
+    if not config.get("stages"):
+        die(f"env '{env_dir.name}' declares no 'stages:' in its {CONFIG_NAME}")
 
 
 if __name__ == "__main__":

@@ -191,6 +191,60 @@ class DockerProvider(Provider):
         resolved["run-args"] = cfg.get("run-args") or ["--rm"]
         return fill_unset(resolved, cls.KEYS)
 
+    def _require_exe(self, ctx, exe):
+        """Die unless the configured docker executable is on PATH.
+
+        dry_fallback: --dry-run never starts a container, so previewing an
+        env's docker stage on a machine without docker is legitimate and
+        shouldn't abort before the compose commands are shown.
+        """
+        if not ctx.which(exe, dry_fallback=True):
+            die(f"docker[{self.stage}]: needs '{exe}' on PATH")
+
+    @staticmethod
+    def _resolved_compose_files(ctx, compose):
+        """Every 'compose.file:' entry resolved to a path that exists (a lone string is a one-entry list)."""
+        files = compose["file"]
+        files = [files] if isinstance(files, str) else files
+        compose_files = [ctx.resolve_path(f) for f in files]
+        for f in compose_files:
+            if not f.is_file():
+                die(f"docker: compose file not found: {f}")
+        return compose_files
+
+    def _resolved_registries(self, cfg, image):
+        """'registries:' as configured and validated -- empty when there is no 'image:' to look for."""
+        registries = cfg.get("registries") or []
+        if not image:
+            # nothing to search a registry *for* without a canonical tag --
+            # silently treat 'registries:' as unset rather than erroring.
+            registries = []
+        self._validate_registries(registries)
+        return registries
+
+    def _resolve_image_ref(self, ctx, exe, image, registries):
+        """Decide which ref $DENVER_DOCKER_IMAGE should be. Returns ``(remote_ref, found_locally)``.
+
+        Local is checked whenever 'image:' is set, regardless of whether
+        'registries:' is configured. Remote is checked whenever local missed,
+        OR --force is set -- --force means "rebuild even a locally-cached
+        image", but a registry that already has it still wins over a forced
+        local rebuild, so that case must still look.
+        """
+        found_locally = bool(image) and self._image_present_locally(ctx, exe, image)
+        remote_ref = None
+        if registries and (not found_locally or ctx.force):
+            remote_ref = self._use_remote_image(ctx, exe, image, registries)
+        return remote_ref, found_locally
+
+    def _stash_for_wrap(self, exe, compose_files, compose, cfg):
+        """Hand the bits setup() resolved over to wrap(), which runs long after setup() returned."""
+        self._exe = exe
+        self._compose_files = compose_files
+        self._compose_args = [str(a) for a in (compose.get("args") or [])]
+        self._service = compose["service"]
+        self._run_args = [str(a) for a in cfg["run-args"]]
+
     def setup(self, ctx):
         """Validate the compose files/exe, run env-scripts, and build the image if not found locally/remotely."""
         if ctx.in_container:
@@ -204,43 +258,20 @@ class DockerProvider(Provider):
         cfg = self.config_section(ctx)
 
         exe = cfg["exe"]
-        # dry_fallback: --dry-run never starts a container, so previewing an
-        # env's docker stage on a machine without docker is legitimate and
-        # shouldn't abort before the compose commands are shown.
-        if not ctx.which(exe, dry_fallback=True):
-            die(f"docker[{self.stage}]: needs '{exe}' on PATH")
+        self._require_exe(ctx, exe)
 
         compose = cfg["compose"]
-        files = compose["file"]
-        files = [files] if isinstance(files, str) else files
-        compose_files = [ctx.resolve_path(f) for f in files]
-        for f in compose_files:
-            if not f.is_file():
-                die(f"docker: compose file not found: {f}")
+        compose_files = self._resolved_compose_files(ctx, compose)
 
         image = cfg.get("image")
-        registries = cfg.get("registries") or []
-        if not image:
-            # nothing to search a registry *for* without a canonical tag --
-            # silently treat 'registries:' as unset rather than erroring.
-            registries = []
-        self._validate_registries(registries)
+        registries = self._resolved_registries(cfg, image)
 
         # bannered first so its own visible work (a registry login's echo,
         # an env-script's echo/output) never prints ahead of any banner,
         # the way create-env.sh's output used to.
         banner(ctx, self.stage, "prepare")
 
-        # Decide which ref $DENVER_DOCKER_IMAGE should be. Local is checked
-        # whenever 'image:' is set, regardless of whether 'registries:' is
-        # configured. Remote is checked whenever local missed, OR --force is
-        # set -- --force means "rebuild even a locally-cached image", but a
-        # registry that already has it still wins over a forced local
-        # rebuild, so that case must still look.
-        found_locally = bool(image) and self._image_present_locally(ctx, exe, image)
-        remote_ref = None
-        if registries and (not found_locally or ctx.force):
-            remote_ref = self._use_remote_image(ctx, exe, image, registries)
+        remote_ref, found_locally = self._resolve_image_ref(ctx, exe, image, registries)
 
         # export $DENVER_DOCKER_IMAGE -- the registry ref if one was found,
         # else the bare local tag (empty string if 'image:' is unset) -- so
@@ -252,13 +283,7 @@ class DockerProvider(Provider):
         ctx.set("DENVER_DOCKER_IMAGE", remote_ref or image)
 
         self._run_env_scripts(ctx, cfg)
-
-        # stash resolved bits for wrap()
-        self._exe = exe
-        self._compose_files = compose_files
-        self._compose_args = [str(a) for a in (compose.get("args") or [])]
-        self._service = compose["service"]
-        self._run_args = [str(a) for a in cfg["run-args"]]
+        self._stash_for_wrap(exe, compose_files, compose, cfg)
 
         self._build_or_skip(ctx, exe, image, compose, registries, remote_ref, found_locally)
 
@@ -303,22 +328,35 @@ class DockerProvider(Provider):
         there'd be nothing to check for next run, so it'd rebuild every
         single time regardless of --fast/found_locally.
         """
-        if remote_ref:
-            banner(ctx, self.stage, f"found '{remote_ref}' on a configured registry, will pull on run")
-        elif found_locally and not ctx.force:
-            banner(ctx, self.stage, f"image '{image}' found locally, skip build")
+        already_available = self._already_available_banner(ctx, image, remote_ref, found_locally)
+        if already_available:
+            banner(ctx, self.stage, already_available)
         elif image and compose["build"]:
             ctx.run(
                 [exe, "compose", *self._compose_file_args(), *self._compose_args, "build", self._service],
                 step="build",
             )
-        elif registries:
+        else:
+            self._explain_no_build(ctx, image, compose, registries)
+
+    @staticmethod
+    def _already_available_banner(ctx, image, remote_ref, found_locally):
+        """The banner text for an image that needs no build, or None if it still has to come from somewhere."""
+        if remote_ref:
+            return f"found '{remote_ref}' on a configured registry, will pull on run"
+        if found_locally and not ctx.force:
+            return f"image '{image}' found locally, skip build"
+        return None
+
+    def _explain_no_build(self, ctx, image, compose, registries):
+        """Nothing to build: die if a configured registry missed it, else banner why the build is skipped."""
+        if registries:
             urls = [r["url"] for r in registries]
             die(
                 f"docker: image '{image}' not found locally or on any of the configured "
                 f"registries ({', '.join(urls)}), and compose.build is false"
             )
-        elif not compose["build"]:
+        if not compose["build"]:
             banner(ctx, self.stage, "build (skipped: compose.build=false)")
         else:
             banner(ctx, self.stage, "build (skipped: 'image:' is not set)")

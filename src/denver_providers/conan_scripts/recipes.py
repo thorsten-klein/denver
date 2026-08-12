@@ -274,16 +274,28 @@ def handle_args_recipe(all_recipes, recipes: list[str]) -> dict[Path, PkgReferen
     return filtered
 
 
+def _remotes_to_search(remotes) -> list[Remote | None]:
+    """The remotes to look in, in order -- ``[None]`` (the local cache) when no names were given.
+
+    A remote conan has configured as *disabled* is dropped: it cannot answer.
+    """
+    if not remotes:
+        return [None]
+    configured = [conan_api.remotes.get(remote_name) for remote_name in remotes]
+    return [remote for remote in configured if not remote.disabled]
+
+
+def _package_revisions(pref, conan_remote) -> list:
+    """``pref``'s package revisions in ``conan_remote`` (None = the local cache); [] if it has none there."""
+    with contextlib.suppress(NotFoundException):
+        return conan_api.list.package_revisions(pref, remote=conan_remote)
+    return []
+
+
 def conan_list(pref, remotes=None) -> tuple[list, Remote | None]:
     """Find ``pref``'s package revisions locally (remotes=None) or in the first matching, enabled remote."""
-    for remote_name in remotes or [None]:
-        conan_remote = conan_api.remotes.get(remote_name) if remote_name else None
-        if conan_remote and conan_remote.disabled:
-            continue
-        try:
-            revisions = conan_api.list.package_revisions(pref, remote=conan_remote)
-        except NotFoundException:
-            continue
+    for conan_remote in _remotes_to_search(remotes):
+        revisions = _package_revisions(pref, conan_remote)
         if revisions:
             return revisions, conan_remote
     return [], None
@@ -406,21 +418,33 @@ _CONAN_CLI_OPTIONS = frozenset({'--name', '--version', '--user', '--channel', '-
 _CONAN_CLI_VALUE = re.compile(r'[^-\x00-\x1f][^\x00-\x1f]*')
 
 
+def _validated_conan_value(value, what):
+    """Raise ValueError unless ``value`` has the shape of a conan CLI value (see _CONAN_CLI_VALUE)."""
+    if not _CONAN_CLI_VALUE.fullmatch(value):
+        raise ValueError(f"invalid conan CLI arguments: not a usable {what}: {value!r}")
+
+
+def _validated_conan_option(arg):
+    """Raise ValueError unless the option-shaped ``arg`` is one this module passes.
+
+    That means '--test-missing' bare, or '--name=<value>' / '-r=<value>',
+    whose value is checked like any other.
+    """
+    option, sep, value = arg.partition('=')
+    if option not in _CONAN_CLI_OPTIONS:
+        raise ValueError(f"invalid conan CLI arguments: not an option this module passes: {arg!r}")
+    if sep:
+        _validated_conan_value(value, f"value for {option}")
+
+
 def _validated_conan_arg(arg):
     """Raise ValueError unless ``arg`` is one argv element of the shape this module builds (see below)."""
     if not isinstance(arg, str):
         raise ValueError(f"invalid conan CLI arguments: not a string: {arg!r}")
-    if not arg.startswith('-'):
-        if not _CONAN_CLI_VALUE.fullmatch(arg):
-            raise ValueError(f"invalid conan CLI arguments: not a usable value: {arg!r}")
-        return
-    # option-shaped: it has to be one of ours ('--test-missing', bare, or
-    # '--name=<value>' / '-r=<value>', whose value is checked like any other)
-    option, sep, value = arg.partition('=')
-    if option not in _CONAN_CLI_OPTIONS:
-        raise ValueError(f"invalid conan CLI arguments: not an option this module passes: {arg!r}")
-    if sep and not _CONAN_CLI_VALUE.fullmatch(value):
-        raise ValueError(f"invalid conan CLI arguments: not a usable value for {option}: {value!r}")
+    if arg.startswith('-'):
+        _validated_conan_option(arg)
+    else:
+        _validated_conan_value(arg, "value")
 
 
 def _validated_conan_argv(args):
@@ -547,11 +571,8 @@ def _find_renamed(remote_name, remote, remotes):
     return None
 
 
-def conan_ensure_remotes(remotes):
-    """Add/rename/update conan home remotes to match ``remotes`` (a {name: {url, verify_ssl}} dict)."""
-    print("Ensure custom remotes ...")
-    current_remotes = conan_remotes_list()
-
+def _remove_renamed_remotes(current_remotes, remotes):
+    """Drop every conan home remote that ``remotes`` now keys under a different name for the same url."""
     for remote_name, remote in current_remotes.items():
         new_name = _find_renamed(remote_name, remote, remotes)
         if new_name:
@@ -560,14 +581,25 @@ def conan_ensure_remotes(remotes):
             print(f"  New name: {new_name}")
             conan_api.remotes.remove(remote_name)
 
+
+def _add_or_replace_remote(remote_name, meta, current_remotes):
+    """Add ``remote_name`` at index 0, first removing an already-present one that doesn't match ``meta``."""
+    remote = Remote(remote_name, meta.get('url'), meta.get('verify_ssl', True))
+    if remote_name in current_remotes:
+        if remote == conan_api.remotes.get(remote_name):
+            return  # already correctly present
+        conan_api.remotes.remove(remote_name)
+    conan_api.remotes.add(remote, index=0)
+
+
+def conan_ensure_remotes(remotes):
+    """Add/rename/update conan home remotes to match ``remotes`` (a {name: {url, verify_ssl}} dict)."""
+    print("Ensure custom remotes ...")
+    current_remotes = conan_remotes_list()
+
+    _remove_renamed_remotes(current_remotes, remotes)
     for remote_name, meta in remotes.items():
-        remote = Remote(remote_name, meta.get('url'), meta.get('verify_ssl', True))
-        if remote_name in current_remotes:
-            current_remote = conan_api.remotes.get(remote_name)
-            if remote == current_remote:
-                continue  # already correctly present
-            conan_api.remotes.remove(remote_name)
-        conan_api.remotes.add(remote, index=0)
+        _add_or_replace_remote(remote_name, meta, current_remotes)
 
 
 def _env_enable_override(remote_name):
@@ -575,15 +607,21 @@ def _env_enable_override(remote_name):
     return {"ON": True, "OFF": False}.get(os.getenv(f"CONAN_REMOTE_ENABLE_{remote_name.upper()}"))
 
 
+def _should_be_enabled(remote_name, remotes):
+    """Whether ``remote_name`` ends up enabled: its own 'enabled:' unless CONAN_REMOTE_ENABLE_<NAME> overrides it."""
+    override = _env_enable_override(remote_name)
+    if override is not None:
+        return override
+    if remote_name not in remotes:
+        return False  # not ours to keep on
+    return remotes[remote_name].get("enabled", True)
+
+
 def conan_enable_remotes(remotes):
     """Enable every remote named in ``remotes`` (per its own 'enabled:'), disable every other conan home remote."""
     print("Enable custom remotes ...")
     for remote_name in conan_remotes_list():
-        configured_enabled = remotes[remote_name].get("enabled", True) if remote_name in remotes else False
-        override = _env_enable_override(remote_name)
-        enabled = configured_enabled if override is None else override
-
-        if enabled:
+        if _should_be_enabled(remote_name, remotes):
             conan_api.remotes.enable(remote_name)
         else:
             print(f"Info: {remote_name} is disabled.")
@@ -599,6 +637,23 @@ def _needs_reauth(user_info, configured_username, *, force):
     return not (configured_username and user_info.get('username') == configured_username)
 
 
+def _login_remote(remote_name, remote, *, force):
+    """Authenticate ``remote`` if it needs it, warning rather than dying when the remote is unreachable."""
+    user_info = conan_api.remotes.user_info(remote)
+    configured_username = os.getenv(f"CONAN_LOGIN_USERNAME_{remote_name.upper()}")
+    if not _needs_reauth(user_info, configured_username, force=force):
+        return
+
+    print_banner(remote)
+    try:
+        authenticate_remote(remote, force=True)
+    except ConanConnectionError as e:
+        print(colorama.Fore.YELLOW, end='')
+        print(f"\nWARNING: Unable to connect to remote '{remote_name}' at {remote.url}")
+        print(f"Reason: {e}")
+        print(colorama.Style.RESET_ALL)
+
+
 def conan_login(remotes, *, force=False):
     """Authenticate to each enabled remote named in ``remotes``, unless already authenticated.
 
@@ -610,20 +665,8 @@ def conan_login(remotes, *, force=False):
     print("Login to custom remotes ...")
     for remote_name, remote in conan_remotes_list().items():
         managed = not remote.disabled and remote_name in remotes
-        if not managed:
-            continue
-
-        user_info = conan_api.remotes.user_info(remote)
-        configured_username = os.getenv(f"CONAN_LOGIN_USERNAME_{remote_name.upper()}")
-        if _needs_reauth(user_info, configured_username, force=force):
-            print_banner(remote)
-            try:
-                authenticate_remote(remote, force=True)
-            except ConanConnectionError as e:
-                print(colorama.Fore.YELLOW, end='')
-                print(f"\nWARNING: Unable to connect to remote '{remote_name}' at {remote.url}")
-                print(f"Reason: {e}")
-                print(colorama.Style.RESET_ALL)
+        if managed:
+            _login_remote(remote_name, remote, force=force)
 
 
 def prepare(remotes: dict[str, dict[str, str | bool]], *, cleanup: bool = False, force: bool = False):
@@ -656,15 +699,20 @@ def _export_missing_recipes(recipes_ref):
             export(recipe_path, ref)
 
 
+def _run_pref_actions(recipe_path, pref, args):
+    """Create/run_ci/upload one ``{path: PkgReference}`` entry, as selected by ``args``."""
+    if args.create:
+        create(recipe_path, pref)
+    if args.ci:
+        run_ci(recipe_path, pref, [args.remote])
+    if args.upload:
+        upload(pref, args.remote)
+
+
 def _run_per_pref_actions(recipes_pref, args):
     """Create/run_ci/upload each ``{path: PkgReference}`` entry, as selected by ``args``."""
     for recipe_path, pref in recipes_pref.items():
-        if args.create:
-            create(recipe_path, pref)
-        if args.ci:
-            run_ci(recipe_path, pref, [args.remote])
-        if args.upload:
-            upload(pref, args.remote)
+        _run_pref_actions(recipe_path, pref, args)
 
 
 def _process_catalog(recipes_dirs, args):
@@ -771,46 +819,76 @@ def _build_arg_parser():
     return parser
 
 
-def main():
-    """CLI entry point: parse args, prepare remotes, then generate/export/create/upload/ci as requested."""
-    parser = _build_arg_parser()
-    args = parser.parse_args()
-
+def _validate_remote_required(parser, args):
+    """--ci/--upload act on one named remote; there is no default one to fall back on."""
     if (args.ci or args.upload) and not args.remote:
         parser.error('--ci/--upload need --remote (no default remote is assumed)')
 
-    # prepend conan helpers to PYTHONPATH, if given (not needed for a
-    # --prepare-only invocation with no recipe-dirs, e.g. remotes-only setup);
-    # --base-classes-dir is repeatable, and earlier dirs win over later ones.
-    if args.base_classes_dir:
-        conan_pythonpath = [os.fspath(d.resolve()) for d in args.base_classes_dir]
-        sys.path[0:0] = conan_pythonpath
-        os.environ['PYTHONPATH'] = ':'.join([os.getenv('PYTHONPATH', ""), *conan_pythonpath])
 
-    custom_remotes = json.loads(args.remotes_json.read_text()) if args.remotes_json else {}
-    prepare(custom_remotes, cleanup=args.cleanup_remotes, force=args.force)
-    if args.prepare:
+def _apply_base_classes_pythonpath(base_classes_dirs):
+    """Prepend the --base-classes-dir entries to sys.path and PYTHONPATH.
+
+    Not needed for a --prepare-only invocation with no recipe-dirs (e.g. a
+    remotes-only setup). --base-classes-dir is repeatable, and earlier dirs
+    win over later ones.
+    """
+    if not base_classes_dirs:
         return
+    conan_pythonpath = [os.fspath(d.resolve()) for d in base_classes_dirs]
+    sys.path[0:0] = conan_pythonpath
+    os.environ['PYTHONPATH'] = ':'.join([os.getenv('PYTHONPATH', ""), *conan_pythonpath])
 
-    # after prepare(), which is what puts denver.yml's 'remotes:' into the
-    # conan home in the first place -- so this fails a typo'd (or otherwise
-    # unknown) --remote before the generate/export/create work rather than
-    # after it, and with the list of names that would have worked
-    if args.remote is not None:
-        try:
-            # conan's own name for that remote replaces the one from argv
-            # (see there), so everything downstream -- run_ci()'s lookups,
-            # upload()'s '-r=' -- works with the registry's string
-            args.remote = _validate_remote_name(args.remote)
-        except ValueError as exc:
-            parser.error(str(exc))
 
+def _load_remotes_json(remotes_json):
+    """denver.yml's ``conan.remotes:`` as the conan provider wrote it out; {} without a --remotes-json."""
+    if not remotes_json:
+        return {}
+    return json.loads(remotes_json.read_text())
+
+
+def _resolve_remote_arg(parser, args):
+    """Replace --remote with conan's own name for it, erroring out if conan has no such remote.
+
+    Called after prepare(), which is what puts denver.yml's 'remotes:' into
+    the conan home in the first place -- so this fails a typo'd (or otherwise
+    unknown) --remote before the generate/export/create work rather than
+    after it, and with the list of names that would have worked.
+    """
+    if args.remote is None:
+        return
+    try:
+        # conan's own name for that remote replaces the one from argv (see
+        # there), so everything downstream -- run_ci()'s lookups, upload()'s
+        # '-r=' -- works with the registry's string
+        args.remote = _validate_remote_name(args.remote)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+
+def _validate_catalog_args(parser, args):
+    """Reject the --recipes-dir/--catalog-yml/--no-generate combinations argparse itself can't express."""
     if not args.recipes_dir:
         parser.error('--recipes-dir is required (unless --prepare)')
     if args.no_generate and not args.catalog_yml:
         parser.error('--no-generate needs --catalog-yml (the existing catalog to read instead)')
     if args.catalog_yml and not args.no_generate:
         parser.error('--catalog-yml only applies with --no-generate; --export-catalog writes the generated one')
+
+
+def main():
+    """CLI entry point: parse args, prepare remotes, then generate/export/create/upload/ci as requested."""
+    parser = _build_arg_parser()
+    args = parser.parse_args()
+
+    _validate_remote_required(parser, args)
+    _apply_base_classes_pythonpath(args.base_classes_dir)
+
+    prepare(_load_remotes_json(args.remotes_json), cleanup=args.cleanup_remotes, force=args.force)
+    if args.prepare:
+        return
+
+    _resolve_remote_arg(parser, args)
+    _validate_catalog_args(parser, args)
 
     _process_catalog([d.resolve() for d in args.recipes_dir], args)
     print_banner("Done!")
