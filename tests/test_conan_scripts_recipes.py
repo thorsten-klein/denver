@@ -736,6 +736,16 @@ def test_needs_export_true_when_graph_errors(monkeypatch):
     assert recipes.needs_export(ref) is True
 
 
+def _configured_remotes(*names):
+    """What conan_remotes_list() returns for ``names``: a {name: Remote} of real conan Remotes.
+
+    Real Remote objects rather than placeholders, because _validate_remote_name()
+    hands back the registry's own ``Remote.name`` -- a stub without one would
+    pass a test the production path could not.
+    """
+    return {name: Remote(name, f"http://{name}") for name in names}
+
+
 def test_run_ci_skips_when_found_remote(monkeypatch):
     called = {"create": False}
     monkeypatch.setattr(recipes, "find_pref", lambda pref, remotes: (["found"], None))
@@ -755,7 +765,7 @@ def test_run_ci_creates_when_missing_everywhere(monkeypatch):
 
 def test_upload_skips_when_already_present(monkeypatch):
     called = []
-    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"remote": object()})
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: _configured_remotes("remote"))
     monkeypatch.setattr(recipes, "find_pref", lambda pref, remotes: (["found"], None))
     monkeypatch.setattr(recipes.subprocess, "run", lambda *a, **k: called.append(a))
     recipes.upload("pref", "remote")
@@ -764,7 +774,7 @@ def test_upload_skips_when_already_present(monkeypatch):
 
 def test_upload_runs_conan_upload(monkeypatch):
     called = []
-    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"remote": object()})
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: _configured_remotes("remote"))
     monkeypatch.setattr(recipes, "find_pref", lambda pref, remotes: ([], None))
     monkeypatch.setattr(recipes.subprocess, "run", lambda cmd, check: called.append(cmd))
     ref = RecipeReference.loads("foo/1.0@denver/snapshot")
@@ -805,6 +815,38 @@ def test_run_conan_cli_rejects_nul_byte_in_arg(monkeypatch):
         recipes._run_conan_cli("create", "foo\0bar")
 
 
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("create", "/recipes/foo/1.0/conanfile.py", "--name=foo", "--version=1.0", "--test-missing"),
+        ("upload", "-r=conancenter", "foo/1.0@denver/snapshot#rev:pkgid#prev"),
+        # a path is whatever the filesystem allows -- spaces, dots, '+',
+        # a Windows drive -- and none of it is option-shaped
+        ("create", "/home/some one/recipes/foo+bar/1.0/conanfile.py"),
+        ("create", r"C:\recipes\foo\1.0\conanfile.py"),
+    ],
+)
+def test_validated_conan_argv_passes_what_this_module_builds(args):
+    assert recipes._validated_conan_argv(args) == ["conan", *args]
+
+
+@pytest.mark.parametrize(
+    "arg",
+    [
+        "--config-install=evil",  # an option denver never passes, smuggled in as a value
+        "-r=--config-install",  # ... or as one of denver's own options' values
+        "--name=--version",
+        "--name=",  # an option denver does pass, with nothing behind it
+        "",  # not an argument at all
+        "\x1b[31m",  # control characters: not a reference, not a path
+        "foo\nbar",
+    ],
+)
+def test_validated_conan_argv_rejects_anything_option_shaped_or_unprintable(arg):
+    with pytest.raises(ValueError, match="invalid conan CLI arguments"):
+        recipes._validated_conan_argv(("create", arg))
+
+
 def test_reject_option_like_passes_through_normal_value():
     assert recipes._reject_option_like("/some/path", "recipe path") == "/some/path"
 
@@ -815,19 +857,40 @@ def test_reject_option_like_rejects_leading_dash():
 
 
 def test_validate_remote_name_accepts_a_configured_remote(monkeypatch):
-    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"conancenter": object(), "team": object()})
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: _configured_remotes("conancenter", "team"))
     assert recipes._validate_remote_name("team") == "team"
+
+
+def test_validate_remote_name_returns_conans_own_name_not_the_one_passed_in(monkeypatch):
+    # equal strings, but what comes back is the registry's object -- that is
+    # the name that goes on to be interpolated into conan's '-r=' argument
+    registry = _configured_remotes("conancenter")
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: registry)
+    assert recipes._validate_remote_name("".join(["conan", "center"])) is registry["conancenter"].name
+
+
+def test_upload_passes_conans_own_remote_name(monkeypatch):
+    called = []
+    registry = _configured_remotes("conancenter")
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: registry)
+    monkeypatch.setattr(recipes, "find_pref", lambda pref, remotes: ([], None))
+    monkeypatch.setattr(recipes.subprocess, "run", lambda cmd, check: called.append(cmd))
+    pref = PkgReference(RecipeReference.loads("foo/1.0@denver/snapshot"), "id", "rev")
+
+    recipes.upload(pref, "".join(["conan", "center"]))
+
+    assert f"-r={registry['conancenter'].name}" in called[0]
 
 
 @pytest.mark.parametrize("name", ["typo", "-r", "team;rm -rf /", ""])
 def test_validate_remote_name_rejects_anything_conan_does_not_know(monkeypatch, name):
-    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"conancenter": object()})
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: _configured_remotes("conancenter"))
     with pytest.raises(ValueError, match="not a configured conan remote"):
         recipes._validate_remote_name(name)
 
 
 def test_upload_refuses_a_remote_conan_does_not_know(monkeypatch):
-    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"conancenter": object()})
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: _configured_remotes("conancenter"))
     monkeypatch.setattr(recipes, "find_pref", lambda pref, remotes: pytest.fail("must not look it up"))
     monkeypatch.setattr(recipes.subprocess, "run", lambda *a, **k: pytest.fail("must not run"))
     pref = PkgReference(RecipeReference.loads("foo/1.0@denver/snapshot"), "id", "rev")
@@ -846,7 +909,7 @@ def _stub_pipeline(monkeypatch, remotes=("conancenter",)):
     checks --remote against. Stubbed like everything else here: left real it
     would read the machine's own conan home, so whether a test passed would
     depend on which remotes the developer running it happens to have."""
-    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {name: object() for name in remotes})
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: _configured_remotes(*remotes))
     monkeypatch.setattr(recipes, "prepare", lambda remotes, cleanup=False, force=False: None)
     monkeypatch.setattr(recipes, "generate_catalog", lambda *a, **k: {})
     monkeypatch.setattr(recipes, "read_catalog", lambda *a: {})

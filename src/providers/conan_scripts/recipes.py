@@ -25,6 +25,7 @@ import functools
 import getpass
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -389,23 +390,71 @@ def test(recipe_path, pref):
     )
 
 
+# Every option this module ever puts on conan's command line, spelled out:
+# anything else that would reach conan's parser as an option is, by
+# definition, not one of ours. Add to this when a call site below grows a new
+# flag -- that is the point, the list is the thing being enforced.
+_CONAN_CLI_OPTIONS = frozenset({'--name', '--version', '--user', '--channel', '--test-missing', '-r'})
+
+# A value: a subcommand, a recipe path, a package reference, a remote name --
+# or the '<value>' half of '--name=<value>'. It may not begin with '-', that
+# being exactly the shape that gets a path or a reference read as *another
+# option* by conan's own parser, which is the injection this guards against.
+# It may not contain a control character either: NUL is rejected by exec()
+# itself anyway, and the rest have no business in a conan reference or in a
+# path denver was pointed at.
+_CONAN_CLI_VALUE = re.compile(r'[^-\x00-\x1f][^\x00-\x1f]*')
+
+
+def _validated_conan_arg(arg):
+    """Raise ValueError unless ``arg`` is one argv element of the shape this module builds (see below)."""
+    if not isinstance(arg, str):
+        raise ValueError(f"invalid conan CLI arguments: not a string: {arg!r}")
+    if not arg.startswith('-'):
+        if not _CONAN_CLI_VALUE.fullmatch(arg):
+            raise ValueError(f"invalid conan CLI arguments: not a usable value: {arg!r}")
+        return
+    # option-shaped: it has to be one of ours ('--test-missing', bare, or
+    # '--name=<value>' / '-r=<value>', whose value is checked like any other)
+    option, sep, value = arg.partition('=')
+    if option not in _CONAN_CLI_OPTIONS:
+        raise ValueError(f"invalid conan CLI arguments: not an option this module passes: {arg!r}")
+    if sep and not _CONAN_CLI_VALUE.fullmatch(value):
+        raise ValueError(f"invalid conan CLI arguments: not a usable value for {option}: {value!r}")
+
+
+def _validated_conan_argv(args):
+    """Return ``['conan', *args]``, every element of it checked by _validated_conan_arg() first.
+
+    Validation happens on the assembled argv rather than on ``args`` alone:
+    what matters is the list that is about to be executed, argv[0] included.
+
+    The elements are built by this module's own callers (create()'s
+    ``--name=``/``--version=``/``--user=``/``--channel=``, sourced from a
+    RecipeReference; upload()'s ``-r=``, a remote name checked against the
+    ones conan has configured), never taken verbatim from raw CLI/network
+    input. Checking them here regardless is what keeps that true: a value
+    that arrived malformed -- a recipe path, a catalog entry, a --remote --
+    or one a future call site passes through unexamined cannot reach conan's
+    parser as an option denver never meant to pass. It fails here instead,
+    with the offending element named.
+    """
+    cmd = ['conan', *args]
+    for arg in cmd:
+        _validated_conan_arg(arg)
+    return cmd
+
+
 def _run_conan_cli(*args):
     """Run `conan <args...>` as a subprocess, raising on a non-zero exit.
 
     TODO: replace with conan's own python API, if/when one covers this.
     """
-    # args are built by this module's own callers (create()'s --name=/
-    # --version=/--user=/--channel=, sourced from a RecipeReference), never
-    # taken verbatim from raw CLI/network input -- but validated here all
-    # the same, so a malformed recipe reference fails with a clear error
-    # instead of reaching subprocess.run() as a mystery argument.
-    if any(not isinstance(arg, str) or not arg or "\0" in arg for arg in args):
-        raise ValueError(f"invalid conan CLI arguments: {args!r}")
-    subprocess.run(['conan', *args], check=True)
+    subprocess.run(_validated_conan_argv(args), check=True)
 
 
 def _validate_remote_name(remote_name):
-    """Return ``remote_name`` if conan has a remote of that name configured, else raise ValueError.
+    """Return conan's own name for the remote called ``remote_name``, or raise ValueError if it has no such remote.
 
     A remote name is the one value here that comes from outside this module
     -- denver.yml's ``conan.remotes:`` keys, or ``--remote`` on this
@@ -415,20 +464,27 @@ def _validate_remote_name(remote_name):
     a remote conan knows about (``conan remote list``, enabled or not).
     Anything else -- a typo, or a value shaped to smuggle a second argument
     past conan's parser -- is not in that list and never reaches the CLI.
+
+    What comes back is conan's own ``Remote.name``, not the string that was
+    passed in; they compare equal, that being what was just checked. Callers
+    are expected to use it, so that the name reaching conan's command line
+    is one conan itself reported rather than one this script was handed.
     """
     known = conan_remotes_list()
-    if remote_name not in known:
+    remote = known.get(remote_name)
+    if remote is None:
         raise ValueError(f"not a configured conan remote: {remote_name!r} (known: {sorted(known)})")
-    return remote_name
+    return remote.name
 
 
 def _reject_option_like(value, what):
-    """Refuse a ``value`` headed for conan as a bare (non ``--flag=``) argument if it could pass as a CLI option.
+    """Refuse a ``value`` headed for conan's command line if it could pass as a CLI option.
 
-    ``create()``'s recipe path and ``upload()``'s package reference are both
-    positional, not `--name=`-style -- so, unlike those, a value starting
-    with '-' would be read by conan's own arg parser as an option rather
-    than the path/reference it actually is. Neither can genuinely produce
+    ``create()``'s recipe path and ``upload()``'s package reference are
+    positional, and ``upload()``'s remote name is interpolated into
+    ``-r=<name>``: in every one of those a value starting with '-' would be
+    read by conan's own arg parser as an option rather than as the
+    path/reference/name it actually is. None of them can genuinely produce
     that shape today (see call sites), but this is the one place that can
     still say so plainly instead of letting a future change reach conan as
     an injected flag.
@@ -460,7 +516,7 @@ def create(recipe_path, pref):
 def upload(pref, remote_name):
     """Upload ``pref`` to ``remote_name``, unless it's already there."""
     print_banner(f"Upload: {pref!r}")
-    _validate_remote_name(remote_name)
+    remote_name = _reject_option_like(_validate_remote_name(remote_name), 'remote name')
     found, _ = find_pref(pref, remotes=[remote_name])
     if found:
         return
@@ -742,7 +798,10 @@ def main():
     # after it, and with the list of names that would have worked
     if args.remote is not None:
         try:
-            _validate_remote_name(args.remote)
+            # conan's own name for that remote replaces the one from argv
+            # (see there), so everything downstream -- run_ci()'s lookups,
+            # upload()'s '-r=' -- works with the registry's string
+            args.remote = _validate_remote_name(args.remote)
         except ValueError as exc:
             parser.error(str(exc))
 
