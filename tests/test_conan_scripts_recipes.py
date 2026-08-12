@@ -163,9 +163,9 @@ def test_authenticate_remote_success_no_prompt(monkeypatch):
     prompted = []
     monkeypatch.setattr(recipes, "_prompt_and_login", lambda r: prompted.append(r.name))
 
-    recipes.authenticate_remote(Remote("sdd", "http://sdd"))
+    recipes.authenticate_remote(Remote("conancenter", "http://conancenter"))
 
-    assert calls == [("sdd", False)]
+    assert calls == [("conancenter", False)]
     assert prompted == []
 
 
@@ -176,7 +176,7 @@ def test_authenticate_remote_force_passed_through(monkeypatch):
     )
     monkeypatch.setattr(recipes, "conan_api", fake_api)
 
-    recipes.authenticate_remote(Remote("sdd", "http://sdd"), force=True)
+    recipes.authenticate_remote(Remote("conancenter", "http://conancenter"), force=True)
 
     assert calls == [True]
 
@@ -194,9 +194,9 @@ def test_authenticate_remote_prompts_on_failure_when_interactive(monkeypatch):
     prompted = []
     monkeypatch.setattr(recipes, "_prompt_and_login", lambda r: prompted.append(r.name))
 
-    recipes.authenticate_remote(Remote("sdd", "http://sdd"))
+    recipes.authenticate_remote(Remote("conancenter", "http://conancenter"))
 
-    assert prompted == ["sdd"]
+    assert prompted == ["conancenter"]
 
 
 def test_authenticate_remote_reraises_when_not_interactive(monkeypatch):
@@ -209,7 +209,7 @@ def test_authenticate_remote_reraises_when_not_interactive(monkeypatch):
     prompted = []
     monkeypatch.setattr(recipes, "_prompt_and_login", lambda r: prompted.append(r.name))
 
-    remote = Remote("sdd", "http://sdd")
+    remote = Remote("conancenter", "http://conancenter")
     with pytest.raises(AuthenticationException):
         recipes.authenticate_remote(remote)
     assert prompted == []
@@ -224,9 +224,9 @@ def test_prompt_and_login_uses_input_and_getpass(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt="": "alice")
     monkeypatch.setattr(recipes.getpass, "getpass", lambda prompt="": "s3cret")
 
-    recipes._prompt_and_login(Remote("sdd", "http://sdd"))
+    recipes._prompt_and_login(Remote("conancenter", "http://conancenter"))
 
-    assert logged_in == [("sdd", "alice", "s3cret")]
+    assert logged_in == [("conancenter", "alice", "s3cret")]
 
 
 # --------------------------------------------------------------------------- #
@@ -435,43 +435,43 @@ def test_conan_remotes_list(monkeypatch):
 def test_conan_ensure_remotes_adds_new(monkeypatch):
     api = FakeRemotesAPI([])
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_ensure_remotes({"sdd": {"url": "http://sdd", "verify_ssl": False}})
-    assert [r.name for r in api.added] == ["sdd"]
+    recipes.conan_ensure_remotes({"conancenter": {"url": "http://conancenter", "verify_ssl": False}})
+    assert [r.name for r in api.added] == ["conancenter"]
     assert api.added[0].verify_ssl is False
 
 
 def test_conan_ensure_remotes_renames_on_url_match(monkeypatch, capsys):
-    api = FakeRemotesAPI([Remote("old-name", "http://sdd")])
+    api = FakeRemotesAPI([Remote("old-name", "http://conancenter")])
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_ensure_remotes({"new-name": {"url": "http://sdd"}})
+    recipes.conan_ensure_remotes({"new-name": {"url": "http://conancenter"}})
     assert "old-name" in api.removed
     assert "Old name: old-name" in capsys.readouterr().out
     assert any(r.name == "new-name" for r in api.added)
 
 
 def test_conan_ensure_remotes_skips_when_already_correct(monkeypatch):
-    api = FakeRemotesAPI([Remote("sdd", "http://sdd", verify_ssl=True)])
+    api = FakeRemotesAPI([Remote("conancenter", "http://conancenter", verify_ssl=True)])
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_ensure_remotes({"sdd": {"url": "http://sdd", "verify_ssl": True}})
+    recipes.conan_ensure_remotes({"conancenter": {"url": "http://conancenter", "verify_ssl": True}})
     assert api.removed == []
     assert api.added == []
 
 
 def test_conan_ensure_remotes_replaces_when_different(monkeypatch):
-    api = FakeRemotesAPI([Remote("sdd", "http://sdd", verify_ssl=True)])
+    api = FakeRemotesAPI([Remote("conancenter", "http://conancenter", verify_ssl=True)])
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_ensure_remotes({"sdd": {"url": "http://sdd", "verify_ssl": False}})
-    assert "sdd" in api.removed
-    assert any(r.name == "sdd" and r.verify_ssl is False for r in api.added)
+    recipes.conan_ensure_remotes({"conancenter": {"url": "http://conancenter", "verify_ssl": False}})
+    assert "conancenter" in api.removed
+    assert any(r.name == "conancenter" and r.verify_ssl is False for r in api.added)
 
 
 @pytest.mark.parametrize(
     "remote_name, config, env, expect_enabled, expect_disabled",
     [
         ("unmanaged", {}, None, [], ["unmanaged"]),
-        ("sdd", {"sdd": {"enabled": True}}, None, ["sdd"], []),
-        ("sdd", {"sdd": {"enabled": True}}, "OFF", [], ["sdd"]),
-        ("sdd", {}, "ON", ["sdd"], []),
+        ("conancenter", {"conancenter": {"enabled": True}}, None, ["conancenter"], []),
+        ("conancenter", {"conancenter": {"enabled": True}}, "OFF", [], ["conancenter"]),
+        ("conancenter", {}, "ON", ["conancenter"], []),
     ],
     ids=["default-disabled", "configured-enabled", "env-var-overrides-off", "env-var-overrides-on"],
 )
@@ -486,41 +486,41 @@ def test_conan_enable_remotes(monkeypatch, remote_name, config, env, expect_enab
 
 
 def test_conan_login_skips_disabled(monkeypatch):
-    api = FakeRemotesAPI([Remote("sdd", "http://sdd", disabled=True)])
+    api = FakeRemotesAPI([Remote("conancenter", "http://conancenter", disabled=True)])
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_login({"sdd": {}})
+    recipes.conan_login({"conancenter": {}})
     assert api.auth_calls == []
 
 
 def test_conan_login_authenticates_when_needed(monkeypatch):
-    api = FakeRemotesAPI([Remote("sdd", "http://sdd")])
+    api = FakeRemotesAPI([Remote("conancenter", "http://conancenter")])
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_login({"sdd": {}})
-    assert api.auth_calls == [("sdd", True)]
+    recipes.conan_login({"conancenter": {}})
+    assert api.auth_calls == [("conancenter", True)]
 
 
 def test_conan_login_skips_when_already_authenticated(monkeypatch):
-    api = FakeRemotesAPI([Remote("sdd", "http://sdd")])
-    api._user_info["sdd"] = {"authenticated": True, "username": "u"}
+    api = FakeRemotesAPI([Remote("conancenter", "http://conancenter")])
+    api._user_info["conancenter"] = {"authenticated": True, "username": "u"}
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_login({"sdd": {}})
+    recipes.conan_login({"conancenter": {}})
     assert api.auth_calls == []
 
 
 def test_conan_login_force_reauthenticates(monkeypatch):
-    api = FakeRemotesAPI([Remote("sdd", "http://sdd")])
-    api._user_info["sdd"] = {"authenticated": True, "username": "u"}
+    api = FakeRemotesAPI([Remote("conancenter", "http://conancenter")])
+    api._user_info["conancenter"] = {"authenticated": True, "username": "u"}
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_login({"sdd": {}}, force=True)
-    assert api.auth_calls == [("sdd", True)]
+    recipes.conan_login({"conancenter": {}}, force=True)
+    assert api.auth_calls == [("conancenter", True)]
 
 
 def test_conan_login_skips_when_username_unchanged(monkeypatch):
-    api = FakeRemotesAPI([Remote("sdd", "http://sdd")])
-    api._user_info["sdd"] = {"username": "denver-bot"}
+    api = FakeRemotesAPI([Remote("conancenter", "http://conancenter")])
+    api._user_info["conancenter"] = {"username": "denver-bot"}
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    monkeypatch.setenv("CONAN_LOGIN_USERNAME_SDD", "denver-bot")
-    recipes.conan_login({"sdd": {}})
+    monkeypatch.setenv("CONAN_LOGIN_USERNAME_CONANCENTER", "denver-bot")
+    recipes.conan_login({"conancenter": {}})
     assert api.auth_calls == []
 
 
@@ -529,9 +529,9 @@ def test_conan_login_warns_on_connection_error(monkeypatch, capsys):
         def user_auth(self, remote, force=False):
             raise ConanConnectionError("unreachable")
 
-    api = FailingAuthRemotesAPI([Remote("sdd", "http://sdd")])
+    api = FailingAuthRemotesAPI([Remote("conancenter", "http://conancenter")])
     monkeypatch.setattr(recipes, "conan_api", types.SimpleNamespace(remotes=api))
-    recipes.conan_login({"sdd": {}})
+    recipes.conan_login({"conancenter": {}})
     assert "Unable to connect" in capsys.readouterr().out
 
 
@@ -571,7 +571,7 @@ def test_prepare_runs_all_three_when_remotes_configured(monkeypatch):
     monkeypatch.setattr(recipes, "conan_enable_remotes", lambda r: calls.append(("enable", r)))
     monkeypatch.setattr(recipes, "conan_login", lambda r, force=False: calls.append(("login", r)))
 
-    remotes = {"sdd": {"url": "http://sdd"}}
+    remotes = {"conancenter": {"url": "http://conancenter"}}
     recipes.prepare(remotes)
 
     assert [c[0] for c in calls] == ["ensure", "enable", "login"]
@@ -584,7 +584,7 @@ def test_prepare_passes_force_to_login(monkeypatch):
     monkeypatch.setattr(recipes, "conan_enable_remotes", lambda r: None)
     monkeypatch.setattr(recipes, "conan_login", lambda r, force=False: seen.setdefault("force", force))
 
-    recipes.prepare({"sdd": {}}, force=True)
+    recipes.prepare({"conancenter": {}}, force=True)
 
     assert seen["force"] is True
 
@@ -888,7 +888,7 @@ def test_main_prepare_only_returns_before_generate(monkeypatch, tmp_path):
 
 
 def test_main_loads_remotes_json(monkeypatch, tmp_path):
-    remotes = {"sdd": {"url": "http://sdd"}}
+    remotes = {"conancenter": {"url": "http://conancenter"}}
     remotes_json = tmp_path / "remotes.json"
     remotes_json.write_text(json.dumps(remotes))
 

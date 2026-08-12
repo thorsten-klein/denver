@@ -725,7 +725,7 @@ def test_cleanup_remotes_still_applies_with_config_dir_when_remotes_also_configu
     config = {
         "conan": {
             "config": ["conan-config"],
-            "remotes": {"sdd": {"url": "https://example.invalid/conan"}},
+            "remotes": {"conancenter": {"url": "https://example.invalid/conan"}},
         }
     }
     ctx = make_context(config=config)
@@ -742,7 +742,7 @@ def test_remotes_configured_written_and_passed(make_context, run_recorder, which
     import json
 
     default_profile_ok(run_recorder)
-    remotes = {"sdd": {"url": "https://example.invalid/conan", "enabled": True}}
+    remotes = {"conancenter": {"url": "https://example.invalid/conan", "enabled": True}}
     config = {"conan": {"remotes": remotes}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
@@ -769,7 +769,7 @@ def test_remotes_configured_written_and_passed(make_context, run_recorder, which
 
 def test_ctx_force_passes_force_to_prepare(make_context, run_recorder, which):
     default_profile_ok(run_recorder)
-    config = {"conan": {"remotes": {"sdd": {"url": "https://example.invalid"}}}}
+    config = {"conan": {"remotes": {"conancenter": {"url": "https://example.invalid"}}}}
     ctx = make_context(config=config, force=True)
     _ensure_default_conanfile(ctx, config)
     run_conan(config, ctx)
@@ -780,7 +780,7 @@ def test_ctx_force_passes_force_to_prepare(make_context, run_recorder, which):
 
 def test_no_force_omits_force_flag(make_context, run_recorder, which):
     default_profile_ok(run_recorder)
-    config = {"conan": {"remotes": {"sdd": {"url": "https://example.invalid"}}}}
+    config = {"conan": {"remotes": {"conancenter": {"url": "https://example.invalid"}}}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
     run_conan(config, ctx)
@@ -793,7 +793,7 @@ def test_remotes_configured_without_recipe_dirs_still_prepares(make_context, run
     # 'remotes:' alone (no recipe-dirs) must still trigger a --prepare run --
     # remote management doesn't depend on any recipes being configured.
     default_profile_ok(run_recorder)
-    config = {"conan": {"remotes": {"sdd": {"url": "https://example.invalid"}}}}
+    config = {"conan": {"remotes": {"conancenter": {"url": "https://example.invalid"}}}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
     run_conan(config, ctx)

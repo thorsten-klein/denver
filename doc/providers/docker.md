@@ -57,7 +57,7 @@ isn't the right one.
   check against that entry; an entry with neither is assumed
   already-authenticated or public. Both fields go through denver's normal
   `${VAR}` interpolation, so a literal (`myusername`) and an
-  env-var-sourced secret (`${DOCKER_PASSWORD_SDD}`) are written the same
+  env-var-sourced secret (`${DOCKER_PASSWORD_DOCKERHUB}`) are written the same
   way.
 - **`compose`** — `file` (**required**, a single path or a list for
   multiple `-f` overlays — never guessed, see "Explicit over implicit" in

@@ -29,7 +29,7 @@ Configured from denver.yml -> ``conan:``:
       - path/to/config-dir                      # installed via `conan config
                                                  # install <dir>` (see below)
       remotes:                                  # optional, see below
-        sdd:
+        conancenter:
           url: https://example.invalid/artifactory/api/conan/conan
           verify_ssl: true                      # default: true
           enabled: true                         # default: true
