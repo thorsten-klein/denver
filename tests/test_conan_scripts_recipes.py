@@ -838,9 +838,15 @@ def test_upload_refuses_a_remote_conan_does_not_know(monkeypatch):
 # --------------------------------------------------------------------------- #
 # main(): argument parsing
 # --------------------------------------------------------------------------- #
-def _stub_pipeline(monkeypatch):
+def _stub_pipeline(monkeypatch, remotes=("conancenter",)):
     """Neutralise everything main() calls beyond argument handling +
-    prepare(), so these tests exercise CLI/config wiring only."""
+    prepare(), so these tests exercise CLI/config wiring only.
+
+    ``remotes`` is what conan is pretended to have configured, which main()
+    checks --remote against. Stubbed like everything else here: left real it
+    would read the machine's own conan home, so whether a test passed would
+    depend on which remotes the developer running it happens to have."""
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {name: object() for name in remotes})
     monkeypatch.setattr(recipes, "prepare", lambda remotes, cleanup=False, force=False: None)
     monkeypatch.setattr(recipes, "generate_catalog", lambda *a, **k: {})
     monkeypatch.setattr(recipes, "read_catalog", lambda *a: {})
@@ -858,7 +864,6 @@ def test_main_ci_without_remote_errors(monkeypatch, capsys):
 
 def test_main_rejects_a_remote_conan_does_not_know(monkeypatch, tmp_path, capsys):
     _stub_pipeline(monkeypatch)
-    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"conancenter": object()})
     # '--remote=...' rather than two argv entries: argparse would read a
     # bare '--evil' as a missing value for --remote and never get this far
     monkeypatch.setattr(sys, "argv", ["recipes.py", "--upload", "--remote=--evil", "--recipes-dir", str(tmp_path)])
@@ -1022,15 +1027,15 @@ def test_main_ci_and_upload_flow(monkeypatch, tmp_path):
             "--create",
             "--ci",
             "--upload",
-            "--remote=sdd",
+            "--remote=conancenter",
             f"--recipes-dir={tmp_path}",
         ],
     )
     recipes.main()
 
     assert create_calls == [(Path("/r"), pref)]
-    assert ci_calls == [(Path("/r"), pref, ["sdd"])]
-    assert upload_calls == [(pref, "sdd")]
+    assert ci_calls == [(Path("/r"), pref, ["conancenter"])]
+    assert upload_calls == [(pref, "conancenter")]
 
 
 def test_main_base_classes_dir_explicit(monkeypatch, tmp_path):
