@@ -28,6 +28,7 @@ jobs:
       - run: uv run poe mypy
       - run: uv run poe pyright
       - run: uv run poe bandit
+      - run: uv run poe pip-audit
       - run: uv run poe complexity
 
   test:
