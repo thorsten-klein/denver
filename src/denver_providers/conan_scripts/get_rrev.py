@@ -15,6 +15,7 @@ import functools
 import shlex
 import subprocess
 from pathlib import Path
+from typing import cast
 from urllib.request import urlretrieve
 
 import yaml
@@ -23,7 +24,9 @@ from conan.internal.model.manifest import FileTreeManifest
 from conan.internal.util.files import load, md5sum, save
 
 try:
-    import DenverConanFile
+    # invoked as a real subprocess (its own sys.path[0] is this directory) --
+    # see the [[tool.mypy.overrides]] for this same module in pyproject.toml.
+    import DenverConanFile  # pyright: ignore[reportMissingImports]
 except ImportError:
     DenverConanFile = None
 
@@ -81,7 +84,7 @@ def _base_manifest_entries(conanfile_py: Path, conandata_yml: Path) -> list[tupl
         (conandata_yml.name, md5sum(conandata_yml)),
     ]
     if DenverConanFile is not None and "DenverConanFile" in conanfile_py.read_text():
-        denver_conan_file_py = Path(DenverConanFile.__file__)
+        denver_conan_file_py = Path(cast(str, DenverConanFile.__file__))
         entries.append((denver_conan_file_py.name, md5sum(denver_conan_file_py)))
     return entries
 

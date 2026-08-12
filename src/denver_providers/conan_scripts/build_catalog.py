@@ -22,8 +22,9 @@ import yaml
 from conan.tools.files import load, save
 
 try:
-    # invoked as a real subprocess (its own sys.path[0] is this directory)
-    import get_rrev
+    # invoked as a real subprocess (its own sys.path[0] is this directory) --
+    # see the [[tool.mypy.overrides]] for this same module in pyproject.toml.
+    import get_rrev  # pyright: ignore[reportMissingImports]
 except ImportError:
     # imported as providers.conan_scripts.build_catalog, e.g. by denver's own tests
     from . import get_rrev

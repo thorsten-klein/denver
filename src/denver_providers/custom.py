@@ -62,10 +62,10 @@ class CustomProvider(Provider):
     name = "custom"
     KEYS = ("cmd", "source", "launcher")
 
-    @property
-    def kind(self):
-        """'wrapper' if this stage's own section sets a (non-empty) 'launcher:', else the default 'setup'."""
-        return "wrapper" if (self.config.get(self.stage) or {}).get("launcher") else "setup"
+    def __init__(self, config):
+        """Set 'kind' to 'wrapper' if this stage's own section sets a (non-empty) 'launcher:', else 'setup'."""
+        super().__init__(config)
+        self.kind = "wrapper" if (self.config.get(self.stage) or {}).get("launcher") else "setup"
 
     def _validate_str(self, value, key):
         """Die unless ``key``'s value is unset or a non-empty string."""

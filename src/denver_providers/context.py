@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import NoReturn
+from typing import NoReturn, cast
 
 # Every line a --dry-run emits starts with this, so the whole preview can be
 # grepped/filtered out of a terminal session in one go. The marker that
@@ -788,7 +788,7 @@ class Context:
 
     def apply_env_map(self, mapping):
         """Apply an interpolated {name: value} mapping into the environment."""
-        for key, value in interpolate(mapping or {}, self.variables).items():
+        for key, value in cast(dict, interpolate(mapping or {}, self.variables)).items():
             self.set(key, value)
 
     # ---- dry-run reporting ---------------------------------------------- #

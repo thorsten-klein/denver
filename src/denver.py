@@ -47,7 +47,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import NoReturn
+from typing import NoReturn, cast
 
 try:
     import yaml
@@ -443,7 +443,7 @@ def resolve_import(entry, base_dir):
     return target
 
 
-def load_config(config_path, _seen=None):
+def load_config(config_path, _seen=None) -> dict:
     """Load a denver.yml and all of its imports into one merged config.
 
     Imports are merged first (base), then the importing file overlays on top,
@@ -468,7 +468,7 @@ def load_config(config_path, _seen=None):
     # here keeps --show-config's output consistent with that.
     merged.pop("runnable", None)
 
-    return deep_merge(merged, _without_import(raw))
+    return cast(dict, deep_merge(merged, _without_import(raw)))
 
 
 def _without_import(mapping):
@@ -476,12 +476,12 @@ def _without_import(mapping):
     return {k: v for k, v in mapping.items() if k != "import"}
 
 
-def _merged_imports(raw, base_dir, _seen):
+def _merged_imports(raw, base_dir, _seen) -> dict:
     """Every 'import:' entry of ``raw``, loaded and merged in order -- the base its own keys overlay."""
-    merged = {}
+    merged: dict = {}
     for entry in raw.get("import", []) or []:
         imported_path = resolve_import(entry, base_dir)
-        merged = deep_merge(merged, load_config(imported_path, _seen))
+        merged = cast(dict, deep_merge(merged, load_config(imported_path, _seen)))
     return merged
 
 
@@ -690,7 +690,7 @@ def _parse_version_requirement(part, spec):
     """One comma-separated specifier as ``(operator, parsed_version, text)``, or die naming the whole spec."""
     match = _SPEC_RE.fullmatch(part)
     wanted = parse_version(match.group(2)) if match else None
-    if wanted is None:
+    if match is None or wanted is None:
         die(
             f"denver.yml: invalid 'denver-version: {spec}' -- {part.strip()!r} is not a version requirement "
             f"(expected e.g. \">=1.0.3\", \"1.0.3\" or \">=1.0.3, <2\")."
@@ -2293,7 +2293,7 @@ def print_help(parser):
     """
     print_logo()
     print(parser.format_help())
-    print(__doc__.strip())
+    print((__doc__ or "").strip())
 
 
 def _command_failure_message(exc):

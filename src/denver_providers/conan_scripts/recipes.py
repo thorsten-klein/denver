@@ -604,7 +604,7 @@ def conan_ensure_remotes(remotes):
 
 def _env_enable_override(remote_name):
     """True/False/None for CONAN_REMOTE_ENABLE_<NAME>, overriding whatever the config said."""
-    return {"ON": True, "OFF": False}.get(os.getenv(f"CONAN_REMOTE_ENABLE_{remote_name.upper()}"))
+    return {"ON": True, "OFF": False}.get(os.getenv(f"CONAN_REMOTE_ENABLE_{remote_name.upper()}") or "")
 
 
 def _should_be_enabled(remote_name, remotes):
