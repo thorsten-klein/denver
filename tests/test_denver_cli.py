@@ -976,7 +976,9 @@ def test_main_run_without_a_name_lists_them(tmp_path, capsys):
     assert denver.main([str(env_dir), "--run"]) == 0
     err = capsys.readouterr().err
     assert "available --run names" in err
-    assert "setup" in err and "a (2 scripts)" in err and "b (1 script)" in err
+    assert "setup" in err
+    assert "a (2 scripts)" in err
+    assert "b (1 script)" in err
     assert "login" in err
 
 

@@ -110,8 +110,9 @@ def test_run_reports_an_unstartable_command_without_a_stage(make_context, caplog
     # the same call outside any stage (a provider driven directly, e.g. in
     # tests) still reports the command rather than raising.
     caplog.set_level("INFO")
+    ctx = make_context()
     with pytest.raises(SystemExit):
-        make_context().run(["/nonexistent/tool"])
+        ctx.run(["/nonexistent/tool"])
     assert "cannot run /nonexistent/tool" in caplog.text
 
 

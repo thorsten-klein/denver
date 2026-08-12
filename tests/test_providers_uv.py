@@ -210,7 +210,8 @@ def test_existing_venv_with_a_different_python_dies(make_context, run_recorder, 
     with pytest.raises(SystemExit):
         run_uv(config, ctx)
     assert "is Python 3.12.3, but 'python: 3.11.14' is configured" in caplog.text
-    assert "--force" in caplog.text and "'venv:'" in caplog.text
+    assert "--force" in caplog.text
+    assert "'venv:'" in caplog.text
 
 
 def test_a_patch_version_is_not_satisfied_by_another(make_context, run_recorder, which):
