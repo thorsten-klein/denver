@@ -404,6 +404,24 @@ def _run_conan_cli(*args):
     subprocess.run(['conan', *args], check=True)
 
 
+def _validate_remote_name(remote_name):
+    """Return ``remote_name`` if conan has a remote of that name configured, else raise ValueError.
+
+    A remote name is the one value here that comes from outside this module
+    -- denver.yml's ``conan.remotes:`` keys, or ``--remote`` on this
+    script's own command line -- and it is interpolated into a bare
+    ``-r=<name>`` argument. Rather than guessing at which shapes are safe,
+    this checks the only thing that actually matters: that the name denotes
+    a remote conan knows about (``conan remote list``, enabled or not).
+    Anything else -- a typo, or a value shaped to smuggle a second argument
+    past conan's parser -- is not in that list and never reaches the CLI.
+    """
+    known = conan_remotes_list()
+    if remote_name not in known:
+        raise ValueError(f"not a configured conan remote: {remote_name!r} (known: {sorted(known)})")
+    return remote_name
+
+
 def _reject_option_like(value, what):
     """Refuse a ``value`` headed for conan as a bare (non ``--flag=``) argument if it could pass as a CLI option.
 
@@ -442,6 +460,7 @@ def create(recipe_path, pref):
 def upload(pref, remote_name):
     """Upload ``pref`` to ``remote_name``, unless it's already there."""
     print_banner(f"Upload: {pref!r}")
+    _validate_remote_name(remote_name)
     found, _ = find_pref(pref, remotes=[remote_name])
     if found:
         return
@@ -716,6 +735,16 @@ def main():
     prepare(custom_remotes, cleanup=args.cleanup_remotes, force=args.force)
     if args.prepare:
         return
+
+    # after prepare(), which is what puts denver.yml's 'remotes:' into the
+    # conan home in the first place -- so this fails a typo'd (or otherwise
+    # unknown) --remote before the generate/export/create work rather than
+    # after it, and with the list of names that would have worked
+    if args.remote is not None:
+        try:
+            _validate_remote_name(args.remote)
+        except ValueError as exc:
+            parser.error(str(exc))
 
     if not args.recipes_dir:
         parser.error('--recipes-dir is required (unless --prepare)')

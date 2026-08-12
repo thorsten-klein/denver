@@ -1005,8 +1005,20 @@ class Context:
         sys.stdout.flush()
         info(f"exec: {' '.join(cmd)}")
         sys.stderr.flush()
+        # Resolve the program to a concrete file *before* handing it to the
+        # kernel, rather than leaving the PATH search to execvpe: the lookup
+        # then has an answer denver can check and name ("not found on this
+        # environment's PATH", the actual problem) instead of an ENOENT that
+        # cannot say whether the program or something inside it was missing.
+        # Resolved against this environment's PATH -- the one the stages just
+        # built, which is also the one execvpe would have used. Deliberately
+        # after the --dry-run branch above: a preview must still work for a
+        # tool the stage it comes from was skipped.
+        program = shutil.which(cmd[0], path=self.env.get("PATH"))
+        if not program:
+            die(f"exec: command not found on this environment's PATH: {cmd[0]!r}")
         try:
-            os.execvpe(cmd[0], cmd, self.env)
+            os.execvpe(program, cmd, self.env)
         except OSError as exc:
             die(f"failed to exec {cmd[0]}: {exc}")
 

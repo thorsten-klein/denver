@@ -755,6 +755,7 @@ def test_run_ci_creates_when_missing_everywhere(monkeypatch):
 
 def test_upload_skips_when_already_present(monkeypatch):
     called = []
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"remote": object()})
     monkeypatch.setattr(recipes, "find_pref", lambda pref, remotes: (["found"], None))
     monkeypatch.setattr(recipes.subprocess, "run", lambda *a, **k: called.append(a))
     recipes.upload("pref", "remote")
@@ -763,6 +764,7 @@ def test_upload_skips_when_already_present(monkeypatch):
 
 def test_upload_runs_conan_upload(monkeypatch):
     called = []
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"remote": object()})
     monkeypatch.setattr(recipes, "find_pref", lambda pref, remotes: ([], None))
     monkeypatch.setattr(recipes.subprocess, "run", lambda cmd, check: called.append(cmd))
     ref = RecipeReference.loads("foo/1.0@denver/snapshot")
@@ -812,6 +814,27 @@ def test_reject_option_like_rejects_leading_dash():
         recipes._reject_option_like("--evil", "recipe path")
 
 
+def test_validate_remote_name_accepts_a_configured_remote(monkeypatch):
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"conancenter": object(), "team": object()})
+    assert recipes._validate_remote_name("team") == "team"
+
+
+@pytest.mark.parametrize("name", ["typo", "-r", "team;rm -rf /", ""])
+def test_validate_remote_name_rejects_anything_conan_does_not_know(monkeypatch, name):
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"conancenter": object()})
+    with pytest.raises(ValueError, match="not a configured conan remote"):
+        recipes._validate_remote_name(name)
+
+
+def test_upload_refuses_a_remote_conan_does_not_know(monkeypatch):
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"conancenter": object()})
+    monkeypatch.setattr(recipes, "find_pref", lambda pref, remotes: pytest.fail("must not look it up"))
+    monkeypatch.setattr(recipes.subprocess, "run", lambda *a, **k: pytest.fail("must not run"))
+    pref = PkgReference(RecipeReference.loads("foo/1.0@denver/snapshot"), "id", "rev")
+    with pytest.raises(ValueError, match="not a configured conan remote"):
+        recipes.upload(pref, "--evil")
+
+
 # --------------------------------------------------------------------------- #
 # main(): argument parsing
 # --------------------------------------------------------------------------- #
@@ -831,6 +854,17 @@ def test_main_ci_without_remote_errors(monkeypatch, capsys):
     with pytest.raises(SystemExit):
         recipes.main()
     assert "--remote" in capsys.readouterr().err
+
+
+def test_main_rejects_a_remote_conan_does_not_know(monkeypatch, tmp_path, capsys):
+    _stub_pipeline(monkeypatch)
+    monkeypatch.setattr(recipes, "conan_remotes_list", lambda: {"conancenter": object()})
+    # '--remote=...' rather than two argv entries: argparse would read a
+    # bare '--evil' as a missing value for --remote and never get this far
+    monkeypatch.setattr(sys, "argv", ["recipes.py", "--upload", "--remote=--evil", "--recipes-dir", str(tmp_path)])
+    with pytest.raises(SystemExit):
+        recipes.main()
+    assert "not a configured conan remote" in capsys.readouterr().err
 
 
 def test_main_upload_without_remote_errors(monkeypatch):
