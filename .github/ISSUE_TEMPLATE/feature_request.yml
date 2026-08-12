@@ -1,0 +1,68 @@
+name: Feature request
+description: Ask for something denver cannot do yet
+labels: ["enhancement"]
+body:
+- type: markdown
+  attributes:
+    value: |
+      denver tries to stay small. Every new option has to keep working, be
+      documented, and be explained to the next person who reads it. So the
+      first question here is not "what should it do" but "what is blocking
+      you today".
+
+      Good to read first:
+      [doc/philosophy.md](https://github.com/thorsten-klein/denver/blob/develop/doc/philosophy.md).
+
+- type: textarea
+  id: problem
+  attributes:
+    label: What you cannot do today
+    description: >
+      What you are trying to set up, and where denver stops. Please describe
+      the situation, not only the feature you have in mind.
+  validations:
+    required: true
+
+- type: textarea
+  id: workaround
+  attributes:
+    label: What you do instead
+    description: >
+      How you work around it today -- a `custom` stage, a wrapper script, a
+      manual step in your README. Write "nothing" if there is no way at all.
+  validations:
+    required: true
+
+- type: textarea
+  id: proposal
+  attributes:
+    label: What denver should do
+    description: >
+      If you already know how it should look, write it as a `denver.yml`.
+      That makes it much easier to talk about.
+    render: yaml
+
+- type: dropdown
+  id: area
+  attributes:
+    label: What part of denver
+    multiple: true
+    options:
+    - conan provider
+    - custom provider
+    - docker provider
+    - uv provider
+    - zephyr provider
+    - a new provider
+    - denver.yml settings and layering
+    - command line
+    - documentation
+    - something else
+
+- type: checkboxes
+  id: checks
+  attributes:
+    label: Before you send this
+    options:
+    - label: I looked through the open issues and did not find this idea.
+      required: true

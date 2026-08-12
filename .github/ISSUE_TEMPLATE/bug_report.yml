@@ -1,0 +1,102 @@
+name: Bug report
+description: denver does not do what the docs say it does
+labels: ["bug"]
+body:
+- type: markdown
+  attributes:
+    value: |
+      Thanks for reporting this.
+
+      Most denver bugs can be reproduced with one `denver.yml` and one
+      command. The more of that you paste below, the faster it gets fixed.
+
+- type: textarea
+  id: what-happened
+  attributes:
+    label: What happened
+    description: What denver did, and what you expected instead.
+    placeholder: |
+      `denver my-env` gives me an empty PATH. I expected the uv stage's
+      .venv/bin to be on it.
+  validations:
+    required: true
+
+- type: textarea
+  id: denver-yml
+  attributes:
+    label: Your denver.yml
+    description: >
+      The smallest `denver.yml` that still shows the bug. If your env builds
+      on another one, paste that one too.
+    render: yaml
+  validations:
+    required: true
+
+- type: textarea
+  id: reproduce
+  attributes:
+    label: How to reproduce it
+    description: >
+      The command you ran and what it printed. Please run it with
+      `--verbose` and paste the whole output.
+    render: shell
+    placeholder: |
+      $ denver my-env --verbose -- echo $PATH
+      ...
+  validations:
+    required: true
+
+- type: textarea
+  id: show-config
+  attributes:
+    label: Output of --show-config
+    description: >
+      Run `denver <env> --show-config` and paste the result. It shows the
+      settings denver ended up with, which is often where the surprise is.
+      Leave this empty if denver fails before it gets there.
+    render: shell
+
+- type: input
+  id: version
+  attributes:
+    label: denver version
+    description: What `denver --version` prints.
+    placeholder: "1.4.2"
+  validations:
+    required: true
+
+- type: dropdown
+  id: provider
+  attributes:
+    label: Which provider is involved
+    description: Pick the provider(s) your broken stage uses.
+    multiple: true
+    options:
+    - conan
+    - custom
+    - docker
+    - uv
+    - zephyr
+    - none / denver itself
+
+- type: input
+  id: environment
+  attributes:
+    label: OS and Python
+    description: >
+      Your system and what `python3 --version` prints. If the env runs in
+      docker, there are two pythons -- please say which one you mean.
+    placeholder: "Ubuntu 24.04, Python 3.12.3"
+  validations:
+    required: true
+
+- type: checkboxes
+  id: checks
+  attributes:
+    label: Before you send this
+    options:
+    - label: I looked through the open issues and did not find this one.
+      required: true
+    - label: >
+        I tried the latest denver release (or wrote above why I cannot).
+      required: true
