@@ -28,6 +28,11 @@ targeting different venvs.
 project-specific knowledge; everything specific comes from the `denver.yml`
 section it is given. See [`providers/`](providers/).
 
+**Extension provider** — a project's own `Provider` subclass, registered via
+`extensions: providers: dirs:` instead of being built into denver. Behaves
+exactly like a built-in provider everywhere else once registered — see
+"Extension providers" in [`architecture.md`](architecture.md).
+
 **Step** — a stage's own internal sub-phase, e.g. conan's
 prepare/export/install or uv's ensure-python/ensure-venv/install/activate.
 Each step prints its own banner line, in whatever order the provider actually

@@ -237,6 +237,11 @@ def test_validate_top_level_keys_no_stages_only_known_keys_ok():
     denver.validate_top_level_keys(config)  # no error
 
 
+def test_validate_top_level_keys_extensions_ok():
+    config = {"extensions": {"providers": {"dirs": ["my_providers"]}}}
+    denver.validate_top_level_keys(config)  # no error
+
+
 # ---- 'denver-version:' requirement -------------------------------------------#
 @pytest.mark.parametrize(
     ("text", "expected"),

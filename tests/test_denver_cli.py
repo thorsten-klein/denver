@@ -583,6 +583,29 @@ def test_main_show_config_flag(tmp_path, capsys, which):
     assert printed["uv"]["link-mode"] == "copy"
 
 
+def test_main_show_config_extension_provider(tmp_path, capsys, which):
+    """A stage using an 'extensions.providers.dirs:'-registered provider resolves end to end."""
+    env_dir = tmp_path / "e"
+    (env_dir / "my_providers").mkdir(parents=True)
+    (env_dir / "my_providers" / "acme.py").write_text(
+        "from denver_providers import Provider\n\n\n"
+        "class AcmeProvider(Provider):\n"
+        "    name = 'acme'\n"
+        "    KEYS = ('greeting',)\n\n\n"
+        "PROVIDER = AcmeProvider\n"
+    )
+    (env_dir / "denver.yml").write_text(
+        "extensions:\n  providers:\n    dirs: [my_providers]\n"
+        "stages: [greet]\n"
+        "greet:\n  provider: acme\n  greeting: hi\n"
+    )
+
+    assert denver.main([str(env_dir), "--show-config"]) == 0
+    printed = denver.yaml.safe_load(capsys.readouterr().out)
+    assert printed["greet"]["provider"] == "acme"
+    assert printed["greet"]["greeting"] == "hi"
+
+
 def test_main_show_config_key_order(tmp_path, capsys, which):
     # version: first, then the rest of the generic (non-stage) keys
     # alphabetically, then stages:, then each stage's own section in

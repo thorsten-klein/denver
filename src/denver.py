@@ -130,7 +130,7 @@ def _default_denver_dir():
 
 DENVER_DIR = _default_denver_dir()
 
-# Not imported from providers.context: providers is only imported lazily
+# Not imported from denver_providers.context: denver_providers is only imported lazily
 # (inside run_stages()) so --help/--version/etc. stay light. Same logger name,
 # so both feed the same "denver" logger regardless of which side configures
 # it first.
@@ -543,6 +543,7 @@ KNOWN_TOP_LEVEL_KEYS = {
     "runnable",
     "env",
     "hooks",
+    "extensions",
 }
 
 
@@ -1181,7 +1182,7 @@ def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, fo
     so they can never drift apart -- a provider's setup() never guesses a
     default itself, it just reads what's already there. Returns (config, ctx).
     """
-    from denver_providers import Context
+    from denver_providers import Context, load_extension_providers
 
     config, extra_dirs = expand_section_imports(config, env_dir)
     import_dirs = collect_import_dirs(config_path) + extra_dirs
@@ -1197,6 +1198,10 @@ def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, fo
         ci=ci,
         dry_run=dry_run,
     )
+    # registers any 'extensions.providers.dirs:' Provider subclasses into
+    # providers.PROVIDERS before resolve_provider_defaults below needs to
+    # look any of their names up via make_stage.
+    load_extension_providers(ctx, config.get("extensions"))
     resolve_provider_defaults(config, ctx)
     return config, ctx
 
