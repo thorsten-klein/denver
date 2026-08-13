@@ -23,6 +23,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --group lint
+      - run: uv run poe pre-commit
       - run: uv run ruff format --check .
       - run: uv run ruff check .
       - run: uv run poe mypy

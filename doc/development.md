@@ -16,11 +16,20 @@ uv run poe all      # lint + format + mypy + test, in one go
 Or run each stage on its own:
 
 ```bash
-uv run poe lint      # ruff check .
-uv run poe format    # ruff format .
-uv run poe mypy      # mypy
-uv run poe test      # pytest, with coverage
+uv run poe pre-commit  # pre-commit run --all-files
+uv run poe lint        # ruff check .
+uv run poe format      # ruff format .
+uv run poe mypy        # mypy
+uv run poe test        # pytest, with coverage
 ```
+
+`poe pre-commit` runs the hooks in `.pre-commit-config.yaml` with
+`--all-files` rather than over a staged set: they're cheap enough that
+there's no reason to check less than the whole tree, and it means the gate
+says the same thing no matter what happens to be staged when you run it.
+The fixing hooks (trailing whitespace, end-of-file, line endings) repair the
+file in place and *then* exit non-zero, so the first run after a violation
+aborts `poe all` with the fix already applied — on next re-run it will pass.
 
 `uv run poe clean` removes build artifacts (`dist/`, `build/`, `*.egg-info`,
 `htmlcov/`, `.coverage`, `coverage.xml`); `uv run poe build` cleans then
@@ -126,7 +135,7 @@ this or a fork: see "Extension providers" in
 `.github/workflows/ci.yml` runs on every push to `develop` and every pull
 request, in three jobs:
 
-- **lint** — `ruff format --check`, `ruff check`, `mypy`.
+- **lint** — `pre-commit`, `ruff format --check`, `ruff check`, `mypy`.
 - **test** — `uv run poe test` on Python 3.9 and 3.13: the floor denver
   declares support for (`pyproject.toml`'s `requires-python`) and the newest
   available, so a change that only works at one end doesn't slip through.

@@ -198,7 +198,7 @@ uv tool install denver-tool
 uv tool install git+https://github.com/thorsten-klein/denver.git
 ```
 
-This installs the `denver` script/entry point. 
+This installs the `denver` script/entry point.
 
 On a machine with no Python at all, take the standalone executable attached to
 every [release](https://github.com/thorsten-klein/denver/releases) instead — it
