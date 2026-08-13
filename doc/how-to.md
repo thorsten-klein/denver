@@ -28,13 +28,13 @@ who wants to build it is told:
 >
 > Make sure uv is installed (install from  `PyPi`).
 > Then create a Python 3.12 virtualenv via `uv` and install `pytest==9.1.1`.
-> 
+>
 > PS: In our team it is a best practice to export environment variable
 > `PYTEST_ADDOPTS="-v -s` so pytest always runs verbose and show live logs.
 >
 > Finally you should be able to run `pytest`.
 
-Every step of that is one simple action. 
+Every step of that is one simple action.
 But in total it is a lot of setup effort for the user.
 
 Let's create a `denver.yml` for this so the user can just run:
@@ -185,7 +185,7 @@ RUN export UV_INSTALL_DIR=/usr/local/bin; \
   them at pinned versions instead — one by hand, one via `conan`.
 
 `envs/howto-example/create-env.sh` — This script will generate `.env` file with user-specific informations.
-When we specify it in `denver.yml` as `env-scripts:`, it will run right before build/run (on the host machine). 
+When we specify it in `denver.yml` as `env-scripts:`, it will run right before build/run (on the host machine).
 Background: Dynamic values a compose file cannot compute itself (host UID/GID, user-specific cache dirs, ...).
 
 ```bash

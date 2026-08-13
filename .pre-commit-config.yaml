@@ -1,0 +1,67 @@
+# Repo-wide hygiene gate. Run over the whole tree by `uv run poe pre-commit`,
+# the first step of `uv run poe all`. Nothing installs an actual git hook --
+# that stays a per-developer `pre-commit install` if you want it.
+#
+# Everything language-specific already has its own poe task backed by a version
+# pinned in pyproject.toml's `lint` dependency group -- ruff, mypy, pyright,
+# bandit, pip-audit, complexipy. Duplicating any of them here would mean a
+# second, independently-pinned copy drifting from the one CI runs, so this file
+# deliberately stays limited to the checks nothing else covers.
+repos:
+  # General pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # --- whitespace -----------------------------------------------------
+      # .patch/.diff are excluded throughout: trailing whitespace inside a
+      # hunk is content, and git's "-- \n" signature separator is load-bearing.
+      # Rewriting either corrupts the patch.
+      - id: trailing-whitespace
+        # src/denver_assets/logo.txt is a fixed-width ASCII wordmark whose
+        # right-hand padding is part of the art (see denver.print_logo).
+        exclude: ^(.*\.(patch|diff)|src/denver_assets/logo\.txt)$
+      - id: end-of-file-fixer
+        # tests/golden/*.yml must match --show-config byte for byte, and that
+        # output ends in a blank line (yaml.dump's trailing \n plus print's).
+        # Stripping it here just makes test_golden_show_config fail.
+        exclude: ^(.*\.(patch|diff)|tests/golden/.*)$
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+        exclude: ^.*\.(patch|diff)$
+
+      # --- parseability of the files that configure everything else -------
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+
+      # --- python ---------------------------------------------------------
+      - id: debug-statements
+      - id: name-tests-test
+        args: ['--pytest-test-first']
+
+      # --- scripts --------------------------------------------------------
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+        # examples/zephyr-docker/configs/* are shell rc files the Dockerfile
+        # copies into the image for the shell to *source*, never to execute.
+        # Their shebang is there so editors pick the right syntax mode.
+        exclude: ^examples/zephyr-docker/configs/
+
+      # --- repo integrity -------------------------------------------------
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ['--maxkb=500', '--enforce-all']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: forbid-submodules
+
+
+# Configuration
+default_language_version:
+  python: python3.12
+
+# Minimum pre-commit version -- matches the floor pyproject.toml's `lint`
+# dependency group pins.
+minimum_pre_commit_version: '4.0.0'
