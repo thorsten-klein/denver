@@ -1,5 +1,11 @@
 version: '1.0'
 denver-version: '>=1.1.0'
+args:
+- default: hello
+  flags:
+  - --greeting
+  - -g
+  help: what the last stage greets with
 hooks:
   env: null
   post-print-vars-after: null
@@ -38,7 +44,7 @@ print-vars-after:
   description: null
   disabled: false
   scripts: null
-  cmd: 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
+  cmd: 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR greeting=${DENVER_ARG_GREETING}"
 
     '
   launcher: null

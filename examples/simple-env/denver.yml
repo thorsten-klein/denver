@@ -14,6 +14,15 @@ denver-version: ">=1.1.0"
 # back into ctx.env -- that's what makes MYVAR/FOO/BAR visible to
 # 'print-vars-after' below (and the final command).
 
+# This env's own command-line flag: one argparse.add_argument entry, so
+# `denver examples/simple-env --help` lists it like any denver flag, and
+# what the user passes arrives as DENVER_ARG_GREETING below (see
+# "Environment-specific CLI arguments" in doc/architecture.md).
+args:
+- flags: [--greeting, -g]
+  default: hello
+  help: what the last stage greets with
+
 stages:
 - print-vars-before
 - set-vars
@@ -32,5 +41,9 @@ set-vars:
 
 print-vars-after:
   provider: custom
+  # ${DENVER_ARG_GREETING} and $MYVAR are expanded by two different things:
+  # the first by denver itself, before this line is ever handed to a shell
+  # (so --greeting's value is baked in here), the second by that shell,
+  # from what 'set-vars' exported above.
   cmd: |
-    echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
+    echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR greeting=${DENVER_ARG_GREETING}"
