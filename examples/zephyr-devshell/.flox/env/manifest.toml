@@ -1,43 +1,38 @@
-# Port of ../../denver.yml to flox (https://flox.dev).
-# Written to spec and NOT executed -- see ../../../PORTING-flox.md.
-#
-# denver original: the shared base every zephyr-devshell-<version> env
-# imports. Declared `runnable: false` -- starting it directly is an error; it
-# exists only to be inherited.
-#
-# flox is one of only two tools in this comparison (with devenv) that can
-# express this at all. `[include] environments` in the derived env names this
-# one by directory -- see ../../../zephyr-devshell-4.3.1/.flox/env/manifest.toml.
-#
-# GAP -- flox has no `runnable: false`. Nothing stops `flox activate` here;
-# it just yields an incomplete environment rather than denver's clear error.
-#
-# GAP (semantics) -- flox composition is a *merge with last-wins on
-# conflicts*, resolved at `flox activate` time and requiring an explicit
-# `flox include upgrade` to pick up changes in the included env. denver
-# resolves the import chain on every run, and its list-valued keys (hooks:,
-# recipe-dirs:) accumulate across layers rather than overwriting. So the
-# base/derived split ports structurally, but the merge rules differ.
-
-version = 1
+schema-version = "1.14.0"
 
 [install]
 python3.pkg-path = "python3"
-python3.version = "3.12.3"
 uv.pkg-path = "uv"
 cmake.pkg-path = "cmake"
 ninja.pkg-path = "ninja"
 ccache.pkg-path = "ccache"
 git.pkg-path = "git"
 
+# native_sim compiles for the host, so a host toolchain is needed rather than
+# a cross one. Taking these from the catalog rather than depending on whatever
+# the machine happens to have is what makes this environment self-contained --
+# the mise port of the same env has to borrow all three from apt.
+gcc.pkg-path = "gcc"
+dtc.pkg-path = "dtc"
+gperf.pkg-path = "gperf"
+
 [vars]
-CONAN_HOME = "$FLOX_ENV_PROJECT/.flox/cache/conan2"
+CONAN_HOME = "$FLOX_ENV_CACHE/conan2"
+ZEPHYR_TOOLCHAIN_VARIANT = "host"
 
 [hook]
 # denver's base contributed hooks/env.sh, and every layer of the import chain
 # adds its own rather than replacing it.
+#
+# NOT SOURCED HERE, AND THAT IS THE FINDING -- ../hooks/env.sh cannot be used
+# outside denver at all. It derives its own location from $BASH_SOURCE (empty
+# in a hook context) and reads WEST_TOPDIR and DENVER_ENV_WORKDIR, which are
+# denver built-ins that exist nowhere else. Sourcing it here fails exactly as
+# it did in the devbox port ("dirname: missing operand"). Its two
+# machine-independent exports are inlined instead.
 on-activate = '''
-  . "$FLOX_ENV_PROJECT/hooks/env.sh"
+  export CMAKE_COLOR_DIAGNOSTICS=ON
+  export CCACHE_NOHASHDIR=1
 '''
 
 [options]

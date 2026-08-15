@@ -1,0 +1,417 @@
+{
+  "lockfile-version": 1,
+  "manifest": {
+    "schema-version": "1.14.0",
+    "install": {
+      "ccache": {
+        "pkg-path": "ccache"
+      },
+      "cmake": {
+        "pkg-path": "cmake"
+      },
+      "dtc": {
+        "pkg-path": "dtc"
+      },
+      "gcc": {
+        "pkg-path": "gcc"
+      },
+      "git": {
+        "pkg-path": "git"
+      },
+      "gperf": {
+        "pkg-path": "gperf"
+      },
+      "ninja": {
+        "pkg-path": "ninja"
+      },
+      "python3": {
+        "pkg-path": "python3"
+      },
+      "uv": {
+        "pkg-path": "uv"
+      }
+    },
+    "vars": {
+      "CONAN_HOME": "$FLOX_ENV_CACHE/conan2",
+      "ZEPHYR_TOOLCHAIN_VARIANT": "host",
+      "ZEPHYR_VERSION": "4.3.1"
+    },
+    "hook": {
+      "on-activate": "  export CMAKE_COLOR_DIAGNOSTICS=ON\n  export CCACHE_NOHASHDIR=1\n\n  VENV=\"$FLOX_ENV_CACHE/venv\"\n  if [ ! -d \"$VENV\" ]; then\n    uv venv --seed \"$VENV\"\n    uv pip install --python \"$VENV/bin/python\" -q west conan\n  fi\n  # PATH is exported HERE, not in [profile], and that distinction is a\n  # finding rather than a style choice. [profile] is sourced by *your shell*,\n  # so it does not run under `flox activate -- <command>` -- the non-\n  # interactive form, and the one that corresponds to denver's\n  # `denver <env> -- <command>`. Putting the venv on PATH in [profile] left\n  # `west` missing in exactly that mode. [hook] exports do propagate to both.\n  export VIRTUAL_ENV=\"$VENV\"\n  export PATH=\"$VENV/bin:$PATH\"\n"
+    },
+    "options": {
+      "systems": [
+        "x86_64-linux"
+      ]
+    }
+  },
+  "packages": [
+    {
+      "attr_path": "ccache",
+      "broken": false,
+      "derivation": "/nix/store/yyfdrbr92k2x8fajarba9bj2jrirps6s-ccache-4.13.6.drv",
+      "description": "Compiler cache for fast recompilation of C/C++ code",
+      "install_id": "ccache",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "ccache-4.13.6",
+      "pname": "ccache",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:16:55.949426Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "4.13.6",
+      "outputs_to_install": [
+        "man",
+        "out"
+      ],
+      "outputs": {
+        "man": "/nix/store/xyid7sk2gvx3i855wvcg3bvs9w7apyg9-ccache-4.13.6-man",
+        "out": "/nix/store/jpn7x08mbfzzq5h9a711a330jbk6xcq7-ccache-4.13.6"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "cmake",
+      "broken": false,
+      "derivation": "/nix/store/4blvcrk5v6zq1xv11sxyamhh6rrk72bb-cmake-4.3.4.drv",
+      "description": "Cross-platform, open-source build system generator",
+      "install_id": "cmake",
+      "license": "BSD-3-Clause",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "cmake-4.3.4",
+      "pname": "cmake",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:16:56.196489Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "4.3.4",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/vylp1x0xj02qs7aqdkjjcf4v7di91rn8-cmake-4.3.4-debug",
+        "out": "/nix/store/s35s3anz14hil6dk30m9ahax5447ap9r-cmake-4.3.4"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "dtc",
+      "broken": false,
+      "derivation": "/nix/store/jvgdgv97bmf1ryfyzrv2pmlbw2hmlw6x-dtc-1.7.2.drv",
+      "description": "Device Tree Compiler",
+      "install_id": "dtc",
+      "license": "GPL-2.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "dtc-1.7.2",
+      "pname": "dtc",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:16:56.860310Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.7.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/hn2i3kqqna2gc0i6iq2kiwf3ckm8gxmb-dtc-1.7.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gcc",
+      "broken": false,
+      "derivation": "/nix/store/ijc4dyx0vj8qbwp7dz0a0g11rg6kd6d2-gcc-wrapper-15.3.0.drv",
+      "description": "GNU Compiler Collection, version 15.3.0 (wrapper script)",
+      "install_id": "gcc",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "gcc-wrapper-15.3.0",
+      "pname": "gcc",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:16:57.656277Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "15.3.0",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/azh5xknrc1wnlh66n1ba73kp8lzrjd76-gcc-wrapper-15.3.0-info",
+        "man": "/nix/store/jjm7zxsc05zkfa60rrywxlfryzqy24al-gcc-wrapper-15.3.0-man",
+        "out": "/nix/store/3d1c302vw7kc8a5vknhmn34c0pd7zm6m-gcc-wrapper-15.3.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "git",
+      "broken": false,
+      "derivation": "/nix/store/y1bhwp1rl04s5qw50qdbmx83x8yy9nmf-git-2.55.0.drv",
+      "description": "Distributed version control system",
+      "install_id": "git",
+      "license": "GPL-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "git-2.55.0",
+      "pname": "git",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:16:57.821223Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "2.55.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/3zxdc75ib758dwba0afaj63d33w6z42w-git-2.55.0-debug",
+        "doc": "/nix/store/h1dp7wlh1saz2d77ajpdpbms1fn56ih8-git-2.55.0-doc",
+        "out": "/nix/store/8wxs6573l730vxkqd6wp58kvxa19csll-git-2.55.0"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gperf",
+      "broken": false,
+      "derivation": "/nix/store/dgpn51a68v7c0vcihyjshifqz7k58816-gperf-3.3.drv",
+      "description": "Perfect hash function generator",
+      "install_id": "gperf",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "gperf-3.3",
+      "pname": "gperf",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:16:58.902625Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "3.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/3qx4h6ah8g2anwvpji41xr448s7vkj8q-gperf-3.3"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "ninja",
+      "broken": false,
+      "derivation": "/nix/store/wdqzxi4w0nm2gjma4xy60zlrgwlw65cp-ninja-1.13.2.drv",
+      "description": "Small build system with a focus on speed",
+      "install_id": "ninja",
+      "license": "Apache-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "ninja-1.13.2",
+      "pname": "ninja",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:17:36.634357Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "1.13.2",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/vj0z9ncypj0qcp8jdcri68dls27inzm6-ninja-1.13.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "python3",
+      "broken": false,
+      "derivation": "/nix/store/8ypyfgr768vw937caa9v56hcp2al7z0h-python3-3.14.7.drv",
+      "description": "High-level dynamically-typed programming language",
+      "install_id": "python3",
+      "license": "Python-2.0",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "python3-3.14.7",
+      "pname": "python3",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:18:00.003101Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "3.14.7",
+      "outputs_to_install": [
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/qjz7g5m2mqwjpqq0r662gv87ys44pjwy-python3-3.14.7-debug",
+        "out": "/nix/store/3n4qphl9s728sz8frmpqqrv9b1m87g68-python3-3.14.7"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "uv",
+      "broken": false,
+      "derivation": "/nix/store/ixjcr92n3zip2hm2akran5ci4cw83318-uv-0.12.3.drv",
+      "description": "Extremely fast Python package installer and resolver, written in Rust",
+      "install_id": "uv",
+      "license": "[ Apache-2.0, MIT ]",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "name": "uv-0.12.3",
+      "pname": "uv",
+      "rev": "0e251e24a4f24e036a084b6b4b2d2491af4167f4",
+      "rev_count": 1053317,
+      "rev_date": "2026-08-13T05:33:33Z",
+      "scrape_date": "2026-08-14T06:20:32.457916Z",
+      "stabilities": [
+        "unstable",
+        "staging"
+      ],
+      "unfree": false,
+      "version": "0.12.3",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/qhm6hxj4whqi9cv5bl0f5sq1xfgj3bvw-uv-0.12.3"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    }
+  ],
+  "compose": {
+    "composer": {
+      "schema-version": "1.14.0",
+      "vars": {
+        "ZEPHYR_VERSION": "4.3.1"
+      },
+      "hook": {
+        "on-activate": "  VENV=\"$FLOX_ENV_CACHE/venv\"\n  if [ ! -d \"$VENV\" ]; then\n    uv venv --seed \"$VENV\"\n    uv pip install --python \"$VENV/bin/python\" -q west conan\n  fi\n  # PATH is exported HERE, not in [profile], and that distinction is a\n  # finding rather than a style choice. [profile] is sourced by *your shell*,\n  # so it does not run under `flox activate -- <command>` -- the non-\n  # interactive form, and the one that corresponds to denver's\n  # `denver <env> -- <command>`. Putting the venv on PATH in [profile] left\n  # `west` missing in exactly that mode. [hook] exports do propagate to both.\n  export VIRTUAL_ENV=\"$VENV\"\n  export PATH=\"$VENV/bin:$PATH\"\n"
+      },
+      "options": {
+        "systems": [
+          "x86_64-linux"
+        ]
+      },
+      "include": {
+        "environments": [
+          {
+            "dir": "../zephyr-devshell"
+          }
+        ]
+      }
+    },
+    "include": [
+      {
+        "manifest": {
+          "schema-version": "1.14.0",
+          "install": {
+            "ccache": {
+              "pkg-path": "ccache"
+            },
+            "cmake": {
+              "pkg-path": "cmake"
+            },
+            "dtc": {
+              "pkg-path": "dtc"
+            },
+            "gcc": {
+              "pkg-path": "gcc"
+            },
+            "git": {
+              "pkg-path": "git"
+            },
+            "gperf": {
+              "pkg-path": "gperf"
+            },
+            "ninja": {
+              "pkg-path": "ninja"
+            },
+            "python3": {
+              "pkg-path": "python3"
+            },
+            "uv": {
+              "pkg-path": "uv"
+            }
+          },
+          "vars": {
+            "CONAN_HOME": "$FLOX_ENV_CACHE/conan2",
+            "ZEPHYR_TOOLCHAIN_VARIANT": "host"
+          },
+          "hook": {
+            "on-activate": "  export CMAKE_COLOR_DIAGNOSTICS=ON\n  export CCACHE_NOHASHDIR=1\n"
+          },
+          "options": {
+            "systems": [
+              "x86_64-linux"
+            ]
+          }
+        },
+        "name": "zephyr-devshell-base",
+        "descriptor": {
+          "dir": "../zephyr-devshell"
+        }
+      }
+    ],
+    "warnings": [
+      {
+        "warning": {
+          "Overriding": [
+            "options",
+            "systems"
+          ]
+        },
+        "higher_priority_name": "Current manifest"
+      }
+    ]
+  }
+}
