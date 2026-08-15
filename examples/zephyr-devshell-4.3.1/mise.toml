@@ -1,0 +1,68 @@
+# Port of this folder's denver.yml to mise (https://mise.jdx.dev).
+# Written to spec and NOT executed -- see ../PORTING-mise.md.
+#
+# denver original: five stages, inheriting ../zephyr-devshell via `import:`
+# and restating only the 4.3.1 pins.
+#
+# NOTE ON LAYOUT: this file cannot actually inherit ../zephyr-devshell/mise.toml
+# where it sits, because mise merges configs from PARENT directories, not
+# from named siblings. Everything the base contributed is therefore
+# duplicated below. To get real inheritance this folder would have to be
+# moved to ../zephyr-devshell/4.3.1/ -- see the long comment in
+# ../zephyr-devshell/mise.toml.
+
+[tools]
+python = "3.12.3"
+cmake = "latest"
+ninja = "latest"
+ccache = "latest"
+
+[tools."pipx:west"]
+version = "latest"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+CONAN_HOME = "{{config_root}}/.mise/conan2"
+ZEPHYR_VERSION = "4.3.1"
+
+# --- stages 4 and 5: where this stops being expressible --------------------
+#
+# denver ran `west update` (clone ~40 pinned repos), `west patches`,
+# `west blobs`, and THEN installed whatever python packages the freshly
+# cloned modules turn out to declare (`west packages pip`). mise's task
+# graph can order these correctly, which is more than some tools in this
+# comparison manage -- but:
+#
+# GAP -- these run on demand, not on entering the environment. denver ran
+# them as part of activation, with per-stage fingerprinting so an unchanged
+# workspace costs nothing and `--force` redoes it. Under mise, entering the
+# directory gives you the tools and an empty workspace; whether the
+# workspace is up to date is something you have to remember.
+#
+# GAP -- 'uv-zephyr' installed into the SAME venv as the 'uv' stage, on
+# purpose, so west's own extension commands could import those packages in
+# the same running west process. mise has one venv per config, so this
+# happens to work -- but by accident rather than because it can be stated.
+#
+# GAP -- no equivalent of denver's `no-index: auto` offline install against
+# the conan-provided wheel cache, of `venv-patcher:`, of `skip-if:`, or of
+# `freeze-to:` writing requirements.final.txt back into the tree.
+
+[tasks.west-init]
+run = "west init -l ."
+
+[tasks.west-update]
+run = "west update"
+depends = ["west-init"]
+
+[tasks.west-blobs]
+run = "west blobs fetch"
+depends = ["west-update"]
+
+[tasks.west-packages]
+run = "uv pip install $(west packages pip)"
+depends = ["west-update"]
+
+[tasks.setup]
+depends = ["west-update", "west-blobs", "west-packages"]
+run = "echo 'workspace ready'"

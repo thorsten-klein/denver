@@ -1,0 +1,62 @@
+# Port of this folder's denver.yml to mise (https://mise.jdx.dev).
+# Written to spec and NOT executed -- see ../PORTING-mise.md.
+#
+# denver original: five stages --
+#   docker-with-tools    Ubuntu 24.04 container, everything below runs inside
+#   uv-packages          python 3.12.3 venv (conan, pytest)
+#   nvim-by-hand         one prebuilt release, downloaded/checksummed by hand
+#   tools-from-internet  cmake 3.31.9 + arm-none-eabi 15.3 via conan
+#   best-practices       the team's PYTEST_ADDOPTS convention
+#
+# This is mise's best showing of the five ports: 'nvim-by-hand' and the cmake
+# half of 'tools-from-internet' are exactly what mise exists to do.
+
+# GAP (structural) -- no port of 'docker-with-tools'. mise manages tools on
+# your host; it has no container concept whatsoever. denver's docker stage
+# relocates every later stage into ubuntu:24.04 so the OS is identical for
+# everyone, with `--skip docker` running the same stack natively. Under mise
+# the host OS is simply whatever you have, and system libraries are out of
+# scope. For a project that genuinely only builds on Ubuntu 24.04, mise is
+# not an answer.
+
+[tools]
+# 'uv-packages'. denver had to pin 3.12.3 to match ubuntu:24.04's
+# interpreter, because inside a container it cannot install another one.
+# mise installs the interpreter itself, so the pin is a choice rather than a
+# constraint imposed by the layer below.
+python = "3.12.3"
+
+# 'tools-from-internet', first half. One line, versus a conan recipe.
+cmake = "3.31.9"
+
+# 'nvim-by-hand', in full. denver's version of this stage is ~60 lines across
+# install.sh (download, checksum, atomic unpack, idempotence), activate.sh
+# (PATH) and nvim.env (the pins) -- deliberately, to show what that job costs
+# by hand. mise's ubi backend does all of it, including the idempotence.
+#
+# Reading this next to ../howto-env/nvim/ is the sharpest single comparison
+# in this whole port: the denver example is *teaching* what a tool like mise
+# does for you, and mise then does it in one line.
+"ubi:neovim/neovim" = "0.12.4"
+
+# 'tools-from-internet', second half. Same UNVERIFIED caveat as
+# ../raspberry-pico/mise.toml -- the ARM toolchain is not a GitHub release,
+# so whether any mise backend reaches it needs checking.
+#   "ubi:<org>/<repo>" = "15.3"
+
+[tools."pipx:conan"]
+version = "2.31.2"
+
+[tools."pipx:pytest"]
+version = "9.1.1"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+# 'best-practices' -- ports exactly, and more declaratively than the original
+# (denver had to source a script so the export would survive; mise just sets
+# it).
+PYTEST_ADDOPTS = "-v -s"
+
+[tasks.test]
+run = "pytest"

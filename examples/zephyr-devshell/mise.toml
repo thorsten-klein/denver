@@ -1,0 +1,43 @@
+# Port of this folder's denver.yml to mise (https://mise.jdx.dev).
+# Written to spec and NOT executed -- see ../PORTING-mise.md.
+#
+# denver original: the shared base that every zephyr-devshell-<version> env
+# imports. Declared `runnable: false` -- starting it directly is an error;
+# it exists only to be inherited.
+#
+# GAP (structural) -- mise has no concept of a non-runnable config, and no
+# `import: ../sibling-folder`. What mise does have is hierarchical merging:
+# a mise.toml in a PARENT directory is merged into the one in a child. So
+# this base only works as inheritance if the version envs are moved to be
+# children of this folder:
+#
+#     zephyr-devshell/mise.toml          <- this file (the base)
+#     zephyr-devshell/4.3.1/mise.toml    <- the version env, as a CHILD
+#
+# denver's layout is siblings that name their base explicitly. mise's is
+# containment, resolved implicitly by where a directory happens to sit.
+# That is a real difference in kind, not just in syntax: with denver an env
+# states what it inherits and you can read it; with mise you have to know
+# the directory tree. It also means one env cannot inherit from two bases,
+# and cannot inherit from a base in an unrelated part of the repo.
+
+[tools]
+python = "3.12.3"
+cmake = "latest"
+ninja = "latest"
+ccache = "latest"
+
+[tools."pipx:conan"]
+version = "2.31.2"
+
+[tools."pipx:west"]
+version = "latest"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+CONAN_HOME = "{{config_root}}/.mise/conan2"
+
+# denver's base also contributed a hooks/env.sh, which every layer of the
+# import chain adds to rather than replaces. mise's `_.source` is per-config
+# and merges the same way, so this one detail does port.
+_.source = "./hooks/env.sh"

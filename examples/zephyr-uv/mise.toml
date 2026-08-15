@@ -1,0 +1,27 @@
+# Port of this folder's denver.yml to mise (https://mise.jdx.dev).
+# Written to spec and NOT executed -- see ../PORTING-mise.md.
+#
+# denver original: a single 'uv' stage -- a virtualenv with two pinned
+# packages, nothing else.
+
+[tools]
+python = "latest"
+# mise can install uv as a tool in its own right, which denver could not:
+# denver's uv provider requires uv to already be on PATH (see the
+# pre-conditions table in the top-level README).
+uv = "0.9.13"
+
+[env]
+# mise creates and activates the venv on entry. This is the closest thing in
+# the whole comparison to a like-for-like replacement of a denver stage --
+# `create = true` even reproduces "make it if it isn't there yet".
+_.python.venv = { path = ".venv", create = true, uv_create_args = ["--seed"] }
+
+[tasks.install]
+# GAP (small) -- denver's uv stage fingerprinted requirements.txt and
+# re-installed only when it actually changed. mise has no equivalent
+# staleness check, so this is a task you remember to run, or wire into
+# a task that depends on it.
+run = "uv pip install -r requirements.txt"
+sources = ["requirements.txt"]
+outputs = [".venv/pyvenv.cfg"]

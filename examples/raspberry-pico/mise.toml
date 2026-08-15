@@ -1,0 +1,45 @@
+# Port of this folder's denver.yml to mise (https://mise.jdx.dev).
+# Written to spec and NOT executed -- see ../PORTING-mise.md.
+#
+# denver original: 'uv' -> 'conan'. A cross-compilation toolchain, no Docker.
+
+[tools]
+python = "latest"
+uv = "0.12.3"
+cmake = "latest"
+ninja = "latest"
+
+# UNVERIFIED -- mise's `ubi:` backend installs binaries straight from GitHub
+# releases, which is a genuinely good fit for the ARM toolchain: it is
+# distributed exactly that way, and this is the same job denver's
+# conan/recipes/arm-none-eabi/15.3/ does. What needs checking is whether the
+# ARM developer.arm.com tarballs are reachable through a ubi/aqua/asdf
+# backend at all -- they are not GitHub releases, which is precisely why
+# denver's recipe pins the upstream URL and checksum directly.
+#   "ubi:<org>/<repo>" = "15.3"
+#
+# GAP (hard) -- pico-sdk. denver's conan/recipes/pico-sdk/2.3.0/ fetches the
+# SDK *and builds picotool from source* as part of the recipe. mise installs
+# tools; it does not build them. There is no mise backend for "clone this,
+# cmake it, install the result", so this becomes a task below and stops
+# being version-managed at all.
+
+[tools."pipx:conan"]
+version = "2.31.2"
+
+[env]
+_.python.venv = { path = ".venv", create = true }
+# denver kept conan's cache out of ~/.conan2 to avoid colliding with an
+# existing one. Same idea.
+CONAN_HOME = "{{config_root}}/.mise/conan2"
+
+[tasks.pico-sdk]
+# The part that does not fit mise's model. In denver this is a declarative
+# conan recipe with a pinned source and checksum; here it is a shell script
+# you have to write and keep idempotent yourself -- which is exactly the
+# "setup.sh is only a suggestion" problem denver's README opens with.
+run = "echo 'TODO: fetch pico-sdk 2.3.0 and build picotool -- no mise backend for this'"
+
+[tasks.conan-install]
+run = "conan install conan/conanfile.py --build=missing"
+depends = ["pico-sdk"]

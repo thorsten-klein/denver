@@ -1,0 +1,32 @@
+# Port of this folder's denver.yml to mise (https://mise.jdx.dev).
+# Written to spec and NOT executed -- mise is not installed in the repo that
+# produced this branch. See ../PORTING-mise.md for the fidelity report.
+#
+# denver original: three 'custom' stages demonstrating stage-to-stage env
+# propagation, plus one env-specific CLI flag (--greeting).
+
+# denver's 'set-vars' stage used `source: custom.sh` so the exports fold into
+# every later stage and the final command. mise's `_.source` is the direct
+# equivalent -- it sources the script and keeps what it exports, which is
+# closer to the original than most tools in this comparison manage.
+[env]
+_.source = "./custom.sh"
+
+# GAP -- denver's 'args:' declared a real argparse flag (--greeting, default
+# 'hello'), listed by `denver simple-env --help` and delivered as
+# DENVER_ARG_GREETING. mise has no per-config CLI argument declaration.
+# Nearest equivalent: a default env var, overridable before activation.
+GREETING = "hello"
+
+# denver ran the three stages in order, automatically, on entry. mise
+# activates env but has no ordered setup pipeline, so the two echo stages
+# become tasks. `depends` gives ordering *between tasks*, but not between
+# "steps of entering the environment", which is what the original was about.
+#
+# GAP -- 'print-vars-before' demonstrated that the vars are NOT set yet at
+# that point. mise has no pre-activation hook, so that half is unportable.
+[tasks.print-vars-before]
+run = 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
+
+[tasks.print-vars-after]
+run = 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR greeting=$GREETING"'

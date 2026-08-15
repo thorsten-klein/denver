@@ -1,0 +1,96 @@
+# Porting the examples to mise
+
+An honest attempt to express each of denver's seven bundled examples as a
+[mise](https://mise.jdx.dev) config, to find out where the two tools actually
+disagree.
+
+**These ports are unverified.** mise is not installed in the environment this
+branch was produced in, so nothing here has been resolved, installed or run.
+Backend/tool identifiers that were assumed rather than checked are marked
+UNVERIFIED inline. Treat this as a design comparison, not as working
+configuration.
+
+Ports are additive: each `mise.toml` sits next to the `denver.yml` it was
+derived from. No example was modified.
+
+## Result per example
+
+| Example | Ported | Fidelity |
+|---|---|---|
+| `simple-env` | [`simple-env/mise.toml`](simple-env/mise.toml) | Partial — `_.source` ports well; no CLI args, no ordered pipeline |
+| `zephyr-uv` | [`zephyr-uv/mise.toml`](zephyr-uv/mise.toml) | **Near-full** — mise even installs `uv` itself, which denver requires pre-installed |
+| `raspberry-pico` | [`raspberry-pico/mise.toml`](raspberry-pico/mise.toml) | Partial — pico-sdk needs *building*, which mise does not do |
+| `zephyr-docker` | *not ported* | No equivalent — mise has no container concept at all |
+| `howto-env` | [`howto-env/mise.toml`](howto-env/mise.toml) | **4 of 5 stages, very cleanly** — see below |
+| `zephyr-devshell` (base) | [`zephyr-devshell/mise.toml`](zephyr-devshell/mise.toml) | Only inherits if the version envs become child *directories* |
+| `zephyr-devshell-4.3.1` | [`zephyr-devshell-4.3.1/mise.toml`](zephyr-devshell-4.3.1/mise.toml) | Duplicates the base; west stages run on demand, not on entry |
+
+## The sharpest finding
+
+`howto-env`'s `nvim-by-hand` stage is ~60 lines across three files
+([`install.sh`](howto-env/nvim/install.sh) — download, checksum, atomic unpack,
+idempotence; [`activate.sh`](howto-env/nvim/activate.sh) — PATH;
+[`nvim.env`](howto-env/nvim/nvim.env) — the pins). It is deliberately written
+by hand so `doc/how-to.md` can show what that job costs, immediately before
+showing conan doing it properly.
+
+In mise that stage is:
+
+```toml
+"ubi:neovim/neovim" = "0.12.4"
+```
+
+That is not a criticism of the example — the example is *teaching* exactly this
+— but it is worth being clear-eyed that a reader who already knows mise will
+look at that stage and ask why denver is involved.
+
+## What mise does better
+
+- **Installs the tools denver requires.** denver's pre-conditions table says
+  `uv` must already be on PATH, `conan` usually via an earlier `uv` stage, and
+  `west` likewise. mise installs all three as managed, version-pinned tools.
+  denver's `uv` → `conan` stage ordering exists solely to solve a bootstrap
+  problem mise does not have.
+- **Binary releases from GitHub.** The `ubi:` backend is a direct, declarative
+  replacement for hand-rolled download/checksum/unpack scripts.
+- **Venv handling.** `_.python.venv = { create = true }` is close to a
+  like-for-like replacement for denver's `uv` stage.
+- **`_.source`** genuinely reproduces denver's `source:` semantics, including
+  merging across config layers the way denver's `hooks:` lists do.
+
+## What did not port, and why
+
+1. **The container wrapper.** mise has no container concept. `zephyr-docker`
+   has no port, and `howto-env` loses its first stage. If a project genuinely
+   only builds on Ubuntu 24.04, mise does not address that at all — this is the
+   largest single gap of the five tools compared.
+
+2. **Inheritance is containment, not naming.** denver's
+   `import: [../zephyr-devshell]` names its base explicitly, from a sibling
+   folder, and one env can import several. mise merges configs from *parent
+   directories*, so inheritance is a property of where a folder sits in the
+   tree. Reproducing the base/derived split would require moving
+   `zephyr-devshell-4.3.1/` to `zephyr-devshell/4.3.1/`, and even then an env
+   could not inherit two bases or a base elsewhere in the repo.
+
+3. **Building, as opposed to installing.** `pico-sdk` needs fetching *and*
+   compiling picotool. mise installs prebuilt tools; there is no backend for
+   "clone this and cmake it". That stage degrades to a shell script — the
+   unmaintained-`setup.sh` problem denver's README opens with.
+
+4. **Activation-time pipelines.** denver runs stages in order when you enter
+   the env, fingerprinted so unchanged work is skipped. mise's task graph can
+   express the *ordering* (`depends`), but tasks run on demand. Under mise,
+   whether your west workspace is current is something you remember; under
+   denver it is checked every time.
+
+5. **Environment-specific CLI flags.** No mise equivalent to denver's `args:`.
+
+## Verdict
+
+For `zephyr-uv` and most of `howto-env`, mise is simpler than denver and pulls
+its own weight. Its gap is the opposite of pixi's: pixi can supply almost any
+*library* but no container; mise can supply almost any *binary tool* but also
+no container, and cannot build anything that is not already published as a
+release artifact. Both leave `zephyr-docker` and the harder half of
+`zephyr-devshell-4.3.1` untouched.
