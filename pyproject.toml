@@ -64,13 +64,11 @@ dev = [
     {include-group = "test"},
     {include-group = "conan-tools"},
 ]
-# conan/colorama are not denver's own runtime dependencies: the
-# conan_scripts run inside the env's own venv, where the env's uv stage
-# installs them (see src/denver_providers/conan.py's module docstring). They're
-# pulled in here only so denver's own test suite can import and exercise
-# conan_scripts/*.py.
+# conan is not one of denver's own runtime dependencies: the conan_scripts
+# run inside the env's own venv, where the env's uv stage installs it (see
+# src/denver_providers/conan.py's module docstring). It's pulled in here only
+# so denver's own test suite can import and exercise conan_scripts/*.py.
 conan-tools = [
-    "colorama>=0.4.6,<0.5",
     "conan>=2.31.1,<3",
 ]
 
@@ -159,10 +157,10 @@ files = ["src"]
 module = ["get_rrev", "DenverConanFile"]
 ignore_missing_imports = true
 
-# conan/colorama ship no type stubs (see the conan-tools dependency group
-# above: they're denver's test-only, not a real runtime dependency).
+# conan ships no type stubs (see the conan-tools dependency group above:
+# it's denver's test-only, not a real runtime dependency).
 [[tool.mypy.overrides]]
-module = ["conan.*", "colorama.*"]
+module = ["conan.*"]
 ignore_missing_imports = true
 
 [tool.pyright]
