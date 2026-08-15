@@ -1157,21 +1157,7 @@ def resolve_command(config, forwarded):
     return list(forwarded) or default_command(config)
 
 
-def reinvoke_command(
-    config_path,
-    forwarded,
-    wrapper_stage_ids,
-    *,
-    until_stage=None,
-    skip_stages=(),
-    quiet=0,
-    fast=False,
-    force=False,
-    ci=False,
-    no_wait=False,
-    start_time=None,
-    cli_argv=(),
-):
+def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None):
     """Re-invoke denver (skipping ``wrapper_stage_ids``) so setup providers run in the wrapper.
 
     Used inside a wrapper (e.g. docker): the same denver runs again inside the
@@ -1197,42 +1183,50 @@ def reinvoke_command(
     ``wrapper_stage_ids`` (the active wrapper(s) relocating this command) are
     each passed as their own ``--skip``, so the re-invoked denver's own stage
     filtering drops them from 'stages:' and never tries to relocate again.
-    ``until_stage``/``skip_stages`` are the user's *original* --until/--skip
-    (consumed out of ``forwarded`` by the outer main(), same as
-    quiet/fast/force/ci below) -- re-passed explicitly so a stage the user
-    asked to skip stays skipped inside the wrapper too, instead of the inner
-    denver re-computing 'stages:' from scratch with no memory of them and
-    running it anyway.
-    --quiet (repeated ``quiet`` times, so e.g. -qq's level 2 survives, not
-    just a single -q)/--fast/--force/--ci are re-passed explicitly: all were
-    consumed out of ``forwarded`` by the outer main(), so the inner denver
-    wouldn't otherwise know to honour them too -- none of these are read
-    back out of a real environment variable, so there's no other way for the
-    inner process to inherit them. ``forwarded`` (already stripped of any
-    '--' marker by the outer main(), see resolve_command) is re-introduced
-    with a fresh '--' here, so the re-invoked denver's own argv splitting
-    (main() splits on the first literal '--') separates it from denver's own
-    flags again instead of trying to parse it as one of them.
-    ``start_time`` (hidden --start-time flag) is the outer denver's own
-    ``time.time()`` at the very start of run_stages() -- carried across so
-    the "env started in Ns" line the inner denver prints right before
-    launching the command reflects the *whole* startup (including the
-    outer denver's own wrapper-stage work), not just the inner process's
-    own, much shorter, wall-clock.
-    ``cli_argv`` are the tokens the env's own 'args:' flags consumed (see
-    CliArgs), re-passed verbatim for the same reason as --fast/--force
-    above: the inner denver re-reads the same denver.yml, so it declares the
-    same flags -- but nobody would have given them to it, and every one
-    would quietly fall back to its 'default:'.
+
+    ``options`` is this invocation's own RunOptions, and essentially all of
+    it has to be re-passed: every one of these was consumed out of argv by
+    the outer main(), and none is read back out of a real environment
+    variable, so there is no other way for the inner process to inherit any
+    of them.
+
+    * --until/--skip, so a stage the user asked to skip stays skipped inside
+      the wrapper too, instead of the inner denver re-computing 'stages:'
+      from scratch with no memory of them and running it anyway;
+    * --quiet (repeated ``options.quiet`` times, so e.g. -qq's level 2
+      survives, not just a single -q), --fast/--force/--ci/--no-wait;
+    * the env's own 'args:' flags (``options.cli_args.argv``): the inner
+      denver re-reads the same denver.yml, so it declares the same flags --
+      but nobody would have given them to it, and every one would quietly
+      fall back to its 'default:';
+    * ``start_time`` (the hidden --start-time flag), the outer denver's own
+      ``time.time()`` at the very start of this startup -- carried across so
+      the "env started in Ns" line the inner denver prints right before
+      launching the command reflects the *whole* startup (including the
+      outer denver's own wrapper-stage work), not just the inner process's
+      own, much shorter, wall-clock.
+
+    ``forwarded`` (already stripped of any '--' marker by the outer main(),
+    see resolve_command) is re-introduced with a fresh '--' here, so the
+    re-invoked denver's own argv splitting (main() splits on the first
+    literal '--') separates it from denver's own flags again instead of
+    trying to parse it as one of them.
     """
+    options = options or RunOptions()
     filter_flags = []
-    if until_stage:
-        filter_flags += ["--until", until_stage]
-    for stage_id in (*skip_stages, *wrapper_stage_ids):
+    if options.until_stage:
+        filter_flags += ["--until", options.until_stage]
+    for stage_id in (*options.skip_stages, *wrapper_stage_ids):
         filter_flags += ["--skip", stage_id]
-    extra_flags = _reinvoke_flags(quiet=quiet, fast=fast, force=force, ci=ci, no_wait=no_wait, start_time=start_time)
     command = ["--", *forwarded] if forwarded else []
-    return [*_denver_launcher(), str(config_path), *filter_flags, *extra_flags, *cli_argv, *command]
+    return [
+        *_denver_launcher(),
+        str(config_path),
+        *filter_flags,
+        *_reinvoke_flags(options),
+        *options.cli_args.argv,
+        *command,
+    ]
 
 
 def _denver_launcher():
@@ -1245,15 +1239,19 @@ def _denver_launcher():
     return ["python3", str(Path(__file__).resolve())]
 
 
-def _reinvoke_flags(*, quiet, fast, force, ci, no_wait, start_time):
+def _reinvoke_flags(options):
     """The denver-own flags re-passed to the inner denver: -q once per level, then each flag that is set."""
-    flags = ["-q"] * quiet
-    for flag, enabled in (("--fast", fast), ("--force", force), ("--ci", ci), ("--no-wait", no_wait)):
+    flags = ["-q"] * options.quiet
+    toggles = (
+        ("--fast", options.fast),
+        ("--force", options.force),
+        ("--ci", options.ci),
+        ("--no-wait", options.no_wait),
+    )
+    for flag, enabled in toggles:
         if enabled:
             flags.append(flag)
-    if start_time is not None:
-        flags += ["--start-time", repr(start_time)]
-    return flags
+    return [*flags, "--start-time", repr(options.start_time)]
 
 
 def resolve_full_config(
@@ -1626,30 +1624,14 @@ def _print_env_started(ctx, start_time):
     print(f"\033[94m{line}\n| {text} |\n{line}\033[39m", file=sys.stderr)
 
 
-def run_stages(
-    env_dir,
-    config,
-    config_path,
-    forwarded,
-    *,
-    until_stage=None,
-    skip_stages=(),
-    quiet=0,
-    fast=False,
-    force=False,
-    ci=False,
-    dry_run=False,
-    no_wait=False,
-    start_time=None,
-    cli_args=None,
-):
+def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     """Build/enter the environment via its stages, then exec the command.
 
-    ``start_time`` is this whole startup's own ``time.time()`` origin,
-    threaded across a wrapper reinvocation (see reinvoke_command) for the
-    final "env started in Ns" line right before the resolved command
-    actually launches -- it must reflect the *whole* startup, not just the
-    reinvoked (inner) process's own, much shorter, wall-clock.
+    ``options`` is everything this invocation chose about *how* to run
+    (--until/--skip, -q, --fast/--force/--ci, --dry-run, --no-wait, the
+    env's own 'args:' flags, the startup clock) as one RunOptions value; it
+    defaults to "no flag given at all". See RunOptions for ``start_time``,
+    which reaches the final "env started in Ns" line.
 
     banner()'s '[i/n]' numbers every stage the env *declares* in 'stages:'
     (see ``all_stage_ids`` below), not just the ones actually running -- a
@@ -1670,25 +1652,24 @@ def run_stages(
     """
     from denver_providers.context import dry_run_legend
 
-    if start_time is None:
-        start_time = time.time()
+    options = options or RunOptions()
 
-    if dry_run:
+    if options.dry_run:
         dry_run_legend()
 
     all_stage_ids = _declared_stage_ids(config)
-    stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
+    stage_ids = filtered_stage_ids(config, env_dir, options.until_stage, options.skip_stages)
     config, ctx = _prepare_context(
         env_dir,
         config,
         config_path,
-        no_wait=no_wait,
-        quiet=quiet,
-        fast=fast,
-        force=force,
-        ci=ci,
-        dry_run=dry_run,
-        cli_args=cli_args,
+        no_wait=options.no_wait,
+        quiet=options.quiet,
+        fast=options.fast,
+        force=options.force,
+        ci=options.ci,
+        dry_run=options.dry_run,
+        cli_args=options.cli_args,
     )
 
     # each entry in 'stages:' is a pipeline stage (a provider type + config
@@ -1710,23 +1691,12 @@ def run_stages(
         stage_index=_stage_positions(all_stages),
         total=len(all_stages),
         stage_ids=stage_ids,
-        cutoff=_until_cutoff(all_stage_ids, until_stage),
+        cutoff=_until_cutoff(all_stage_ids, options.until_stage),
         all_stage_ids=all_stage_ids,
         all_stages=all_stages,
     )
 
     if active_wrappers:
-        run_options = _RunOptions(
-            until_stage=until_stage,
-            skip_stages=skip_stages,
-            quiet=quiet,
-            fast=fast,
-            force=force,
-            ci=ci,
-            no_wait=no_wait,
-            start_time=start_time,
-            cli_args=cli_args,
-        )
         _run_stages_via_wrapper(
             ctx,
             config,
@@ -1737,7 +1707,7 @@ def run_stages(
             skipped_wrappers=skipped_wrappers,
             skipped_setups=skipped_setups,
             skip_state=skip_state,
-            run_options=run_options,
+            options=options,
         )
     else:
         _run_stages_directly(
@@ -1749,8 +1719,8 @@ def run_stages(
             skipped_wrappers=skipped_wrappers,
             skipped_setups=skipped_setups,
             skip_state=skip_state,
-            quiet=quiet,
-            start_time=start_time,
+            quiet=options.quiet,
+            start_time=options.start_time,
         )
 
 
@@ -1881,18 +1851,46 @@ class _StageSkipState:
         self.all_stages = all_stages
 
 
-class _RunOptions:
-    """The per-invocation flags ``_run_stages_via_wrapper`` threads through to a wrapper reinvocation -- see run_stages."""
+class RunOptions:
+    """Everything one invocation chose about *how* to run an env, as one value -- see run_stages.
 
-    def __init__(self, *, until_stage, skip_stages, quiet, fast, force, ci, no_wait, start_time, cli_args=None):
+    These travel together from the command line all the way into a wrapper
+    reinvocation (see reinvoke_command), so they are passed as one bundle
+    rather than as a dozen parameters that every function in that chain
+    would have to name again. Every field defaults, so a caller that cares
+    about one flag (a test, mostly) states only that one.
+
+    ``start_time`` is resolved here rather than left as None: it is this
+    whole startup's clock origin, and the invocation *is* when the startup
+    began. A reinvoked denver is handed the outer run's own value (the
+    hidden --start-time), so the "env started in Ns" line always reflects
+    the whole startup rather than the inner process's much shorter one.
+    """
+
+    def __init__(
+        self,
+        *,
+        until_stage=None,
+        skip_stages=(),
+        quiet=0,
+        fast=False,
+        force=False,
+        ci=False,
+        dry_run=False,
+        no_wait=False,
+        start_time=None,
+        cli_args=None,
+    ):
+        """Hold one invocation's options; see the class docstring for ``start_time``."""
         self.until_stage = until_stage
         self.skip_stages = skip_stages
         self.quiet = quiet
         self.fast = fast
         self.force = force
         self.ci = ci
+        self.dry_run = dry_run
         self.no_wait = no_wait
-        self.start_time = start_time
+        self.start_time = time.time() if start_time is None else start_time
         self.cli_args = _cli_args(cli_args)
 
 
@@ -1931,7 +1929,7 @@ def _run_stages_via_wrapper(
     skipped_wrappers,
     skipped_setups,
     skip_state,
-    run_options,
+    options,
 ):
     """Host side: prepare the wrapper(s), then relocate execution into them (see run_stages)."""
     # Same single ordered walk as _run_stages_directly, for the same reason:
@@ -1955,13 +1953,13 @@ def _run_stages_via_wrapper(
             run_ids=set(_stage_ids_of(active_wrappers)),
             report_ids=report_ids,
             skip_state=skip_state,
-            quiet=run_options.quiet,
+            quiet=options.quiet,
         )
 
     cmd = _wrapper_target_cmd(
-        ctx, config, config_path, forwarded, active_wrappers=active_wrappers, setups=setups, run_options=run_options
+        ctx, config, config_path, forwarded, active_wrappers=active_wrappers, setups=setups, options=options
     )
-    _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, run_options, has_setups=bool(setups))
+    _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, has_setups=bool(setups))
 
 
 def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, skip_state, quiet):
@@ -1984,7 +1982,7 @@ def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, 
         _show_skipped(ctx, [stage], skip_state)
 
 
-def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers, setups, run_options):
+def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers, setups, options):
     """What the wrapper relocates: a denver reinvocation for the setup stages, else the command itself."""
     if not setups:
         # pure wrapper: relocate the user's command (or default) directly.
@@ -1995,20 +1993,7 @@ def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers,
     # -- it recomputes skipped_setups identically (same denver.yml,
     # same --until/--skip) and shows those banners itself.
     _note_not_previewed(ctx, "stages", setups, active_wrappers)
-    return reinvoke_command(
-        config_path,
-        forwarded,
-        _stage_ids_of(active_wrappers),
-        until_stage=run_options.until_stage,
-        skip_stages=run_options.skip_stages,
-        quiet=run_options.quiet,
-        fast=run_options.fast,
-        force=run_options.force,
-        ci=run_options.ci,
-        no_wait=run_options.no_wait,
-        start_time=run_options.start_time,
-        cli_argv=run_options.cli_args.argv,
-    )
+    return reinvoke_command(config_path, forwarded, _stage_ids_of(active_wrappers), options=options)
 
 
 def _note_not_previewed(ctx, what, setups, active_wrappers):
@@ -2034,12 +2019,12 @@ def _note_not_previewed(ctx, what, setups, active_wrappers):
     )
 
 
-def _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, run_options, *, has_setups):
+def _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, *, has_setups):
     """Wrap ``cmd`` through the active wrapper(s) and exec it, announcing a ready env if nothing re-invokes."""
     cmd = _wrap_cmd(ctx, cmd, active_wrappers, skip_state.stage_index, skip_state.total)
     # with no setup stages nothing re-invokes, so this is where the env is ready
-    if not has_setups and run_options.quiet < 2:
-        _print_env_started(ctx, run_options.start_time)
+    if not has_setups and options.quiet < 2:
+        _print_env_started(ctx, options.start_time)
     ctx.exec(cmd)
 
 
@@ -2665,11 +2650,12 @@ def _run_cli(argv=None):
         return
 
     _require_runnable(env_dir, config, config_path)
-    run_stages(
-        env_dir,
-        config,
-        config_path,
-        forwarded,
+    run_stages(env_dir, config, config_path, forwarded, options=_run_options(args, cli_args))
+
+
+def _run_options(args, cli_args):
+    """Everything the parsed command line chose about *how* to run, as one RunOptions."""
+    return RunOptions(
         until_stage=args.until,
         skip_stages=args.skip,
         quiet=args.quiet,

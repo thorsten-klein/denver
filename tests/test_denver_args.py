@@ -272,7 +272,12 @@ def test_reinvoke_command_re_passes_the_flags(tmp_path):
     # the inner denver re-reads the same denver.yml, so it declares the same
     # flags -- but nobody gave them to it, and each would fall back to its
     # 'default:'
-    cmd = denver.reinvoke_command(tmp_path / "denver.yml", ["echo", "hi"], ["docker"], cli_argv=["--target", "release"])
+    cmd = denver.reinvoke_command(
+        tmp_path / "denver.yml",
+        ["echo", "hi"],
+        ["docker"],
+        options=denver.RunOptions(cli_args=denver.CliArgs(argv=["--target", "release"])),
+    )
     assert cmd[cmd.index("--target") + 1] == "release"
     # ...still ahead of the forwarded command's own '--' marker
     assert cmd.index("--target") < cmd.index("--")
@@ -353,6 +358,11 @@ def test_resolve_full_config_without_cli_args(tmp_path, which):
 def test_frozen_reinvocation_carries_the_flags_too(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "bin" / "denver"))
-    cmd = denver.reinvoke_command(tmp_path / "denver.yml", [], ["docker"], cli_argv=["--target", "release"])
+    cmd = denver.reinvoke_command(
+        tmp_path / "denver.yml",
+        [],
+        ["docker"],
+        options=denver.RunOptions(cli_args=denver.CliArgs(argv=["--target", "release"])),
+    )
     assert cmd[0] == str(Path(tmp_path / "bin" / "denver").resolve())
     assert cmd[-2:] == ["--target", "release"]

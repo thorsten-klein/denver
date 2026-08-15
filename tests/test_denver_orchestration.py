@@ -353,7 +353,7 @@ def test_reinvoke_command_skips_every_wrapper_stage(tmp_path):
 
 def test_reinvoke_command_forwards_quiet(tmp_path):
     config_path = tmp_path / "e" / "denver.yml"
-    cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], quiet=True)
+    cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], options=denver.RunOptions(quiet=True))
     # -q must reach the re-invoked (in-container) denver -- it was already
     # stripped out of the forwarded args by the outer main()'s own parsing.
     assert "-q" in cmd
@@ -367,7 +367,10 @@ def test_reinvoke_command_forwards_original_until_and_skip(tmp_path):
     # wrapper -- the inner denver has no other way to know about them.
     config_path = tmp_path / "e" / "denver.yml"
     cmd = denver.reinvoke_command(
-        config_path, ["echo", "hi"], ["docker"], until_stage="conan", skip_stages=["uv-zephyr"]
+        config_path,
+        ["echo", "hi"],
+        ["docker"],
+        options=denver.RunOptions(until_stage="conan", skip_stages=["uv-zephyr"]),
     )
     assert cmd[cmd.index("--until") + 1] == "conan"
     skip_positions = [i for i, tok in enumerate(cmd) if tok == "--skip"]
@@ -376,7 +379,7 @@ def test_reinvoke_command_forwards_original_until_and_skip(tmp_path):
 
 def test_reinvoke_command_forwards_fast(tmp_path):
     config_path = tmp_path / "e" / "denver.yml"
-    cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], fast=True)
+    cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], options=denver.RunOptions(fast=True))
     # --fast must reach the re-invoked (in-container) denver too, for the
     # same reason as -q above -- it's what actually skips uv/conan/zephyr's
     # build steps, which run inside the container, not on the host.
@@ -519,7 +522,7 @@ def test_run_stages_wrapper_reinvocation_forwards_skip_stages(tmp_path, fake_pro
         "fakesetup": {"provider": "fakesetup"},
         "fakesetup2": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["fakesetup2"])
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["fakesetup2"]))
     args = exec_recorder["args"]
     skip_positions = [i for i, tok in enumerate(args) if tok == "--skip"]
     assert [args[i + 1] for i in skip_positions] == ["fakesetup2", "fakewrap"]
@@ -549,7 +552,9 @@ def test_run_stages_numbers_by_full_declared_stage_list(tmp_path, exec_recorder,
             "fakesetup2": {"provider": "fakesetup"},
             "fakesetup3": {"provider": "fakesetup"},
         }
-        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["fakesetup2"])
+        denver.run_stages(
+            env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["fakesetup2"])
+        )
     finally:
         del providers_module.PROVIDERS["fakesetup"]
     err = capsys.readouterr().err
@@ -583,7 +588,7 @@ def test_run_stages_summary_keeps_a_row_for_a_skipped_stage(tmp_path, fake_provi
         "one": {"provider": "fakesetup"},
         "two": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["two"])
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["two"]))
     assert re.search(r"two\s+skipped by --skip", capsys.readouterr().err)
 
 
@@ -597,7 +602,7 @@ def test_stage_summary_prints_nothing_without_stages(make_context, capsys):
 def test_run_stages_summary_silent_at_quiet_level_2(tmp_path, fake_providers, exec_recorder, capsys):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["one"], "one": {"provider": "fakesetup"}}
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], quiet=2)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(quiet=2))
     assert "one" not in capsys.readouterr().err
 
 
@@ -625,7 +630,9 @@ def test_run_stages_shows_skipped_stages_in_pipeline_order(tmp_path, exec_record
             "three": {"provider": "fakesetup"},
             "four": {"provider": "fakesetup"},
         }
-        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["two", "three"])
+        denver.run_stages(
+            env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["two", "three"])
+        )
     finally:
         del providers_module.PROVIDERS["fakesetup"]
     err = capsys.readouterr().err
@@ -661,7 +668,9 @@ def test_run_stages_shows_earlier_skips_before_a_stage_that_dies(tmp_path, exec_
             "boomer": {"provider": "fakedies"},
         }
         with pytest.raises(SystemExit):
-            denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["skipped-one"])
+            denver.run_stages(
+                env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["skipped-one"])
+            )
     finally:
         del providers_module.PROVIDERS["fakedies"]
     err = capsys.readouterr().err
@@ -695,7 +704,7 @@ def test_run_stages_shows_skipped_by_until_reason(tmp_path, fake_providers, exec
         "fakesetup": {"provider": "fakesetup"},
         "fakesetup2": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], until_stage="fakesetup")
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(until_stage="fakesetup"))
     err = capsys.readouterr().err
     assert "[2/2] stage 'fakesetup2' skipped by --until" in err
 
@@ -760,7 +769,7 @@ def test_run_stages_disabled_and_skipped_together_shows_skip_reason(tmp_path, fa
         "fakesetup": {"provider": "fakesetup"},
         "fakesetup2": {"provider": "fakesetup", "disabled": True},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["fakesetup2"])
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["fakesetup2"]))
     err = capsys.readouterr().err
     assert "[2/2] stage 'fakesetup2' skipped by --skip" in err
 
@@ -775,7 +784,7 @@ def test_run_stages_wrapper_shows_skipped_wrapper_banner_on_host(tmp_path, fake_
         "fakewrap": {"provider": "fakewrap"},
         "fakesetup": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["fakewrap"])
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["fakewrap"]))
     err = capsys.readouterr().err
     assert "[1/2] stage 'fakewrap' skipped by --skip" in err
     # the wrapper being skipped means fakesetup ran directly on the host
@@ -789,7 +798,7 @@ def test_run_stages_wrapper_reinvocation_forwards_quiet(tmp_path, fake_providers
         "fakewrap": {"provider": "fakewrap"},
         "fakesetup": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], quiet=True)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(quiet=True))
     # -q must be re-passed to the in-container denver, or the reinvoked
     # process (which does the actual uv/conan/zephyr build) stays noisy.
     assert "-q" in exec_recorder["args"]
@@ -802,7 +811,7 @@ def test_run_stages_wrapper_reinvocation_forwards_fast(tmp_path, fake_providers,
         "fakewrap": {"provider": "fakewrap"},
         "fakesetup": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], fast=True)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(fast=True))
     assert "--fast" in exec_recorder["args"]
 
 
@@ -820,7 +829,7 @@ def test_run_stages_skip_wrapper_stage_runs_on_host(tmp_path, fake_providers, ex
         "fakewrap": {"provider": "fakewrap"},
         "fakesetup": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], skip_stages=["fakewrap"])
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["fakewrap"]))
     assert "WRAP_SETUP" not in exec_recorder["env"]
     assert exec_recorder["env"]["RAN_FAKESETUP"] == "1"
     assert exec_recorder["args"] == ["echo", "hi"]
@@ -841,7 +850,9 @@ def test_run_stages_until_keeps_named_stage_and_everything_before_it(tmp_path, f
     # "run this stage alone" filter would have dropped), so the wrapper is
     # prepared and execution relocates into it, carrying the same --until on.
     env_dir, cfg_path = _env(tmp_path, _multi_stage_config())
-    denver.run_stages(env_dir, _multi_stage_config(), cfg_path, ["echo", "hi"], until_stage="fakesetup")
+    denver.run_stages(
+        env_dir, _multi_stage_config(), cfg_path, ["echo", "hi"], options=denver.RunOptions(until_stage="fakesetup")
+    )
     assert exec_recorder["env"]["WRAP_SETUP"] == "1"
     args = exec_recorder["args"]
     assert args[args.index("--until") + 1] == "fakesetup"
@@ -854,7 +865,7 @@ def test_run_stages_until_drops_stages_after_named_one(tmp_path, fake_providers,
         "fakesetup2": {"provider": "fakesetup"},
     }
     env_dir, cfg_path = _env(tmp_path, config)
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], until_stage="fakesetup")
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(until_stage="fakesetup"))
     assert exec_recorder["env"]["RAN_FAKESETUP"] == "1"
     # the command still runs, in the partial environment those stages built
     assert exec_recorder["args"] == ["echo", "hi"]
@@ -862,7 +873,9 @@ def test_run_stages_until_drops_stages_after_named_one(tmp_path, fake_providers,
 
 def test_run_stages_skip_excludes_named_stage(tmp_path, fake_providers, exec_recorder):
     env_dir, cfg_path = _env(tmp_path, _multi_stage_config())
-    denver.run_stages(env_dir, _multi_stage_config(), cfg_path, ["echo", "hi"], skip_stages=["fakesetup"])
+    denver.run_stages(
+        env_dir, _multi_stage_config(), cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["fakesetup"])
+    )
     assert "RAN_FAKESETUP" not in exec_recorder["env"]
 
 
@@ -875,8 +888,7 @@ def test_run_stages_until_and_skip_filters_out_everything_dies(tmp_path, fake_pr
             config,
             cfg_path,
             [],
-            until_stage="fakewrap",
-            skip_stages=["fakewrap"],
+            options=denver.RunOptions(until_stage="fakewrap", skip_stages=["fakewrap"]),
         )
 
 
