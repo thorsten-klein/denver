@@ -1,0 +1,57 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/main/.schema/devbox.schema.json",
+
+  "//": [
+    "Port of this folder's denver.yml to devbox. Written to spec and NOT",
+    "executed -- see ../PORTING-devbox.md.",
+    "",
+    "denver original: five stages --",
+    "  docker-with-tools    Ubuntu 24.04 container, everything below runs inside",
+    "  uv-packages          python 3.12.3 venv (conan, pytest)",
+    "  nvim-by-hand         one prebuilt release, downloaded/checksummed by hand",
+    "  tools-from-internet  cmake 3.31.9 + arm-none-eabi 15.3 via conan",
+    "  best-practices       the team's PYTEST_ADDOPTS convention",
+    "",
+    "PARTIAL ANSWER TO THE DOCKER STAGE -- devbox is the only one of the five",
+    "tools compared that has anything here at all: `devbox generate dockerfile`",
+    "and `devbox generate devcontainer` emit a container built FROM this",
+    "config. The direction is the reverse of denver's, though. denver takes an",
+    "image you specify (ubuntu:24.04, with its apt packages) and relocates the",
+    "remaining stages into it; devbox takes the environment it already resolved",
+    "and packages that as an image. So it covers 'ship this env as a container'",
+    "but not 'this project only builds on Ubuntu 24.04 with these apt",
+    "packages'. Different problem, same word.",
+    "",
+    "'nvim-by-hand' is the neovim line below. denver's version of that stage is",
+    "~60 lines across nvim/install.sh (download, checksum, atomic unpack,",
+    "idempotence), nvim/activate.sh (PATH) and nvim/nvim.env (the pins) --",
+    "written by hand on purpose, so doc/how-to.md can show what that job costs",
+    "right before showing conan doing it properly. Reading those three files",
+    "next to one line here is the sharpest single comparison in this port.",
+    "",
+    "UNVERIFIED VERSION for gcc-arm-embedded -- same caveat as",
+    "../raspberry-pico/devbox.json."
+  ],
+
+  "packages": [
+    "python@3.12.3",
+    "cmake@3.31.9",
+    "neovim@0.12.4",
+    "gcc-arm-embedded@latest"
+  ],
+
+  "env": {
+    "PYTEST_ADDOPTS": "-v -s"
+  },
+
+  "shell": {
+    "init_hook": [
+      "[ -d .venv ] || uv venv .venv",
+      ". .venv/bin/activate",
+      "uv pip install -q -r requirements.txt"
+    ],
+    "scripts": {
+      "test": ["pytest"]
+    }
+  }
+}

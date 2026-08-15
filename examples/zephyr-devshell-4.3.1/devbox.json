@@ -1,0 +1,71 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/main/.schema/devbox.schema.json",
+
+  "//": [
+    "Port of this folder's denver.yml (+ the ../zephyr-devshell base it",
+    "imports) to devbox. Written to spec and NOT executed -- see",
+    "../PORTING-devbox.md.",
+    "",
+    "denver original: five stages, split across two folders --",
+    "  ../zephyr-devshell/denver.yml   the shared base, 'runnable: false'",
+    "  ./denver.yml                    ONLY the 4.3.1 pins, via 'import:'",
+    "",
+    "GAP (structural) -- LAYERING. devbox has no `import: ../sibling-env`.",
+    "Its composition mechanisms are plugins (`include`) and, for multi-project",
+    "repos, workspace-style layouts -- neither of which expresses 'inherit that",
+    "folder's whole environment and override three keys'. The base has",
+    "therefore been FLATTENED into this file, which loses exactly the property",
+    "the two-folder split exists to demonstrate: that five sibling repos share",
+    "one base and each add a handful of lines. There is no port of",
+    "../zephyr-devshell/ as a base, because devbox has no notion of a",
+    "non-runnable, inherit-only environment.",
+    "",
+    "GAP (hard) -- WEST. Stages 4 and 5 run `west update` (clone ~40 pinned",
+    "repos), `west patches`, `west blobs`, and then install whatever python",
+    "packages the freshly-cloned modules turn out to declare",
+    "(`west packages pip`). That last set is not knowable until stage 4 has",
+    "run. devbox's init_hook is one hook, not an ordered pipeline with",
+    "fingerprinting, so the scripts below have to be invoked by hand and in the",
+    "right order.",
+    "",
+    "GAP -- no equivalent of denver's `no-index: auto` offline install against",
+    "the conan-provided wheel cache (UV_FIND_LINKS), of `venv-patcher:`, of",
+    "`skip-if:`, or of `freeze-to:` writing requirements.final.txt back into",
+    "the tree."
+  ],
+
+  "packages": [
+    "python@3.12.3",
+    "cmake@latest",
+    "ninja@latest",
+    "ccache@latest",
+    "git@latest",
+    "uv@latest"
+  ],
+
+  "env": {
+    "CONAN_HOME": "$PWD/.devbox/conan2",
+    "ZEPHYR_VERSION": "4.3.1"
+  },
+
+  "shell": {
+    "init_hook": [
+      "[ -d .venv ] || uv venv .venv",
+      ". .venv/bin/activate",
+      "uv pip install -q west conan",
+      ". ../zephyr-devshell/hooks/env.sh"
+    ],
+    "scripts": {
+      "west-init": ["west init -l ."],
+      "west-update": ["west update"],
+      "west-blobs": ["west blobs fetch"],
+      "west-packages": ["uv pip install $(west packages pip)"],
+      "setup": [
+        "devbox run west-init",
+        "devbox run west-update",
+        "devbox run west-blobs",
+        "devbox run west-packages"
+      ]
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/main/.schema/devbox.schema.json",
+
+  "//": [
+    "Port of this folder's denver.yml to devbox (https://www.jetify.com/devbox).",
+    "Written to spec and NOT executed -- devbox and nix are not installed in the",
+    "repo that produced this branch. See ../PORTING-devbox.md.",
+    "",
+    "denver original: 'uv' -> 'conan'. A cross-compilation toolchain, no Docker.",
+    "",
+    "This is where devbox is strongest of the five tools compared: nixpkgs has",
+    "the ARM bare-metal toolchain packaged and cached, so the half of this env",
+    "that costs denver a conan recipe costs devbox one line.",
+    "",
+    "UNVERIFIED VERSION -- nixpkgs packages the toolchain as gcc-arm-embedded,",
+    "but pinning it to exactly 15.3 depends on some nixpkgs revision having",
+    "built that version, and devbox's @version syntax resolves against its own",
+    "search index. denver's conan/recipes/arm-none-eabi/15.3/ pins the upstream",
+    "ARM tarball and checksum directly, so it never depends on a third party",
+    "having packaged that exact release.",
+    "",
+    "GAP (hard) -- pico-sdk is not in nixpkgs, and denver's recipe also *builds",
+    "picotool from source*. Neither has a devbox equivalent short of writing a",
+    "Nix derivation, which is the thing devbox exists to let you avoid. It",
+    "degrades to the shell script below."
+  ],
+
+  "packages": [
+    "python@3.12",
+    "uv@0.12.3",
+    "cmake@latest",
+    "ninja@latest",
+    "gcc-arm-embedded@latest"
+  ],
+
+  "env": {
+    "CONAN_HOME": "$PWD/.devbox/conan2"
+  },
+
+  "shell": {
+    "init_hook": [
+      "[ -d .venv ] || uv venv .venv",
+      ". .venv/bin/activate",
+      "uv pip install -q -r requirements.txt"
+    ],
+    "scripts": {
+      "pico-sdk": [
+        "echo 'TODO: fetch pico-sdk 2.3.0 and build picotool -- not in nixpkgs'"
+      ],
+      "conan-install": [
+        "conan install conan/conanfile.py --build=missing"
+      ]
+    }
+  }
+}

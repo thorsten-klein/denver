@@ -1,0 +1,48 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/main/.schema/devbox.schema.json",
+
+  "//": [
+    "Port of this folder's denver.yml to devbox (https://www.jetify.com/devbox).",
+    "Written to spec and NOT executed -- devbox and nix are not installed in the",
+    "repo that produced this branch. See ../PORTING-devbox.md for the fidelity",
+    "report.",
+    "",
+    "denver original: three 'custom' stages demonstrating stage-to-stage env",
+    "propagation, plus one env-specific CLI flag (--greeting).",
+    "",
+    "GAP -- denver's 'args:' declared a real argparse flag (--greeting, default",
+    "'hello'), listed by `denver simple-env --help` and delivered as",
+    "DENVER_ARG_GREETING. devbox has no per-project CLI argument declaration.",
+    "Nearest equivalent: the GREETING default below."
+  ],
+
+  "packages": [],
+
+  "env": {
+    "GREETING": "hello"
+  },
+
+  "shell": {
+    "//": [
+      "denver's 'set-vars' stage used `source: custom.sh` so the exports fold",
+      "into every later stage and the final command. devbox's init_hook runs in",
+      "the shell it hands you, so sourcing there is the direct equivalent.",
+      "",
+      "GAP -- 'print-vars-before' demonstrated that the vars are NOT set yet at",
+      "that point in the pipeline. init_hook is a single hook, not an ordered",
+      "list of stages with observable state between them, so running the",
+      "'before' echo here would print the vars as already set and demonstrate",
+      "the opposite of what the original does. It is therefore a script below",
+      "rather than part of entry."
+    ],
+    "init_hook": [
+      ". ./custom.sh",
+      "echo \"[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR greeting=$GREETING\""
+    ],
+    "scripts": {
+      "print-vars-before": [
+        "echo \"[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR\""
+      ]
+    }
+  }
+}

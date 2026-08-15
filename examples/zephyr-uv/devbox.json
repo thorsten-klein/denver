@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/main/.schema/devbox.schema.json",
+
+  "//": [
+    "Port of this folder's denver.yml to devbox. Written to spec and NOT",
+    "executed -- see ../PORTING-devbox.md.",
+    "",
+    "denver original: a single 'uv' stage -- a virtualenv with two pinned",
+    "packages, nothing else."
+  ],
+
+  "packages": [
+    "python@3.12",
+    "uv@0.9.13"
+  ],
+
+  "shell": {
+    "//": [
+      "devbox has no first-class venv concept the way devenv and mise do, so",
+      "creating and activating it is init_hook shell script -- closer to the",
+      "hand-rolled system_venv.sh that denver's uv provider was written to",
+      "replace than to the provider itself.",
+      "",
+      "GAP -- denver fingerprinted requirements.txt and re-installed only when",
+      "it changed. The `uv pip install` below runs on every shell entry. uv",
+      "makes that cheap, but it is not the same guarantee."
+    ],
+    "init_hook": [
+      "[ -d .venv ] || uv venv .venv",
+      ". .venv/bin/activate",
+      "uv pip install -q -r requirements.txt"
+    ],
+    "scripts": {}
+  }
+}
