@@ -11,6 +11,17 @@
 # moved to ../zephyr-devshell/4.3.1/ -- see the long comment in
 # ../zephyr-devshell/mise.toml.
 
+[settings]
+# Required to install python 3.12.3 at all: mise verifies GitHub artifact
+# attestations by default, and the python-build-standalone release for
+# 3.12.3 (2024-04-15) predates them, so the install fails outright with
+# "No GitHub artifact attestations found".
+#
+# Worth noticing as a difference in kind: denver's uv stage pins 3.12.3
+# because that is what the container ships, and uv simply fetches it. Here
+# pinning an older interpreter means opting out of a supply-chain check.
+python.github_attestations = false
+
 [tools]
 python = "3.12.3"
 cmake = "latest"
@@ -20,10 +31,25 @@ ccache = "latest"
 [tools."pipx:west"]
 version = "latest"
 
+# NOT DECLARED, AND THAT IS THE POINT -- gcc, g++, dtc (device-tree-compiler)
+# and gperf all have to be on the host already for this build to work; they
+# came from apt when this port was verified. native_sim compiles for the
+# host, and mise has no backend for a C toolchain or for distro packages, so
+# unlike the pixi port (which takes gcc/dtc/gperf from conda-forge) this
+# environment is not self-contained. That is mise's documented gap showing
+# up in practice rather than in prose.
+
 [env]
-_.python.venv = { path = ".venv", create = true }
+# `--seed` is load-bearing: mise creates this venv with uv, which does not
+# install pip into it by default. Zephyr's build-time python packages cannot
+# be declared up front (see the west-packages task below), so they have to be
+# installed imperatively into this venv -- which means it needs a pip inside
+# it. Without --seed the install fails with "No module named pip".
+_.python.venv = { path = ".venv", create = true, uv_create_args = ["--seed"] }
 CONAN_HOME = "{{config_root}}/.mise/conan2"
 ZEPHYR_VERSION = "4.3.1"
+# native_sim compiles for the host rather than with the Zephyr SDK.
+ZEPHYR_TOOLCHAIN_VARIANT = "host"
 
 # --- stages 4 and 5: where this stops being expressible --------------------
 #
@@ -66,3 +92,10 @@ depends = ["west-update"]
 [tasks.setup]
 depends = ["west-update", "west-blobs", "west-packages"]
 run = "echo 'workspace ready'"
+
+# The build this port is verified against. See ../PORTING-mise.md for exactly
+# what was and was not proven by it -- in particular, ZEPHYR_BASE points at a
+# workspace mise did not create, because `west update` has to run before the
+# python dependency set is even knowable.
+[tasks.build-hello-world]
+run = "west build -p always $ZEPHYR_BASE/samples/hello_world -b native_sim/native/64"

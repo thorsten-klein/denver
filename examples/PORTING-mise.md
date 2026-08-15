@@ -4,11 +4,65 @@ An honest attempt to express each of denver's seven bundled examples as a
 [mise](https://mise.jdx.dev) config, to find out where the two tools actually
 disagree.
 
-**These ports are unverified.** mise is not installed in the environment this
-branch was produced in, so nothing here has been resolved, installed or run.
-Backend/tool identifiers that were assumed rather than checked are marked
-UNVERIFIED inline. Treat this as a design comparison, not as working
-configuration.
+**Most of these ports are unverified**, with one important exception:
+`zephyr-devshell-4.3.1` has since been **built and run for real** — see
+"Verified build" below. Everything else was written to spec and not executed;
+backend/tool identifiers that were assumed rather than checked are marked
+UNVERIFIED inline.
+
+## Verified build (`zephyr-devshell-4.3.1`)
+
+```
+mise run build-hello-world
+  -> west build -p always $ZEPHYR_BASE/samples/hello_world -b native_sim/native/64
+```
+
+**Result: passes.** 92/92 ninja targets, `zephyr.elf` linked, and the
+resulting `zephyr.exe` runs:
+
+```
+*** Booting Zephyr OS build 75f67d766726 ***
+Hello World! native_sim/native/64
+```
+
+Verified with mise 2026.8.6, python 3.12.3, cmake 4.4.2, ninja 1.13.2 and
+west 1.5.0 (all installed by mise), against a workspace at Zephyr v4.3.1
+(54 repos, 2.2 GB) cloned from this env's own
+[`west.yml`](zephyr-devshell-4.3.1/west.yml).
+
+### What that does and does not prove
+
+Three changes were needed, each a finding in its own right:
+
+1. **`python.github_attestations = false` in `[settings]`.** Without it,
+   installing python 3.12.3 fails outright — mise verifies GitHub artifact
+   attestations by default, and the python-build-standalone release for 3.12.3
+   (April 2024) predates them. Pinning the interpreter denver pins therefore
+   means opting out of a supply-chain check. That is a genuinely awkward
+   trade, and it is not one denver's `uv` stage has to make.
+2. **`uv_create_args = ["--seed"]` on the venv.** mise creates the venv with
+   uv, which does not seed pip. Zephyr's build-time python packages cannot be
+   declared up front (gap 4 below), so they must be installed imperatively into
+   that venv — which then needs a pip inside it. Without `--seed` the install
+   fails with "No module named pip".
+3. **`ZEPHYR_TOOLCHAIN_VARIANT=host`**, since `native_sim` compiles for the
+   host.
+
+And two things it does **not** prove:
+
+> **`ZEPHYR_BASE` points at a workspace mise did not create.** The build ran
+> against a workspace cloned beforehand by a bootstrap `west`, because
+> `west update` has to happen before the dependency set in point 2 is even
+> knowable. This verifies that a mise environment can build Zephyr; it does
+> not verify that mise can bring that environment into existence from a clean
+> checkout the way `denver examples/zephyr-devshell-4.3.1` does.
+
+> **The environment is not self-contained.** `gcc`, `g++`, `dtc` and `gperf`
+> had to be present on the host already — they came from `apt` when this was
+> verified. `native_sim` compiles for the host, and mise has no backend for a
+> C toolchain or for distro packages. The pixi port of the same env takes all
+> four from conda-forge and *is* self-contained; this one is not. That is
+> mise's documented gap showing up in practice rather than in prose.
 
 Ports are additive: each `mise.toml` sits next to the `denver.yml` it was
 derived from. No example was modified.
