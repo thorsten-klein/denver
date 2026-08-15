@@ -280,6 +280,29 @@ something nobody meant to run.
 Both compose with `--show-config`, so you can check what an override
 actually does before running it for real.
 
+## Command-line environment variables
+
+`-e`/`--env NAME[=VALUE]` sets an environment variable for this run — the
+"as if you'd exported it in your shell first" counterpart to `-c`'s config
+overrides. Applied to denver's own process (`os.environ`), to every stage
+and hook (`ctx.env`), and to the final command; repeatable, later entries
+win over earlier ones of the same name, the same as `-c`. `NAME` alone (no
+`=`) forwards `NAME`'s current value out of denver's own environment,
+mirroring `docker run -e`'s own shorthand.
+
+It always wins over the same name set by the env's own declarative `env:`
+map (applied *before* any stage runs, right after the `env` hook — see
+"Hooks and scripts"), the same way `-c` always wins over `import:`/`-cf`.
+
+A wrapper stage that relocates into an actual container (`docker`) is a
+fresh process with its own, separate environment, so `-e` values are handed
+across that boundary explicitly two ways: as `--env NAME=VALUE` flags on the
+re-invoked denver (see "Wrapper / relocation" below), and as `docker compose
+run -e NAME=VALUE` flags on the container itself — the same mechanism that
+already carries `DENVER_IN_CONTAINER`/`DENVER_RELOCATED` across (see
+`docker.py`'s `_relocation_env`). A `custom` stage's `launcher:` needs
+neither: its child simply inherits `ctx.env` like any other exec.
+
 ## Environment-specific CLI arguments
 
 `-c` can set *anything*, which is exactly why it makes a poor interface for

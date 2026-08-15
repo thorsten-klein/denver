@@ -611,6 +611,33 @@ def test_wrap_forwards_the_relocating_stage_ids(make_context, run_recorder, whic
     assert "DENVER_RELOCATED=docker" in n.wrap(ctx, ["fish"])
 
 
+def test_wrap_forwards_cli_env_vars(make_context, run_recorder, which):
+    # a container's environment comes from the image and the compose file,
+    # not from this process -- so a -e/--env value has to be handed across
+    # the boundary explicitly, the same way DENVER_RELOCATED is.
+    config = {"docker": docker_cfg()}
+    ctx = make_context(config=config)
+    write_compose(ctx)
+    ctx, n = run_docker(config, ctx)
+    ctx.set("MY_VAR", "hello")
+    ctx.set("DENVER_CLI_ENV_VAR_NAMES", "MY_VAR")
+    cmd = n.wrap(ctx, ["fish"])
+    assert cmd[cmd.index("MY_VAR=hello") - 1] == "-e"
+
+
+def test_wrap_forwards_no_cli_env_vars_by_default(make_context, run_recorder, which):
+    # nothing named in ctx.env is forwarded unless it went through -e/--env
+    # (see DENVER_CLI_ENV_VAR_NAMES) -- forwarding ctx.env wholesale would
+    # leak the whole host environment into the container.
+    config = {"docker": docker_cfg()}
+    ctx = make_context(config=config)
+    write_compose(ctx)
+    ctx, n = run_docker(config, ctx)
+    ctx.set("MY_VAR", "hello")
+    cmd = n.wrap(ctx, ["fish"])
+    assert not any("MY_VAR" in str(part) for part in cmd)
+
+
 def test_wrap_shows_run_banner(make_context, run_recorder, which, capsys):
     config = {"docker": docker_cfg()}
     ctx = make_context(config=config, quiet=1)

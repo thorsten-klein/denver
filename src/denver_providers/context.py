@@ -333,6 +333,16 @@ RELOCATED_VAR = "DENVER_RELOCATED"
 # denver did *not* create -- one a user started by hand.
 IN_CONTAINER_VAR = "DENVER_IN_CONTAINER"
 
+# Set (only when -e/--env was given) to every name the CLI --env flag
+# supplied, comma-joined -- denver's own bookkeeping, the same way
+# RELOCATED_VAR names which stages relocated this run. Naming just the
+# *names* (each value already lives under its own key in ctx.env) is what
+# lets a wrapper that crosses a real process boundary (docker) forward
+# exactly those entries explicitly -- see docker.py's _relocation_env --
+# instead of the whole of ctx.env, most of which the container's own image
+# already provides its own way.
+CLI_ENV_VAR_NAMES = "DENVER_CLI_ENV_VAR_NAMES"
+
 # Files a container runtime leaves behind, most common first. Deliberately
 # not /proc/self/cgroup string-matching: under cgroup v2 that file is often
 # just '0::/' whether containerised or not, so it answers nothing.
@@ -556,6 +566,18 @@ class Context:
         """
         value = self.env.get(RELOCATED_VAR, "")
         return [stage for stage in value.split(",") if stage]
+
+    @property
+    def cli_env_vars(self):
+        """``{name: value}`` for every ``-e``/``--env`` entry this invocation was given, or ``{}``.
+
+        Read back out of ctx.env (see denver.py's resolve_full_config, which
+        is what sets CLI_ENV_VAR_NAMES) rather than kept separately, the same
+        pattern ``relocated`` uses -- so it survives untouched across
+        whatever else touches ctx.env in between.
+        """
+        names = self.env.get(CLI_ENV_VAR_NAMES, "")
+        return {name: self.env.get(name, "") for name in names.split(",") if name}
 
     @property
     def cache_dir(self):

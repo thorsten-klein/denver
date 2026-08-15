@@ -368,6 +368,19 @@ def test_relocated_ignores_an_empty_value(make_context):
     assert ctx.relocated == []
 
 
+def test_cli_env_vars_defaults_to_empty(make_context):
+    ctx = make_context()
+    assert ctx.cli_env_vars == {}
+
+
+def test_cli_env_vars_reads_named_entries_back_out_of_ctx_env(make_context):
+    ctx = make_context()
+    ctx.set("FOO", "bar")
+    ctx.set("BAZ", "qux")
+    ctx.set(ctxmod.CLI_ENV_VAR_NAMES, "FOO,BAZ")
+    assert ctx.cli_env_vars == {"FOO": "bar", "BAZ": "qux"}
+
+
 def test_builtins_host(make_context):
     ctx = make_context(in_container=False)
     assert ctx.env["DENVER_ENV_NAME"] == "myenv"
