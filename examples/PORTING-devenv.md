@@ -4,11 +4,89 @@ An honest attempt to express each of denver's seven bundled examples as a
 [devenv](https://devenv.sh) project, to find out where the two tools actually
 disagree.
 
-**These ports are unverified.** Neither devenv nor nix is installed in the
-environment this branch was produced in, so nothing here has been evaluated or
-run, and no `devenv.yaml` (the nixpkgs input pin) is included. Package versions
-that were assumed rather than checked are marked UNVERIFIED inline. Treat this
-as a design comparison, not as working configuration.
+**Most of these ports are unverified**, with one important exception:
+`zephyr-devshell-4.3.1` (and the `zephyr-devshell` base it imports) has since
+been **built and run for real** — see "Verified build" below. Everything else
+was written to spec and not executed; package versions assumed rather than
+checked are marked UNVERIFIED inline.
+
+## Verified build (`zephyr-devshell-4.3.1`)
+
+```
+devenv shell -- west build -p always $ZEPHYR_BASE/samples/hello_world \
+    -b native_sim/native/64
+```
+
+**Result: passes.** 92/92 ninja targets, and the resulting `zephyr.exe` runs:
+
+```
+*** Booting Zephyr OS build 75f67d766726 ***
+Hello World! native_sim/native/64
+```
+
+Verified with devenv 2.2.0 on Determinate Nix 2.34.8, **CPython 3.12.3 exactly**,
+cmake 4.3.4, gcc 15.3.0, west 1.5.0, against a workspace at Zephyr v4.3.1
+(54 repos, 2.2 GB).
+
+`imports = [ ../zephyr-devshell/devenv.nix ]` works as claimed: the base
+module's packages and settings reached the build through Nix module
+composition. Of the five tools, only devenv and flox have a real counterpart
+to denver's `import:`, and this is that claim executed rather than asserted.
+
+### The finding that matters most
+
+**A Nix-backed environment is not automatically hermetic.**
+
+The port built successfully *before* `dtc` and `gperf` were declared — because
+it silently picked up `/usr/bin/dtc` and `/usr/bin/gperf`, the host's apt
+packages. A `devenv shell` keeps the host `PATH` behind its own, so a package
+you forgot to declare degrades to *whatever the machine happens to have*
+rather than to a clear error.
+
+That is precisely the failure mode denver's
+["explicit over implicit"](../doc/philosophy.md) principle exists to prevent —
+appearing in the tool with the strongest reproducibility story of the five, and
+appearing *silently*. The build passing is what makes it dangerous: nothing
+tells you the environment is under-specified. Both are now declared.
+
+### `hooks/env.sh` behaves differently here than under devbox
+
+Worth reading next to [`PORTING-devbox.md`](PORTING-devbox.md), which found
+that the shared base's `hooks/env.sh` **crashes** devbox's `init_hook`
+(`dirname: missing operand`, because `$BASH_SOURCE` is empty there).
+
+Under devenv it does **not** crash: `${./hooks/env.sh}` copies the file into
+the Nix store and sources it by absolute path, so `$BASH_SOURCE` is set. But it
+still reads `WEST_TOPDIR` and `DENVER_ENV_WORKDIR` — denver built-ins that
+exist nowhere else — so it quietly exports a `CMAKE_PREFIX_PATH` ending in
+`/zephyr-rtos` and a `CTCACHE_DIR` of `/ctcache`.
+
+devbox fails loudly and devenv succeeds wrongly. The second is worse, and
+neither is a portable use of that file.
+
+### Other changes needed
+
+1. **`devenv.yaml` did not exist.** The original port omitted it entirely, so
+   the environment could never have evaluated — `devenv.nix` alone is not an
+   environment.
+2. **`languages.python.version = "3.12.3"` needs a second flake input.**
+   devenv refuses to evaluate without `nixpkgs-python`, because plain nixpkgs
+   carries only whatever 3.12.x its revision sits on. denver pins 3.12.3 by
+   simply fetching it. Once added, devenv delivered 3.12.3 *exactly* — the only
+   tool of the five to match denver's pin precisely (flox gave 3.12.13; mise
+   needed a supply-chain check disabled to get 3.12.3 at all).
+3. **west was never installed.** Added to `languages.python.venv.requirements`
+   rather than `packages`, so it lands in the venv Zephyr's build scripts
+   import from.
+4. **`ZEPHYR_TOOLCHAIN_VARIANT=host`.**
+
+### What it does not prove
+
+> **`ZEPHYR_BASE` points at a workspace devenv did not create**, because
+> `west update` must run before Zephyr's python dependency set is knowable.
+> devenv's `tasks` can *order* the west steps and `status` can skip them, which
+> is more than any other tool here manages — but the packages installed by
+> `zephyr:west-packages` still cannot be declared, only executed.
 
 Ports are additive: each `devenv.nix` sits next to the `denver.yml` it was
 derived from. No example was modified.

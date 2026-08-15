@@ -16,9 +16,32 @@
   # else comes from the imported base.
   languages.python.version = "3.12.3";
 
-  env.ZEPHYR_VERSION = "4.3.1";
+  # west is a python package, so it belongs in the venv rather than in
+  # `packages` -- Zephyr's own build scripts import from that same venv, and a
+  # nixpkgs-level west would sit outside it.
+  languages.python.venv.requirements = ''
+    west
+    conan
+  '';
 
-  packages = [ pkgs.uv ];
+  env.ZEPHYR_VERSION = "4.3.1";
+  # native_sim compiles for the host rather than with the Zephyr SDK.
+  env.ZEPHYR_TOOLCHAIN_VARIANT = "host";
+
+  packages = [
+    pkgs.uv
+    # dtc and gperf have to be declared explicitly, and finding that out is a
+    # finding in itself: without them the build still worked, because it
+    # silently picked up /usr/bin/dtc and /usr/bin/gperf from the host's apt
+    # packages. A Nix-backed environment is not automatically hermetic -- a
+    # devenv shell keeps the host PATH behind its own, so a missing package
+    # degrades to "whatever the machine has" rather than to a clear error.
+    # That is exactly the failure mode denver's "explicit over implicit"
+    # principle is written against, appearing in the tool with the strongest
+    # reproducibility story of the five.
+    pkgs.dtc
+    pkgs.gperf
+  ];
 
   tasks = {
     # Stages 4 and 5. devenv's task graph orders these correctly via

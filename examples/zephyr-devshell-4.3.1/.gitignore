@@ -1,0 +1,5 @@
+# devenv's own state dir (venv, build artefacts, profiles) -- generated, never
+# committed. devenv.lock and devenv.yaml above it are committed: they are the
+# input pins that make the environment reproducible.
+.devenv/
+.devenv.flake.nix

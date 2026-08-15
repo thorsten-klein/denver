@@ -1,0 +1,29 @@
+# devenv's input pin -- the Nix flake inputs this environment resolves
+# against. The original port of this env omitted this file entirely, which is
+# why nothing in it could ever have evaluated: devenv.nix on its own is not a
+# complete environment.
+#
+# denver has no equivalent concept. Its providers fetch from the upstream
+# sources named in each recipe/requirements file, so there is no separate
+# "which universe of packages" pin to keep. That is simultaneously devenv's
+# big reproducibility advantage over denver and one more file to maintain.
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+
+  # Required by `languages.python.version = "3.12.3"` in devenv.nix. Without
+  # it devenv refuses to evaluate at all:
+  #
+  #   error: To use 'languages.python.version', run the following command:
+  #     $ devenv inputs add nixpkgs-python github:cachix/nixpkgs-python
+  #
+  # Worth recording as a difference in kind. denver pins 3.12.3 because that
+  # is the interpreter the container ships and uv simply fetches it. Here,
+  # asking for a specific patch version means adding a whole second package
+  # universe to the environment, because plain nixpkgs carries only one
+  # python 3.12.x at whatever patch level its revision happens to be on.
+  nixpkgs-python:
+    url: github:cachix/nixpkgs-python
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
