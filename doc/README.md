@@ -56,6 +56,12 @@ flag list.
 
 ## Background
 
+- **[`alternatives.md`](alternatives.md)** — when to use something else.
+  denver compared against pixi, mise, devbox, devenv and flox, based on
+  porting all seven bundled examples to each; which tool to pick instead and
+  why, the four things none of them do, and what "reproducible" does and does
+  not mean here. Read this before adopting denver.
+
 - **[`philosophy.md`](philosophy.md)** — the design principles behind all of
   the above: genericity, explicit over implicit, central default resolution,
   fail loud on the unexpected, fast-but-never-at-the-cost-of-correctness, the
