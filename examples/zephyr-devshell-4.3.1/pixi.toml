@@ -26,7 +26,7 @@
 #    be complete up front. The port below can install west; it cannot
 #    reproduce the pipeline west then drives.
 
-[project]
+[workspace]
 name = "zephyr-devshell-4.3.1"
 channels = ["conda-forge"]
 platforms = ["linux-64"]
@@ -37,6 +37,20 @@ cmake = "*"
 ninja = "*"
 ccache = "*"
 git = "*"
+# Zephyr's own build scripts need a large set of python packages that this
+# manifest cannot declare (see the west-packages note below), so they have to
+# be installed imperatively into the environment pixi built -- which needs a
+# pip in it. denver never had this problem: its uv stage owns the venv, so
+# `west packages pip` output can be handed straight to uv.
+pip = "*"
+# native_sim compiles for the host, so Zephyr needs a host toolchain rather
+# than a cross one. Taking gcc from conda-forge rather than depending on
+# whatever the machine has is the whole point of using pixi here.
+gcc = "*"
+gxx = "*"
+# Zephyr's build calls dtc (device tree compiler) and gperf directly.
+dtc = "*"
+gperf = "*"
 
 [pypi-dependencies]
 west = "*"
@@ -58,6 +72,10 @@ ZEPHYR_VERSION = "4.3.1"
 [environments]
 default = ["devshell-base", "zephyr-431"]
 
+[activation.env]
+# native_sim builds with the host compiler rather than the Zephyr SDK.
+ZEPHYR_TOOLCHAIN_VARIANT = "host"
+
 [tasks]
 # GAP -- denver ran these as ordered stages on entry, with fingerprinting so
 # an unchanged workspace skips the expensive work. Here they are manual
@@ -67,7 +85,13 @@ west-update = "west update"
 west-blobs = "west blobs fetch"
 # ...and this one cannot be a dependency of anything, because what it
 # installs is only discoverable after west-update has finished:
-west-packages = "uv pip install $(west packages pip)"
+west-packages = "python -m pip install -r $ZEPHYR_BASE/scripts/requirements.txt"
+
+# The build this port is verified against. See ../PORTING-pixi.md for exactly
+# what was and was not proven by it -- in particular, ZEPHYR_BASE points at a
+# workspace pixi did not create, because `west update` has to happen before
+# the dependency set above is even knowable.
+build-hello-world = "west build -p always $ZEPHYR_BASE/samples/hello_world -b native_sim/native/64"
 
 # GAP -- no equivalent of denver's 'uv: no-index: auto' offline install
 # against the conan-provided wheel cache (UV_FIND_LINKS), of 'venv-patcher:',

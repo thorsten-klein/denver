@@ -4,11 +4,64 @@ An honest attempt to express each of denver's seven bundled examples as a
 [pixi](https://pixi.sh) project, to find out where the two tools actually
 disagree.
 
-**These ports are unverified.** pixi is not installed in the environment this
-branch was produced in, so nothing here has been solved, locked or run. Package
-names and version availability on conda-forge are marked UNVERIFIED inline
-wherever they were assumed rather than checked. Treat this as a design
-comparison, not as working configuration.
+**Most of these ports are unverified**, with one important exception:
+`zephyr-devshell-4.3.1` has since been **built and run for real** — see
+"Verified build" below. Everything else here was written to spec and not
+executed; package names and version availability on conda-forge are marked
+UNVERIFIED inline wherever they were assumed rather than checked.
+
+## Verified build (`zephyr-devshell-4.3.1`)
+
+```
+pixi run build-hello-world
+  -> west build -p always $ZEPHYR_BASE/samples/hello_world -b native_sim/native/64
+```
+
+**Result: passes.** 92/92 ninja targets, `zephyr.elf` linked, and the
+resulting `zephyr.exe` runs:
+
+```
+*** Booting Zephyr OS build 75f67d766726 ***
+Hello World! native_sim/native/64
+```
+
+Verified with pixi 0.76.2, python 3.12.3 from conda-forge, west 1.5.0, against
+a workspace at Zephyr v4.3.1 (54 repos, 2.2 GB) cloned from this env's own
+[`west.yml`](zephyr-devshell-4.3.1/west.yml).
+
+### What that does and does not prove
+
+Getting to a passing build required four changes to the port, and each one is
+itself a finding:
+
+1. **`[project]` → `[workspace]`.** The original used a key pixi now
+   deprecates. Purely cosmetic, but it is what an unverified port looks like.
+2. **`pip` had to be added as a dependency.** Zephyr's build needs ~30 python
+   packages that this manifest *cannot declare* (see gap 3 below), so they have
+   to be installed imperatively into the environment pixi built — which means
+   the environment needs a pip inside it. denver never has this problem: its
+   `uv` stage owns the venv, so `west packages pip` output goes straight to uv.
+3. **`gcc`/`gxx`/`dtc`/`gperf` had to be added.** `native_sim` compiles for the
+   host, and the original port declared no compiler at all. Taking these from
+   conda-forge rather than the machine is genuinely better than what denver
+   does here — but it was missing.
+4. **`ZEPHYR_TOOLCHAIN_VARIANT=host`** had to be set in `[activation.env]`.
+
+And the thing it does **not** prove, which is the whole point:
+
+> **`ZEPHYR_BASE` points at a workspace pixi did not create.**
+
+The build ran against a workspace cloned beforehand by a bootstrap `west`,
+because `west update` has to happen before the dependency set in step 2 is even
+knowable. So this verifies that **a pixi environment can build Zephyr**; it
+does *not* verify that pixi can bring that environment into existence from a
+clean checkout the way `denver examples/zephyr-devshell-4.3.1` does. The
+`west-init`/`west-update`/`west-packages` tasks exist in `pixi.toml` and run in
+the right order if invoked by hand, but nothing makes entering the environment
+produce a correct workspace, and nothing fingerprints it afterwards.
+
+That is the same gap the rest of this document describes, now demonstrated
+rather than asserted.
 
 Ports are additive: each `pixi.toml` sits next to the `denver.yml` it was
 derived from, so the two can be read side by side. No example was modified.
