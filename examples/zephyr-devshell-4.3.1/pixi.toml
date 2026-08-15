@@ -1,0 +1,76 @@
+# Port of this folder's denver.yml (+ the ../zephyr-devshell base it
+# imports) to pixi. Written to spec and NOT executed -- see
+# ../PORTING-pixi.md.
+#
+# denver original: five stages, split across two folders --
+#   ../zephyr-devshell/denver.yml   the shared base, 'runnable: false'
+#   ./denver.yml                    ONLY the 4.3.1-specific pins, via 'import:'
+#
+# This is the example that ports worst, for two independent reasons:
+#
+# 1. LAYERING. denver's 'import:' inherits another *folder's* env -- its
+#    stages, its docker config, its conan base classes, its hooks -- and
+#    restates only what differs. pixi's composition unit is the [feature],
+#    and features live in the same manifest (or in workspace members). There
+#    is no "inherit ../another-project's manifest and override three keys."
+#    The base/derived split below is therefore FLATTENED into one file with
+#    features, which loses the property the original was demonstrating: that
+#    five sibling repos can share one base and each add a handful of lines.
+#
+# 2. WEST. Stages 4 and 5 ('zephyr' and 'uv-zephyr') run `west update` to
+#    clone ~40 pinned repositories, `west patches`, `west blobs`, and then
+#    install the python packages those freshly-cloned modules turn out to
+#    declare (`west packages pip`). That last one is the killer: the
+#    dependency set is not knowable until stage 4 has run. A lockfile-based
+#    tool cannot express "resolve these after cloning" -- pixi.lock has to
+#    be complete up front. The port below can install west; it cannot
+#    reproduce the pipeline west then drives.
+
+[project]
+name = "zephyr-devshell-4.3.1"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = "3.12.3.*"
+cmake = "*"
+ninja = "*"
+ccache = "*"
+git = "*"
+
+[pypi-dependencies]
+west = "*"
+
+# --- what the base contributed, as a feature -------------------------------
+# Approximating ../zephyr-devshell/denver.yml. In denver this is a separate,
+# non-runnable folder that five sibling envs import; here it can only be a
+# feature in this same file.
+[feature.devshell-base.pypi-dependencies]
+conan = "*"
+
+[feature.devshell-base.activation.env]
+CONAN_HOME = "$PIXI_PROJECT_ROOT/.pixi/conan2"
+
+# --- what 4.3.1 pins on top ------------------------------------------------
+[feature.zephyr-431.activation.env]
+ZEPHYR_VERSION = "4.3.1"
+
+[environments]
+default = ["devshell-base", "zephyr-431"]
+
+[tasks]
+# GAP -- denver ran these as ordered stages on entry, with fingerprinting so
+# an unchanged workspace skips the expensive work. Here they are manual
+# tasks in the right order, and staying in that order is the user's problem.
+west-init = "west init -l ."
+west-update = "west update"
+west-blobs = "west blobs fetch"
+# ...and this one cannot be a dependency of anything, because what it
+# installs is only discoverable after west-update has finished:
+west-packages = "uv pip install $(west packages pip)"
+
+# GAP -- no equivalent of denver's 'uv: no-index: auto' offline install
+# against the conan-provided wheel cache (UV_FIND_LINKS), of 'venv-patcher:',
+# of 'skip-if:', or of 'freeze-to:' writing requirements.final.txt back into
+# the tree. pixi.lock covers roughly the job freeze-to did, and covers it
+# better; the other three have no counterpart.

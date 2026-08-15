@@ -1,0 +1,52 @@
+# Port of this folder's denver.yml to pixi (https://pixi.sh).
+# Written to spec and NOT executed -- see ../PORTING-pixi.md.
+#
+# denver original: 'uv' -> 'conan'. A cross-compilation toolchain with no
+# Docker involved. This is the example where the two tools genuinely
+# disagree about where native toolchains come from: denver fetches them with
+# conan, from recipes committed in this repo; pixi fetches them from
+# conda-forge.
+
+[project]
+name = "raspberry-pico"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.9"
+# denver got cmake transitively, as a conan system_tools_requires of the
+# pico-sdk recipe. Here it is a direct dependency like anything else.
+cmake = "*"
+ninja = "*"
+
+# UNVERIFIED PACKAGE NAMES. The ARM bare-metal toolchain is packaged on
+# conda-forge, but the exact package name and whether 15.3 specifically is
+# available there both need checking against the channel before this file
+# will solve. denver's conan/recipes/arm-none-eabi/15.3/ pins the upstream
+# ARM release tarball and its checksum directly, so it does not depend on a
+# third-party channel having repackaged that exact version.
+#   [dependencies]
+#   gcc-arm-none-eabi = "==15.3"
+#
+# GAP (hard) -- pico-sdk is not on conda-forge at all. denver's
+# conan/recipes/pico-sdk/2.3.0/ builds it, including building picotool from
+# source, and that recipe has no pixi equivalent. Reproducing it means
+# either a fetch-and-build task like the one below, or maintaining a
+# conda-forge feedstock. This is the single clearest thing denver's conan
+# stage does that pixi does not.
+
+[pypi-dependencies]
+conan = "==2.31.2"
+uv = "==0.12.3"
+
+[activation.env]
+# denver kept conan's home inside its own working area rather than
+# ~/.conan2, to avoid colliding with an existing cache. Same idea, pointed
+# at pixi's own dir.
+CONAN_HOME = "$PIXI_PROJECT_ROOT/.pixi/conan2"
+
+[tasks]
+# The escape hatch: if you keep conan for the pico-sdk half (because
+# conda-forge has no equivalent), pixi ends up *hosting* conan rather than
+# replacing it -- which is worth noticing as a result in its own right.
+conan-install = "conan install conan/conanfile.py --build=missing -c:a=tools.system.package_manager:mode=install -c:a=tools.system.package_manager:sudo=True"

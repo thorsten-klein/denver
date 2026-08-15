@@ -1,0 +1,30 @@
+# Port of this folder's denver.yml to pixi (https://pixi.sh).
+# Written to spec and NOT executed -- see ../PORTING-pixi.md.
+#
+# denver original: a single 'uv' stage -- a virtualenv with two pinned
+# packages in it, and nothing else. This is the example that ports most
+# cleanly of the seven, because it is the one job pixi was built for.
+
+[project]
+name = "zephyr-uv"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+# denver's uv stage did not pin an interpreter here (it inherited whatever
+# python it found); pixi always resolves one explicitly, which is arguably
+# stricter than the original.
+python = ">=3.9"
+
+[pypi-dependencies]
+# straight from requirements.txt. pixi resolves these into pixi.lock, which
+# denver's uv stage has no equivalent of -- denver re-runs `uv pip install`
+# against requirements.txt and fingerprints the file.
+conan = "==2.23.0"
+uv = "==0.9.13"
+
+# denver's `command: bash` -- the shell to drop into when no command is
+# given. `pixi shell` uses your login shell instead; this task is the
+# explicit equivalent.
+[tasks]
+shell = "bash"

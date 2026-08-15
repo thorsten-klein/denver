@@ -1,0 +1,64 @@
+# Port of this folder's denver.yml to pixi (https://pixi.sh).
+# Written to spec and NOT executed -- see ../PORTING-pixi.md.
+#
+# denver original: five stages --
+#   docker-with-tools    Ubuntu 24.04 container, everything below runs inside
+#   uv-packages          python 3.12.3 venv (conan, pytest)
+#   nvim-by-hand         one prebuilt release, downloaded/checksummed by hand
+#   tools-from-internet  cmake 3.31.9 + arm-none-eabi 15.3 via conan
+#   best-practices       the team's PYTEST_ADDOPTS convention
+#
+# Four of those five have a pixi equivalent. The first does not, and that is
+# the structural difference rather than a missing feature: pixi replaces the
+# container, it does not run inside one.
+
+[project]
+name = "howto-env"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+# GAP (structural) -- there is no port of 'docker-with-tools'. denver's
+# docker stage relocates every later stage into ubuntu:24.04, so the OS and
+# the apt packages are identical for everyone, and `--skip docker` runs the
+# very same stack on the host. pixi's answer to "the same libraries
+# everywhere" is conda-forge packages pinned in pixi.lock, not a container:
+# the host OS is whatever you are sitting at. That is a real answer to the
+# same problem, but it is not the same mechanism, and an env that needs a
+# specific glibc or a distro package with no conda-forge build cannot be
+# expressed this way.
+
+[dependencies]
+# denver pinned 3.12.3 because that is what ubuntu:24.04 ships and the venv
+# had to match the container's interpreter. Here nothing constrains it to
+# 3.12.3 except the port being faithful -- pixi brings its own python, which
+# is one fewer coupling than the original had.
+python = "3.12.3.*"
+
+# 'tools-from-internet': cmake at exactly the pinned version. conda-forge
+# has this one, so it is a one-liner rather than a conan recipe.
+cmake = "3.31.9.*"
+
+# 'nvim-by-hand': the whole point of that stage was to show the manual
+# download/checksum/unpack/PATH dance right next to the same job done
+# properly -- so seeing it collapse to one line here is the intended
+# comparison, not a cheat. What is lost is the *lesson*, not the capability.
+neovim = "0.12.4.*"
+
+# UNVERIFIED -- the other half of 'tools-from-internet'. Same caveat as
+# ../raspberry-pico/pixi.toml: check the conda-forge package name and
+# whether 15.3 exists there.
+#   gcc-arm-none-eabi = "==15.3"
+
+[pypi-dependencies]
+# 'uv-packages', straight from requirements.txt.
+conan = "==2.31.2"
+pytest = "==9.1.1"
+
+# 'best-practices' -- the one stage that ports exactly. denver sourced a
+# script so the export survived into the final command; pixi sets it
+# declaratively, which is if anything the better expression of a convention.
+[activation.env]
+PYTEST_ADDOPTS = "-v -s"
+
+[tasks]
+test = "pytest"

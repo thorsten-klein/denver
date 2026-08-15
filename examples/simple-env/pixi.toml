@@ -1,0 +1,37 @@
+# Port of this folder's denver.yml to pixi (https://pixi.sh).
+# Written to spec and NOT executed -- pixi is not installed in the repo that
+# produced this branch. See ../PORTING-pixi.md for the fidelity report.
+#
+# denver original: three 'custom' stages demonstrating stage-to-stage env
+# propagation, plus one env-specific CLI flag (--greeting).
+
+[project]
+name = "simple-env"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+# denver's 'set-vars' stage used `source: custom.sh`, so what the script
+# exports folds into every later stage and the final command. pixi's nearest
+# equivalent is an activation script: sourced into the shell pixi hands you.
+[activation]
+scripts = ["custom.sh"]
+
+# GAP -- denver's 'args:' block declared a real argparse flag (--greeting,
+# default 'hello') that `denver simple-env --help` listed alongside denver's
+# own flags, and that arrived in the env as DENVER_ARG_GREETING. pixi has no
+# per-project CLI argument declaration; the closest thing is an env var with
+# a default, set here and overridable by exporting it before `pixi shell`.
+[activation.env]
+GREETING = "hello"
+
+# denver's 'print-vars-before' / 'print-vars-after' stages ran automatically,
+# in order, as part of entering the environment. pixi runs activation
+# scripts but has no ordered multi-step build pipeline, so the two echo
+# stages become explicit tasks you invoke.
+#
+# GAP -- 'print-vars-before' demonstrated that the vars are NOT yet set at
+# that point in the pipeline. There is no "before activation" hook in pixi,
+# so that half of the demonstration cannot be reproduced at all.
+[tasks]
+print-vars-before = "echo \"[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR\""
+print-vars-after = "echo \"[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR greeting=$GREETING\""
