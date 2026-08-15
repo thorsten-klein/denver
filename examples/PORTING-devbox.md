@@ -4,11 +4,76 @@ An honest attempt to express each of denver's seven bundled examples as a
 [devbox](https://www.jetify.com/devbox) project, to find out where the two
 tools actually disagree.
 
-**These ports are unverified.** Neither devbox nor nix is installed in the
-environment this branch was produced in, so nothing here has been resolved or
-run. Package versions that were assumed rather than checked against devbox's
-search index are marked UNVERIFIED inline. Treat this as a design comparison,
-not as working configuration.
+**Most of these ports are unverified**, with one important exception:
+`zephyr-devshell-4.3.1` has since been **built and run for real** — see
+"Verified build" below. Everything else was written to spec and not executed;
+package versions assumed rather than checked against devbox's search index are
+marked UNVERIFIED inline.
+
+## Verified build (`zephyr-devshell-4.3.1`)
+
+```
+devbox run build-hello-world
+  -> west build -p always $ZEPHYR_BASE/samples/hello_world -b native_sim/native/64
+```
+
+**Result: passes.** 92/92 ninja targets, and the resulting `zephyr.exe` runs:
+
+```
+*** Booting Zephyr OS build 75f67d766726 ***
+Hello World! native_sim/native/64
+```
+
+Verified with devbox 0.17.5 on Determinate Nix 2.34.8, python 3.12.3, cmake
+4.1.2, ninja 1.13.1 and gcc 16.2.0 (all from nixpkgs, all fetched prebuilt
+from `cache.nixos.org`), against a workspace at Zephyr v4.3.1 (54 repos,
+2.2 GB) cloned from this env's own [`west.yml`](zephyr-devshell-4.3.1/west.yml).
+
+### The interesting failure
+
+The port as originally written **could not enter its own shell at all**. The
+`init_hook` ended with:
+
+```json
+". ../zephyr-devshell/hooks/env.sh"
+```
+
+which died with `dirname: missing operand` / `realpath: '': No such file`.
+
+Two independent reasons, and both matter more than the fix:
+
+1. **`hooks/env.sh` computes its own location from `$BASH_SOURCE`**, which is
+   empty in devbox's `init_hook` context. denver sources that file in a way
+   that sets it; devbox does not.
+2. **It reads `WEST_TOPDIR` and `DENVER_ENV_WORKDIR`** — denver built-ins that
+   simply do not exist anywhere else. The script is not portable *in
+   principle*, not merely unported.
+
+So the shared base's environment hook — which this document and
+[`PORTING-devenv.md`](PORTING-devenv.md) both treated as something that "ports
+cleanly" — is in fact the least portable file in the whole example. It had to
+be dropped, with its two machine-independent exports
+(`CMAKE_COLOR_DIAGNOSTICS`, `CCACHE_NOHASHDIR`) inlined instead.
+
+### Other changes needed
+
+- **`gcc`, `dtc`, `gperf` added.** `native_sim` compiles for the host and the
+  port declared no compiler. Unlike the mise port — which had to borrow all
+  three from `apt` — devbox takes them from nixpkgs, so **this environment is
+  self-contained**, matching pixi and beating mise.
+- **`uv venv --seed`**, so the venv has a pip for the imperative install of
+  Zephyr's build-time packages.
+- **`ZEPHYR_TOOLCHAIN_VARIANT=host`.**
+
+### What it does not prove
+
+> **`ZEPHYR_BASE` points at a workspace devbox did not create.** The build ran
+> against a workspace cloned beforehand by a bootstrap `west`, because
+> `west update` must happen before Zephyr's python dependency set is knowable.
+> This verifies that a devbox environment can build Zephyr; it does not verify
+> that devbox can bring that environment into existence from a clean checkout
+> the way `denver examples/zephyr-devshell-4.3.1` does. `init_hook` is a single
+> hook with no ordering and no skip checks, so the `west-*` scripts stay manual.
 
 Ports are additive: each `devbox.json` sits next to the `denver.yml` it was
 derived from. No example was modified. All five files parse as JSON.

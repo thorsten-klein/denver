@@ -40,20 +40,25 @@
     "ninja@latest",
     "ccache@latest",
     "git@latest",
-    "uv@latest"
+    "uv@latest",
+    "gcc@latest",
+    "dtc@latest",
+    "gperf@latest"
   ],
 
   "env": {
     "CONAN_HOME": "$PWD/.devbox/conan2",
-    "ZEPHYR_VERSION": "4.3.1"
+    "ZEPHYR_VERSION": "4.3.1",
+    "ZEPHYR_TOOLCHAIN_VARIANT": "host"
   },
 
   "shell": {
     "init_hook": [
-      "[ -d .venv ] || uv venv .venv",
+      "[ -d .venv ] || uv venv --seed .venv",
       ". .venv/bin/activate",
       "uv pip install -q west conan",
-      ". ../zephyr-devshell/hooks/env.sh"
+      "export CMAKE_COLOR_DIAGNOSTICS=ON",
+      "export CCACHE_NOHASHDIR=1"
     ],
     "scripts": {
       "west-init": ["west init -l ."],
@@ -65,6 +70,9 @@
         "devbox run west-update",
         "devbox run west-blobs",
         "devbox run west-packages"
+      ],
+      "build-hello-world": [
+        "west build -p always $ZEPHYR_BASE/samples/hello_world -b native_sim/native/64"
       ]
     }
   }
