@@ -413,6 +413,10 @@ denver examples/zephyr-devshell-4.3.1 --show-config
 
 # quieter output (-q keeps stage banners, -qq silences denver completely)
 denver examples/zephyr-devshell-4.3.1 -qq -- west --version
+
+# set an environment variable for this run -- on the host, in every stage,
+# and inside a docker-wrapped env's container too
+denver examples/zephyr-devshell-4.3.1 -e MY_TOKEN=secret -- west build
 ```
 
 An environment can also declare **flags of its own**, in its `denver.yml`
@@ -560,6 +564,15 @@ behavior isn't obvious from a one-line description.
   env's `denver.yml`, using the same merge rules as `import:`. Repeatable,
   applied in the order given; `-c` overrides are applied last, on top of
   every `-cf` file.
+- **`-e`/`--env NAME[=VALUE]`** sets an environment variable for this run —
+  as if you had exported it in your shell before invoking denver, only
+  simpler to script. Applied to denver's own process (`os.environ`), to
+  every stage and hook, and forwarded across a wrapper relocation (e.g.
+  `docker`) so it's set inside the container too, not just on the host.
+  `NAME` alone (no `=`) forwards `NAME`'s current value out of denver's own
+  environment, the same shorthand `docker run -e` offers. Repeatable; later
+  `-e`s win when they target the same name, and always win over the same
+  name set by the env's own `env:` map.
 - **`--until <stage>`** truncates the pipeline: every stage up to and
   including `<stage>` runs, everything after it is dropped — there's no
   "run only this one stage" flag, since a stage practically always needs

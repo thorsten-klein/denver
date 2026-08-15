@@ -125,6 +125,13 @@ def _relocation_env(ctx):
     * ``DENVER_RELOCATED`` -- which wrapper stage ids put it there (see
       denver.py's _mark_relocated), so a wrapper stage's absence inside is
       known to be denver's own doing rather than a user's ``--skip``.
+    * every ``-e``/``--env NAME=VALUE`` the user gave this invocation
+      (``ctx.cli_env_vars``) -- the re-invoked denver inside the container
+      re-applies the same flags to its own ctx.env regardless (see
+      denver.py's reinvoke_command), but the raw container environment
+      itself comes from the image and the compose file, same as above, so
+      anything in there that isn't the re-invoked denver (an entrypoint
+      script, ``docker inspect``, ...) would otherwise never see them.
     """
     from .context import IN_CONTAINER_VAR, RELOCATED_VAR
 
@@ -132,6 +139,8 @@ def _relocation_env(ctx):
     relocated = ctx.env.get(RELOCATED_VAR)
     if relocated:
         flags += ["-e", f"{RELOCATED_VAR}={relocated}"]
+    for name, value in ctx.cli_env_vars.items():
+        flags += ["-e", f"{name}={value}"]
     return flags
 
 

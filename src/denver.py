@@ -1195,6 +1195,12 @@ def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None)
       from scratch with no memory of them and running it anyway;
     * --quiet (repeated ``options.quiet`` times, so e.g. -qq's level 2
       survives, not just a single -q), --fast/--force/--ci/--no-wait;
+    * -e/--env (``options.env_vars``): re-passed as its own ``--env
+      NAME=VALUE`` flags, one per entry, for the same reason -- the inner
+      denver's own os.environ starts empty of them (a wrapper reinvocation
+      is a fresh process, docker included -- see docker.py's
+      _relocation_env for how the raw container environment itself gets
+      them too);
     * the env's own 'args:' flags (``options.cli_args.argv``): the inner
       denver re-reads the same denver.yml, so it declares the same flags --
       but nobody would have given them to it, and every one would quietly
@@ -1251,11 +1257,23 @@ def _reinvoke_flags(options):
     for flag, enabled in toggles:
         if enabled:
             flags.append(flag)
+    for name, value in options.env_vars.items():
+        flags += ["--env", f"{name}={value}"]
     return [*flags, "--start-time", repr(options.start_time)]
 
 
 def resolve_full_config(
-    env_dir, config, config_path, *, quiet=0, fast=False, force=False, ci=False, dry_run=False, cli_args=None
+    env_dir,
+    config,
+    config_path,
+    *,
+    quiet=0,
+    fast=False,
+    force=False,
+    ci=False,
+    dry_run=False,
+    cli_args=None,
+    env_vars=None,
 ):
     """Fully resolve an env's config for actual use.
 
@@ -1269,9 +1287,13 @@ def resolve_full_config(
     see CliArgs) is exported into ctx.env *before* any default is resolved,
     for exactly the same reason: a stage section reading
     ``${DENVER_ARG_TARGET}`` must see the same value under --show-config as
-    in the real run.
+    in the real run. ``env_vars`` (-e/--env, see RunOptions) is applied right
+    after, for the same reason and overriding it if a name collides -- an
+    explicit ``-e FOO=bar`` is a more direct statement of intent than
+    whatever 'args:' happened to export under that name.
     """
     from denver_providers import Context, load_extension_providers
+    from denver_providers.context import CLI_ENV_VAR_NAMES
 
     config, extra_dirs = expand_section_imports(config, env_dir)
     import_dirs = collect_import_dirs(config_path) + extra_dirs
@@ -1288,6 +1310,13 @@ def resolve_full_config(
         dry_run=dry_run,
     )
     ctx.env.update(_cli_args(cli_args).env)
+    if env_vars:
+        ctx.env.update(env_vars)
+        # names only -- see CLI_ENV_VAR_NAMES; each value already lives under
+        # its own key above, this is what lets a wrapper crossing a real
+        # process boundary (docker) tell which of ctx.env's entries to
+        # forward explicitly.
+        ctx.set(CLI_ENV_VAR_NAMES, ",".join(env_vars))
     # registers any 'extensions.providers.dirs:' Provider subclasses into
     # providers.PROVIDERS before resolve_provider_defaults below needs to
     # look any of their names up via make_stage.
@@ -1376,6 +1405,7 @@ def run_named_scripts(
     dry_run=False,
     no_wait=False,
     cli_args=None,
+    env_vars=None,
 ):
     """Run every (filtered) stage's ``scripts: <name>:`` entries, each in the context it actually needs.
 
@@ -1405,7 +1435,14 @@ def run_named_scripts(
 
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
     config, ctx = _prepare_context(
-        env_dir, config, config_path, no_wait=no_wait, quiet=quiet, dry_run=dry_run, cli_args=cli_args
+        env_dir,
+        config,
+        config_path,
+        no_wait=no_wait,
+        quiet=quiet,
+        dry_run=dry_run,
+        cli_args=cli_args,
+        env_vars=env_vars,
     )
 
     stages = _make_stages(config, stage_ids)
@@ -1438,6 +1475,7 @@ def run_named_scripts(
         until_stage=until_stage,
         skip_stages=(*skip_stages, *_stage_ids_of(active_wrappers)),
         cli_argv=_cli_args(cli_args).argv,
+        env_vars=env_vars,
     )
     ctx.exec(_wrap_cmd(ctx, cmd, active_wrappers, stage_index, len(stages)))
 
@@ -1457,13 +1495,13 @@ def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stag
         )
 
 
-def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages, cli_argv=()):
+def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages, cli_argv=(), env_vars=None):
     """The ``denver <config> --run <name>`` argv the wrapper re-invokes, this run's own filters re-passed.
 
     ``cli_argv`` -- the tokens this env's own 'args:' flags consumed -- is
     re-passed for the same reason reinvoke_command does it: the inner
     denver declares the same flags and would otherwise only see their
-    defaults.
+    defaults. ``env_vars`` (-e/--env) is re-passed for the same reason.
     """
     cmd = ["python3", str(Path(__file__).resolve()), str(config_path), "--run", name]
     if quiet:
@@ -1472,6 +1510,8 @@ def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages, cl
         cmd += ["--until", until_stage]
     for stage_id in skip_stages:
         cmd += ["--skip", stage_id]
+    for var_name, value in (env_vars or {}).items():
+        cmd += ["--env", f"{var_name}={value}"]
     return [*cmd, *cli_argv]
 
 
@@ -1628,10 +1668,10 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     """Build/enter the environment via its stages, then exec the command.
 
     ``options`` is everything this invocation chose about *how* to run
-    (--until/--skip, -q, --fast/--force/--ci, --dry-run, --no-wait, the
-    env's own 'args:' flags, the startup clock) as one RunOptions value; it
-    defaults to "no flag given at all". See RunOptions for ``start_time``,
-    which reaches the final "env started in Ns" line.
+    (--until/--skip, -q, --fast/--force/--ci, --dry-run, --no-wait,
+    -e/--env, the env's own 'args:' flags, the startup clock) as one
+    RunOptions value; it defaults to "no flag given at all". See RunOptions
+    for ``start_time``, which reaches the final "env started in Ns" line.
 
     banner()'s '[i/n]' numbers every stage the env *declares* in 'stages:'
     (see ``all_stage_ids`` below), not just the ones actually running -- a
@@ -1670,6 +1710,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
         ci=options.ci,
         dry_run=options.dry_run,
         cli_args=options.cli_args,
+        env_vars=options.env_vars,
     )
 
     # each entry in 'stages:' is a pipeline stage (a provider type + config
@@ -1724,7 +1765,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
         )
 
 
-def _prepare_context(env_dir, config, config_path, *, no_wait, **resolve_kwargs):
+def _prepare_context(env_dir, config, config_path, *, no_wait, env_vars=None, **resolve_kwargs):
     """Resolve the config, take the env's lock, and apply the whole-devshell environment.
 
     Shared by run_stages and run_named_scripts, which must set an env up the
@@ -1733,12 +1774,21 @@ def _prepare_context(env_dir, config, config_path, *, no_wait, **resolve_kwargs)
     sources a script once, before anything else -- its exports (and the
     declarative 'env:' map applied right after) are visible to every stage
     and to the final command, i.e. they apply to the whole devshell.
+
+    ``env_vars`` (-e/--env) is re-applied here, *after* the declarative
+    'env:' map -- resolve_full_config already applied it once (so
+    --show-config/interpolation see it), but that happens before 'env:' is
+    even read, so without this second application 'env:' would silently win
+    over an explicit -e of the same name. -e is meant to always have the
+    final word, the same way '-c' always wins over 'import:'/'-cf' (see
+    doc/architecture.md).
     """
-    config, ctx = resolve_full_config(env_dir, config, config_path, **resolve_kwargs)
+    config, ctx = resolve_full_config(env_dir, config, config_path, env_vars=env_vars, **resolve_kwargs)
     ctx.acquire_lock(wait=not no_wait)
     ctx.ensure_state_dir()
     run_hook(ctx, config_path, "env")
     ctx.apply_env_map(config.get("env"))
+    ctx.env.update(env_vars or {})
     return config, ctx
 
 
@@ -1880,6 +1930,7 @@ class RunOptions:
         no_wait=False,
         start_time=None,
         cli_args=None,
+        env_vars=None,
     ):
         """Hold one invocation's options; see the class docstring for ``start_time``."""
         self.until_stage = until_stage
@@ -1892,6 +1943,12 @@ class RunOptions:
         self.no_wait = no_wait
         self.start_time = time.time() if start_time is None else start_time
         self.cli_args = _cli_args(cli_args)
+        # -e/--env NAME=VALUE (see build_arg_parser); dict rather than a list
+        # of tuples so a later entry naturally overrides an earlier one of
+        # the same name, same as -c. Order preserved (dicts remember
+        # insertion order), so a wrapper reinvocation re-passes them in the
+        # order the user gave them.
+        self.env_vars = dict(env_vars or {})
 
 
 def _show_skipped(ctx, skipped, skip_state):
@@ -2158,7 +2215,7 @@ def _provider_keys(section):
     return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
-def show_config(env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None):
+def show_config(env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None, env_vars=None):
     """Print the fully resolved config as YAML -- exactly what the real run would use.
 
     Whole-file 'import:' stacking, section-level 'import:' stacking, and
@@ -2182,7 +2239,7 @@ def show_config(env_dir, config, config_path, until_stage=None, skip_stages=(), 
     alphabetically. Everything *below* that (a section's own nested keys, a
     hook name's own sub-keys, ...) stays alphabetical (see _sorted_nested).
     """
-    resolved, ctx = resolve_full_config(env_dir, config, config_path, cli_args=cli_args)
+    resolved, ctx = resolve_full_config(env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
     _drop_filtered_sections(resolved, stage_ids)
     resolved["stages"] = stage_ids
@@ -2395,6 +2452,25 @@ def _cli_args(cli_args):
 # --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
+def _parsed_env_vars(entries):
+    """``{name: value}`` from repeated ``-e``/``--env`` entries, in the order given.
+
+    ``NAME=VALUE`` sets that literal value; a bare ``NAME`` (no ``=``) forwards
+    NAME's current value out of denver's own environment (``""`` if it isn't
+    set there either) -- the same shorthand ``docker run -e`` offers, for the
+    common case of passing something like a secret through unchanged rather
+    than retyping it. A later entry for the same name overrides an earlier
+    one, same as ``-c``.
+    """
+    result = {}
+    for entry in entries:
+        name, sep, value = entry.partition("=")
+        if not name:
+            die(f"--env: expected NAME=VALUE or NAME, got {entry!r}")
+        result[name] = value if sep else os.environ.get(name, "")
+    return result
+
+
 def build_arg_parser(config_args=None):
     """The argparse.ArgumentParser for every denver-own flag (not the forwarded command).
 
@@ -2476,6 +2552,17 @@ def build_arg_parser(config_args=None):
     )
     parser.add_argument(
         "-cf", "--config-file", action="append", default=[], metavar="FILE", help="overlay a config file (repeatable)"
+    )
+    parser.add_argument(
+        "-e",
+        "--env",
+        action="append",
+        default=[],
+        dest="env_vars",
+        metavar="NAME[=VALUE]",
+        help="set an environment variable for this run (repeatable): applied to denver's own process, to every "
+        "stage, and to a wrapped stage's container too (e.g. docker); 'NAME' alone (no '=') forwards NAME's "
+        "current value out of denver's own environment, the way `docker run -e` does",
     )
     parser.add_argument(
         "--until",
@@ -2632,6 +2719,17 @@ def _run_cli(argv=None):
     if _handle_env_less_argv(preliminary, head):
         return
 
+    # Applied to denver's own process environment as early as possible --
+    # before the env's config is even loaded -- so it reaches everything
+    # downstream (${...} interpolation, hooks, every stage, the final
+    # command) the exact same way a real shell export would, with no
+    # separate plumbing path of its own; see resolve_full_config for how
+    # env_vars is *also* carried explicitly (RunOptions -> ctx.env), which
+    # is what makes it survive a wrapper reinvocation (docker) too, a
+    # boundary a real os.environ mutation here cannot cross on its own.
+    env_vars = _parsed_env_vars(preliminary.env_vars)
+    os.environ.update(env_vars)
+
     env_dir, config_path = resolve_env_dir(preliminary.env)
     config = _load_cli_config(preliminary, config_path)
 
@@ -2646,14 +2744,14 @@ def _run_cli(argv=None):
 
     cli_args = CliArgs(cli_arg_env(config.get("args"), args), extra_argv)
 
-    if _handle_config_subcommands(args, env_dir, config, config_path, cli_args=cli_args):
+    if _handle_config_subcommands(args, env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars):
         return
 
     _require_runnable(env_dir, config, config_path)
-    run_stages(env_dir, config, config_path, forwarded, options=_run_options(args, cli_args))
+    run_stages(env_dir, config, config_path, forwarded, options=_run_options(args, cli_args, env_vars))
 
 
-def _run_options(args, cli_args):
+def _run_options(args, cli_args, env_vars):
     """Everything the parsed command line chose about *how* to run, as one RunOptions."""
     return RunOptions(
         until_stage=args.until,
@@ -2666,6 +2764,7 @@ def _run_options(args, cli_args):
         no_wait=args.no_wait,
         start_time=args.start_time,
         cli_args=cli_args,
+        env_vars=env_vars,
     )
 
 
@@ -2715,10 +2814,18 @@ def _load_cli_config(args, config_path) -> dict:
     return cast(dict, config)
 
 
-def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=None):
+def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=None, env_vars=None):
     """Handle --show-config/--run, if given. Returns True if one of them ran (nothing is launched then)."""
     if args.show_config:
-        show_config(env_dir, config, config_path, until_stage=args.until, skip_stages=args.skip, cli_args=cli_args)
+        show_config(
+            env_dir,
+            config,
+            config_path,
+            until_stage=args.until,
+            skip_stages=args.skip,
+            cli_args=cli_args,
+            env_vars=env_vars,
+        )
         return True
 
     if args.run == LIST_SCRIPTS:
@@ -2737,6 +2844,7 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
             dry_run=args.dry_run,
             no_wait=args.no_wait,
             cli_args=cli_args,
+            env_vars=env_vars,
         )
         return True
 
