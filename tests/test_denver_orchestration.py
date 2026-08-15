@@ -667,10 +667,9 @@ def test_run_stages_shows_earlier_skips_before_a_stage_that_dies(tmp_path, exec_
             "skipped-one": {"provider": "fakedies"},
             "boomer": {"provider": "fakedies"},
         }
+        options = denver.RunOptions(skip_stages=["skipped-one"])
         with pytest.raises(SystemExit):
-            denver.run_stages(
-                env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["skipped-one"])
-            )
+            denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=options)
     finally:
         del providers_module.PROVIDERS["fakedies"]
     err = capsys.readouterr().err
@@ -882,14 +881,9 @@ def test_run_stages_skip_excludes_named_stage(tmp_path, fake_providers, exec_rec
 def test_run_stages_until_and_skip_filters_out_everything_dies(tmp_path, fake_providers):
     env_dir, cfg_path = _env(tmp_path, _multi_stage_config())
     config = _multi_stage_config()
+    options = denver.RunOptions(until_stage="fakewrap", skip_stages=["fakewrap"])
     with pytest.raises(SystemExit):
-        denver.run_stages(
-            env_dir,
-            config,
-            cfg_path,
-            [],
-            options=denver.RunOptions(until_stage="fakewrap", skip_stages=["fakewrap"]),
-        )
+        denver.run_stages(env_dir, config, cfg_path, [], options=options)
 
 
 # ---- per-stage performance recording -----------------------------------------#
