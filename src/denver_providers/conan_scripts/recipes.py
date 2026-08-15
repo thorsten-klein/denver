@@ -30,7 +30,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import colorama
 import yaml
 from conan.api.conan_api import ConanAPI
 from conan.api.model import PkgReference, RecipeReference, Remote
@@ -39,6 +38,15 @@ from conan.internal.errors import AuthenticationException, ConanConnectionError,
 from conan.internal.util.files import load
 
 CONANFILE_NAME = 'conanfile.py'
+
+# SGR escapes for the two colors this script prints. colorama used to supply
+# these, but it was only ever read for its constants -- colorama.init(), the
+# call that installs its Windows ANSI-to-Win32 shim, was never invoked, so it
+# contributed nothing a literal doesn't. denver targets POSIX (see the
+# classifiers in pyproject.toml), where these are emitted as-is either way.
+_GREEN = '\033[32m'
+_YELLOW = '\033[33m'
+_RESET = '\033[0m'
 
 
 @functools.cache
@@ -98,8 +106,8 @@ def redirect():
 def print_banner(text):
     """Print ``text`` in a colored box, as a visual step marker."""
     divider = "-----------------------------------------------------"
-    box = "\n".join(["", f"{colorama.Fore.GREEN}{divider}", str(text), divider])
-    print(f"{box}{colorama.Style.RESET_ALL}")
+    box = "\n".join(["", f"{_GREEN}{divider}", str(text), divider])
+    print(f"{box}{_RESET}")
 
 
 def _prompt_and_login(remote):
@@ -648,10 +656,10 @@ def _login_remote(remote_name, remote, *, force):
     try:
         authenticate_remote(remote, force=True)
     except ConanConnectionError as e:
-        print(colorama.Fore.YELLOW, end='')
+        print(_YELLOW, end='')
         print(f"\nWARNING: Unable to connect to remote '{remote_name}' at {remote.url}")
         print(f"Reason: {e}")
-        print(colorama.Style.RESET_ALL)
+        print(_RESET)
 
 
 def conan_login(remotes, *, force=False):

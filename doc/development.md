@@ -93,7 +93,7 @@ a tooling limitation, not a way to hit 100% faster.
   documentation, so docstrings aren't required there.
 - **`mypy`** type-checks `src/` only (`[tool.mypy]`). `conan_scripts/`'s own
   sibling-module imports (`get_rrev`, `DenverConanFile`) and the optional
-  `conan`/`colorama` dependencies (test-only, see the `conan-tools`
+  `conan` dependency (test-only, see the `conan-tools`
   dependency group) both need `ignore_missing_imports` overrides — see the
   comments next to each in `pyproject.toml` for why.
 
