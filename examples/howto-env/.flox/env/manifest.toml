@@ -1,0 +1,62 @@
+# Port of ../../denver.yml to flox (https://flox.dev).
+# Written to spec and NOT executed -- see ../../../PORTING-flox.md.
+#
+# denver original: five stages --
+#   docker-with-tools    Ubuntu 24.04 container, everything below runs inside
+#   uv-packages          python 3.12.3 venv (conan, pytest)
+#   nvim-by-hand         one prebuilt release, downloaded/checksummed by hand
+#   tools-from-internet  cmake 3.31.9 + arm-none-eabi 15.3 via conan
+#   best-practices       the team's PYTEST_ADDOPTS convention
+#
+# GAP (structural) -- no port of 'docker-with-tools'. flox does have
+# `flox containerize`, which packages an activated environment as an OCI
+# image. As with devbox and devenv, that runs the opposite direction from
+# denver's docker stage: denver takes an image you name (ubuntu:24.04, with
+# its apt packages) and relocates every later stage INTO it, with
+# `--skip docker` running the identical stack on the host. flox takes the
+# environment it resolved and packages THAT as an image. It answers "ship
+# this env as a container", not "this project only builds on Ubuntu 24.04".
+
+version = 1
+
+[install]
+python3.pkg-path = "python3"
+python3.version = "3.12.3"
+uv.pkg-path = "uv"
+
+# 'tools-from-internet', first half.
+cmake.pkg-path = "cmake"
+cmake.version = "3.31.9"
+
+# 'nvim-by-hand', in full. denver's version of that stage is ~60 lines across
+# nvim/install.sh (download, checksum, atomic unpack, idempotence),
+# nvim/activate.sh (PATH) and nvim/nvim.env (the pins) -- written by hand on
+# purpose, so doc/how-to.md can show what that job costs immediately before
+# showing conan doing it properly. Here it is two lines.
+neovim.pkg-path = "neovim"
+neovim.version = "0.12.4"
+
+# 'tools-from-internet', second half. UNVERIFIED -- same catalog caveat as
+# ../../../raspberry-pico/.flox/env/manifest.toml.
+gcc-arm-embedded.pkg-path = "gcc-arm-embedded"
+
+[vars]
+# 'best-practices' -- ports exactly, and more declaratively than the original
+# (denver had to source a script so the export would survive into the final
+# command).
+PYTEST_ADDOPTS = "-v -s"
+
+[hook]
+# 'uv-packages'. Hand-rolled, as in every flox port here -- no venv primitive.
+on-activate = '''
+  [ -d "$FLOX_ENV_PROJECT/.venv" ] || uv venv "$FLOX_ENV_PROJECT/.venv"
+  uv pip install -q -r "$FLOX_ENV_PROJECT/requirements.txt"
+'''
+
+[profile]
+common = '''
+  . "$FLOX_ENV_PROJECT/.venv/bin/activate"
+'''
+
+[options]
+systems = ["x86_64-linux"]

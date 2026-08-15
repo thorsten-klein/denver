@@ -1,0 +1,43 @@
+# Port of ../../denver.yml to flox (https://flox.dev).
+# Written to spec and NOT executed -- flox and nix are not installed in the
+# repo that produced this branch. See ../../../PORTING-flox.md for the
+# fidelity report.
+#
+# denver original: three 'custom' stages demonstrating stage-to-stage env
+# propagation, plus one env-specific CLI flag (--greeting).
+
+version = 1
+
+[install]
+# nothing to install -- this env is entirely about env propagation
+
+[vars]
+# GAP -- denver's 'args:' declared a real argparse flag (--greeting, default
+# 'hello'), listed by `denver simple-env --help` and delivered as
+# DENVER_ARG_GREETING. flox has no per-environment CLI argument declaration.
+# Nearest equivalent: a default var.
+GREETING = "hello"
+
+[hook]
+# denver's 'set-vars' stage used `source: custom.sh` so what it exports folds
+# into every later stage and the final command. flox's on-activate runs in a
+# bash subshell whose *exported* variables are propagated into the activated
+# environment -- so unlike most tools here, a script that COMPUTES what to
+# export does port. That is the closest match to denver's `source:`
+# semantics of any of the five, devenv included.
+on-activate = '''
+  . "$FLOX_ENV_PROJECT/custom.sh"
+'''
+
+[profile]
+# GAP -- 'print-vars-before' demonstrated that the vars are NOT set yet at
+# that point in the pipeline. flox has one activation hook, not an ordered
+# list of stages with observable state between them, so putting the "before"
+# echo anywhere in activation would print the vars as already set and
+# demonstrate the opposite of the original's point. It has no home here.
+common = '''
+  echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR greeting=$GREETING"
+'''
+
+[options]
+systems = ["x86_64-linux"]

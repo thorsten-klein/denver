@@ -1,0 +1,44 @@
+# Port of ../../denver.yml to flox (https://flox.dev).
+# Written to spec and NOT executed -- see ../../../PORTING-flox.md.
+#
+# denver original: the shared base every zephyr-devshell-<version> env
+# imports. Declared `runnable: false` -- starting it directly is an error; it
+# exists only to be inherited.
+#
+# flox is one of only two tools in this comparison (with devenv) that can
+# express this at all. `[include] environments` in the derived env names this
+# one by directory -- see ../../../zephyr-devshell-4.3.1/.flox/env/manifest.toml.
+#
+# GAP -- flox has no `runnable: false`. Nothing stops `flox activate` here;
+# it just yields an incomplete environment rather than denver's clear error.
+#
+# GAP (semantics) -- flox composition is a *merge with last-wins on
+# conflicts*, resolved at `flox activate` time and requiring an explicit
+# `flox include upgrade` to pick up changes in the included env. denver
+# resolves the import chain on every run, and its list-valued keys (hooks:,
+# recipe-dirs:) accumulate across layers rather than overwriting. So the
+# base/derived split ports structurally, but the merge rules differ.
+
+version = 1
+
+[install]
+python3.pkg-path = "python3"
+python3.version = "3.12.3"
+uv.pkg-path = "uv"
+cmake.pkg-path = "cmake"
+ninja.pkg-path = "ninja"
+ccache.pkg-path = "ccache"
+git.pkg-path = "git"
+
+[vars]
+CONAN_HOME = "$FLOX_ENV_PROJECT/.flox/cache/conan2"
+
+[hook]
+# denver's base contributed hooks/env.sh, and every layer of the import chain
+# adds its own rather than replacing it.
+on-activate = '''
+  . "$FLOX_ENV_PROJECT/hooks/env.sh"
+'''
+
+[options]
+systems = ["x86_64-linux"]

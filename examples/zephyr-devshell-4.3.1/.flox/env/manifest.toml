@@ -1,0 +1,59 @@
+# Port of ../../denver.yml to flox (https://flox.dev).
+# Written to spec and NOT executed -- see ../../../PORTING-flox.md.
+#
+# denver original: five stages, inheriting ../zephyr-devshell via `import:`
+# and restating only the 4.3.1-specific pins.
+
+version = 1
+
+# denver's `import: [../zephyr-devshell]`. flox's `[include] environments` is
+# a real named-sibling composition mechanism -- one of only two in this
+# comparison (with devenv's Nix module `imports`) that reproduces denver's
+# layering rather than flattening it (devbox, pixi) or replacing it with
+# implicit parent-directory merging (mise).
+#
+# See the caveats in ../../../zephyr-devshell/.flox/env/manifest.toml: the
+# merge rules are last-wins and require `flox include upgrade` to pick up
+# base changes, where denver re-resolves the chain every run and accumulates
+# list-valued keys across layers.
+[include]
+environments = [
+  { dir = "../../../zephyr-devshell" },
+]
+
+[install]
+west.pkg-path = "python3Packages.west"
+
+[vars]
+ZEPHYR_VERSION = "4.3.1"
+
+[hook]
+# GAP (hard) -- stages 4 and 5. denver ran `west update` (clone ~40 pinned
+# repos), `west patches`, `west blobs`, and THEN installed whatever python
+# packages the freshly-cloned modules turn out to declare (`west packages
+# pip`) -- as ordered, fingerprinted stages, on entry.
+#
+# flox has a single on-activate hook and no task graph at all (no `depends`
+# like mise, no `after`/`status` like devenv). So the ordering below is
+# ordering-by-line-number in one shell script, and there is no per-step skip
+# check: this would re-run `west update` on every single activation, which
+# for a 40-repo Zephyr workspace is not viable. In practice you would guard
+# it by hand or move it out of activation entirely -- at which point
+# "entering the environment gives you a correct workspace", denver's actual
+# promise, is gone.
+#
+# GAP -- no equivalent of denver's `no-index: auto` offline install against
+# the conan-provided wheel cache, of `venv-patcher:`, of `skip-if:`, or of
+# `freeze-to:` writing requirements.final.txt back into the tree.
+on-activate = '''
+  # guard by hand -- flox has no per-step status check
+  if [ ! -d "$FLOX_ENV_PROJECT/.west" ]; then
+    west init -l "$FLOX_ENV_PROJECT"
+    west update
+    west blobs fetch
+    uv pip install $(west packages pip)
+  fi
+'''
+
+[options]
+systems = ["x86_64-linux"]

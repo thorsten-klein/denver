@@ -1,0 +1,37 @@
+# Port of ../../denver.yml to flox (https://flox.dev).
+# Written to spec and NOT executed -- see ../../../PORTING-flox.md.
+#
+# denver original: a single 'uv' stage -- a virtualenv with two pinned
+# packages, nothing else.
+
+version = 1
+
+[install]
+python3.pkg-path = "python3"
+uv.pkg-path = "uv"
+# UNVERIFIED -- pinning uv to exactly 0.9.13 depends on flox's catalog
+# carrying that version.
+uv.version = "0.9.13"
+
+[hook]
+# GAP -- flox has no first-class Python venv concept (unlike devenv's
+# languages.python.venv and mise's _.python.venv). So this is hand-rolled
+# shell, which is close to the system_venv.sh script denver's uv provider
+# was written to replace.
+#
+# GAP -- denver fingerprinted requirements.txt and reinstalled only when it
+# actually changed. This runs on every activation. uv makes that cheap, but
+# it is not the same guarantee.
+on-activate = '''
+  [ -d "$FLOX_ENV_PROJECT/.venv" ] || uv venv "$FLOX_ENV_PROJECT/.venv"
+  uv pip install -q -r "$FLOX_ENV_PROJECT/requirements.txt"
+'''
+
+[profile]
+# activate the venv in the interactive shell flox hands you
+common = '''
+  . "$FLOX_ENV_PROJECT/.venv/bin/activate"
+'''
+
+[options]
+systems = ["x86_64-linux"]

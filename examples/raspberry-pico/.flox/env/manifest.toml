@@ -1,0 +1,48 @@
+# Port of ../../denver.yml to flox (https://flox.dev).
+# Written to spec and NOT executed -- see ../../../PORTING-flox.md.
+#
+# denver original: 'uv' -> 'conan'. A cross-compilation toolchain, no Docker.
+
+version = 1
+
+[install]
+python3.pkg-path = "python3"
+uv.pkg-path = "uv"
+cmake.pkg-path = "cmake"
+ninja.pkg-path = "ninja"
+
+# flox's catalog is nixpkgs-derived, so the ARM bare-metal toolchain is
+# there and the half of this env that costs denver a whole conan recipe
+# costs three lines here.
+#
+# UNVERIFIED -- flox pins per-package versions from its catalog, so whether
+# exactly 15.3 is available needs checking. denver's
+# conan/recipes/arm-none-eabi/15.3/ pins the upstream ARM tarball and its
+# checksum directly, so it never depends on a third party having packaged
+# that release.
+gcc-arm-embedded.pkg-path = "gcc-arm-embedded"
+
+# GAP (hard) -- pico-sdk is not in nixpkgs/the flox catalog, and denver's
+# conan/recipes/pico-sdk/2.3.0/ does not merely fetch it: it *builds
+# picotool from source*. flox installs catalog packages; it does not build
+# arbitrary things. That stage degrades to the shell below -- i.e. back to
+# the unmaintained setup.sh the whole exercise is trying to get away from.
+
+[vars]
+# denver kept conan's cache out of ~/.conan2 to avoid colliding with an
+# existing one.
+CONAN_HOME = "$FLOX_ENV_PROJECT/.flox/cache/conan2"
+
+[hook]
+on-activate = '''
+  [ -d "$FLOX_ENV_PROJECT/.venv" ] || uv venv "$FLOX_ENV_PROJECT/.venv"
+  uv pip install -q -r "$FLOX_ENV_PROJECT/requirements.txt"
+'''
+
+[profile]
+common = '''
+  . "$FLOX_ENV_PROJECT/.venv/bin/activate"
+'''
+
+[options]
+systems = ["x86_64-linux"]
