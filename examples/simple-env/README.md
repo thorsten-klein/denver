@@ -11,12 +11,21 @@ Running it prints three lines and drops you into a shell:
 $ denver examples/simple-env -- true
 [print-vars-before] MYVAR= FOO= BAR=
 [set-vars] sourcing custom.sh...
-[print-vars-after] MYVAR=1 FOO=2 BAR=3
+[print-vars-after] MYVAR=1 FOO=2 BAR=3 greeting=hello
 ```
 
 Three stages run in the order `stages:` lists them. The middle one sources
 `custom.sh`, which exports `MYVAR`/`FOO`/`BAR`. The stage before it sees
 nothing; the stage after it sees all three — and so does the final command.
+
+That last `greeting=hello` comes from this env's own command-line flag,
+declared under `args:` — so it is also `--greeting`'s default:
+
+```console
+$ denver examples/simple-env --greeting "hi there" -- true
+...
+[print-vars-after] MYVAR=1 FOO=2 BAR=3 greeting=hi there
+```
 
 ## Why it exists
 
@@ -44,6 +53,15 @@ genuinely confusing — so this env exists to make the difference visible:
 The `print-vars-before` / `print-vars-after` pair is there purely so you can
 see that boundary being crossed.
 
+**And, in passing, as the smallest `args:` demo.** `--greeting` is one
+`args:` entry — an `argparse.add_argument` call written in YAML — and
+`denver examples/simple-env --help` lists it next to denver's own flags. Its
+value arrives in the config as `${DENVER_ARG_GREETING}`, which is expanded
+by *denver*, before `print-vars-after`'s `cmd:` reaches a shell at all —
+unlike `$MYVAR` in that same line, which the shell expands from what
+`set-vars` exported. See "Environment-specific CLI arguments" in
+[`doc/architecture.md`](../../doc/architecture.md).
+
 Note this is stage-scoped: `source:` belongs to the `set-vars` stage's own
 section, which is different from the global `hooks:` mechanism that applies
 to the whole env.
@@ -61,7 +79,7 @@ the `Examples` workflow.
 
 | File | What it is |
 |---|---|
-| `denver.yml` | Three `custom` stages; the middle one wires up `source:` |
+| `denver.yml` | Three `custom` stages; the middle one wires up `source:`, plus one `args:` flag |
 | `custom.sh` | The sourced script — just three `export`s |
 
 ## Next

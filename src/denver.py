@@ -27,6 +27,11 @@ instead of launched. Read-only queries and sourced scripts do still run --
 they are what the printed commands are derived from; see README.md for the
 full marker legend and the wrapper-boundary caveat.
 
+An env may declare flags of its own, under 'args:' in its denver.yml: each
+entry is forwarded to argparse's add_argument, and what the user passes is
+exported as DENVER_ARG_<DEST> (see add_config_args). `denver <env> --help`
+lists those alongside denver's own flags.
+
 Run `denver --help` to see every flag, and README.md for the full
 behavioural reference (-c's dotted-path/+= syntax, --run's 'scripts:'
 mechanism, the wrapper relocation model, ...).
@@ -580,6 +585,7 @@ KNOWN_TOP_LEVEL_KEYS = {
     "env",
     "hooks",
     "extensions",
+    "args",
 }
 
 
@@ -1151,20 +1157,7 @@ def resolve_command(config, forwarded):
     return list(forwarded) or default_command(config)
 
 
-def reinvoke_command(
-    config_path,
-    forwarded,
-    wrapper_stage_ids,
-    *,
-    until_stage=None,
-    skip_stages=(),
-    quiet=0,
-    fast=False,
-    force=False,
-    ci=False,
-    no_wait=False,
-    start_time=None,
-):
+def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None):
     """Re-invoke denver (skipping ``wrapper_stage_ids``) so setup providers run in the wrapper.
 
     Used inside a wrapper (e.g. docker): the same denver runs again inside the
@@ -1190,37 +1183,50 @@ def reinvoke_command(
     ``wrapper_stage_ids`` (the active wrapper(s) relocating this command) are
     each passed as their own ``--skip``, so the re-invoked denver's own stage
     filtering drops them from 'stages:' and never tries to relocate again.
-    ``until_stage``/``skip_stages`` are the user's *original* --until/--skip
-    (consumed out of ``forwarded`` by the outer main(), same as
-    quiet/fast/force/ci below) -- re-passed explicitly so a stage the user
-    asked to skip stays skipped inside the wrapper too, instead of the inner
-    denver re-computing 'stages:' from scratch with no memory of them and
-    running it anyway.
-    --quiet (repeated ``quiet`` times, so e.g. -qq's level 2 survives, not
-    just a single -q)/--fast/--force/--ci are re-passed explicitly: all were
-    consumed out of ``forwarded`` by the outer main(), so the inner denver
-    wouldn't otherwise know to honour them too -- none of these are read
-    back out of a real environment variable, so there's no other way for the
-    inner process to inherit them. ``forwarded`` (already stripped of any
-    '--' marker by the outer main(), see resolve_command) is re-introduced
-    with a fresh '--' here, so the re-invoked denver's own argv splitting
-    (main() splits on the first literal '--') separates it from denver's own
-    flags again instead of trying to parse it as one of them.
-    ``start_time`` (hidden --start-time flag) is the outer denver's own
-    ``time.time()`` at the very start of run_stages() -- carried across so
-    the "env started in Ns" line the inner denver prints right before
-    launching the command reflects the *whole* startup (including the
-    outer denver's own wrapper-stage work), not just the inner process's
-    own, much shorter, wall-clock.
+
+    ``options`` is this invocation's own RunOptions, and essentially all of
+    it has to be re-passed: every one of these was consumed out of argv by
+    the outer main(), and none is read back out of a real environment
+    variable, so there is no other way for the inner process to inherit any
+    of them.
+
+    * --until/--skip, so a stage the user asked to skip stays skipped inside
+      the wrapper too, instead of the inner denver re-computing 'stages:'
+      from scratch with no memory of them and running it anyway;
+    * --quiet (repeated ``options.quiet`` times, so e.g. -qq's level 2
+      survives, not just a single -q), --fast/--force/--ci/--no-wait;
+    * the env's own 'args:' flags (``options.cli_args.argv``): the inner
+      denver re-reads the same denver.yml, so it declares the same flags --
+      but nobody would have given them to it, and every one would quietly
+      fall back to its 'default:';
+    * ``start_time`` (the hidden --start-time flag), the outer denver's own
+      ``time.time()`` at the very start of this startup -- carried across so
+      the "env started in Ns" line the inner denver prints right before
+      launching the command reflects the *whole* startup (including the
+      outer denver's own wrapper-stage work), not just the inner process's
+      own, much shorter, wall-clock.
+
+    ``forwarded`` (already stripped of any '--' marker by the outer main(),
+    see resolve_command) is re-introduced with a fresh '--' here, so the
+    re-invoked denver's own argv splitting (main() splits on the first
+    literal '--') separates it from denver's own flags again instead of
+    trying to parse it as one of them.
     """
+    options = options or RunOptions()
     filter_flags = []
-    if until_stage:
-        filter_flags += ["--until", until_stage]
-    for stage_id in (*skip_stages, *wrapper_stage_ids):
+    if options.until_stage:
+        filter_flags += ["--until", options.until_stage]
+    for stage_id in (*options.skip_stages, *wrapper_stage_ids):
         filter_flags += ["--skip", stage_id]
-    extra_flags = _reinvoke_flags(quiet=quiet, fast=fast, force=force, ci=ci, no_wait=no_wait, start_time=start_time)
     command = ["--", *forwarded] if forwarded else []
-    return [*_denver_launcher(), str(config_path), *filter_flags, *extra_flags, *command]
+    return [
+        *_denver_launcher(),
+        str(config_path),
+        *filter_flags,
+        *_reinvoke_flags(options),
+        *options.cli_args.argv,
+        *command,
+    ]
 
 
 def _denver_launcher():
@@ -1233,18 +1239,24 @@ def _denver_launcher():
     return ["python3", str(Path(__file__).resolve())]
 
 
-def _reinvoke_flags(*, quiet, fast, force, ci, no_wait, start_time):
+def _reinvoke_flags(options):
     """The denver-own flags re-passed to the inner denver: -q once per level, then each flag that is set."""
-    flags = ["-q"] * quiet
-    for flag, enabled in (("--fast", fast), ("--force", force), ("--ci", ci), ("--no-wait", no_wait)):
+    flags = ["-q"] * options.quiet
+    toggles = (
+        ("--fast", options.fast),
+        ("--force", options.force),
+        ("--ci", options.ci),
+        ("--no-wait", options.no_wait),
+    )
+    for flag, enabled in toggles:
         if enabled:
             flags.append(flag)
-    if start_time is not None:
-        flags += ["--start-time", repr(start_time)]
-    return flags
+    return [*flags, "--start-time", repr(options.start_time)]
 
 
-def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, force=False, ci=False, dry_run=False):
+def resolve_full_config(
+    env_dir, config, config_path, *, quiet=0, fast=False, force=False, ci=False, dry_run=False, cli_args=None
+):
     """Fully resolve an env's config for actual use.
 
     Section-level ('docker: import:') stacking, then every provider's
@@ -1252,6 +1264,12 @@ def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, fo
     single place both --show-config and the real run get their config from,
     so they can never drift apart -- a provider's setup() never guesses a
     default itself, it just reads what's already there. Returns (config, ctx).
+
+    ``cli_args`` (the env's own 'args:', as this invocation resolved them --
+    see CliArgs) is exported into ctx.env *before* any default is resolved,
+    for exactly the same reason: a stage section reading
+    ``${DENVER_ARG_TARGET}`` must see the same value under --show-config as
+    in the real run.
     """
     from denver_providers import Context, load_extension_providers
 
@@ -1269,6 +1287,7 @@ def resolve_full_config(env_dir, config, config_path, *, quiet=0, fast=False, fo
         ci=ci,
         dry_run=dry_run,
     )
+    ctx.env.update(_cli_args(cli_args).env)
     # registers any 'extensions.providers.dirs:' Provider subclasses into
     # providers.PROVIDERS before resolve_provider_defaults below needs to
     # look any of their names up via make_stage.
@@ -1346,7 +1365,17 @@ def _resolved_script_path(ctx, stage_id, name, script):
 
 
 def run_named_scripts(
-    env_dir, config, config_path, name, *, until_stage=None, skip_stages=(), quiet=False, dry_run=False, no_wait=False
+    env_dir,
+    config,
+    config_path,
+    name,
+    *,
+    until_stage=None,
+    skip_stages=(),
+    quiet=False,
+    dry_run=False,
+    no_wait=False,
+    cli_args=None,
 ):
     """Run every (filtered) stage's ``scripts: <name>:`` entries, each in the context it actually needs.
 
@@ -1375,7 +1404,9 @@ def run_named_scripts(
         dry_run_legend()
 
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
-    config, ctx = _prepare_context(env_dir, config, config_path, no_wait=no_wait, quiet=quiet, dry_run=dry_run)
+    config, ctx = _prepare_context(
+        env_dir, config, config_path, no_wait=no_wait, quiet=quiet, dry_run=dry_run, cli_args=cli_args
+    )
 
     stages = _make_stages(config, stage_ids)
     wrappers, setups, _, _ = _partition_stages(stages, set(_stage_ids_of(stages)))
@@ -1406,6 +1437,7 @@ def run_named_scripts(
         quiet=quiet,
         until_stage=until_stage,
         skip_stages=(*skip_stages, *_stage_ids_of(active_wrappers)),
+        cli_argv=_cli_args(cli_args).argv,
     )
     ctx.exec(_wrap_cmd(ctx, cmd, active_wrappers, stage_index, len(stages)))
 
@@ -1425,8 +1457,14 @@ def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stag
         )
 
 
-def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages):
-    """The ``denver <config> --run <name>`` argv the wrapper re-invokes, this run's own filters re-passed."""
+def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages, cli_argv=()):
+    """The ``denver <config> --run <name>`` argv the wrapper re-invokes, this run's own filters re-passed.
+
+    ``cli_argv`` -- the tokens this env's own 'args:' flags consumed -- is
+    re-passed for the same reason reinvoke_command does it: the inner
+    denver declares the same flags and would otherwise only see their
+    defaults.
+    """
     cmd = ["python3", str(Path(__file__).resolve()), str(config_path), "--run", name]
     if quiet:
         cmd.append("-q")
@@ -1434,7 +1472,7 @@ def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages):
         cmd += ["--until", until_stage]
     for stage_id in skip_stages:
         cmd += ["--skip", stage_id]
-    return cmd
+    return [*cmd, *cli_argv]
 
 
 def _wrap_cmd(ctx, cmd, active_wrappers, stage_index, stage_count):
@@ -1586,29 +1624,14 @@ def _print_env_started(ctx, start_time):
     print(f"\033[94m{line}\n| {text} |\n{line}\033[39m", file=sys.stderr)
 
 
-def run_stages(
-    env_dir,
-    config,
-    config_path,
-    forwarded,
-    *,
-    until_stage=None,
-    skip_stages=(),
-    quiet=0,
-    fast=False,
-    force=False,
-    ci=False,
-    dry_run=False,
-    no_wait=False,
-    start_time=None,
-):
+def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     """Build/enter the environment via its stages, then exec the command.
 
-    ``start_time`` is this whole startup's own ``time.time()`` origin,
-    threaded across a wrapper reinvocation (see reinvoke_command) for the
-    final "env started in Ns" line right before the resolved command
-    actually launches -- it must reflect the *whole* startup, not just the
-    reinvoked (inner) process's own, much shorter, wall-clock.
+    ``options`` is everything this invocation chose about *how* to run
+    (--until/--skip, -q, --fast/--force/--ci, --dry-run, --no-wait, the
+    env's own 'args:' flags, the startup clock) as one RunOptions value; it
+    defaults to "no flag given at all". See RunOptions for ``start_time``,
+    which reaches the final "env started in Ns" line.
 
     banner()'s '[i/n]' numbers every stage the env *declares* in 'stages:'
     (see ``all_stage_ids`` below), not just the ones actually running -- a
@@ -1629,24 +1652,24 @@ def run_stages(
     """
     from denver_providers.context import dry_run_legend
 
-    if start_time is None:
-        start_time = time.time()
+    options = options or RunOptions()
 
-    if dry_run:
+    if options.dry_run:
         dry_run_legend()
 
     all_stage_ids = _declared_stage_ids(config)
-    stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
+    stage_ids = filtered_stage_ids(config, env_dir, options.until_stage, options.skip_stages)
     config, ctx = _prepare_context(
         env_dir,
         config,
         config_path,
-        no_wait=no_wait,
-        quiet=quiet,
-        fast=fast,
-        force=force,
-        ci=ci,
-        dry_run=dry_run,
+        no_wait=options.no_wait,
+        quiet=options.quiet,
+        fast=options.fast,
+        force=options.force,
+        ci=options.ci,
+        dry_run=options.dry_run,
+        cli_args=options.cli_args,
     )
 
     # each entry in 'stages:' is a pipeline stage (a provider type + config
@@ -1668,22 +1691,12 @@ def run_stages(
         stage_index=_stage_positions(all_stages),
         total=len(all_stages),
         stage_ids=stage_ids,
-        cutoff=_until_cutoff(all_stage_ids, until_stage),
+        cutoff=_until_cutoff(all_stage_ids, options.until_stage),
         all_stage_ids=all_stage_ids,
         all_stages=all_stages,
     )
 
     if active_wrappers:
-        run_options = _RunOptions(
-            until_stage=until_stage,
-            skip_stages=skip_stages,
-            quiet=quiet,
-            fast=fast,
-            force=force,
-            ci=ci,
-            no_wait=no_wait,
-            start_time=start_time,
-        )
         _run_stages_via_wrapper(
             ctx,
             config,
@@ -1694,7 +1707,7 @@ def run_stages(
             skipped_wrappers=skipped_wrappers,
             skipped_setups=skipped_setups,
             skip_state=skip_state,
-            run_options=run_options,
+            options=options,
         )
     else:
         _run_stages_directly(
@@ -1706,8 +1719,8 @@ def run_stages(
             skipped_wrappers=skipped_wrappers,
             skipped_setups=skipped_setups,
             skip_state=skip_state,
-            quiet=quiet,
-            start_time=start_time,
+            quiet=options.quiet,
+            start_time=options.start_time,
         )
 
 
@@ -1838,18 +1851,47 @@ class _StageSkipState:
         self.all_stages = all_stages
 
 
-class _RunOptions:
-    """The per-invocation flags ``_run_stages_via_wrapper`` threads through to a wrapper reinvocation -- see run_stages."""
+class RunOptions:
+    """Everything one invocation chose about *how* to run an env, as one value -- see run_stages.
 
-    def __init__(self, *, until_stage, skip_stages, quiet, fast, force, ci, no_wait, start_time):
+    These travel together from the command line all the way into a wrapper
+    reinvocation (see reinvoke_command), so they are passed as one bundle
+    rather than as a dozen parameters that every function in that chain
+    would have to name again. Every field defaults, so a caller that cares
+    about one flag (a test, mostly) states only that one.
+
+    ``start_time`` is resolved here rather than left as None: it is this
+    whole startup's clock origin, and the invocation *is* when the startup
+    began. A reinvoked denver is handed the outer run's own value (the
+    hidden --start-time), so the "env started in Ns" line always reflects
+    the whole startup rather than the inner process's much shorter one.
+    """
+
+    def __init__(
+        self,
+        *,
+        until_stage=None,
+        skip_stages=(),
+        quiet=0,
+        fast=False,
+        force=False,
+        ci=False,
+        dry_run=False,
+        no_wait=False,
+        start_time=None,
+        cli_args=None,
+    ):
+        """Hold one invocation's options; see the class docstring for ``start_time``."""
         self.until_stage = until_stage
         self.skip_stages = skip_stages
         self.quiet = quiet
         self.fast = fast
         self.force = force
         self.ci = ci
+        self.dry_run = dry_run
         self.no_wait = no_wait
-        self.start_time = start_time
+        self.start_time = time.time() if start_time is None else start_time
+        self.cli_args = _cli_args(cli_args)
 
 
 def _show_skipped(ctx, skipped, skip_state):
@@ -1887,7 +1929,7 @@ def _run_stages_via_wrapper(
     skipped_wrappers,
     skipped_setups,
     skip_state,
-    run_options,
+    options,
 ):
     """Host side: prepare the wrapper(s), then relocate execution into them (see run_stages)."""
     # Same single ordered walk as _run_stages_directly, for the same reason:
@@ -1911,13 +1953,13 @@ def _run_stages_via_wrapper(
             run_ids=set(_stage_ids_of(active_wrappers)),
             report_ids=report_ids,
             skip_state=skip_state,
-            quiet=run_options.quiet,
+            quiet=options.quiet,
         )
 
     cmd = _wrapper_target_cmd(
-        ctx, config, config_path, forwarded, active_wrappers=active_wrappers, setups=setups, run_options=run_options
+        ctx, config, config_path, forwarded, active_wrappers=active_wrappers, setups=setups, options=options
     )
-    _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, run_options, has_setups=bool(setups))
+    _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, has_setups=bool(setups))
 
 
 def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, skip_state, quiet):
@@ -1940,7 +1982,7 @@ def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, 
         _show_skipped(ctx, [stage], skip_state)
 
 
-def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers, setups, run_options):
+def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers, setups, options):
     """What the wrapper relocates: a denver reinvocation for the setup stages, else the command itself."""
     if not setups:
         # pure wrapper: relocate the user's command (or default) directly.
@@ -1951,19 +1993,7 @@ def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers,
     # -- it recomputes skipped_setups identically (same denver.yml,
     # same --until/--skip) and shows those banners itself.
     _note_not_previewed(ctx, "stages", setups, active_wrappers)
-    return reinvoke_command(
-        config_path,
-        forwarded,
-        _stage_ids_of(active_wrappers),
-        until_stage=run_options.until_stage,
-        skip_stages=run_options.skip_stages,
-        quiet=run_options.quiet,
-        fast=run_options.fast,
-        force=run_options.force,
-        ci=run_options.ci,
-        no_wait=run_options.no_wait,
-        start_time=run_options.start_time,
-    )
+    return reinvoke_command(config_path, forwarded, _stage_ids_of(active_wrappers), options=options)
 
 
 def _note_not_previewed(ctx, what, setups, active_wrappers):
@@ -1989,12 +2019,12 @@ def _note_not_previewed(ctx, what, setups, active_wrappers):
     )
 
 
-def _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, run_options, *, has_setups):
+def _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, *, has_setups):
     """Wrap ``cmd`` through the active wrapper(s) and exec it, announcing a ready env if nothing re-invokes."""
     cmd = _wrap_cmd(ctx, cmd, active_wrappers, skip_state.stage_index, skip_state.total)
     # with no setup stages nothing re-invokes, so this is where the env is ready
-    if not has_setups and run_options.quiet < 2:
-        _print_env_started(ctx, run_options.start_time)
+    if not has_setups and options.quiet < 2:
+        _print_env_started(ctx, options.start_time)
     ctx.exec(cmd)
 
 
@@ -2128,7 +2158,7 @@ def _provider_keys(section):
     return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
-def show_config(env_dir, config, config_path, until_stage=None, skip_stages=()):
+def show_config(env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None):
     """Print the fully resolved config as YAML -- exactly what the real run would use.
 
     Whole-file 'import:' stacking, section-level 'import:' stacking, and
@@ -2152,7 +2182,7 @@ def show_config(env_dir, config, config_path, until_stage=None, skip_stages=()):
     alphabetically. Everything *below* that (a section's own nested keys, a
     hook name's own sub-keys, ...) stays alphabetical (see _sorted_nested).
     """
-    resolved, ctx = resolve_full_config(env_dir, config, config_path)
+    resolved, ctx = resolve_full_config(env_dir, config, config_path, cli_args=cli_args)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
     _drop_filtered_sections(resolved, stage_ids)
     resolved["stages"] = stage_ids
@@ -2185,9 +2215,187 @@ def _ordered_config(resolved, stage_ids):
 
 
 # --------------------------------------------------------------------------- #
+# denver.yml-declared CLI arguments ('args:')
+#
+# An env may declare flags of its own: each 'args:' entry is one
+# ``parser.add_argument(*flags, **kwargs)`` call, so an env offering a
+# per-run knob ("which board?", "release or debug?") gets a real flag that
+# `denver <env> --help` lists, instead of asking its users for a generic
+# `-c some.dotted.path=value`. What the user then passes is exported as
+# DENVER_ARG_<DEST> (see cli_arg_env), i.e. it reaches the denver.yml's own
+# ${...} interpolation, every hook, every stage and the final command
+# through the one mechanism all of those already read.
+# --------------------------------------------------------------------------- #
+# Every 'args:' entry's parsed value is exported under this prefix:
+# '--target' -> DENVER_ARG_TARGET.
+ARG_ENV_PREFIX = "DENVER_ARG_"
+
+
+def add_config_args(parser, entries):
+    """Add every denver.yml 'args:' entry to ``parser`` as an ordinary argparse flag.
+
+    ``entries`` is the raw 'args:' value (None when the env declares none).
+    Each entry is a mapping: 'flags:' names the flag(s), everything else is
+    forwarded verbatim as an ``add_argument`` keyword argument -- so an env
+    gets argparse's full vocabulary ('help', 'default', 'action', 'nargs',
+    'choices', 'required', 'metavar', 'dest', ...) without denver having to
+    re-invent, or gate, any of it.
+    """
+    if entries is None:
+        return
+    if not isinstance(entries, list):
+        die(f"denver.yml: 'args:' must be a list of argument definitions, got {entries!r}")
+    # every dest already spoken for: denver's own flags first (so an entry
+    # can never quietly overwrite args.force et al.), then each entry added
+    # here, so two entries cannot silently collide with each other either.
+    taken = {action.dest for action in parser._actions}
+    for entry in entries:
+        _add_config_arg(parser, entry, taken)
+
+
+def _add_config_arg(parser, entry, taken):
+    """Add one 'args:' entry, refusing a dest that is already spoken for."""
+    if not isinstance(entry, dict):
+        die(f"denver.yml 'args:': every entry must be a mapping of add_argument arguments, got {entry!r}")
+    flags = config_arg_flags(entry)
+    kwargs = {key: value for key, value in entry.items() if key != "flags"}
+    _reject_type_key(flags, kwargs)
+    dest = config_arg_dest(flags, entry)
+    if dest in taken:
+        die(
+            f"denver.yml 'args:': {', '.join(flags)} resolves to '{dest}', which denver's own arguments "
+            f"already use -- rename the flag or give the entry a different 'dest:'."
+        )
+    _add_argument(parser, flags, kwargs)
+    taken.add(dest)
+
+
+def config_arg_flags(entry):
+    """One entry's flag(s) as a list: ``flags: --target`` and ``flags: [-t, --target]`` both work.
+
+    Only option flags, never a positional: denver's own <env> is the one
+    positional argument, and a second one would silently compete with it for
+    whatever the user typed.
+    """
+    flags = entry.get("flags")
+    if isinstance(flags, str):
+        flags = [flags]
+    if not isinstance(flags, list) or not flags:
+        die(f"denver.yml 'args:': entry {entry!r} needs 'flags:' -- a flag string, or a list of them")
+    for flag in flags:
+        _validate_flag(flag, entry)
+    return flags
+
+
+def _validate_flag(flag, entry):
+    """Die unless one 'flags:' element is a string starting with '-'."""
+    if not isinstance(flag, str) or not flag.startswith("-"):
+        die(
+            f"denver.yml 'args:': flag {flag!r} in entry {entry!r} must be a string starting with '-' -- "
+            f"an env cannot declare a positional argument (denver's own <env> is the only one)."
+        )
+
+
+def _reject_type_key(flags, kwargs):
+    """Die on 'type:', which a denver.yml cannot express.
+
+    argparse's ``type=`` is a *callable*, and YAML only ever hands over a
+    string -- accepting one would mean denver picking which conversions
+    exist, or importing whatever a config names. Neither is needed: every
+    value arrives as a string anyway (an environment variable is a string),
+    and 'choices:'/'action:' cover the cases a type would have.
+    """
+    if "type" in kwargs:
+        die(
+            f"denver.yml 'args:': {', '.join(flags)} sets 'type:', which denver.yml cannot express "
+            f"(argparse needs a callable) -- values are always strings; use 'choices:' or 'action:' instead."
+        )
+
+
+def _add_argument(parser, flags, kwargs):
+    """``parser.add_argument(*flags, **kwargs)``, reporting argparse's own complaints as denver errors."""
+    try:
+        parser.add_argument(*flags, **kwargs)
+    except (argparse.ArgumentError, TypeError, ValueError) as exc:
+        die(f"denver.yml 'args:': cannot add {', '.join(flags)} -- {exc}")
+
+
+def config_arg_dest(flags, entry):
+    """The attribute argparse stores this entry under: its own 'dest:', else the first long flag.
+
+    Mirrors argparse's own rule, because denver needs the name *before*
+    add_argument runs (to reject a collision with its own flags) and after
+    parsing (to name the DENVER_ARG_<DEST> variable).
+    """
+    if "dest" in entry:
+        return entry["dest"]
+    long_flags = [flag for flag in flags if flag.startswith("--")]
+    return (long_flags or flags)[0].lstrip("-").replace("-", "_")
+
+
+def cli_arg_env(entries, args):
+    """``{DENVER_ARG_<DEST>: text}`` for every 'args:' entry this invocation has a value for."""
+    env = {}
+    for entry in entries or []:
+        dest = config_arg_dest(config_arg_flags(entry), entry)
+        text = _arg_value_text(getattr(args, dest, None))
+        if text is not None:
+            env[f"{ARG_ENV_PREFIX}{dest.upper()}"] = text
+    return env
+
+
+def _arg_value_text(value):
+    """One parsed value as environment-variable text, or None when there is nothing to export.
+
+    A value of None (an entry with no 'default:', whose flag wasn't given)
+    deliberately exports *nothing* rather than an empty string, so
+    ``${DENVER_ARG_X:-fallback}`` still takes its fallback -- interpolation
+    treats a set-but-empty variable as set (see context.interpolate).
+
+    An environment variable is a string, so everything else becomes one:
+    'action: store_true'/'store_false' as "1"/"0" (what a shell's `[ "$X" =
+    1 ]` and a compose file both expect), a multi-value 'nargs:'/'action:
+    append' as its space-joined items.
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return str(int(value))
+    if isinstance(value, (list, tuple)):
+        return " ".join(map(str, value))
+    return str(value)
+
+
+class CliArgs:
+    """The env's own 'args:' as one invocation resolved them.
+
+    Two views of the same thing, both needed: ``env`` is what the
+    environment gets to see (DENVER_ARG_<DEST> for every entry with a
+    value), while ``argv`` is the user's own tokens, kept verbatim so a
+    wrapper reinvocation can re-pass them (see reinvoke_command) -- the
+    inner denver re-reads the same denver.yml and would otherwise fall back
+    to each entry's 'default:'.
+    """
+
+    def __init__(self, env=None, argv=()):
+        """Hold one invocation's 'args:' values: ``env`` to export, ``argv`` to re-pass."""
+        self.env = dict(env or {})
+        self.argv = list(argv)
+
+
+def _cli_args(cli_args):
+    """``cli_args``, or an empty CliArgs -- so every caller can just read .env/.argv.
+
+    An env declaring no 'args:' at all, and every caller that predates them
+    (a provider driven directly, a test), both land here.
+    """
+    return cli_args or CliArgs()
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
-def build_arg_parser():
+def build_arg_parser(config_args=None):
     """The argparse.ArgumentParser for every denver-own flag (not the forwarded command).
 
     A fresh instance per call (see main()), so its 'append' actions' default
@@ -2198,6 +2406,13 @@ def build_arg_parser():
     one -- but every other flag is a normal argparse action, so unknown
     flags, a missing required value, etc. are all argparse's own problem to
     report (its usual `usage: ...` + `error: ...` on stderr, exit code 2).
+
+    ``config_args`` is the env's own 'args:' (see add_config_args), added
+    last so those flags are indistinguishable from denver's own everywhere
+    after this -- in --help, in the parse, in the error messages. Omitted
+    (None) wherever the env isn't known yet, which is why parsing is a two
+    pass affair: the flags an env declares live in the file the <env>
+    argument names (see _run_cli).
     """
     parser = argparse.ArgumentParser(prog="denver", add_help=False)
     parser.add_argument("env", nargs="?", help="path to an env directory or a denver.yml file")
@@ -2279,6 +2494,7 @@ def build_arg_parser():
     # Ns" line -- never meant to be typed by a user, hence SUPPRESS instead
     # of a real --help entry.
     parser.add_argument("--start-time", type=float, default=None, help=argparse.SUPPRESS)
+    add_config_args(parser, config_args)
     return parser
 
 
@@ -2400,33 +2616,46 @@ def _run_cli(argv=None):
     returns normally on success, or exits via ``die()``.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
-    parser = build_arg_parser()
 
     if not argv:
-        print_help(parser)
+        print_help(build_arg_parser())
         return
 
     head, forwarded = _split_argv(argv)
+    # First pass, with denver's own flags only: the extra flags this env
+    # declares (its 'args:') live in the very file <env> names, so they
+    # cannot be parsed before <env> itself has been. Unknown tokens are
+    # tolerated here and re-parsed for real below -- they are this env's own
+    # flags, or a typo, and only the second pass can tell the two apart.
+    preliminary, extra_argv = build_arg_parser().parse_known_args(head)
+
+    if _handle_env_less_argv(preliminary, head):
+        return
+
+    env_dir, config_path = resolve_env_dir(preliminary.env)
+    config = _load_cli_config(preliminary, config_path)
+
+    # Second pass, this time with the env's own 'args:' known: an unknown
+    # flag is once again argparse's own `usage:`/`error:` + exit 2, and
+    # --help lists this env's flags alongside denver's own.
+    parser = build_arg_parser(config.get("args"))
     args = parser.parse_args(head)
 
     if _handle_info_flags(args, parser):
         return
 
-    if args.env is None:
-        die("no environment given -- see `denver --help`")
+    cli_args = CliArgs(cli_arg_env(config.get("args"), args), extra_argv)
 
-    env_dir, config_path = resolve_env_dir(args.env)
-    config = _load_cli_config(args, config_path)
-
-    if _handle_config_subcommands(args, env_dir, config, config_path):
+    if _handle_config_subcommands(args, env_dir, config, config_path, cli_args=cli_args):
         return
 
     _require_runnable(env_dir, config, config_path)
-    run_stages(
-        env_dir,
-        config,
-        config_path,
-        forwarded,
+    run_stages(env_dir, config, config_path, forwarded, options=_run_options(args, cli_args))
+
+
+def _run_options(args, cli_args):
+    """Everything the parsed command line chose about *how* to run, as one RunOptions."""
+    return RunOptions(
         until_stage=args.until,
         skip_stages=args.skip,
         quiet=args.quiet,
@@ -2436,10 +2665,39 @@ def _run_cli(argv=None):
         dry_run=args.dry_run,
         no_wait=args.no_wait,
         start_time=args.start_time,
+        cli_args=cli_args,
     )
 
 
-def _load_cli_config(args, config_path):
+def _handle_env_less_argv(preliminary, head):
+    """Handle an invocation with no env to read 'args:' from. Returns True if the run is over.
+
+    `denver --help`/`--version`/`--license` must keep working with no <env>
+    at all, or with one naming something that isn't there -- but neither can
+    wait for the second parse, which needs an env's config to exist. So
+    those invocations are answered here instead, and parsed *strictly*
+    against denver's own flags: with no env, denver's own flags are the
+    entire vocabulary, so a mistyped one is still argparse's usual error
+    rather than a silently ignored token.
+
+    A non-existent <env> falls through (False) rather than being reported
+    here: resolve_env_dir says that far better, and says it for
+    --show-config/--run/a normal run alike.
+    """
+    if preliminary.env is not None and Path(preliminary.env).expanduser().exists():
+        return False
+
+    parser = build_arg_parser()
+    if _handle_info_flags(parser.parse_args(head), parser):
+        return True
+
+    if preliminary.env is None:
+        die("no environment given -- see `denver --help`")
+
+    return False
+
+
+def _load_cli_config(args, config_path) -> dict:
     """The env's config as the CLI asked for it: its own file, plus -f files, plus -c overrides -- validated."""
     config = load_config(config_path) if config_path.is_file() else {}
     for config_file in args.config_file:
@@ -2452,13 +2710,15 @@ def _load_cli_config(args, config_path):
     validate_denver_version(config)
     validate_top_level_keys(config)
     validate_stage_filters(config, args.until, args.skip)
-    return config
+    # deep_merge/apply_config_overrides are typed for config *values* (a
+    # mapping, a list, a scalar); a whole denver.yml is always the mapping.
+    return cast(dict, config)
 
 
-def _handle_config_subcommands(args, env_dir, config, config_path):
+def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=None):
     """Handle --show-config/--run, if given. Returns True if one of them ran (nothing is launched then)."""
     if args.show_config:
-        show_config(env_dir, config, config_path, until_stage=args.until, skip_stages=args.skip)
+        show_config(env_dir, config, config_path, until_stage=args.until, skip_stages=args.skip, cli_args=cli_args)
         return True
 
     if args.run == LIST_SCRIPTS:
@@ -2476,6 +2736,7 @@ def _handle_config_subcommands(args, env_dir, config, config_path):
             quiet=args.quiet,
             dry_run=args.dry_run,
             no_wait=args.no_wait,
+            cli_args=cli_args,
         )
         return True
 

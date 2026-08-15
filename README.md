@@ -415,6 +415,26 @@ denver examples/zephyr-devshell-4.3.1 --show-config
 denver examples/zephyr-devshell-4.3.1 -qq -- west --version
 ```
 
+An environment can also declare **flags of its own**, in its `denver.yml`
+under `args:` — each entry is forwarded to Python's `argparse.add_argument`,
+and what the user passes is exported as `DENVER_ARG_<NAME>` for the config,
+the hooks and the command to read:
+
+```yaml
+args:
+- flags: [--board, -b]
+  default: nrf52840dk
+  help: which board to build for
+```
+
+```bash
+denver my-project --board nrf5340dk -- west build   # ...and it shows up in --help
+```
+
+See "Environment-specific CLI arguments" in
+[`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md),
+or `examples/simple-env/` for a working one.
+
 ### Why is `zephyr-devshell-4.3.1/denver.yml` so short?
 
 If you open it, you'll find under 60 lines — half of them comments, and no

@@ -72,6 +72,9 @@ see "Fail loud" in [`philosophy.md`](philosophy.md)).
 - **`extensions`** — own, project-local `Provider` subclasses to register
   alongside the built-ins (`uv`, `conan`, `zephyr`, `docker`, `custom`), no
   denver fork required. See "Extension providers" below.
+- **`args`** — command-line flags of this environment's own, each one
+  forwarded to argparse's `add_argument`. See "Environment-specific CLI
+  arguments" below.
 
 ### Requiring a denver version
 
@@ -276,6 +279,78 @@ something nobody meant to run.
 
 Both compose with `--show-config`, so you can check what an override
 actually does before running it for real.
+
+## Environment-specific CLI arguments
+
+`-c` can set *anything*, which is exactly why it makes a poor interface for
+the one or two knobs an environment actually wants to offer ("which board?",
+"debug or release?"): its users have to know the dotted path, nothing
+appears in `--help`, and a typo is a new config key rather than an error.
+
+`args:` declares those knobs as real flags instead. Each entry is one
+`parser.add_argument()` call: `flags:` names the flag (a string, or a list
+to give it aliases), and **every other key is forwarded verbatim as a
+keyword argument** — so an env has argparse's whole vocabulary (`help:`,
+`default:`, `action:`, `nargs:`, `choices:`, `required:`, `metavar:`,
+`dest:`, …) without denver re-inventing, or gating, any of it:
+
+```yaml
+args:
+- flags: [--board, -b]
+  default: nrf52840dk
+  help: which board to build for
+- flags: [--release]
+  action: store_true
+  help: build with optimisations
+```
+
+```bash
+denver my-project --board nrf5340dk --release -- west build
+```
+
+What the user passed is exported as **`DENVER_ARG_<DEST>`**, where `<DEST>`
+is argparse's own destination name uppercased (`--board` → `DENVER_ARG_BOARD`,
+`--build-type` → `DENVER_ARG_BUILD_TYPE`, or whatever an explicit `dest:`
+says). That is one variable in the environment denver is building, so it
+reaches everything through the mechanisms already documented above —
+`${...}` interpolation in the same `denver.yml`, hooks, `scripts:`, and the
+final command:
+
+```yaml
+zephyr-build:
+  provider: custom
+  cmd: west build -b ${DENVER_ARG_BOARD}
+```
+
+The value is always a string, since an environment variable is:
+
+- `action: store_true`/`store_false` → `"1"` / `"0"`.
+- a multi-value flag (`nargs:`, `action: append`) → its items, space-joined.
+- a flag with no `default:` that wasn't given → **not exported at all**,
+  rather than exported empty — so `${DENVER_ARG_BOARD:-nrf52840dk}` still
+  falls back the way it reads.
+
+For the same reason, `type:` is rejected: argparse's `type=` is a callable,
+which a YAML file cannot express, and every value ends up a string anyway.
+Use `choices:` (argparse validates it, and lists it in `--help`) or an
+`action:`.
+
+A few more properties worth knowing:
+
+- The flags are ordinary argparse flags, so `denver <env> --help` lists them
+  alongside denver's own, and a mistyped one is argparse's usual
+  `usage:`/`error:` on stderr — never a silently ignored token.
+- Write them **after** `<env>` (`denver my-project --board x`): the flags an
+  env declares live in the very file `<env>` names, so denver has to resolve
+  `<env>` before it can know them.
+- A flag that would collide with one of denver's own (`--force`, or a `dest:`
+  of `ci`) is a hard error, not a silent override.
+- `args:` is a list, so it follows the normal list-merge rule: an env
+  inherits every flag its `import:` chain declares and adds its own (see
+  "Layering").
+- They survive a wrapper relocation: the tokens are re-passed to the denver
+  re-invoked inside the container, which would otherwise only see each
+  flag's `default:` (see "Wrapper / relocation").
 
 ## Hooks and scripts
 

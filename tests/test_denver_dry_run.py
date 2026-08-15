@@ -405,7 +405,7 @@ def test_run_stages_dry_run_prints_legend_and_never_execs(tmp_path, exec_recorde
         "hello": {"provider": "custom", "cmd": "echo hello"},
     }
     env_dir, cfg_path = _env(tmp_path, config)
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], dry_run=True)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(dry_run=True))
 
     err = capsys.readouterr().err
     assert "no command below is executed for its effect" in err
@@ -421,7 +421,7 @@ def test_run_stages_dry_run_records_no_performance_trace(tmp_path, exec_recorder
     monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     config = {"stages": ["hello"], "hello": {"provider": "custom", "cmd": "echo hello"}}
     env_dir, cfg_path = _env(tmp_path, config)
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], dry_run=True)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(dry_run=True))
     assert not (tmp_path / "env" / ".denver" / "denver" / "performance.jsonl").exists()
 
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
@@ -454,7 +454,7 @@ def test_run_stages_dry_run_says_wrapper_relocated_stages_are_not_previewed(tmp_
         "fakesetup": {"provider": "fakesetup"},
     }
     env_dir, cfg_path = _env(tmp_path, config)
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], dry_run=True)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(dry_run=True))
 
     assert exec_recorder == {}
 
@@ -479,7 +479,7 @@ def test_run_stages_dry_run_wrapper_note_names_the_skip_that_would_show_them(
         "fakesetup": {"provider": "fakesetup"},
     }
     env_dir, cfg_path = _env(tmp_path, config)
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], dry_run=True)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(dry_run=True))
 
     note = dry_lines(capsys, "!")
     assert len(note) == 1
@@ -540,10 +540,10 @@ def test_main_dry_run_flag_reaches_run_stages(tmp_path, monkeypatch):
     env_dir, _ = _env(tmp_path, config)
 
     denver.main([str(env_dir), "--dry-run", "--", "echo", "hi"])
-    assert seen["dry_run"] is True
+    assert seen["options"].dry_run is True
 
     denver.main([str(env_dir), "--", "echo", "hi"])
-    assert seen["dry_run"] is False
+    assert seen["options"].dry_run is False
 
 
 def test_main_dry_run_flag_reaches_run_named_scripts(tmp_path, monkeypatch):

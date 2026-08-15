@@ -321,7 +321,7 @@ script is *sourced* into the environment denver is assembling, so whatever it
 exports reaches everything after it. Installing and activating are two
 different jobs, so they are two scripts. (More on this pair in
 [`providers/custom.md`](providers/custom.md); `examples/simple-env` is a
-three-stage demo of nothing else.)
+three-stage demo built around that distinction.)
 
 **Note**: one sourced script would do the whole job just as well — check,
 download, unpack, `export PATH=`, all in `source: install-nvim.sh` and no
