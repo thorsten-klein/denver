@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 500" width="1500" height="500" role="img" aria-labelledby="denver-logo-title">
+  <title id="denver-logo-title">denver</title>
+  <rect width="1500" height="500" fill="#000000"/>
+  <text x="750" y="345"
+        text-anchor="middle"
+        font-family="'Arial Black', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+        font-weight="900"
+        font-size="260"
+        letter-spacing="8"
+        fill="none"
+        stroke="#ffffff"
+        stroke-width="6"
+        style="paint-order: stroke fill;">DENVER</text>
+</svg>

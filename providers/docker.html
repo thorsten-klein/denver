@@ -1,0 +1,419 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>docker provider &mdash; denver</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+      <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=7026087e"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+      <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+      <script src="../_static/copybutton.js?v=f281be69"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="zephyr provider" href="zephyr.html" />
+    <link rel="prev" title="conan provider" href="conan.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            denver
+              <img src="../_static/logo.svg" class="logo" alt="Logo"/>
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">About denver</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../introduction/index.html#what-problem-does-denver-solve">What problem does denver solve?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../introduction/index.html#what-is-a-denver-environment">What is a denver environment?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../introduction/index.html#is-denver-flexible">Is denver flexible?</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../introduction/install.html">Install Denver</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#from-pypi">From PyPi</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#prebuilt-binary">Prebuilt Binary</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#editable-mode">Editable mode</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#vendor-with-git-nested">Vendor with git-nested</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Quickstart</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/five-minutes.html">Denver in 5 minutes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/five-minutes.html#pre-conditions">Pre-conditions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/five-minutes.html#running-examples-howto-env">Running <code class="docutils literal notranslate"><span class="pre">examples/howto-env</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/five-minutes.html#the-one-command-you-need">The one command you need</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/five-minutes.html#what-just-happened">What just happened</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/five-minutes.html#the-5-stages-of-this-example">The 5 stages of this example</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/five-minutes.html#one-time-host-setup">One-time host setup</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/five-minutes.html#first-run-vs-every-run-after">First run vs. every run after</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/five-minutes.html#the-handful-of-options-you-ll-actually-use">The handful of options you’ll actually use</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/five-minutes.html#sharing-one-setup-across-repositories">Sharing one setup across repositories</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/creating-environments.html">Creating your first environment</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#the-use-case">The use case</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#pre-requisites-for-denver">Pre-Requisites for denver</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-0-the-skeleton">Step 0 — the skeleton</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-1-declare-the-stages">Step 1 — declare the stages</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-2-the-docker-base-stage">Step 2 — the <code class="docutils literal notranslate"><span class="pre">docker-base</span></code> stage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/creating-environments.html#the-files-the-docker-stage-needs">The files the docker stage needs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/creating-environments.html#check-it-the-container">Check it — the container</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-3-the-uv-packages-stage">Step 3 — the <code class="docutils literal notranslate"><span class="pre">uv-packages</span></code> stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-4-the-nvim-setup-stage">Step 4 — the <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> stage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/creating-environments.html#the-files-the-nvim-stage-needs">The files the nvim stage needs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/creating-environments.html#check-it-nvim-on-path">Check it — nvim on PATH</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-5-the-conan-packages-stage">Step 5 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/creating-environments.html#the-files-the-conan-stage-needs">The files the conan stage needs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/creating-environments.html#by-hand-or-via-conan">By hand or via conan?</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-6-the-best-practices-stage">Step 6 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-7-what-actually-starts">Step 7 — what actually starts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#the-finished-denver-yml">The finished <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#prove-it-rather-than-hope">Prove it, rather than hope</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#everyday-use">Everyday use</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart/examples.html">Examples</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/examples.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/examples.html#running-the-bundled-examples">Running the bundled examples</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Concepts</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/glossary.html">Glossary</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/glossary.html#the-core-model">The core model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/glossary.html#configuration">Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/glossary.html#execution">Execution</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../concepts/philosophy.html">Philosophy</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/philosophy.html#genericity">Genericity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/philosophy.html#explicit-over-implicit">Explicit over implicit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/philosophy.html#central-default-resolution">Central default resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/philosophy.html#fail-loud-on-the-unexpected">Fail loud on the unexpected</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/philosophy.html#fast-by-default-never-at-the-cost-of-correctness">Fast by default, never at the cost of correctness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../concepts/philosophy.html#reproducibility-as-a-first-class-goal">Reproducibility as a first-class goal</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">denver command</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../cli/arguments.html">Arguments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#control-the-stages-choosing-what-runs">Control the stages: Choosing what runs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#control-the-config-change-values-for-one-run">Control the config: Change values for one run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#inspect-an-environment">Inspect an environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/environment-variables.html">Environment variables</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-reads">What denver reads</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-exports">What denver exports</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#where-an-environment-s-state-lives">Where an environment’s state lives</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/denver-yml.html">denver.yml</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#core-model">Core model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#the-denver-yml-schema">The <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> schema</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../configuration/denver-yml.html#top-level-keys">Top-level keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../configuration/denver-yml.html#requiring-a-denver-version">Requiring a denver version</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../configuration/denver-yml.html#generic-stage-keys">Generic stage keys</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../configuration/denver-yml.html#variable-interpolation">Variable interpolation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../configuration/denver-yml.html#the-prompt-marker">The prompt marker</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#config-resolution">Config resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#layering">Layering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#command-line-overrides">Command-line overrides</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#command-line-environment-variables">Command-line environment variables</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#environment-specific-cli-arguments">Environment-specific CLI arguments</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#hooks-and-scripts">Hooks and scripts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#fast-by-default">Fast by default</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#previewing-a-run-dry-run">Previewing a run (<code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#stage-filtering">Stage filtering</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#wrapper-relocation">Wrapper / relocation</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../configuration/denver-yml.html#how-the-inner-run-knows-where-it-is">How the inner run knows where it is</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#one-run-per-environment-at-a-time">One run per environment at a time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#quiet-levels">Quiet levels</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-yml.html#performance-tracing">Performance tracing</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Providers</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="uv.html">uv provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="uv.html#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="uv.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="uv.html#one-venv-one-interpreter">One venv, one interpreter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="uv.html#design-notes">Design notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="conan.html">conan provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="conan.html#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conan.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conan.html#design-notes">Design notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">docker provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#design-notes">Design notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="zephyr.html">zephyr provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#design-notes">Design notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="custom.html">custom provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#design-notes">Design notes</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">Contributing</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../contributing/development.html">Development</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#quick-start">Quick start</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#test-suite">Test suite</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#coverage">Coverage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#linting-formatting-types">Linting / formatting / types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#adding-a-new-provider">Adding a new provider</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#ci">CI</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#releasing">Releasing</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#known-limitations">Known limitations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#import-yaml-must-work-wherever-denver-runs"><code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">yaml</span></code> must work wherever denver runs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#pyyaml-s-version-is-intentionally-unconstrained">PyYAML’s version is intentionally unconstrained</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">denver</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">docker provider</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="docker-provider">
+<h1>docker provider<a class="headerlink" href="#docker-provider" title="Link to this heading"></a></h1>
+<p>A <code class="docutils literal notranslate"><span class="pre">docker</span></code> stage is a <em>wrapper</em>, not a builder — see “Wrapper / relocation”
+in <a class="reference internal" href="../configuration/denver-yml.html"><span class="std std-doc">Configuration</span></a>. Instead of building anything itself, it relocates the
+rest of the pipeline into a docker compose service.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">my-docker-stage</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker</span>
+<span class="w">  </span><span class="nt">compose</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">docker-compose.yml</span>
+</pre></div>
+</div>
+<p>(<code class="docutils literal notranslate"><span class="pre">provider:</span></code>/<code class="docutils literal notranslate"><span class="pre">description:</span></code>/<code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/<code class="docutils literal notranslate"><span class="pre">scripts:</span></code> are generic keys every stage has —
+see “Generic stage keys” in <a class="reference internal" href="../configuration/denver-yml.html"><span class="std std-doc">Configuration</span></a>. Everything below is specific to <code class="docutils literal notranslate"><span class="pre">docker</span></code>.)</p>
+<section id="requires">
+<h2>Requires<a class="headerlink" href="#requires" title="Link to this heading"></a></h2>
+<p><strong><code class="docutils literal notranslate"><span class="pre">docker</span></code> with the Compose plugin must be available</strong> on the machine this
+stage runs on — denver never installs it, and every command it issues is a
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">...</span></code> one (v2, the plugin — not the standalone
+<code class="docutils literal notranslate"><span class="pre">docker-compose</span></code> script). The daemon has to be reachable for the invoking
+user, too. Point <code class="docutils literal notranslate"><span class="pre">exe:</span></code> at a specific docker binary if the one on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>
+isn’t the right one.</p>
+</section>
+<section id="key-reference">
+<h2>Key reference<a class="headerlink" href="#key-reference" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">exe</span></code></strong> (default: <code class="docutils literal notranslate"><span class="pre">docker</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>) — the docker executable.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">default-cmd</span></code></strong> — the fallback interactive command once relocated into
+the container, read by denver’s own command resolution (<code class="docutils literal notranslate"><span class="pre">command:</span></code> at
+the top level still wins over this if set) — not read by this provider
+itself, but still a real <code class="docutils literal notranslate"><span class="pre">docker:</span></code> key, shown in <code class="docutils literal notranslate"><span class="pre">--show-config</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">image</span></code></strong> — the canonical local tag denver checks for before falling
+back to a build — checked whenever <code class="docutils literal notranslate"><span class="pre">image:</span></code> is set, whether or not
+<code class="docutils literal notranslate"><span class="pre">registries:</span></code> is also configured; a hit skips the build entirely
+(<code class="docutils literal notranslate"><span class="pre">--force</span></code> overrides this, see below). Exported as <code class="docutils literal notranslate"><span class="pre">$DENVER_DOCKER_IMAGE</span></code>
+before env-scripts/build/run, so the compose file can say <code class="docutils literal notranslate"><span class="pre">image:</span> <span class="pre">&quot;${DENVER_DOCKER_IMAGE}&quot;</span></code> instead of hard-coding the same tag a second
+time — denver doesn’t cross-check the two, this is just how they stay in
+sync. If unset, <code class="docutils literal notranslate"><span class="pre">$DENVER_DOCKER_IMAGE</span></code> is an empty string, the local
+check never runs, and <code class="docutils literal notranslate"><span class="pre">registries:</span></code> is silently ignored (nothing to
+search a registry <em>for</em> without a tag) rather than an error.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">registries</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">[]</span></code>) — ordered list of <code class="docutils literal notranslate"><span class="pre">{url,</span> <span class="pre">username,</span> <span class="pre">password}</span></code> entries to check, each as <code class="docutils literal notranslate"><span class="pre">&lt;url&gt;/&lt;image&gt;</span></code>, once <code class="docutils literal notranslate"><span class="pre">image:</span></code> has
+missed locally (or <code class="docutils literal notranslate"><span class="pre">--force</span></code> is set — see below), before ever
+considering a build: each entry in turn, via <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">manifest</span> <span class="pre">inspect</span></code>
+— <strong>never</strong> a real <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">pull</span></code> — first hit wins and no further entry
+is tried. On a hit, <code class="docutils literal notranslate"><span class="pre">$DENVER_DOCKER_IMAGE</span></code> is repointed from the bare
+<code class="docutils literal notranslate"><span class="pre">image:</span></code> tag to that entry’s full <code class="docutils literal notranslate"><span class="pre">&lt;url&gt;/&lt;image&gt;</span></code> ref, so the actual
+pull happens lazily, later, whenever <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">run</span></code> itself needs
+the image. Empty (the default) disables this entirely. If nothing is
+found anywhere and <code class="docutils literal notranslate"><span class="pre">compose.build:</span> <span class="pre">false</span></code>, denver dies with a clear
+error instead of silently doing nothing. <code class="docutils literal notranslate"><span class="pre">url:</span></code> is required per entry;
+<code class="docutils literal notranslate"><span class="pre">username:</span></code>/<code class="docutils literal notranslate"><span class="pre">password:</span></code> are optional but, if either is set, both must
+be — when present, <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span> <span class="pre">&lt;url&gt;</span></code> runs automatically, credentials
+piped via stdin (never argv, never logged), right before the manifest
+check against that entry; an entry with neither is assumed
+already-authenticated or public. Both fields go through denver’s normal
+<code class="docutils literal notranslate"><span class="pre">${VAR}</span></code> interpolation, so a literal (<code class="docutils literal notranslate"><span class="pre">myusername</span></code>) and an
+env-var-sourced secret (<code class="docutils literal notranslate"><span class="pre">${DOCKER_PASSWORD_DOCKERHUB}</span></code>) are written the same
+way.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">compose</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">file</span></code> (<strong>required</strong>, a single path or a list for
+multiple <code class="docutils literal notranslate"><span class="pre">-f</span></code> overlays — never guessed, see “Explicit over implicit” in
+<a class="reference internal" href="../concepts/philosophy.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">../concepts/philosophy.md</span></code></span></a>), <code class="docutils literal notranslate"><span class="pre">service</span></code> (default <code class="docutils literal notranslate"><span class="pre">&quot;dev&quot;</span></code>), <code class="docutils literal notranslate"><span class="pre">build</span></code> (default <code class="docutils literal notranslate"><span class="pre">true</span></code>),
+<code class="docutils literal notranslate"><span class="pre">args</span></code> (extra <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span></code> args, e.g. <code class="docutils literal notranslate"><span class="pre">[&quot;--project-name&quot;,</span> <span class="pre">&quot;x&quot;]</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">run-args</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">[&quot;--rm&quot;]</span></code>) — extra <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">run</span></code> args.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-scripts</span></code></strong> — script(s) run before build/run, e.g. to write a
+compose <code class="docutils literal notranslate"><span class="pre">.env</span></code> file the compose file itself references. denver has no
+notion of a compose env-file — it just runs <code class="docutils literal notranslate"><span class="pre">env-scripts:</span></code> and lets
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span></code>/the scripts sort out their own file naming and lookup.</p></li>
+</ul>
+</section>
+<section id="design-notes">
+<h2>Design notes<a class="headerlink" href="#design-notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">compose.build:</span> <span class="pre">true</span></code> (the default) does nothing without <code class="docutils literal notranslate"><span class="pre">image:</span></code>.</strong>
+Denver never calls <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">build</span></code> unless <code class="docutils literal notranslate"><span class="pre">image:</span></code> is set — with
+no tag to check next time, it would just rebuild on every single run,
+defeating the point. Set <code class="docutils literal notranslate"><span class="pre">image:</span></code> to get denver’s own build-once
+behavior: it builds the first time, then a local (or <code class="docutils literal notranslate"><span class="pre">registries:</span></code>) hit
+skips the build on every run after that. Without <code class="docutils literal notranslate"><span class="pre">image:</span></code>, <code class="docutils literal notranslate"><span class="pre">compose</span> <span class="pre">build</span></code>/<code class="docutils literal notranslate"><span class="pre">compose</span> <span class="pre">run</span></code> are left to the compose file’s own <code class="docutils literal notranslate"><span class="pre">build:</span></code> section
+to sort out, exactly as if denver’s docker provider weren’t managing
+images at all. Set <code class="docutils literal notranslate"><span class="pre">compose.build:</span> <span class="pre">false</span></code> for the opposite of the
+<code class="docutils literal notranslate"><span class="pre">image:</span></code>-managed case: nothing gets built, ever, denver just relocates
+into whatever image is already there — e.g. one pulled as part of
+<code class="docutils literal notranslate"><span class="pre">env-scripts:</span></code> or a CI step outside denver entirely.</p></li>
+<li><p><strong>Host vs. container.</strong> <code class="docutils literal notranslate"><span class="pre">setup()</span></code> (build the image, run <code class="docutils literal notranslate"><span class="pre">env-scripts:</span></code>)
+always runs on the host — that’s the only place the <code class="docutils literal notranslate"><span class="pre">docker</span></code> CLI
+operates. <code class="docutils literal notranslate"><span class="pre">wrap()</span></code> (turn the resolved command into <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">run</span> <span class="pre">...</span></code>) is what actually relocates execution. Each prints its own progress
+banner — <code class="docutils literal notranslate"><span class="pre">setup()</span></code>’s <code class="docutils literal notranslate"><span class="pre">prepare</span></code> and then whichever of “build”/”found
+locally”/”found on a registry”/skipped applies, <code class="docutils literal notranslate"><span class="pre">wrap()</span></code>’s <code class="docutils literal notranslate"><span class="pre">run</span></code> last —
+so the relocation itself is visible, not silent between the last
+<code class="docutils literal notranslate"><span class="pre">setup()</span></code> line and the container’s own output.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code> has no effect here.</strong> Unlike uv/conan/zephyr, this provider
+doesn’t thread <code class="docutils literal notranslate"><span class="pre">--fast</span></code> through <code class="docutils literal notranslate"><span class="pre">setup()</span></code> at all — <code class="docutils literal notranslate"><span class="pre">compose.build:</span></code> is
+read exactly as configured, so a real <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">build</span></code> still runs
+under <code class="docutils literal notranslate"><span class="pre">--fast</span></code> if the image wasn’t found locally or on a registry. The
+local/<code class="docutils literal notranslate"><span class="pre">registries:</span></code> lookup itself is cheap and read-only, so it always
+runs regardless.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--force</span></code></strong> is the escape hatch back to “always rebuild”: it ignores a
+locally-cached <code class="docutils literal notranslate"><span class="pre">image:</span></code> hit, though a <code class="docutils literal notranslate"><span class="pre">registries:</span></code> entry that already
+has it still wins over a forced local rebuild — a rebuild only actually
+happens if none of the configured registries have it either.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> prints the <code class="docutils literal notranslate"><span class="pre">env-scripts:</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">build</span></code> and
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">run</span></code> commands instead of running them; no container is
+ever started. The local/<code class="docutils literal notranslate"><span class="pre">registries:</span></code> existence checks still run (they’re
+the read-only queries deciding whether a build would be shown at all),
+but the <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">login</span></code> that would precede a private-registry check does
+not — so a private entry may report a miss it wouldn’t report for real.
+The bigger limit is structural: since the container is never entered,
+the setup stages that run <em>inside</em> it can’t be previewed. denver prints
+a note saying so; use <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">&lt;docker</span> <span class="pre">stage&gt;</span></code> to preview that same stack
+on the host instead.</p></li>
+<li><p><strong>Multi-registry check, local-first, never pulling in <code class="docutils literal notranslate"><span class="pre">setup()</span></code>.</strong> When
+several places might already have the image — a shared registry, a
+personal mirror, whatever a CI run pushed to — <code class="docutils literal notranslate"><span class="pre">registries:</span></code> lets denver
+search them in a fixed order instead of only knowing about one, using
+<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">manifest</span> <span class="pre">inspect</span></code> to check existence without downloading
+anything. It’s still fully explicit: nothing is scanned or guessed, only
+the entries named in the list are ever tried, in the order given. The
+actual image transfer is left entirely to <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">run</span></code> itself,
+once denver has pointed <code class="docutils literal notranslate"><span class="pre">$DENVER_DOCKER_IMAGE</span></code> at whichever ref (local
+tag or a specific registry’s) should be used.</p></li>
+<li><p><strong>Automated per-registry login, inline.</strong> Each <code class="docutils literal notranslate"><span class="pre">registries:</span></code> entry can
+carry its own <code class="docutils literal notranslate"><span class="pre">username:</span></code>/<code class="docutils literal notranslate"><span class="pre">password:</span></code> right alongside its <code class="docutils literal notranslate"><span class="pre">url:</span></code>, so a
+private registry in the search list doesn’t need a separate manual
+login step (e.g. a <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">login:</span></code> entry run via <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--run</span> <span class="pre">login</span></code>, <a class="reference internal" href="../configuration/denver-yml.html"><span class="std std-doc">Configuration</span></a>’s generic one-shot mechanism) — denver logs in
+for you, right before it’s actually needed, only for entries that carry
+credentials.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="conan.html" class="btn btn-neutral float-left" title="conan provider" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="zephyr.html" class="btn btn-neutral float-right" title="zephyr provider" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright denver contributors.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
