@@ -1080,7 +1080,10 @@ def parse_section_import_ref(ref):
     (``../zephyr-devshell/denver.yml:conan``) makes the source section
     explicit -- pointing straight at a specific env's ``denver.yml`` and
     picking a (possibly differently-named) section out of it -- instead of
-    always inferring both from the current key.
+    always inferring both from the current key. ``self`` is a reserved
+    ``path`` -- see ``_stacked_section``'s "self:section" handling below --
+    so it always needs an explicit section (``self:other-stage``); a bare
+    ``self`` would only ever mean "stack my own section onto itself".
     """
     path, sep, section = ref.rpartition(":")
     return (path, section) if sep else (ref, None)
@@ -1102,32 +1105,54 @@ def expand_section_imports(config, env_dir):
           import:
           - ../zephyr-devshell/denver.yml:conan
 
+    or, with the reserved ``self:`` path, at another stage declared in this
+    *same* file -- for a stage that's really just a small variation of one
+    declared earlier, e.g. a second ``uv`` stage that only adds a package::
+
+        uv-zephyr:
+          provider: uv
+          import: [self:uv]     # start from this file's own 'uv:' section
+          packages: [west]      # ...then layer this on top
+
     The referenced sections are merged in (base-first), then the local keys
     override. Returns (expanded_config, extra_search_dirs) where the extra
     dirs let relative paths in the imported section (compose file, scripts,
-    ...) resolve against their source env.
+    ...) resolve against their source env -- a ``self:`` reference stays in
+    this env's own directory, so it contributes none.
     """
     result = dict(config)
     extra_dirs = []
     for key, value in config.items():
         if not (isinstance(value, dict) and value.get("import")):
             continue
-        merged, dirs = _stacked_section(value, key, env_dir)
+        merged, dirs = _stacked_section(value, key, env_dir, config)
         extra_dirs += dirs
         result[key] = deep_merge(merged, _without_import(value))
     return result, extra_dirs
 
 
-def _stacked_section(value, key, env_dir):
+def _stacked_section(value, key, env_dir, config):
     """Merge every section-level 'import:' entry of one section, base-first.
 
-    Returns ``(merged, extra_dirs)``, the extra dirs being each source env's
-    own directory (so its relative paths still resolve, see the caller).
+    ``config`` is this same file's own full, not-yet-expanded config -- only
+    consulted for a ``self:`` reference (see ``expand_section_imports``),
+    which stacks another of *this file's* own sections instead of an
+    imported env's. Returns ``(merged, extra_dirs)``, the extra dirs being
+    each source env's own directory (so its relative paths still resolve,
+    see the caller); a ``self:`` reference contributes none.
     """
     merged = {}
     extra_dirs = []
     for ref in value["import"]:
         path, section = parse_section_import_ref(ref)
+        if path == "self":
+            section = section or key
+            if section == key:
+                die(f"section '{key}': 'import: self:...' cannot refer to '{key}' itself")
+            if not isinstance(config.get(section), dict):
+                die(f"section '{key}': 'import: self:{section}' -- no such section in this file")
+            merged = deep_merge(merged, config[section])
+            continue
         src_path = resolve_import(path, env_dir)
         src_config = load_config(src_path)
         merged = deep_merge(merged, src_config.get(section or key) or {})

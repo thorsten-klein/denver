@@ -767,6 +767,23 @@ def test_main_show_config_expands_section_stacking(tmp_path, capsys):
     assert docker["env-scripts"] is None
 
 
+def test_main_show_config_expands_self_section_stacking(tmp_path, capsys, which):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        "stages: [uv, uv-zephyr]\n"
+        "uv:\n  provider: uv\n  requirements: [base.txt]\n"
+        "uv-zephyr:\n  provider: uv\n  import: [self:uv]\n  requirements: '!zephyr.txt'\n"
+    )
+
+    assert denver.main([str(env_dir), "--show-config"]) == 0
+    printed = denver.yaml.safe_load(capsys.readouterr().out)
+    assert printed["uv-zephyr"]["provider"] == "uv"
+    assert printed["uv-zephyr"]["requirements"] == "zephyr.txt"  # local override wins
+    # untouched -- self: stacking only affects the importing section
+    assert printed["uv"]["requirements"] == ["base.txt"]
+
+
 def test_main_show_config_skip_drops_stage_and_section(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()

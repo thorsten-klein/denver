@@ -258,6 +258,20 @@ copy-pasting it:
   without inheriting that base's *entire* stack. An entry can point at a
   specific section by name (`path:section`) instead of always the
   same-named one.
+- **`self:`** is a reserved section-level `import:` path that stacks
+  another stage's section from *this same file*, instead of another env,
+  e.g. a second `uv` stage that's really just the first plus one more
+  package:
+
+  ```yaml
+  uv-zephyr:
+    provider: uv
+    import: [self:uv]   # start from this file's own 'uv:' section
+    packages: [west]    # ...then layer this on top
+  ```
+
+  A section can't `self:`-import itself, and `self:` only stacks one level
+  — it doesn't chase a chain of `self:` references transitively.
 
 A base env that only exists to be imported should set `runnable: false`, so
 starting it directly fails with an explanation instead of half-building

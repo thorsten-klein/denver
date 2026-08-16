@@ -239,6 +239,36 @@ def test_expand_section_imports_explicit_section_ref(tmp_path):
     assert extra_dirs == [src_env]
 
 
+def test_expand_section_imports_self_ref_stacks_sibling_section(tmp_path):
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    config = {
+        "uv": {"python": "3.12", "requirements": ["base.txt"]},
+        "uv-zephyr": {"provider": "uv", "import": ["self:uv"], "requirements": "!zephyr.txt"},
+    }
+    expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
+    assert expanded["uv-zephyr"] == {"provider": "uv", "python": "3.12", "requirements": "zephyr.txt"}
+    # unrelated to this section's stacking -- untouched
+    assert expanded["uv"] == {"python": "3.12", "requirements": ["base.txt"]}
+    assert extra_dirs == []
+
+
+def test_expand_section_imports_self_ref_bare_defaults_to_own_key_and_dies(tmp_path):
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    config = {"uv": {"python": "3.12", "import": ["self"]}}
+    with pytest.raises(SystemExit):
+        denver.expand_section_imports(config, env_dir)
+
+
+def test_expand_section_imports_self_ref_unknown_section_dies(tmp_path):
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    config = {"uv-zephyr": {"provider": "uv", "import": ["self:nope"]}}
+    with pytest.raises(SystemExit):
+        denver.expand_section_imports(config, env_dir)
+
+
 def test_expand_section_imports_no_imports_passthrough(tmp_path):
     env_dir = tmp_path / "env"
     env_dir.mkdir()

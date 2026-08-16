@@ -78,7 +78,9 @@ its `stages:`/`docker:`/`conan:`/`uv:` config.
 **Section-level `import:`** (also called *stacking*) — one stage section
 pulling its content from another environment's section, without inheriting
 that environment's entire stack. An entry may name a specific section
-(`path:section`) instead of the same-named one.
+(`path:section`) instead of the same-named one. The reserved `self:` path
+(`self:<section>`) stacks a section from *this same file* instead, for a
+stage that's just a small variation of another one declared alongside it.
 
 **Merge rules** — how two layers combine: mappings merge key by key
 recursively; lists append (lower layer's entries first); two layers setting
