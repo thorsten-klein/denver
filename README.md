@@ -494,8 +494,15 @@ Helpful: The result of this is stored under:
 
 ## Environment variables
 
-denver reads two environment variables of its own:
+denver reads a few environment variables of its own:
 
+- **`DENVER_ENV_DIR`** — a fallback for the `<env>` positional argument: if
+  `<env>` is omitted from the command line entirely, denver uses this
+  instead (an `<env>` actually given on the command line always wins). Handy
+  when a shell or CI job always targets the same environment and would
+  otherwise repeat the same path on every `denver ...` invocation. denver
+  also *exports* this same name (resolved to an absolute path) into the
+  environment it builds — see below.
 - **`DENVER_STATE_DIR`** — an explicit root for denver's per-env state
   (venv, install trees, fingerprints, logs, `performance.jsonl`), overriding
   the default location described in **Where an environment's state lives**
