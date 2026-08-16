@@ -181,12 +181,39 @@ def test_scm_version_falls_back_to_none(monkeypatch, tmp_path, outcome):
     assert denver.scm_version() is None
 
 
-def test_main_no_env_given_dies():
+def test_main_no_env_given_dies(monkeypatch):
     # a flag with no env positional and no help/list/version -- e.g. a typo'd
     # invocation missing the env argument entirely -- must die with a clear
     # message rather than proceeding with env=None.
+    monkeypatch.delenv("DENVER_ENV_DIR", raising=False)
     with pytest.raises(SystemExit):
         denver.main(["--fast"])
+
+
+def test_main_falls_back_to_denver_env_dir_when_env_omitted(tmp_path, monkeypatch, exec_recorder):
+    # <env> missing from argv entirely -- resolved from $DENVER_ENV_DIR instead.
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
+    monkeypatch.setenv("DENVER_ENV_DIR", str(env_dir))
+    denver.main(["--", "echo", "hi"])
+    assert exec_recorder["args"] == ["echo", "hi"]
+
+
+def test_main_cli_env_wins_over_denver_env_dir(tmp_path, monkeypatch, exec_recorder):
+    # an <env> actually given on the command line always overrides the
+    # fallback -- even when $DENVER_ENV_DIR names a different (valid) env.
+    decoy_dir = tmp_path / "decoy"
+    decoy_dir.mkdir()
+    (decoy_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
+    monkeypatch.setenv("DENVER_ENV_DIR", str(decoy_dir))
+
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
+    denver.main([str(env_dir), "--", "echo", "hi"])
+    assert exec_recorder["args"] == ["echo", "hi"]
+    assert exec_recorder["env"]["DENVER_ENV_DIR"] == str(env_dir.resolve())
 
 
 def test_main_denver_version_error_wins_over_unknown_key(tmp_path, monkeypatch, caplog):

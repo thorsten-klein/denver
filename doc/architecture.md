@@ -154,7 +154,9 @@ name is already exported:
 
 - **`DENVER_SRC_DIR`** — where denver's own code lives.
 - **`DENVER_ENV_DIR`** — this environment's directory (the one holding its
-  `denver.yml`).
+  `denver.yml`). Also the variable denver *reads* as the `<env>` CLI
+  argument's fallback when it's omitted — see the top-level
+  [`../README.md`](../README.md).
 - **`DENVER_ENV_NAME`** — that directory's name.
 - **`DENVER_ENV_WORKDIR`** — denver's own working area for this environment
   (`<env dir>/.denver/<denver.yml stem>/` by default): venv, install trees,
@@ -172,10 +174,10 @@ name is already exported:
   4.8.0** onwards (see below).
 
 These are exported into the environment too, so scripts, compose files and
-the final command can read them as ordinary variables. `DENVER_STATE_DIR`
-and `DENVER_CACHE_DIR` — the two variables denver *reads* rather than sets,
-and where an env's state lives by default — are documented in the top-level
-[`../README.md`](../README.md).
+the final command can read them as ordinary variables. `DENVER_ENV_DIR`,
+`DENVER_STATE_DIR` and `DENVER_CACHE_DIR` — the variables denver *reads*
+rather than only sets, and where an env's state lives by default — are
+documented in the top-level [`../README.md`](../README.md).
 
 ### The prompt marker
 

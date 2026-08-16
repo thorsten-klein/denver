@@ -18,7 +18,9 @@ instead.
 
 <env> is a path to a directory containing a denver.yml, or a path directly
 to a YAML config file (any name, e.g. denver.debug.yml -- lets one folder
-hold several denver.xxx.yml variants).
+hold several denver.xxx.yml variants). If omitted, it falls back to the
+DENVER_ENV_DIR environment variable; an <env> given on the command line
+always takes precedence over it.
 
 --dry-run answers "what does this env actually run?" without running it:
 every stage is walked in order, but its commands and file writes are printed
@@ -2491,7 +2493,11 @@ def build_arg_parser(config_args=None):
     argument names (see _run_cli).
     """
     parser = argparse.ArgumentParser(prog="denver", add_help=False)
-    parser.add_argument("env", nargs="?", help="path to an env directory or a denver.yml file")
+    parser.add_argument(
+        "env",
+        nargs="?",
+        help="path to an env directory or a denver.yml file (falls back to $DENVER_ENV_DIR if omitted)",
+    )
     parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
     parser.add_argument("--version", action="store_true", help="show the installed denver version and exit")
     parser.add_argument("--license", action="store_true", help="show denver's LICENSE (Apache-2.0) and exit")
@@ -2716,6 +2722,13 @@ def _run_cli(argv=None):
     # flags, or a typo, and only the second pass can tell the two apart.
     preliminary, extra_argv = build_arg_parser().parse_known_args(head)
 
+    # <env> falls back to DENVER_ENV_DIR when omitted from argv entirely, so
+    # a shell/CI that already exports it (e.g. one denver invocation per
+    # project checkout) need not repeat it on every command line. An <env>
+    # actually given on the command line always wins.
+    if preliminary.env is None:
+        preliminary.env = os.environ.get("DENVER_ENV_DIR") or None
+
     if _handle_env_less_argv(preliminary, head):
         return
 
@@ -2791,7 +2804,7 @@ def _handle_env_less_argv(preliminary, head):
         return True
 
     if preliminary.env is None:
-        die("no environment given -- see `denver --help`")
+        die("no environment given -- pass one, set $DENVER_ENV_DIR, or see `denver --help`")
 
     return False
 
