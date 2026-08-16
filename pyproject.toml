@@ -184,7 +184,7 @@ exclude_dirs = ["examples", ".envs", "tests"]
 skips = ["B404", "B603", "B606", "B607"]
 
 [tool.poe.tasks]
-all = ["pre-commit", "lint", "format", "mypy", "pyright", "bandit", "pip-audit", "complexity", "test"]
+all = ["pre-commit", "lint", "format", "mypy", "pyright", "bandit", "pip-audit", "complexity", "test", "docs"]
 "pre-commit" = "pre-commit run --all-files --show-diff-on-failure"
 format = "ruff format ."
 lint = "ruff check ."
@@ -197,3 +197,10 @@ test = {cmd = "pytest -v -n=auto --cov-config=pyproject.toml --cov=denver --cov=
 
 clean = "rm -rf dist/ build/ *.egg-info src/*.egg-info htmlcov/ .coverage coverage.xml"
 build = ["clean", {cmd = "uv build"}]
+
+# delegates the actual build to examples/doc-env (its own uv-managed venv
+# provides sphinx-build, denver's 'build-docs' stage runs it) -- '-- true'
+# runs that env's stages and exits instead of dropping into its shell, so
+# this is dogfooding, not a second recipe to keep in sync with that env's.
+docs = "src/denver.py examples/doc-env -- echo 'Finished!'"
+"docs-clean" = "rm -rf doc/_build"

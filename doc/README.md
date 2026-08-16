@@ -5,34 +5,89 @@ is explained in terms of the `denver.yml` schema itself, not by pointing at
 the example environments under `examples/` (those are self-documenting via
 their own comments).
 
-The user-facing walkthrough — installing denver, running your first
-environment, and the CLI flag reference — lives in the top-level
-[`../README.md`](../README.md). `denver --help` is always the authoritative
-flag list.
+**Browsing on GitHub, this page is the index.** Reading it as a built site
+instead — search, sidebar nav, one page per topic — is usually nicer:
+[`index.md`](index.md) is the same tree, built by
+[`examples/doc-env/`](../examples/doc-env/) and published to `gh-pages` by
+[`.github/workflows/docs.yml`](../.github/workflows/docs.yml). That build
+also emits a plain-Markdown mirror of every page under `/markdown/` — meant
+for AI tools/LLMs to fetch directly rather than scrape rendered HTML.
 
-## Start here
+## New to denver? Read in this order
 
-- **[`glossary.md`](glossary.md)** — every term denver uses, defined once:
-  environment, stage, step, provider, resolved config, hook, fingerprint,
-  wrapper relocation. Read this first if a word in another doc is unfamiliar;
-  the rest of the tree assumes these definitions.
+1. [`introduction/index.md`](introduction/index.md) — what problem denver
+   solves, what an environment is, and how flexible it is
+2. [`introduction/install.md`](introduction/install.md) — get the `denver`
+   command onto your machine
+3. [`quickstart/five-minutes.md`](quickstart/five-minutes.md) — run a real
+   environment end to end
+4. [`quickstart/creating-environments.md`](quickstart/creating-environments.md)
+   — build that same environment yourself, from an empty folder
 
-- **[`how-to.md`](how-to.md)** — build a new environment from an empty
-  folder, one stage at a time: a worked use case, the `stages:` list, then
-  each stage in turn with its own provider and the supporting files it needs
-  (compose file, requirements, conanfile, west manifest, ...). Read this if
-  you'd rather learn the schema by writing one than by reading the reference.
+Everything after that is reference you dip into as needed.
 
-## Reference
+## Introduction
 
-- **[`architecture.md`](architecture.md)** — the system, once. The complete
-  `denver.yml` schema (every top-level key, every generic stage key), how a
-  config is resolved (`import:` chain → merge rules → central default
-  resolution), the mechanisms that make it flexible (layering, hooks,
-  extension providers, `-c`/`-cf` overrides, `${...}` interpolation) and fast
-  (fingerprints, `--fast`/`--force`), plus stage filtering and the
-  wrapper/relocation model. This is the doc to read before writing your own
-  `denver.yml`.
+- **[`introduction/index.md`](introduction/index.md)** — three questions
+  answered before you install anything: what problem denver solves, what a
+  denver environment is (environment / stage / provider), and how free you
+  are to ignore the bundled providers entirely.
+- **[`introduction/install.md`](introduction/install.md)** — installing
+  denver (PyPI, the standalone executable, editable mode, vendoring via
+  git-nested).
+
+## Quickstart
+
+- **[`quickstart/five-minutes.md`](quickstart/five-minutes.md)** — a
+  hands-on, end-to-end walkthrough of `examples/howto-env`: one command to a
+  shell with a container, a venv, two hand/conan-installed tools and a team
+  convention all active.
+- **[`quickstart/creating-environments.md`](quickstart/creating-environments.md)**
+  — build that same environment from an empty folder, one stage at a time:
+  the `stages:` list, then each stage in turn with its own provider and the
+  supporting files it needs (compose file, requirements, conanfile, ...).
+  Read this if you'd rather learn the schema by writing one than by reading
+  the reference.
+- **[`quickstart/examples.md`](quickstart/examples.md)** — the eight
+  bundled, real (not illustrative) environments under `examples/`, smallest
+  to largest, with what each one is meant to teach.
+
+## Concepts
+
+- **[`concepts/glossary.md`](concepts/glossary.md)** — every term denver
+  uses, defined once: environment, stage, step, provider, resolved config,
+  hook, fingerprint, wrapper relocation. Read this if a word in another doc
+  is unfamiliar; the rest of the tree assumes these definitions.
+- **[`concepts/philosophy.md`](concepts/philosophy.md)** — the design
+  principles behind all of the above: genericity, explicit over implicit,
+  central default resolution, fail loud on the unexpected,
+  fast-but-never-at-the-cost-of-correctness, the monorepo rule, and
+  reproducibility as a first-class goal. Read this to understand *why*
+  denver refuses to guess things other tools guess for you.
+
+## `denver` command
+
+- **[`cli/arguments.md`](cli/arguments.md)** — every flag `denver --help`
+  lists, grouped by what you reach for it for: choosing what runs, changing
+  the config for one run, trading speed against freshness, looking without
+  running.
+- **[`cli/environment-variables.md`](cli/environment-variables.md)** — the
+  two variables denver itself reads (`DENVER_STATE_DIR`,
+  `DENVER_CACHE_DIR`), the ones it exports for `${...}` interpolation, and
+  where an environment's state lives on disk.
+
+## Configuration
+
+- **[`configuration/denver-yml.md`](configuration/denver-yml.md)** — the
+  system, once. The complete `denver.yml` schema (every top-level key, every
+  generic stage key), how a config is resolved (`import:` chain → merge
+  rules → central default resolution), the mechanisms that make it flexible
+  (layering, hooks, extension providers, `-c`/`-cf` overrides, `${...}`
+  interpolation) and fast (fingerprints, `--fast`/`--force`), plus stage
+  filtering and the wrapper/relocation model. This is the page to read
+  before writing your own `denver.yml`.
+
+## Providers
 
 - **[`providers/`](providers/)** — one page per provider: a full key
   reference for that provider's `denver.yml` section (every key, what it
@@ -47,24 +102,17 @@ flag list.
   | [`zephyr`](providers/zephyr.md) | Manage a West (Zephyr RTOS) workspace |
   | [`custom`](providers/custom.md) | Escape hatch: an arbitrary command, sourced script or launcher |
 
-  Each provider's module docstring (`src/denver_providers/<name>.py`) carries the
-  same key list as a terse lookup table kept next to the code, and points
-  here for the full explanation, worked examples and rationale.
+  Each provider's module docstring (`src/denver_providers/<name>.py`) carries
+  the same key list as a terse lookup table kept next to the code, and
+  points here for the full explanation, worked examples and rationale.
 
   A project can also register its own provider, without a denver fork —
-  see "Extension providers" in [`architecture.md`](architecture.md).
-
-## Background
-
-- **[`philosophy.md`](philosophy.md)** — the design principles behind all of
-  the above: genericity, explicit over implicit, central default resolution,
-  fail loud on the unexpected, fast-but-never-at-the-cost-of-correctness, the
-  monorepo rule, and reproducibility as a first-class goal. Read this to
-  understand *why* denver refuses to guess things other tools guess for you.
+  see "Extension providers" in
+  [`configuration/denver-yml.md`](configuration/denver-yml.md).
 
 ## Contributing
 
-- **[`development.md`](development.md)** — the contributor workflow: `uv run
-  poe all`, the test suite and its fakes, why coverage is pinned at 100%, how
-  `examples/*` doubles as golden-file fixtures, how to add a new provider,
-  and how a release is cut.
+- **[`contributing/development.md`](contributing/development.md)** — the
+  contributor workflow: `uv run poe all`, the test suite and its fakes, why
+  coverage is pinned at 100%, how `examples/*` doubles as golden-file
+  fixtures, how to add a new provider, and how a release is cut.

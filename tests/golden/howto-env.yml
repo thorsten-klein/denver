@@ -4,23 +4,23 @@ command: bash
 hooks:
   env: null
   post-best-practices: null
-  post-docker-with-tools: null
-  post-nvim-by-hand: null
-  post-tools-from-internet: null
+  post-conan-packages: null
+  post-docker-base: null
+  post-nvim-setup: null
   post-uv-packages: null
   pre-best-practices: null
   pre-cmd: null
-  pre-docker-with-tools: null
-  pre-nvim-by-hand: null
-  pre-tools-from-internet: null
+  pre-conan-packages: null
+  pre-docker-base: null
+  pre-nvim-setup: null
   pre-uv-packages: null
 stages:
-- docker-with-tools
+- docker-base
 - uv-packages
-- nvim-by-hand
-- tools-from-internet
+- nvim-setup
+- conan-packages
 - best-practices
-docker-with-tools:
+docker-base:
   provider: docker
   description:
   - Relocates every stage below into an Ubuntu 24.04 container, so the OS and the
@@ -64,7 +64,7 @@ uv-packages:
   uv: /usr/bin/uv
   venv: null
   venv-patcher: null
-nvim-by-hand:
+nvim-setup:
   provider: custom
   description:
   - Brings one prebuilt binary release (neovim 0.12.4) into the environment the manual
@@ -75,12 +75,12 @@ nvim-by-hand:
   cmd: bash ${DENVER_ENV_DIR}/nvim/install.sh
   launcher: null
   source: nvim/activate.sh
-tools-from-internet:
+conan-packages:
   provider: conan
   description:
   - Downloads cmake and the ARM toolchain at exactly the pinned versions and puts
     them on PATH. One unit -- a conanfile plus the recipes it installs. The same job
-    as 'nvim-by-hand' above, minus the shell script -- conan owns the download, the
+    as 'nvim-setup' above, minus the shell script -- conan owns the download, the
     checksum, the cache and the PATH.
   disabled: false
   scripts: null

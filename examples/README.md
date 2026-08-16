@@ -16,9 +16,10 @@ so an example that drifted out of sync with the code fails the build.
 | [`zephyr-uv`](zephyr-uv/) | `uv` | A virtualenv and nothing else — proof that no container or toolchain is required |
 | [`raspberry-pico`](raspberry-pico/) | `uv` → `conan` | A cross-compilation toolchain **without Docker**. Why stage order matters |
 | [`zephyr-docker`](zephyr-docker/) | `docker` | The container layer on its own — a wrapper stage, and `env-scripts:` |
-| [`howto-env`](howto-env/) | `docker` → `uv` → `custom` → `conan` → `custom` | Four providers in one small env, built step by step in [`doc/how-to.md`](../doc/how-to.md). Also: a prebuilt binary installed by hand, right next to the same job done by conan |
+| [`howto-env`](howto-env/) | `docker` → `uv` → `custom` → `conan` → `custom` | Four providers in one small env, built step by step in [`doc/quickstart/creating-environments.md`](../doc/quickstart/creating-environments.md). Also: a prebuilt binary installed by hand, right next to the same job done by conan |
 | [`zephyr-devshell`](zephyr-devshell/) | *(base — not runnable)* | The shared base: `import:`, layering, `runnable: false` |
 | [`zephyr-devshell-4.3.1`](zephyr-devshell-4.3.1/) | 5 stages | A full Zephyr RTOS setup. The patterns that only appear at scale |
+| [`doc-env`](doc-env/) | `uv` → `custom` | Builds denver's own documentation with Sphinx — denver used on itself |
 
 ## Mapped onto the top-level walkthrough
 

@@ -10,7 +10,7 @@ my-stage:
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `custom`.)
+see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Everything below is specific to `custom`.)
 
 ## Key reference
 
@@ -23,7 +23,7 @@ see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everythi
   every later stage and the final command. This is the way to make a
   `custom` stage hand environment variables forward, scoped to this one
   stage's section rather than the global `hooks:` mechanism (see
-  [`../architecture.md`](../architecture.md)).
+  [Configuration](../configuration/denver-yml.md)).
 - **`launcher`** — makes this stage a *wrapper*, the same way `docker` is
   one: instead of (only) doing its own work, it prepends its own script(s)
   ahead of whatever command would otherwise run. Each entry is a string,
@@ -49,10 +49,10 @@ command.
 
 The common shape for "download a release tarball and put it on `PATH`" uses
 both keys, because installing and activating are two different jobs
-([`examples/howto-env`](../../examples/howto-env)'s `nvim-by-hand` stage):
+([`examples/howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env)'s `nvim-setup` stage):
 
 ```yaml
-nvim-by-hand:
+nvim-setup:
   provider: custom
   cmd: bash ${DENVER_ENV_DIR}/nvim/install.sh   # download, checksum, unpack
   source: nvim/activate.sh                      # export PATH=...

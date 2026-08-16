@@ -1,7 +1,7 @@
 # examples/howto-env
 
 **The environment built step by step in
-[`doc/how-to.md`](../../doc/how-to.md) — five stages over the four providers
+[`doc/quickstart/creating-environments.md`](../../doc/quickstart/creating-environments.md) — five stages over the four providers
 how-to uses.** Read the how-to for the reasoning; this folder is the result,
 runnable.
 
@@ -32,10 +32,10 @@ provider:
 
 | Stage id | Provider | What it does |
 |---|---|---|
-| `docker-with-tools` | `docker` | relocates everything below into an Ubuntu 24.04 container |
+| `docker-base` | `docker` | relocates everything below into an Ubuntu 24.04 container |
 | `uv-packages` | `uv` | the python 3.12 venv: `pytest` (and `conan`, for the next stage) |
-| `nvim-by-hand` | `custom` | downloads, checksums and unpacks one prebuilt release, by hand |
-| `tools-from-internet` | `conan` | downloads `cmake` 3.31.9 and `arm-none-eabi` 15.3, exactly |
+| `nvim-setup` | `custom` | downloads, checksums and unpacks one prebuilt release, by hand |
+| `conan-packages` | `conan` | downloads `cmake` 3.31.9 and `arm-none-eabi` 15.3, exactly |
 | `best-practices` | `custom` | exports `PYTEST_ADDOPTS`, sourced so it survives |
 
 The middle two are deliberately the same job twice — "this exact prebuilt
@@ -68,7 +68,7 @@ Getting this wrong is the most common way a first docker-wrapped env fails.
 install an interpreter, only assert the one that is there — hence
 `python: "3.12.3"` (Ubuntu 24.04's) rather than `3.12`.
 
-**A hand-installed tool is two scripts, not one.** `nvim-by-hand` splits
+**A hand-installed tool is two scripts, not one.** `nvim-setup` splits
 installing (`cmd:`, an isolated subprocess that prints its progress and is
 skipped by `--fast`) from activating (`source:`, folded into the environment
 so the `PATH` entry reaches every later stage and the final command). Put the
@@ -116,7 +116,7 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
 
 ## Next
 
-- [`doc/how-to.md`](../../doc/how-to.md) — the step-by-step build-up of this
+- [`doc/quickstart/creating-environments.md`](../../doc/quickstart/creating-environments.md) — the step-by-step build-up of this
   env, and why each key is there
 - [`../simple-env`](../simple-env) — smaller still: three `custom` stages
 - [`../zephyr-devshell-4.3.1`](../zephyr-devshell-4.3.1) — the opposite end:

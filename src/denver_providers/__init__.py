@@ -31,7 +31,7 @@ PROVIDERS = {
 
 # the 'extensions:' sub-schema, validated the same way denver.py validates
 # its top-level keys and a stage's own section: an unrecognised key is an
-# error, never silently ignored (see "Fail loud" in doc/philosophy.md). A
+# error, never silently ignored (see "Fail loud" in doc/concepts/philosophy.md). A
 # typo'd 'providrs:'/'dris:' would otherwise disable the whole mechanism
 # quietly, surfacing only as an "unknown provider type" much further on.
 _EXTENSION_KEYS = {"providers"}

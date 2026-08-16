@@ -1,5 +1,5 @@
 version: 1.0
-# minimum denver (the tool) this env needs -- see doc/architecture.md
+# minimum denver (the tool) this env needs -- see doc/configuration/denver-yml.md
 denver-version: ">=1.1.0"
 
 # Inherit providers, shared conan setup and environment from the base devshell.

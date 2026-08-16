@@ -1,0 +1,55 @@
+name: Docs
+
+# Builds doc/ (see doc/conf.py) with Sphinx and publishes the result to the
+# gh-pages branch, which GitHub Pages serves from.
+on:
+  push:
+    branches:
+    - develop
+    paths:
+    - 'doc/**'
+    - 'examples/doc-env/**'
+    - 'src/**'
+    - 'pyproject.toml'
+    - 'uv.lock'
+    - '.github/workflows/docs.yml'
+  # on-demand -- 'Run workflow' in the Actions tab, or `gh workflow run docs.yml`
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # doc/conf.py reads the installed distribution's version, which
+          # setuptools-scm derives from git tags -- a shallow checkout has
+          # none, and it would fall back to '0.0.0' instead.
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.13'
+          enable-cache: true
+
+      # 'dev' for poethepoet (uv run poe ...) and denver itself (the console
+      # script the 'docs' task execs) -- the Sphinx/MyST/Furo toolchain isn't
+      # a dependency of this project at all, it lives in examples/doc-env's
+      # own venv, which denver builds as part of the task below.
+      - run: uv sync --group dev
+
+      - run: uv run poe docs
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: doc/_build/html
+          publish_branch: gh-pages

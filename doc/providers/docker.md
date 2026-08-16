@@ -1,7 +1,7 @@
 # docker provider
 
 A `docker` stage is a *wrapper*, not a builder — see "Wrapper / relocation"
-in [`../architecture.md`](../architecture.md). Instead of building anything itself, it relocates the
+in [Configuration](../configuration/denver-yml.md). Instead of building anything itself, it relocates the
 rest of the pipeline into a docker compose service.
 
 ```yaml
@@ -12,7 +12,7 @@ my-docker-stage:
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `docker`.)
+see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Everything below is specific to `docker`.)
 
 ## Requires
 
@@ -61,7 +61,7 @@ isn't the right one.
   way.
 - **`compose`** — `file` (**required**, a single path or a list for
   multiple `-f` overlays — never guessed, see "Explicit over implicit" in
-  [`../philosophy.md`](../philosophy.md)), `service` (default `"dev"`), `build` (default `true`),
+  [`../concepts/philosophy.md`](../concepts/philosophy.md)), `service` (default `"dev"`), `build` (default `true`),
   `args` (extra `docker compose` args, e.g. `["--project-name", "x"]`).
 - **`run-args`** (default `["--rm"]`) — extra `docker compose run` args.
 - **`env-scripts`** — script(s) run before build/run, e.g. to write a
@@ -125,6 +125,6 @@ isn't the right one.
   carry its own `username:`/`password:` right alongside its `url:`, so a
   private registry in the search list doesn't need a separate manual
   login step (e.g. a `scripts: login:` entry run via `denver <env> --run
-  login`, [`../architecture.md`](../architecture.md)'s generic one-shot mechanism) — denver logs in
+  login`, [Configuration](../configuration/denver-yml.md)'s generic one-shot mechanism) — denver logs in
   for you, right before it's actually needed, only for entries that carry
   credentials.

@@ -1,13 +1,24 @@
-# How to build a new environment, step by step
+# Creating your first environment
 
-This is the hands-on companion creating a new environment from scratch.
+In [Quickstart](five-minutes.md) you ran `examples/howto-env`
+and saw what it does. **This page builds that exact environment from an
+empty folder**, one stage at a time, explaining why each key is there — so
+by the end you can write your own `denver.yml` rather than copy one.
 
-All terms used here (*environment*, *stage*, *provider*, *wrapper*, ...) are
-defined in [`glossary.md`](glossary.md).
+Build along in your own repo under `envs/howto-env/`; the finished result is
+bundled as
+[`examples/howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env)
+if you want to compare, or skip ahead.
+
+Terms used here (*environment*, *stage*, *provider*, *wrapper*, ...) were
+introduced in
+[What is a denver environment?](../introduction/index.md#what-is-a-denver-environment)
+and are each defined precisely in the
+[Glossary](../concepts/glossary.md).
 
 ## The use case
 
-A team maintains **`howto-example`**, a small firmware repository. A new colleague
+A team maintains **`howto-env`**, a small firmware repository. A new colleague
 who wants to build it is told:
 
 > Use Ubuntu 24.04, as our CI does. Make sure you have installed following
@@ -40,29 +51,27 @@ But in total it is a lot of setup effort for the user.
 Let's create a `denver.yml` for this so the user can just run:
 
 ```bash
-denver envs/howto-example
+denver envs/howto-env
 ```
 
 ## Pre-Requisites for denver
 
-- denver installed (`pip install denver-tool`) — see the top-level
-  [`../README.md`](../README.md).
-- The docker stage will run on your host. Per documentation this means,
-  that only `docker` with Compose plugin must be installed on the host system.
-- Analog for the uv stage: `uv` must be available.
+- denver installed — see [Install Denver](../introduction/install.md).
+- Only the docker stage will run on your host. All subsequent stages run inside docker.
+  This means, that only `docker` with Compose plugin must be installed on the host system.
 
 ## Step 0 — the skeleton
 
 The environment is described by a `denver.yml`, which can live
-anywhere in your repo. Let's use `envs/howto-example/`.
+anywhere in your repo. Let's use `envs/howto-env/`.
 
 
 ```bash
-mkdir -p envs/howto-example
-touch envs/howto-example/denver.yml
+mkdir -p envs/howto-env
+touch envs/howto-env/denver.yml
 ```
 
-We add the first general entries to `envs/howto-example/denver.yml`:
+We add the first general entries to `envs/howto-env/denver.yml`:
 
 ```yaml
 version: "1.0"            # the denver.yml schema version -- currently only "1.0" exists
@@ -76,7 +85,7 @@ gets a clear message upfront.
 Check it loads:
 
 ```bash
-denver envs/howto-example --show-config
+denver envs/howto-env --show-config
 ```
 
 `--show-config` resolves the whole config — imports, merges, defaults — and
@@ -89,11 +98,11 @@ Let's identify the necessary stages. From the use case description we can see th
 
 | What the colleague was told | Provider | Stage id we will use |
 |---|---|---|
-| "use Ubuntu 24.04" + `apt install jq net-tools curl` | [`docker`](providers/docker.md) | `docker-with-tools` |
-| "create a python 3.12 virtualenv, install `pytest==9.1.1`" | [`uv`](providers/uv.md) | `uv-packages` |
-| "unpack the neovim 0.12.4 tarball and put it on `PATH`" | [`custom`](providers/custom.md) | `nvim-by-hand` |
-| "`cmake` 3.31.9 and ARM 15.3 — exactly those versions" | [`conan`](providers/conan.md) | `tools-from-internet` |
-| "export `PYTEST_ADDOPTS`" | [`custom`](providers/custom.md) | `best-practices` |
+| "use Ubuntu 24.04" + `apt install jq net-tools curl` | [`docker`](../providers/docker.md) | `docker-base` |
+| "create a python 3.12 virtualenv, install `pytest==9.1.1`" | [`uv`](../providers/uv.md) | `uv-packages` |
+| "unpack the neovim 0.12.4 tarball and put it on `PATH`" | [`custom`](../providers/custom.md) | `nvim-setup` |
+| "`cmake` 3.31.9 and ARM 15.3 — exactly those versions" | [`conan`](../providers/conan.md) | `conan-packages` |
+| "export `PYTEST_ADDOPTS`" | [`custom`](../providers/custom.md) | `best-practices` |
 
 **Note**: A stage id is a name we freely choose. `uv-packages` is a `uv`
 stage because its section says `provider: uv`, not because of what it is called.
@@ -102,10 +111,10 @@ Now Write the `stages:` list first: it *is* the core of the environment. Note th
 
 ```yaml
 stages:
-- docker-with-tools
+- docker-base
 - uv-packages
-- nvim-by-hand
-- tools-from-internet
+- nvim-setup
+- conan-packages
 - best-practices
 ```
 
@@ -114,14 +123,14 @@ Two things about that list:
 - **A stage id is only a label.** Each id needs a matching top-level section
   that declares `provider:` explicitly — nothing is ever guessed from the id,
   which is exactly what lets this one environment run two `custom` stages
-  (`nvim-by-hand` and `best-practices`) under different ids.
+  (`nvim-setup` and `best-practices`) under different ids.
 - **Order is the dependency chain.** `conan` comes after `uv` because the
   conan provider never installs conan itself. As `conan` is a Python package,
   it is installed into the venv by the uv stage. For simplicity we only want one uv stage, where we install all Python packages. This is why it must be before the conan stage.
 
 In the next step we can create each stage.
 
-## Step 2 — the `docker-with-tools` stage
+## Step 2 — the `docker-base` stage
 
 A `docker` stage is a **wrapper**: it builds nothing itself, it *relocates*
 the rest of the pipeline into a compose service. denver builds/enters the
@@ -129,21 +138,24 @@ container and re-invokes itself inside it with this stage skipped, so the
 `uv` and `conan` stages build their work in there rather than on your host.
 
 ```yaml
-docker-with-tools:      # the id from stages:, not the provider name
+docker-base:      # the id from stages:, not the provider name
   provider: docker
   compose:
     file: docker-compose.yml # required -- never guessed from the directory
     service: dev
 ```
 
-### The files it needs
+Note: It is a best-practice, that you install all basic packages into a docker container, where you do not need a specific version. Dependencies, where you need a specific version or that change regularly, should be installed via a package manager on top.
 
-`envs/howto-example/docker-compose.yml` — an ordinary compose file. Let's create a simple one
+
+### The files the docker stage needs
+
+`envs/howto-env/docker-compose.yml` — an ordinary compose file. Let's create a simple one
 
 ```yaml
 services:
   dev:
-    image: howto-example:2026-08-09
+    image: howto-env:2026-08-09
     build:
       context: container
       dockerfile: Dockerfile
@@ -154,7 +166,7 @@ services:
     - .env # generated below by create-env.sh
 ```
 
-`envs/howto-example/container/Dockerfile` . an ordinary Dockerfile:
+`envs/howto-env/container/Dockerfile` . an ordinary Dockerfile:
 
 ```dockerfile
 FROM ubuntu:24.04
@@ -177,14 +189,14 @@ RUN export UV_INSTALL_DIR=/usr/local/bin; \
   exporter shells out to it. The rule of thumb for the image: whatever has to
   exist before denver's own stages can run in there.
 - `curl` is in the apt list because the use case asked for it — and the
-  `nvim-by-hand` stage later downloads with it, so it would have to be there
+  `nvim-setup` stage later downloads with it, so it would have to be there
   anyway.
 - `cmake`, the ARM toolchain and `neovim` are **not** installed via apt. The
   use case requires exact versions, and pinning versions through a distro's
   package manager is a losing game. This is why the two stages below fetch
   them at pinned versions instead — one by hand, one via `conan`.
 
-`envs/howto-example/create-env.sh` — This script will generate `.env` file with user-specific informations.
+`envs/howto-env/create-env.sh` — This script will generate `.env` file with user-specific informations.
 When we specify it in `denver.yml` as `env-scripts:`, it will run right before build/run (on the host machine).
 Background: Dynamic values a compose file cannot compute itself (host UID/GID, user-specific cache dirs, ...).
 
@@ -200,8 +212,8 @@ HOST_HOME=$HOME
 ) > $SELF_DIR/.env
 ```
 
-`envs/howto-example/setup/install_host_tools.sh` — This script will ensure the host requirements for the docker are installed.
-Note: This setup script will only run when the user invokes `denver denver envs/howto-example --run setup`.
+`envs/howto-env/setup/install_host_tools.sh` — This script will ensure the host requirements for the docker are installed.
+Note: This setup script will only run when the user invokes `denver denver envs/howto-env --run setup`.
 
 ```bash
 #!/bin/bash
@@ -217,7 +229,7 @@ fi
 Your final `denver.yml` should look as follows now:
 
 ```yaml
-docker-with-tools:
+docker-base:
   provider: docker
   compose:
     file: docker-compose.yml # required -- never guessed from the directory
@@ -229,12 +241,12 @@ docker-with-tools:
     - setup/install_host_tools.sh
 ```
 
-Hint: You may add `.env` (the generated file) to `envs/howto-example/.gitignore`.
+Hint: You may add `.env` (the generated file) to `envs/howto-env/.gitignore`.
 
-### Check it
+### Check it — the container
 
 ```bash
-denver envs/howto-example --until docker-with-tools -- cat /etc/os-release
+denver envs/howto-env --until docker-base -- cat /etc/os-release
 ```
 
 `--until` only runs the pipeline until the named stage, so this builds and
@@ -246,7 +258,7 @@ it leaves the image to the compose file, and compose only builds when the
 tag is missing. So a changed `Dockerfile` does *not* rebuild on the next
 `denver` run. Run `docker compose build` yourself, or give the docker stage
 an `image:` and let denver manage the build-once behaviour
-([`providers/docker.md`](providers/docker.md)).
+([`providers/docker.md`](../providers/docker.md)).
 
 ## Step 3 — the `uv-packages` stage
 
@@ -264,7 +276,7 @@ uv-packages:
   - requirements.txt
 ```
 
-Create `envs/howto-example/requirements.txt`:
+Create `envs/howto-env/requirements.txt`:
 
 ```
 # needed by the conan provider
@@ -277,7 +289,7 @@ pytest==9.1.1
 `pytest` is what the use case asked for. `conan` is there because of the
 *next* stage: the conan provider never installs conan itself, it expects it
 on `PATH`, and this venv is what puts it there. That is the whole reason
-`uv-packages` sits before `tools-from-internet` in `stages:`.
+`uv-packages` sits before `conan-packages` in `stages:`.
 
 The provider drives [`uv`](https://docs.astral.sh/uv/) rather than plain
 `pip` — which is why the `Dockerfile` installs `uv`, and why the provider is
@@ -293,10 +305,10 @@ named after it. Three keys worth knowing early:
 Check the environment now with
 
 ```bash
-denver envs/howto-example --until uv-packages -- pytest --version
+denver envs/howto-env --until uv-packages -- pytest --version
 ```
 
-## Step 4 — the `nvim-by-hand` stage
+## Step 4 — the `nvim-setup` stage
 
 The next line of the use case is a prebuilt binary: download a tarball,
 unpack it, put it on `PATH`. Nothing about that needs a package manager, so
@@ -304,7 +316,7 @@ for this simple case let's do it with a `custom` stage — a shell script that
 takes care about the provisioning of this tool:
 
 ```yaml
-nvim-by-hand:
+nvim-setup:
   provider: custom
   # the build step: an isolated subprocess, so it prints what it does and
   # nothing it exports has to survive. Skipped by --fast.
@@ -320,8 +332,8 @@ because that export dies with the subprocess. `source:` is the opposite: the
 script is *sourced* into the environment denver is assembling, so whatever it
 exports reaches everything after it. Installing and activating are two
 different jobs, so they are two scripts. (More on this pair in
-[`providers/custom.md`](providers/custom.md); `examples/simple-env` is a
-three-stage demo built around that distinction.)
+[`providers/custom.md`](../providers/custom.md); `examples/simple-env` is a
+three-stage demo of nothing else.)
 
 **Note**: one sourced script would do the whole job just as well — check,
 download, unpack, `export PATH=`, all in `source: install-nvim.sh` and no
@@ -338,12 +350,12 @@ Note also `${DENVER_ENV_DIR}` in `cmd:`. A `cmd:` inherits denver's working
 directory — wherever the user happened to be — so a relative path would be a
 coin flip; `${DENVER_ENV_DIR}` is a built-in denver expands to the directory
 holding this `denver.yml` (see
-[`architecture.md`](architecture.md#variable-interpolation)). `source:` needs
+[Configuration](../configuration/denver-yml.md#variable-interpolation)). `source:` needs
 none of that: it is resolved relative to the `denver.yml` already.
 
-### The files it needs
+### The files the nvim stage needs
 
-`envs/howto-example/nvim/nvim.env` — the pin itself, in one place, so the
+`envs/howto-env/nvim/nvim.env` — the pin itself, in one place, so the
 installing and the activating script can never disagree about which version
 they mean or where it lives:
 
@@ -363,7 +375,7 @@ would need root and would leak into every other environment on the machine
 (if run without docker). The version is part of the path, so bumping
 `NVIM_VERSION` installs next to the old release rather than on top of it.
 
-`envs/howto-example/nvim/install.sh` — download, verify, unpack:
+`envs/howto-env/nvim/install.sh` — download, verify, unpack:
 
 ```bash
 #!/bin/bash -e
@@ -393,7 +405,7 @@ mv "$STAGING" "$NVIM_PREFIX"
 trap - EXIT
 ```
 
-`envs/howto-example/nvim/activate.sh` — the one line that makes it usable:
+`envs/howto-env/nvim/activate.sh` — the one line that makes it usable:
 
 ```bash
 #!/bin/bash
@@ -403,10 +415,10 @@ source "$SELF_DIR/nvim.env"
 export PATH="$NVIM_PREFIX/bin:$PATH"
 ```
 
-### Check it
+### Check it — nvim on PATH
 
 ```bash
-denver envs/howto-example --until nvim-by-hand -- nvim --version
+denver envs/howto-env --until nvim-setup -- nvim --version
 ```
 
 Expected: `NVIM v0.12.4`. Run it a second time — the download is gone and the
@@ -418,12 +430,12 @@ idempotence check, a place to put things — every one of them a decision you
 now own, for exactly one tool. The next step is the same job for two more
 tools, and it is where that stops scaling.
 
-## Step 5 — the `tools-from-internet` stage
+## Step 5 — the `conan-packages` stage
 
 This is the other way to get exact tool versions into an environment: conan.
 
 conan is a package manager, and it does for you what you just did by hand in
-`nvim-by-hand`: it downloads a pinned archive, verifies its checksum, unpacks
+`nvim-setup`: it downloads a pinned archive, verifies its checksum, unpacks
 it into a package of its own and puts that package on `PATH`. No `apt`, no
 version drift, same result on every machine.
 
@@ -432,7 +444,7 @@ in which version — the download, the checksum check, the "already installed"
 shortcut and the cache belong to conan rather than to a script of yours.
 
 ```yaml
-tools-from-internet:
+conan-packages:
   provider: conan
   # a *unit*: one conanfile plus every recipe dir it installs from
   conanfiles:
@@ -441,17 +453,17 @@ tools-from-internet:
     - conan/recipes
 ```
 
-### The files it needs
+### The files the conan stage needs
 
-`envs/howto-example/conan/conanfile.py` — what this environment wants, and in which
+`envs/howto-env/conan/conanfile.py` — what this environment wants, and in which
 versions:
 
 ```python
 from conan import ConanFile
 
 
-class HowtoExample(ConanFile):
-    name = "howto-example"
+class HowtoEnv(ConanFile):
+    name = "howto-env"
     version = "1.0"
 
     def build_requirements(self):
@@ -462,7 +474,7 @@ class HowtoExample(ConanFile):
 **Note**: The `@denver/snapshot` half is the user/channel denver's recipes-exporter
 stamps onto every recipe it exports. It is the default of `user:`/`channel:`.
 
-Denver expects one directory per recipe, laid out as **`<name>/<version>/`**. That
+denver expects one directory per recipe, laid out as **`<name>/<version>/`**. That
 layout is what names the reference, so `conan/recipes/cmake/3.31.9/` becomes
 `cmake/3.31.9`:
 
@@ -509,8 +521,8 @@ class ConanRecipe(ConanFile):
 Now check if it works:
 
 ```bash
-denver envs/howto-example --until tools-from-internet -- cmake --version
-denver envs/howto-example --until tools-from-internet -- arm-none-eabi-gcc --version
+denver envs/howto-env --until conan-packages -- cmake --version
+denver envs/howto-env --until conan-packages -- arm-none-eabi-gcc --version
 ```
 
 It is expected that both tools are present in their pinned versions.
@@ -520,7 +532,7 @@ It is expected that both tools are present in their pinned versions.
 Both stages solved the same sentence — "this exact prebuilt tool, on `PATH`" —
 so it is worth naming what actually differs:
 
-| | `nvim-by-hand` (`custom`) | `tools-from-internet` (`conan`) |
+| | `nvim-setup` (`custom`) | `conan-packages` (`conan`) |
 |---|---|---|
 | What you write per tool | ~20 lines of bash | a `conandata.yml` (url + checksum) and a small recipe |
 | Download, checksum, unpack | your script's job | conan's |
@@ -538,7 +550,7 @@ Rules of thumb:
   wanting the same 800 MB toolchain** → conan. The per-tool cost drops to a
   url and a checksum, and the second environment on the machine pays nothing.
 
-The example keeps both on purpose: `nvim-by-hand` is the escape hatch you
+The example keeps both on purpose: `nvim-setup` is the escape hatch you
 will need eventually for the tool nobody packaged, and it is also the
 clearest description of what the conan stage next to it is doing for you.
 
@@ -548,7 +560,7 @@ The last line of the use case is solved with a `custom` stage again — the
 second one in this environment, and this time with no `cmd:` at all, since
 there is nothing to install.
 
-`envs/howto-example/best-practices.sh`:
+`envs/howto-env/best-practices.sh`:
 
 ```bash
 #!/bin/bash
@@ -593,26 +605,26 @@ Command resolution, first hit wins:
 
 `command: bash` drops you into a shell with everything set up, and `pytest`
 is then just something you type. Setting `command: pytest` instead would make
-`denver envs/howto-example` *run the tests* and exit — a good choice for an
+`denver envs/howto-env` *run the tests* and exit — a good choice for an
 environment whose whole job is one command (a CI env, a linter env), and
-`denver envs/howto-example -- bash` still gets you the shell.
+`denver envs/howto-env -- bash` still gets you the shell.
 
 ## The finished `denver.yml`
 
-See [`../examples/howto-env`](../examples/howto-env) for all of this as a
+See [`examples/howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env) for all of this as a
 real, runnable environment: every file below, complete and working, ready to
 be started with `denver examples/howto-env`.
 
 The many manual steps a new colleague used to be told about are now:
 
 ```bash
-denver envs/howto-example
+denver envs/howto-env
 ```
 
 ## Prove it, rather than hope
 
 A worthwhile habit for an environment like this: let it carry a test that
-checks what each stage promised. [`../examples/howto-env/tests/`](../examples/howto-env/tests/)
+checks what each stage promised. [`examples/howto-env/tests/`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env/tests)
 does exactly that — one assertion per stage:
 
 ```python
@@ -652,14 +664,14 @@ test_environment.py::test_custom_stage_exported_the_team_convention PASSED
 ## Everyday use
 
 ```bash
-denver envs/howto-example --run setup          # one-time initial host setup, then never again
-denver envs/howto-example                      # open interactive bash in the environment (bash is configured as command:)
-denver envs/howto-example -- pytest            # run one command instead of interactive shell
+denver envs/howto-env --run setup          # one-time initial host setup, then never again
+denver envs/howto-env                      # open interactive bash in the environment (bash is configured as command:)
+denver envs/howto-env -- pytest            # run one command instead of interactive shell
 
-denver envs/howto-example --fast               # activate what is already built; run no build step
-denver envs/howto-example --force              # ignore every "nothing changed" shortcut
-denver envs/howto-example --skip docker-with-tools      # same stack, directly on the host
-denver envs/howto-example -c uv-packages.python=3.13    # override one value, this run
+denver envs/howto-env --fast               # activate what is already built; run no build step
+denver envs/howto-env --force              # ignore every "nothing changed" shortcut
+denver envs/howto-env --skip docker-base      # same stack, directly on the host
+denver envs/howto-env -c uv-packages.python=3.13    # override one value, this run
 ```
 
 The first run is the slow one. After that, each stage fingerprints its own
@@ -668,18 +680,29 @@ step when nothing relevant changed, so a repeat run costs seconds. `--force`
 is how you bypass that; `--fast` is the other extreme, skipping the build step
 without even checking, which needs one full run to have happened first. A
 `custom` stage is the exception on both counts: denver has no idea what an
-arbitrary command changes, so `nvim-by-hand` re-runs `install.sh` every time
+arbitrary command changes, so `nvim-setup` re-runs `install.sh` every time
 (which is why that script checks for itself and exits) and under `--fast` its
 `cmd:` is skipped entirely, while its `source:` still runs — the `PATH` entry
 is not a build step.
 
-**Note on `--skip docker-with-tools`**: worth trying at least once — it builds
+**Note on `--skip docker-base`**: worth trying at least once — it builds
 the very same stack directly on the host instead of in the container, so "does
 this work without Docker?" is one flag away rather than a separate code path.
 Whatever the container was providing must then exist on the host itself: for
-this env that is `uv` (the uv stage), `curl` (the `nvim-by-hand` stage's
+this env that is `uv` (the uv stage), `curl` (the `nvim-setup` stage's
 `install.sh`; `tar` and `sha256sum` it also uses are on every Linux host) and
 `git` (the conan stage's recipe exporter). `conan` is *not* one of them — it arrives through the uv stage's
 venv on the host exactly as it does in the container. Note also that
 `create-env.sh` never runs on this path, so `CONAN_HOME` is unset and conan
 falls back to `~/.conan2` rather than the env's own cache.
+
+```{note}
+**Next:** [Examples](examples.md) — the other bundled environments, from a
+three-line one up to a full Zephyr RTOS setup, so you can find the one
+closest to your own project and start from it.
+
+From here on the documentation is reference rather than narrative: the
+[`denver` command](../cli/arguments.md), the full
+[`denver.yml` schema](../configuration/denver-yml.md), and one page
+[per provider](../providers/uv.md).
+```

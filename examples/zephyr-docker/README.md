@@ -102,6 +102,6 @@ import chain.
 
 - [`doc/providers/docker.md`](../../doc/providers/docker.md) — every `docker:`
   key, `env-scripts:`, and how relocation works
-- [`doc/architecture.md`](../../doc/architecture.md) — the wrapper/relocation
+- [`doc/configuration/denver-yml.md`](../../doc/configuration/denver-yml.md) — the wrapper/relocation
   model in general
 - [`../zephyr-devshell`](../zephyr-devshell) — the env that imports this one

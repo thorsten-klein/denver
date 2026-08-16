@@ -199,7 +199,7 @@ UNKNOWN_VERSION = "unknown (not installed)"
 # tag will be -- or None to switch the mechanism off entirely (nothing is
 # re-based; a checkout reports exactly what `git describe` says). Bump it in
 # the same commit that first relies on the new release, then tag that same
-# number (see doc/development.md, "Releasing").
+# number (see doc/contributing/development.md, "Releasing").
 #
 # It exists because a checkout's git tags necessarily lag behind its content:
 # right after a feature lands, `git describe` still reports the *previous*
@@ -1783,7 +1783,7 @@ def _prepare_context(env_dir, config, config_path, *, no_wait, env_vars=None, **
     even read, so without this second application 'env:' would silently win
     over an explicit -e of the same name. -e is meant to always have the
     final word, the same way '-c' always wins over 'import:'/'-cf' (see
-    doc/architecture.md).
+    doc/configuration/denver-yml.md).
     """
     config, ctx = resolve_full_config(env_dir, config, config_path, env_vars=env_vars, **resolve_kwargs)
     ctx.acquire_lock(wait=not no_wait)

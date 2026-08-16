@@ -1,18 +1,10 @@
 # Philosophy
 
 These are the principles that shape every provider and every design
-decision in denver — the *why* behind what [`architecture.md`](architecture.md)
+decision in denver — the *why* behind what [Configuration](../configuration/denver-yml.md)
 describes as *what*. None of them are abstract for their own sake; each one
 exists because its absence caused a real, specific kind of pain somewhere
 else.
-
-They also explain the slogan: *Development Environments as code —
-reproducible, flexible, simple and fast.* **Reproducible** is the
-monorepo rule plus explicit-over-implicit (nothing depends on what a
-particular machine happens to have lying around); **flexible** is layering
-via `import:` and the generic provider model; **simple** is that an
-environment is one readable file and one command; **fast** is fingerprinting,
-with correctness never traded away for it.
 
 ## Genericity
 
@@ -76,28 +68,6 @@ between "skip this because it's probably unchanged" and "always resolve
 correctly," correctness wins, and `--force` exists as the deliberate,
 explicit escape hatch for the rare case a fingerprint gets it wrong.
 
-## Monorepo: the repository is self-contained
-
-The recipes, patches, scripts and config an environment needs live in the
-*same* repository as the project using them — not in a separate recipes
-repo, not fetched from somewhere else at run time. A conan recipe, a west
-patch, a docker context: all of it sits in the repo, versioned alongside
-the code it builds.
-
-What this buys: cloning the repo is the whole story. There's no second
-repo to also clone and pin to a compatible revision, no "which version of
-the recipes repo does this commit expect" to get wrong, no drift between a
-project and its own build recipes because they live in different places
-with different release cadences. denver itself follows the same rule for
-its own distribution — no install required to run it, `src/denver.py` works
-straight out of a checkout — for the identical reason: fewer moving parts
-outside the one thing you already have.
-
-This doesn't mean every recipe must be reinvented per-project. Shared
-recipes/config still live in a shared *base* env, inherited via `import:`
-(see `architecture.md`'s "Layering") — the point isn't zero sharing, it's
-that whatever is shared is still just more files in a repo denver can walk
-to and read, not an external dependency with its own versioning story.
 
 ## Reproducibility as a first-class goal
 
@@ -105,14 +75,6 @@ The same `denver.yml`, run on a fresh clone and on a six-month-old working
 copy, should produce the same environment — not one shaped by whatever
 history happens to be sitting on that particular machine.
 
-This principle has been in real tension with a real feature: the uv provider's
-`append-mode` accumulates every `uv pip install` argument any previous run
-of a stage ever resolved, specifically so a source that drops out later
-(e.g. a workspace losing a dynamic requirements command) doesn't cause uv
-to downgrade or drop a package that source pulled in. That's a genuinely
-useful property — but it also means the resulting venv depends on *this
-machine's run history*, not just the current config, which is exactly what
-reproducibility rules out. The resolution: `append-mode` defaults to
-`false`. The accumulating behavior is still available for the cases that
-need it, but it's an opt-in trade a project makes deliberately, not
-something denver hands you as the default and hopes you never notice.
+Note: For full reproducibility you need to upload the docker container and the
+conan packages to some artifactory, so that denver downloads them prebuilt each
+instead of re-building it again.

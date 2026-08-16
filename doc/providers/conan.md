@@ -14,7 +14,7 @@ my-conan-stage:
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything else is specific to `conan`.)
+see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Everything else is specific to `conan`.)
 
 ## Requires
 
@@ -38,18 +38,18 @@ needs 'conan' on PATH`.
   may itself live in a base env, resolved the normal way (falling back to an
   imported base env's own directory). A listed dir must exist (it's an error
   if it doesn't). Appends across `import:` layers like any other list (see
-  [`../architecture.md`](../architecture.md)'s "Merge rules"), so a derived
+  [Configuration](../configuration/denver-yml.md)'s "Merge rules"), so a derived
   env only needs to list the base-classes dirs it adds itself.
 - **`conanfiles`** — a list of *units*, installed in order. A unit is a
   conanfile together with the recipes it is installed from, so an env that
   stacks on another appends whole units rather than merging several parallel
   lists. Appends across `import:` layers like any other list (see
-  [`../architecture.md`](../architecture.md)'s "Merge rules"). Each entry is a
+  [Configuration](../configuration/denver-yml.md)'s "Merge rules"). Each entry is a
   mapping — a bare path string is rejected — with these keys:
   - **`path`** (required) — the conanfile to install.
   - **`recipe-dirs`** — optional; directories containing recipes to export
     before installing. Never guessed from the directory layout (see
-    "Explicit over implicit" in [`../philosophy.md`](../philosophy.md)) —
+    "Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) —
     each dir must be listed, and must exist. An entry may be a whole recipe
     tree or a single recipe directory; recipes are found by their
     `conandata.yml`, wherever it sits.
@@ -114,20 +114,20 @@ needs 'conan' on PATH`.
   no dependencies, `curl` + `sha256sum -c` + `tar` in a `custom` stage is an
   honest twenty lines and needs no conan on `PATH` — see "Bringing a
   prebuilt binary in by hand" in [`custom.md`](custom.md), which
-  [`examples/howto-env`](../../examples/howto-env) deliberately shows right
+  [`examples/howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env) deliberately shows right
   next to a conan stage doing the same job. What conan adds is the per-tool
   cost: a url and a checksum instead of a script, plus a cache shared across
   envs and checkouts, and dependencies between tools.
 - **Monorepo pattern.** Recipes commonly live in the same repository as the
-  project using them, not a separate recipes repo — see "Monorepo" in
-  [`../philosophy.md`](../philosophy.md). A unit's `recipe-dirs:` just points at wherever they
+  project using them, not a separate recipes repo.
+  A unit's `recipe-dirs:` just points at wherever they
   actually are; there's no requirement they live in any particular place
-  relative to the `denver.yml`.
+  relative to the `denver.yml`. This simplifies the integration as there is no deployment necessary.
 - **A base env with recipes but no conanfile.** Since `recipe-dirs:` live
   inside a unit, a shared base env that ships recipes without a conanfile of
   its own has no unit to put them in; each env that installs those recipes
   lists the base's dir in its own unit instead (see
-  [`../../examples/zephyr-devshell`](../../examples/zephyr-devshell) and the
+  [`examples/zephyr-devshell`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell) and the
   envs that import it).
 - **Works with or without remotes.** An env with no `remotes:` and no
   `config:` at all is a fully offline/local-cache setup — nothing gets

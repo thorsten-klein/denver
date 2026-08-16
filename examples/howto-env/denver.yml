@@ -1,20 +1,21 @@
 version: "1.0"
 denver-version: ">=1.1.0"
 
-# The environment built step by step in doc/how-to.md. Every stage id here is
-# named after the problem it solves rather than after its provider -- an id is
-# only a label, the section below always declares 'provider:' itself.
+# The environment built step by step in doc/quickstart/creating-environments.md.
+# Every stage id here is named after the problem it solves rather than after its
+# provider -- an id is only a label, the section below always declares
+# 'provider:' itself.
 stages:
-- docker-with-tools   # 1. Ubuntu 24.04 + the apt packages + uv
-- uv-packages         # 2. the python 3.12 venv
-- nvim-by-hand        # 3. one prebuilt release, fetched by hand
-- tools-from-internet # 4. cmake 3.31.9 and the ARM toolchain 15.3, exactly
-- best-practices      # 5. the team's PYTEST_ADDOPTS convention
+- docker-base     # 1. Ubuntu 24.04 + the apt packages + uv
+- uv-packages     # 2. the python 3.12 venv
+- nvim-setup      # 3. one prebuilt release, fetched by hand
+- conan-packages  # 4. cmake 3.31.9 and the ARM toolchain 15.3, exactly
+- best-practices  # 5. the team's PYTEST_ADDOPTS convention
 
 # what the finished environment starts when no command follows '--'
 command: bash
 
-docker-with-tools:
+docker-base:
   provider: docker
   description:
   - Relocates every stage below into an Ubuntu 24.04 container, so the OS
@@ -42,7 +43,7 @@ uv-packages:
   requirements:
   - requirements.txt
 
-nvim-by-hand:
+nvim-setup:
   provider: custom
   description:
   - Brings one prebuilt binary release (neovim 0.12.4) into the environment
@@ -54,16 +55,17 @@ nvim-by-hand:
   cmd: bash ${DENVER_ENV_DIR}/nvim/install.sh
   # the activation: sourced, so its PATH entry survives into every later
   # stage and the final command. Resolved relative to this denver.yml.
-  # (Both halves in one sourced script would work too -- see doc/how-to.md;
-  # split here because the two jobs are worth seeing apart.)
+  # (Both halves in one sourced script would work too -- see
+  # doc/quickstart/creating-environments.md; split here because the two jobs
+  # are worth seeing apart.)
   source: nvim/activate.sh
 
-tools-from-internet:
+conan-packages:
   provider: conan
   description:
   - Downloads cmake and the ARM toolchain at exactly the pinned versions and
     puts them on PATH. One unit -- a conanfile plus the recipes it installs.
-    The same job as 'nvim-by-hand' above, minus the shell script -- conan
+    The same job as 'nvim-setup' above, minus the shell script -- conan
     owns the download, the checksum, the cache and the PATH.
   conanfiles:
   - path: conan/conanfile.py
