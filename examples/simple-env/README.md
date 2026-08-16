@@ -60,7 +60,7 @@ value arrives in the config as `${DENVER_ARG_GREETING}`, which is expanded
 by *denver*, before `print-vars-after`'s `cmd:` reaches a shell at all —
 unlike `$MYVAR` in that same line, which the shell expands from what
 `set-vars` exported. See "Environment-specific CLI arguments" in
-[`doc/architecture.md`](../../doc/architecture.md).
+[`doc/configuration/denver-yml.md`](../../doc/configuration/denver-yml.md).
 
 Note this is stage-scoped: `source:` belongs to the `set-vars` stage's own
 section, which is different from the global `hooks:` mechanism that applies
@@ -86,5 +86,5 @@ the `Examples` workflow.
 
 - [`doc/providers/custom.md`](../../doc/providers/custom.md) — the full
   `custom` key reference (`cmd`, `source`, `launcher`)
-- [`doc/architecture.md`](../../doc/architecture.md) — `hooks:`, the global
+- [`doc/configuration/denver-yml.md`](../../doc/configuration/denver-yml.md) — `hooks:`, the global
   counterpart to a stage's own `source:`

@@ -103,7 +103,7 @@ This is for contributing a provider *into denver itself* — one generic
 enough that other projects would want it too. A provider specific to your
 own project (an internal build tool, a deploy step) doesn't need any of
 this or a fork: see "Extension providers" in
-[`architecture.md`](architecture.md) instead.
+[Configuration](../configuration/denver-yml.md) instead.
 
 1. Subclass `Provider` (`src/denver_providers/base.py`): set `name`, `KEYS` (every
    `denver.yml` key your section understands), and `kind` if it's a wrapper
@@ -171,7 +171,7 @@ schema — it must be bumped together with any breaking schema change, so an
 older denver rejects a newer file instead of misreading it.
 
 A `denver.yml` states which denver *tool* version it needs with
-`denver-version:` (see [`architecture.md`](architecture.md)), so a file
+`denver-version:` (see [Configuration](../configuration/denver-yml.md)), so a file
 using a brand-new feature names the release that first shipped it. When an
 example under `examples/` is changed to rely on something unreleased, its
 `denver-version:` names the version about to be tagged — a pin for a release

@@ -17,6 +17,7 @@ import yaml
 
 import denver
 import denver_providers as providers
+import denver_providers.context as ctxmod
 from denver_providers import Context
 from denver_providers.context import set_quiet
 
@@ -36,6 +37,28 @@ def _isolated_state_dir(tmp_path, monkeypatch):
     passes as denver_dir and the paths tests already assert on.
     """
     monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
+
+
+@pytest.fixture(autouse=True)
+def _no_container_markers(monkeypatch):
+    """Stop the *host's* container marker files from reaching in_container().
+
+    in_container() answers a question about the real machine, partly by
+    looking for /.dockerenv, /run/.containerenv and /run/systemd/container on
+    the real filesystem. That makes every test which builds a Context -- and
+    so every assertion that depends on ctx.in_container, from 'no-index: auto'
+    resolving to true/false all the way to whether the logo is printed --
+    quietly conditional on where the suite happens to run. WSL2 with systemd
+    is the case that actually bites: it has /run/systemd/container, so the
+    whole suite behaves as if it were inside a container.
+
+    Emptying the marker list leaves the *explicit* signals intact
+    (DENVER_IN_CONTAINER, and the 'container' variable podman/nspawn/lxc set),
+    which is how tests and wrappers ask for container behaviour on purpose. A
+    test needing a marker file supplies its own list on top of this, as
+    test_in_container_via_marker_file does.
+    """
+    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", ())
 
 
 @pytest.fixture(autouse=True)

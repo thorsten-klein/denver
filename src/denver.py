@@ -199,7 +199,7 @@ UNKNOWN_VERSION = "unknown (not installed)"
 # tag will be -- or None to switch the mechanism off entirely (nothing is
 # re-based; a checkout reports exactly what `git describe` says). Bump it in
 # the same commit that first relies on the new release, then tag that same
-# number (see doc/development.md, "Releasing").
+# number (see doc/contributing/development.md, "Releasing").
 #
 # It exists because a checkout's git tags necessarily lag behind its content:
 # right after a feature lands, `git describe` still reports the *previous*
@@ -1783,7 +1783,7 @@ def _prepare_context(env_dir, config, config_path, *, no_wait, env_vars=None, **
     even read, so without this second application 'env:' would silently win
     over an explicit -e of the same name. -e is meant to always have the
     final word, the same way '-c' always wins over 'import:'/'-cf' (see
-    doc/architecture.md).
+    doc/configuration/denver-yml.md).
     """
     config, ctx = resolve_full_config(env_dir, config, config_path, env_vars=env_vars, **resolve_kwargs)
     ctx.acquire_lock(wait=not no_wait)
@@ -2715,19 +2715,7 @@ def _run_cli(argv=None):
         return
 
     head, forwarded = _split_argv(argv)
-    # First pass, with denver's own flags only: the extra flags this env
-    # declares (its 'args:') live in the very file <env> names, so they
-    # cannot be parsed before <env> itself has been. Unknown tokens are
-    # tolerated here and re-parsed for real below -- they are this env's own
-    # flags, or a typo, and only the second pass can tell the two apart.
-    preliminary, extra_argv = build_arg_parser().parse_known_args(head)
-
-    # <env> falls back to DENVER_ENV_DIR when omitted from argv entirely, so
-    # a shell/CI that already exports it (e.g. one denver invocation per
-    # project checkout) need not repeat it on every command line. An <env>
-    # actually given on the command line always wins.
-    if preliminary.env is None:
-        preliminary.env = os.environ.get("DENVER_ENV_DIR") or None
+    preliminary, extra_argv = _preliminary_args(head)
 
     if _handle_env_less_argv(preliminary, head):
         return
@@ -2762,6 +2750,26 @@ def _run_cli(argv=None):
 
     _require_runnable(env_dir, config, config_path)
     run_stages(env_dir, config, config_path, forwarded, options=_run_options(args, cli_args, env_vars))
+
+
+def _preliminary_args(head):
+    """First-pass parse of denver's own flags, with <env> resolved. Returns (namespace, extra_argv).
+
+    Only denver's own flags are known here: the extra flags this env declares
+    (its 'args:') live in the very file <env> names, so they cannot be parsed
+    before <env> itself has been. Unknown tokens are tolerated and re-parsed
+    for real by the caller's second pass -- they are this env's own flags, or
+    a typo, and only that second pass can tell the two apart.
+
+    <env> falls back to DENVER_ENV_DIR when omitted from argv entirely, so a
+    shell/CI that already exports it (e.g. one denver invocation per project
+    checkout) need not repeat it on every command line. An <env> actually
+    given on the command line always wins.
+    """
+    preliminary, extra_argv = build_arg_parser().parse_known_args(head)
+    if preliminary.env is None:
+        preliminary.env = os.environ.get("DENVER_ENV_DIR") or None
+    return preliminary, extra_argv
 
 
 def _run_options(args, cli_args, env_vars):

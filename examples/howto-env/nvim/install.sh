@@ -1,5 +1,5 @@
 #!/bin/bash -e
-# The 'cmd:' of the 'nvim-by-hand' stage: bring one prebuilt binary release
+# The 'cmd:' of the 'nvim-setup' stage: bring one prebuilt binary release
 # into this environment, by hand -- download, verify, unpack.
 #
 # Run (not sourced) in an isolated subprocess, which is right for a build

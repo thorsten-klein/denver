@@ -1,4 +1,4 @@
-# Architecture
+# denver.yml
 
 ## Overview
 
@@ -8,10 +8,17 @@ right OS, install native toolchains, create a Python venv, fetch source
 repos. denver makes that sequence declarative: maintain your environment in
 a `denver.yml`, and `denver` will run it.
 
-This document is the reference for that file and for the machinery behind
-it. Terms used here (*environment*, *stage*, *step*, *provider*, *resolved
-config*, ...) are defined once in [`glossary.md`](glossary.md); each
-provider's own config keys are documented under [`providers/`](providers/).
+This page is the complete reference for that file and for the machinery
+behind it — every top-level key, every generic stage key, and how a config
+is resolved. If you worked through
+[Creating environments](../quickstart/creating-environments.md), you have
+already met most of it in context; this is where the remaining keys and the
+exact rules live.
+
+Terms used here (*environment*, *stage*, *step*, *provider*, *resolved
+config*, ...) are defined once in the
+[Glossary](../concepts/glossary.md); each provider's own config keys are
+documented on its own page under [Providers](../providers/uv.md).
 
 ## Core model
 
@@ -39,7 +46,7 @@ different venvs) at different points of the pipeline.
 
 The following keys are recognised at the top level; everything else at that
 level must be a stage id declared in `stages:` (anything else is an error —
-see "Fail loud" in [`philosophy.md`](philosophy.md)).
+see "Fail loud" in [`philosophy.md`](../concepts/philosophy.md)).
 
 - **`version`** — the `denver.yml` schema version this file is written
   against. The only value this denver understands is `"1.0"`; any other
@@ -109,7 +116,7 @@ denver-version: ">=1.0.4"   # directly below version:, always
   same value. A checkout whose tags haven't caught up with what the tree
   contains reports against `DEV_VERSION` instead (`1.1.0-17-gabc1234`), so
   running from source works at every commit rather than only after a
-  release — see "Releasing" in [`development.md`](development.md). In the rare case where neither can answer (a source copy with
+  release — see "Releasing" in [`development.md`](../contributing/development.md). In the rare case where neither can answer (a source copy with
   no git history and no install at all), the requirement is reported as
   unverifiable — a warning, not a failure.
 - A commit past a tag counts as newer than that tag (`1.0.3-2-gabc1234`
@@ -138,7 +145,7 @@ Four keys may appear in *any* stage's section, whatever its provider:
   pipeline. See "Hooks and scripts" below.
 
 Every other key in a stage's section must be one the stage's own provider
-recognises — see that provider's page under [`providers/`](providers/). An
+recognises — see that provider's page under [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers). An
 unrecognised key is an error, not silently ignored.
 
 ### Variable interpolation
@@ -155,14 +162,13 @@ name is already exported:
 - **`DENVER_SRC_DIR`** — where denver's own code lives.
 - **`DENVER_ENV_DIR`** — this environment's directory (the one holding its
   `denver.yml`). Also the variable denver *reads* as the `<env>` CLI
-  argument's fallback when it's omitted — see the top-level
-  [`../README.md`](../README.md).
+  argument's fallback when it's omitted.
 - **`DENVER_ENV_NAME`** — that directory's name.
 - **`DENVER_ENV_WORKDIR`** — denver's own working area for this environment
   (`<env dir>/.denver/<denver.yml stem>/` by default): venv, install trees,
   fingerprints, logs, `performance.jsonl`. Per environment and never shared
   — see "Where an environment's state lives" in the top-level
-  [`../README.md`](../README.md).
+  [`README.md`](https://github.com/thorsten-klein/denver/blob/develop/README.md).
 - **`DENVER_CACHE_DIR`** — the *shared* cache root (`~/.cache/denver` by
   default), offered for an env to point a tool's own download cache at, e.g.
   `env: {CONAN_HOME: "${DENVER_CACHE_DIR}/conan2"}`. Safe to share across
@@ -176,8 +182,9 @@ name is already exported:
 These are exported into the environment too, so scripts, compose files and
 the final command can read them as ordinary variables. `DENVER_ENV_DIR`,
 `DENVER_STATE_DIR` and `DENVER_CACHE_DIR` — the variables denver *reads*
-rather than only sets, and where an env's state lives by default — are
-documented in the top-level [`../README.md`](../README.md).
+rather than sets, and where an env's state lives by default — are documented
+in the top-level
+[`README.md`](https://github.com/thorsten-klein/denver/blob/develop/README.md).
 
 ### The prompt marker
 
@@ -505,7 +512,7 @@ Neither `--force` nor `--ci` is ever read from a real environment variable
 — both only ever come from the flag itself, so behavior can't silently
 change based on what happens to be exported in the calling shell.
 
-Each provider's page under [`providers/`](providers/) documents exactly what
+Each provider's page under [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers) documents exactly what
 `--fast` and `--force` mean for that provider.
 
 ## Previewing a run (`--dry-run`)

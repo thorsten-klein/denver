@@ -124,5 +124,5 @@ installs has to be importable by the interpreter stage 3 set up.
 
 - [`../zephyr-devshell-4.3.1`](../zephyr-devshell-4.3.1) — what a version env
   built on this actually has to say
-- [`doc/architecture.md`](../../doc/architecture.md) — the `import:` chain,
+- [`doc/configuration/denver-yml.md`](../../doc/configuration/denver-yml.md) — the `import:` chain,
   merge rules, and conflicting-value resolution with `!`

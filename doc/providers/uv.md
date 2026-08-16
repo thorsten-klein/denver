@@ -12,14 +12,14 @@ my-uv-stage:
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `uv`.)
+see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Everything below is specific to `uv`.)
 
 ## Requires
 
 **`uv` must already be installed** wherever this stage runs — denver never
 installs it. That's the host for a plain run, or the container when a
 `docker` stage relocated the pipeline first (see "Wrapper / relocation" in
-[`../architecture.md`](../architecture.md)), in which case the image needs
+[Configuration](../configuration/denver-yml.md)), in which case the image needs
 it. Install it per [uv's own instructions](https://docs.astral.sh/uv/getting-started/installation/);
 a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
 
@@ -90,7 +90,7 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   output is written there. Useful as a lockfile a later run (or a different
   `uv` stage) can read back via `requirements:`.
 - **`append-mode`** (default `false`) — see "Reproducibility" in
-  [`../philosophy.md`](../philosophy.md) for the full trade-off. When `true`, every `uv pip
+  [`../concepts/philosophy.md`](../concepts/philosophy.md) for the full trade-off. When `true`, every `uv pip
   install` invocation reuses every `-r`/`--override`/`--find-links`/
   `--no-index`/literal arg any *previous* run of this stage ever resolved,
   appending only what's new this run — so a source that drops out later
@@ -103,7 +103,7 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   machine's run history, not just the current `denver.yml`.
 
 `skip-if` and `venv-patcher` are never guessed from the env's directory
-layout (see "Explicit over implicit" in [`../philosophy.md`](../philosophy.md)) — with no
+layout (see "Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) — with no
 `skip-if:` there is simply no skip check, and the venv patcher runs only
 when `venv-patcher:` names its `patches:` file explicitly.
 

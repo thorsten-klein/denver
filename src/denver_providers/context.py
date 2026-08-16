@@ -759,7 +759,7 @@ class Context:
         A value that isn't a path at all (a list where a provider expects one
         string, say) is a config mistake, and gets denver's own message
         rather than a raw TypeError out of pathlib -- see "Fail loud" in
-        doc/philosophy.md. This is the last line of defence: a provider that
+        doc/concepts/philosophy.md. This is the last line of defence: a provider that
         knows which key it is reading should say so itself first (see
         ConanProvider.resolve_defaults' 'base-classes:' check).
         """

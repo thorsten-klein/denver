@@ -9,7 +9,7 @@ my-zephyr-stage:
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [`../architecture.md`](../architecture.md). Everything below is specific to `zephyr`.)
+see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Everything below is specific to `zephyr`.)
 
 ## Requires
 

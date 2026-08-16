@@ -1,5 +1,5 @@
 #!/bin/bash
-# The 'source:' of the 'nvim-by-hand' stage: the one line that makes the
+# The 'source:' of the 'nvim-setup' stage: the one line that makes the
 # release install.sh unpacked actually usable.
 #
 # Sourced (not run), so this PATH entry folds into the environment denver is
