@@ -1,0 +1,115 @@
+name: devenv-full
+
+# Proves the one claim this branch exists to make: that `devenv shell` alone,
+# on a CLEAN CHECKOUT, brings the zephyr-devshell-4.3.1 environment into
+# existence -- clones the ~40-repo west workspace, installs Zephyr's
+# build-time python packages, and leaves a shell that can build -- the way
+# `denver examples/zephyr-devshell-4.3.1` does.
+#
+# Unlike examples.yml (which is deliberately develop-push and manual only,
+# because it is slow and docker-heavy) this DOES run on pull requests, but is
+# path-filtered to the files it actually exercises. Drop the `paths:` block to
+# run it on every PR; expect ~10-15 minutes and a ~2.2 GB clone each time.
+#
+# The west workspace is deliberately NOT cached. Caching it would defeat the
+# entire point -- the thing under test is creation from nothing. Only the Nix
+# store is cached, which is toolchain rather than workspace.
+
+on:
+  push:
+    branches:
+    - develop
+  pull_request:
+    types:
+    - opened
+    - synchronize
+    - reopened
+    paths:
+    - 'examples/zephyr-devshell/devenv.nix'
+    - 'examples/zephyr-devshell-4.3.1/devenv.nix'
+    - 'examples/zephyr-devshell-4.3.1/devenv.yaml'
+    - 'examples/zephyr-devshell-4.3.1/devenv.lock'
+    - 'examples/zephyr-devshell-4.3.1/west.yml'
+    - '.github/workflows/devenv-full.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  devenv-full:
+    runs-on: ubuntu-latest
+    # a clean west update of ~40 repos plus a Zephyr build. Generous, but
+    # bounded -- a hang here should not burn an hour of runner time.
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: examples/zephyr-devshell-4.3.1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v30
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # devenv's own binary cache -- without it, `nix profile install
+      # nixpkgs#devenv` builds devenv from source and this job roughly
+      # doubles in length.
+      - uses: cachix/cachix-action@v15
+        with:
+          name: devenv
+
+      - name: Install devenv
+        run: nix profile install nixpkgs#devenv
+        working-directory: .
+
+      # The actual claim. No west workspace exists at this point -- only the
+      # checkout. If the tasks wired to devenv:enterShell do not clone and
+      # install, `build-hello-world` cannot possibly succeed.
+      - name: Clean checkout -> devenv shell -> build
+        run: devenv shell -- build-hello-world
+
+      # A build is not proof the artefact works; run it. native_sim runs
+      # forever by design, so a timeout is expected -- the assertion is on
+      # what it printed, not on how it exited.
+      - name: Run the built binary and assert its output
+        run: |
+          set -uo pipefail
+          BIN=.devenv/state/ws/build/zephyr/zephyr.exe
+          test -x "$BIN" || { echo "no executable produced at $BIN"; exit 1; }
+          timeout 10 "$BIN" > /tmp/zephyr-run.log 2>&1 || true
+          cat /tmp/zephyr-run.log
+          grep -q "Hello World! native_sim/native/64" /tmp/zephyr-run.log \
+            || { echo "ERROR: expected hello_world banner not found"; exit 1; }
+
+      # The other half of denver's stage model, and the half that is easy to
+      # get wrong: re-entering must be cheap. Every task declares a `status`,
+      # so a second entry has to skip all of them -- if any re-runs, the
+      # workspace mtime moves and this fails.
+      - name: Re-entry must be a no-op (status checks work)
+        run: |
+          set -euo pipefail
+          BEFORE=$(stat -c %Y .devenv/state/ws/.west)
+          devenv shell -- true
+          AFTER=$(stat -c %Y .devenv/state/ws/.west)
+          if [ "$BEFORE" != "$AFTER" ]; then
+            echo "ERROR: re-entering re-ran the west tasks; status checks are not working"
+            exit 1
+          fi
+          echo "re-entry skipped all tasks, as denver's fingerprinting would"
+
+      # Same rule examples.yml enforces for denver itself: a run must leave
+      # the checkout exactly as it found it. This is why the workspace lives
+      # under .devenv/state/ rather than beside the denver.yml -- `west init
+      # -l .` would otherwise clone 40 repos into examples/.
+      - name: Check the run left the checkout clean
+        working-directory: .
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "ERROR: the devenv run left modified or untracked files behind"
+            git status --porcelain
+            exit 1
+          fi

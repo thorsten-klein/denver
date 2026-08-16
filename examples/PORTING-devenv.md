@@ -80,13 +80,89 @@ neither is a portable use of that file.
    import from.
 4. **`ZEPHYR_TOOLCHAIN_VARIANT=host`.**
 
-### What it does not prove
+## The full adaptation
 
-> **`ZEPHYR_BASE` points at a workspace devenv did not create**, because
-> `west update` must run before Zephyr's python dependency set is knowable.
-> devenv's `tasks` can *order* the west steps and `status` can skip them, which
-> is more than any other tool here manages — but the packages installed by
-> `zephyr:west-packages` still cannot be declared, only executed.
+The verification above deliberately left one gap: `ZEPHYR_BASE` pointed at a
+workspace devenv did not create. **That gap has since been closed on this
+branch**, which is what makes it `devenv-full` rather than a straight port.
+
+Every west task now declares `before = [ "devenv:enterShell" ]`, so
+`devenv shell` on a clean checkout *creates* the workspace instead of assuming
+one — clones ~40 repositories, installs Zephyr's build-time python packages,
+and hands back a shell that can build.
+
+Measured, from `rm -rf .devenv`:
+
+| | |
+|---|---|
+| clean checkout → running `zephyr.exe` | **1m 15s** (2.2 GB workspace, 54 repos, 92/92 ninja targets) |
+| re-entering the environment | **0.19s**, every task skipped |
+
+That is denver's stage model, mechanism for mechanism:
+
+| denver | devenv |
+|---|---|
+| ordered `stages:` | `tasks` with `after`/`before` |
+| runs on entering the env | `before = [ "devenv:enterShell" ]` |
+| `skip-if:` / fingerprinting | `tasks.<name>.status` |
+| `--force` | `devenv tasks run --refresh` |
+| `import:` | Nix module `imports` |
+
+CI enforces it on every PR touching these files
+([`.github/workflows/devenv-full.yml`](../.github/workflows/devenv-full.yml)):
+clean checkout → `devenv shell -- build-hello-world` → run the binary and
+assert its banner → re-enter and assert **nothing re-ran** → assert the
+checkout is unmodified. The west workspace is deliberately **not** cached,
+since creation-from-nothing is the entire thing under test.
+
+### Three failures it took to get there
+
+Each one is a real difference from denver's model, and none was visible
+without running it.
+
+1. **Tasks cannot use venv-provided tools.** The first attempt died on
+   `west: command not found`. `languages.python.venv` puts the venv on `PATH`
+   as part of *entering the shell*, but these tasks run `before` that — so at
+   task time the venv is on disk and not on `PATH`. Every invocation has to
+   hardcode an absolute path into `$DEVENV_STATE/venv/bin/`. Tools from
+   `packages` (nix-provided, e.g. `uv`) *are* available; venv-provided ones
+   are not. denver has no equivalent split: each stage's environment
+   accumulates and is handed to the next.
+
+2. **Tasks can race devenv's own internal tasks.** The second attempt died on
+   `.devenv/state/venv/bin/west: No such file or directory` — the venv did not
+   exist *yet*. It is created by devenv's own `devenv:python:virtualenv` task,
+   which is a **sibling** of the west chain under `enterShell`, so the two are
+   unordered. The fix is `after = [ "devenv:python:virtualenv" ]`, which
+   requires knowing devenv's internal task name (`devenv tasks list` reveals
+   it). denver's stages are a declared, totally-ordered list; a stage cannot
+   accidentally race the machinery that prepared the one before it.
+
+3. **Failed tasks do not fail the shell.** `devenv shell -- <cmd>` exited **0**
+   while printing `✖ Running tasks (failed)`, then ran the command anyway
+   against a half-built environment. Only the command's own later failure
+   surfaced the problem. denver's "fail loud on the unexpected" makes a broken
+   stage a hard error; here a broken setup step is a warning you can miss in
+   CI unless you separately assert on the artefact — which is why the workflow
+   asserts on the binary's output rather than trusting the exit code.
+
+### What still does not port, even fully adapted
+
+1. **Stage 1, `docker`, is unreachable.** `devenv container build` packages the
+   *resolved* environment as an image; denver's `docker` stage relocates later
+   stages into an image *you* name (`ubuntu:24.04` and its apt packages), and
+   `--skip docker` runs the same stack natively. This adaptation covers stages
+   2–5 of five.
+
+2. **`west packages pip` is executable but not declarable.** devenv orders it
+   correctly — more than any other tool here manages — but nothing it installs
+   lands in `devenv.lock`. denver's `freeze-to:` / `requirements.final.txt`
+   pattern commits the resolved pins so a fresh clone skips discovery
+   entirely. There is no devenv counterpart.
+
+3. **The hermeticity hole above still applies.** An undeclared package silently
+   falls through to the host, so a fully-adapted env can pass in CI and fail on
+   a colleague's machine.
 
 Ports are additive: each `devenv.nix` sits next to the `denver.yml` it was
 derived from. No example was modified.
