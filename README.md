@@ -174,11 +174,14 @@ native dependencies are already packaged somewhere, [pixi](https://pixi.sh),
 [flox](https://flox.dev) or [mise](https://mise.jdx.dev) are likely to serve
 you better than denver will.
 
-denver earns its keep from step 3 onwards, and especially where the same
-stack has to run *both* inside a container and natively on the host.
+denver earns its keep from step 3 onwards: where the same stack has to run
+*both* inside a container and natively on the host, and where the setup is
+enough steps that a broken one must stop the run rather than leave you in a
+half-built environment.
 [`doc/alternatives.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/alternatives.md)
-compares all five in detail — including the four things none of them do —
-and says plainly which to pick instead.
+compares all five in detail — each of them built and run for real, not just
+read about — covering which to pick instead, the four things none of them do,
+and the seven denver does better.
 
 Run `denver --help` for every flag, see
 [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md)
@@ -195,7 +198,7 @@ explaining what it does and why.
 | [`doc/glossary.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/glossary.md) | Every term denver uses, defined once |
 | [`doc/how-to.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/how-to.md) | Step-by-step: build your own environment, one stage at a time |
 | [`doc/architecture.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/architecture.md) | The `denver.yml` schema and how the system works |
-| [`doc/alternatives.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/alternatives.md) | **When to use something else** — pixi, mise, devbox, devenv, flox compared |
+| [`doc/alternatives.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/alternatives.md) | **When to use something else, and what denver does better** — pixi, mise, devbox, devenv, flox, each built and run for real |
 | [`doc/philosophy.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/philosophy.md) | The design principles behind it |
 | [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) | One key reference per provider: [uv](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/uv.md), [conan](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/conan.md), [docker](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md), [zephyr](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/zephyr.md), [custom](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/custom.md) |
 | [`doc/development.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/development.md) | Contributing: tests, coverage, adding a provider, releasing |

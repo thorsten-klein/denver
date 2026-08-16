@@ -56,11 +56,13 @@ flag list.
 
 ## Background
 
-- **[`alternatives.md`](alternatives.md)** — when to use something else.
-  denver compared against pixi, mise, devbox, devenv and flox, based on
-  porting all seven bundled examples to each; which tool to pick instead and
-  why, the four things none of them do, and what "reproducible" does and does
-  not mean here. Read this before adopting denver.
+- **[`alternatives.md`](alternatives.md)** — when to use something else, and
+  what denver does better. denver compared against pixi, mise, devbox, devenv
+  and flox, based on porting all seven bundled examples to each *and building
+  Zephyr for real in all five*: which tool to pick instead and why, the four
+  things none of them do, the seven things denver does better (most of which
+  only became visible by running the builds), and what "reproducible" does and
+  does not mean here. Read this before adopting denver.
 
 - **[`philosophy.md`](philosophy.md)** — the design principles behind all of
   the above: genericity, explicit over implicit, central default resolution,
