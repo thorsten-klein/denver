@@ -33,14 +33,17 @@ jobs:
       - run: uv run poe complexity
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # the floor denver declares support for (pyproject.toml's
         # requires-python) and the newest available, so a change that only
-        # works on one end doesn't slip through.
+        # works on one end doesn't slip through -- crossed with every OS
+        # denver supports, so a change that only works on one of those
+        # doesn't either.
         python-version: ["3.9", "3.13"]
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,8 +57,11 @@ jobs:
           enable-cache: true
       - run: uv sync --group dev --python ${{ matrix.python-version }}
       - run: uv run poe test
+      # coverage/Sonar are properties of the code, not of the OS it ran
+      # on -- uploaded once, from one representative leg of the matrix,
+      # rather than once per OS.
       - name: Upload coverage reports to Codecov
-        if: matrix.python-version == '3.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -66,14 +72,18 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           report_type: test_results
       - name: SonarCloud Scan
-        if: matrix.python-version == '3.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         uses: SonarSource/sonarqube-scan-action@v4
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     needs: [lint, test]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
         with:

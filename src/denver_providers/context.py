@@ -1047,10 +1047,19 @@ class Context:
         self._absorb_env(self._sourced_env(scripts))
 
     def _sourced_env(self, scripts):
-        """Source ``scripts`` in a bash subprocess and return the ``env -0`` blob they leave behind."""
+        """Source ``scripts`` in a bash subprocess and return the NUL-separated ``KEY=value`` blob they leave behind.
+
+        Dumped with a ``compgen -e`` loop, a bash builtin, rather than GNU
+        coreutils' ``env -0``: denver supports macOS, whose ``env`` is BSD's
+        and rejects ``-0`` outright ("illegal option -- 0"), while
+        ``compgen -e`` -- the exported-variable-names equivalent of what
+        ``env`` would list -- has been a bash builtin since bash 2.x, so it
+        works identically on Linux and on macOS's bash 3.2.
+        """
         sentinel = "__DENVER_ENV_SENTINEL__"
         source_cmds = " && ".join(f". {shlex.quote(s)}" for s in scripts)
-        script = f'{source_cmds}; printf "%s\\0" "{sentinel}"; env -0'
+        dump_cmd = 'for __v in $(compgen -e); do printf "%s=%s\\0" "$__v" "${!__v}"; done'
+        script = f'{source_cmds}; printf "%s\\0" "{sentinel}"; {dump_cmd}'
         result = subprocess.run(
             ["bash", "-c", script],
             env=self.env,
@@ -1064,7 +1073,7 @@ class Context:
         return env_blob
 
     def _absorb_env(self, env_blob):
-        """Fold a ``env -0`` blob's NUL-separated ``KEY=value`` entries into ctx.env."""
+        """Fold a NUL-separated ``KEY=value`` blob's entries into ctx.env."""
         for entry in env_blob.split("\0"):
             # skip the trailing '' after the last \0-terminated entry (and
             # any malformed entry with no '=') -- always exercised (every
