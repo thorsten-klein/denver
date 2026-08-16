@@ -10,9 +10,10 @@ manually diffing --show-config output. These tests catch that automatically.
 
 Only shutil.which (via the shared ``which`` fixture), the zephyr provider's
 workspace-root lookups (WEST_TOPDIR, and the outermost-``.git`` walk its
-'west-yml:' fallback uses independently of WEST_TOPDIR) and the running
-denver's own version (which the envs' 'denver-version:' pins are checked
-against) are faked, for determinism across machines/CI -- everything else (recipe-dirs,
+'west-yml:' fallback uses independently of WEST_TOPDIR), whether this machine
+looks like a container, and the running denver's own version (which the envs'
+'denver-version:' pins are checked against) are faked, for determinism across
+machines/CI -- everything else (recipe-dirs,
 conanfiles, patches files, ...) is resolved against the real examples/ tree,
 so a real "file not found" in an env's own config still fails here.
 """
@@ -25,6 +26,7 @@ from pathlib import Path
 import pytest
 
 import denver
+import denver_providers.context as context_provider
 import denver_providers.zephyr as zephyr_provider
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -63,6 +65,14 @@ def test_show_config_matches_golden(env_name, capsys, monkeypatch, which, tmp_pa
     # and the release it anticipates. Neither says anything about whether
     # --show-config still resolves the env correctly, so it's faked.
     monkeypatch.setattr(denver, "package_version", lambda: FAKE_DENVER_VERSION)
+    # 'no-index: auto' resolves to true inside a container and false on a host,
+    # so an unfaked answer here makes the expected output depend on the machine
+    # running the test rather than on the env's config. It is a real container
+    # check against the real filesystem -- and it says "yes" on more than just
+    # docker: WSL2 with systemd, for instance, has /run/systemd/container, one
+    # of the markers it looks for. Pinned to the host answer, which is what the
+    # golden files record.
+    monkeypatch.setattr(context_provider, "in_container", lambda env=None: False)
 
     env_dir = REPO_ROOT / "examples" / env_name
     assert denver.main([str(env_dir), "--show-config"]) == 0
