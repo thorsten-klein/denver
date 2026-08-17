@@ -6,41 +6,32 @@ file: denver resolves it (following ``import:`` inheritance), then runs the
 generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker,
 ...) to build/enter the environment purely from config.
 
-A command to run, if given, must be introduced with '--' (e.g.
-`denver <env> -- echo hi`); everything after it is forwarded as-is. With no
-command, denver starts an interactive shell.
+denver's own CLI is subcommand-based:
 
-If an env stacks a wrapper provider (e.g. docker), running it builds/enters
-the container and re-invokes denver inside with --skip <that stage>, so the
-remaining providers build the environment there; skip the wrapper yourself
-(e.g. `denver <env> --skip docker`) to run that same stack on the host
-instead.
+    denver run <env> [flags] [-- command]
+    denver run <env> --action <name> [flags]
+    denver run <env> --show-config [flags]
+    denver complete [bash|fish|zsh]
 
-<env> is a path to a directory containing a denver.yml, or a path directly
-to a YAML config file (any name, e.g. denver.debug.yml -- lets one folder
-hold several denver.xxx.yml variants). If omitted, it falls back to the
-DENVER_ENV_DIR environment variable; an <env> given on the command line
-always takes precedence over it.
+``run`` is the normal entry point: with no command, denver starts an
+interactive shell; a command after '--' (e.g. `denver run <env> -- echo
+hi`) is forwarded as-is instead. ``--action <name>`` runs one of the env's
+own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
+``login``; with no name, lists the names this env defines).
+``--show-config`` prints the fully resolved, deep-merged denver.yml and
+exits.
 
---dry-run answers "what does this env actually run?" without running it:
-every stage is walked in order, but its commands and file writes are printed
-(prefixed '[dry-run]') instead of performed, and the final command is printed
-instead of launched. Read-only queries and sourced scripts do still run --
-they are what the printed commands are derived from; see README.md for the
-full marker legend and the wrapper-boundary caveat.
+``complete`` prints a script wiring up completion for the installed
+``denver`` command, for the given shell (bash/fish/zsh) or, if omitted,
+the one it's run from (auto-detected); wire it up with e.g. ``eval
+"$(denver complete)"`` in your shell rc file (fish: ``denver complete |
+source``).
 
-An env may declare flags of its own, under 'args:' in its denver.yml: each
-entry is forwarded to argparse's add_argument, and what the user passes is
-exported as DENVER_ARG_<DEST> (see add_config_args). `denver <env> --help`
-lists those alongside denver's own flags.
+<env> is a path to a directory containing a denver.yml, or a path
+directly to a YAML config file (any name, e.g. denver.debug.yml). If
+omitted, it falls back to the DENVER_ENV_DIR environment variable.
 
-Run `denver --help` to see every flag, and README.md for the full
-behavioural reference (-c's dotted-path/+= syntax, --run's 'scripts:'
-mechanism, the wrapper relocation model, ...).
-
-Examples:
-    src/denver.py examples/zephyr-devshell-4.3.1
-    src/denver.py examples/zephyr-devshell-4.3.1 -- echo hello
+Run `denver run --help` to see more details about the run-specific flags.
 """
 
 import argparse
@@ -50,6 +41,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -789,7 +781,7 @@ def validate_stage_filters(config, until_stage, skip_stages):
 # --------------------------------------------------------------------------- #
 # keys every stage section may carry regardless of provider: 'provider:'
 # picks the class (see providers.make_stage), 'scripts:' is the generic
-# --run <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
+# --action <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
 # opts a stage out of the normal pipeline by default (see run_stages) --
 # none of these are part of any one provider's own KEYS. Order matters:
 # this is also the fixed display order used by _ordered_stage_section for
@@ -998,10 +990,10 @@ def run_hook(ctx, config_path, name):
 
 PERFORMANCE_FILE_NAME = "performance.jsonl"
 
-# what argparse stores for a bare '--run' (no name): list the names this env
-# defines rather than running one. A sentinel object, not a string, so it can
-# never collide with a name an env actually uses.
-LIST_SCRIPTS = object()
+# what argparse stores for a bare '--action' (no name): list the names this
+# env defines rather than running one. A sentinel object, not a string, so it
+# can never collide with a name an env actually uses.
+LIST_ACTIONS = object()
 
 
 def _append_trace_event(path, event):
@@ -1135,8 +1127,19 @@ def _stacked_section(value, key, env_dir):
     return merged, extra_dirs
 
 
-def default_command(config):
-    """Determine the interactive command when the user gave none."""
+def default_command(config, in_container=False):
+    """Determine the interactive command when the user gave none.
+
+    ``in_container`` -- true whenever this resolved command is about to run
+    inside a docker container, whether that's because this denver process is
+    already there (ctx.in_container), or because it's being resolved on the
+    host only to be relocated there next (a 'pure wrapper', see
+    _wrapper_target_cmd) -- wires up 'denver complete' into it first, via
+    _completion_wrapped_shell: unlike the host, the container's image is
+    never something the user already has their own shell completion set up
+    in. False (the default) leaves ``cmd`` exactly as resolved, e.g. for a
+    plain host run.
+    """
     if not sys.stdin.isatty():
         die("cannot determine command to run (non-interactive and no command given)")
 
@@ -1146,17 +1149,56 @@ def default_command(config):
     # into a container. With neither set, fall back to the user's own shell
     # (not a specific one denver would otherwise be guessing).
     cmd = config.get("command") or (config.get("docker") or {}).get("default-cmd") or os.environ.get("SHELL") or "bash"
-    return [cmd] if isinstance(cmd, str) else [str(c) for c in cmd]
+    cmd = [cmd] if isinstance(cmd, str) else [str(c) for c in cmd]
+    return _completion_wrapped_shell(cmd) if in_container else cmd
 
 
-def resolve_command(config, forwarded):
+def _completion_wrapped_shell(cmd):
+    """Wire 'denver complete' into ``cmd`` before it lands, if ``cmd`` is recognisably an interactive bash/zsh/fish.
+
+    Only a shell denver has a completion script for (see _COMPLETION_SCRIPTS)
+    is touched -- anything else (a custom 'command:', a provider's own tool)
+    comes back unchanged, since denver has no idea whether it's even a shell,
+    let alone how to wire completion into it. ``cmd``'s own extra args (e.g.
+    'docker.default-cmd: [zsh, -l]') are preserved on the final exec, right
+    alongside completion's own '-i' (needed since 'sh -c' would otherwise
+    hand back a non-interactive shell).
+
+    The wiring itself: run 'denver complete <shell>' (routed through
+    _denver_launcher -- the same way reinvoke_command finds itself inside
+    the container, since a bare 'denver' isn't guaranteed to be on PATH
+    there) via that shell's own idiom -- eval for bash/zsh, `| source` for
+    fish -- then exec the real interactive shell. Its own startup files
+    (~/.bashrc etc.), if the image has any, still run too: this only adds to
+    that, on top, never replaces it.
+    """
+    if not cmd:
+        return cmd
+    binary = cmd[0]
+    shell = os.path.basename(binary)
+    if shell not in _COMPLETION_SCRIPTS:
+        return cmd
+
+    launcher = " ".join(shlex.quote(part) for part in _denver_launcher())
+    if shell == "fish":
+        setup = f"{launcher} complete fish 2>/dev/null | source"
+    else:
+        setup = f'eval "$({launcher} complete {shell} 2>/dev/null)"'
+    extra_args = "".join(f" {shlex.quote(a)}" for a in cmd[1:])
+    return [binary, "-c", f"{setup}; exec {shlex.quote(binary)} -i{extra_args}"]
+
+
+def resolve_command(config, forwarded, in_container=False):
     """The command to run: ``forwarded`` verbatim, else the env's default command.
 
     ``forwarded`` is already the clean command (main() split it off argv's
     first literal '--' before any denver flag parsing even started, so
-    there's no '--' marker left in it here to strip).
+    there's no '--' marker left in it here to strip). ``in_container`` is
+    passed straight through to default_command -- irrelevant here, since an
+    explicit ``forwarded`` command is never wrapped, only the env's own
+    fallback/configured interactive shell is (see default_command).
     """
-    return list(forwarded) or default_command(config)
+    return list(forwarded) or default_command(config, in_container)
 
 
 def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None):
@@ -1229,6 +1271,7 @@ def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None)
     command = ["--", *forwarded] if forwarded else []
     return [
         *_denver_launcher(),
+        "run",
         str(config_path),
         *filter_flags,
         *_reinvoke_flags(options),
@@ -1411,8 +1454,8 @@ def run_named_scripts(
 ):
     """Run every (filtered) stage's ``scripts: <name>:`` entries, each in the context it actually needs.
 
-    This is ``denver <env> --run <name>``; ``name`` is open-ended -- any
-    string an env's ``scripts:`` sections happen to use (e.g. ``setup``,
+    This is ``denver run <env> --action <name>``; ``name`` is open-ended --
+    any string an env's ``scripts:`` sections happen to use (e.g. ``setup``,
     ``login``, or a project-specific one like ``migrate``), not a fixed,
     hard-coded set of names. Unlike the normal pipeline, this never
     builds/enters the environment or runs any provider's setup()/wrap() for
@@ -1422,7 +1465,7 @@ def run_named_scripts(
     (e.g. conan, only present once inside a docker-wrapped env's container).
     So when an active wrapper exists and any setup stage declares this name,
     the wrapper is prepared (its setup() runs, same as run_stages() would)
-    and denver is re-invoked `--skip <that wrapper stage> --run <name>`
+    and denver is re-invoked `--skip <that wrapper stage> --action <name>`
     inside it for the setup stages' own entries -- mirroring run_stages()'s
     own host/wrapper relocation exactly.
 
@@ -1498,14 +1541,14 @@ def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stag
 
 
 def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages, cli_argv=(), env_vars=None):
-    """The ``denver <config> --run <name>`` argv the wrapper re-invokes, this run's own filters re-passed.
+    """The ``denver run <config> --action <name>`` argv the wrapper re-invokes, this run's own filters re-passed.
 
     ``cli_argv`` -- the tokens this env's own 'args:' flags consumed -- is
     re-passed for the same reason reinvoke_command does it: the inner
     denver declares the same flags and would otherwise only see their
     defaults. ``env_vars`` (-e/--env) is re-passed for the same reason.
     """
-    cmd = ["python3", str(Path(__file__).resolve()), str(config_path), "--run", name]
+    cmd = ["python3", str(Path(__file__).resolve()), "run", str(config_path), "--action", name]
     if quiet:
         cmd.append("-q")
     if until_stage:
@@ -1528,9 +1571,9 @@ def _wrap_cmd(ctx, cmd, active_wrappers, stage_index, stage_count):
 
 
 def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()):
-    """Print every ``scripts: <name>:`` an env defines, grouped by name -- ``denver <env> --run``.
+    """Print every ``scripts: <name>:`` an env defines, grouped by name -- ``denver run <env> --action``.
 
-    ``--run``'s names are deliberately open-ended (see run_named_scripts):
+    ``--action``'s names are deliberately open-ended (see run_named_scripts):
     any string an env's ``scripts:`` sections happen to use, with ``setup``
     and ``login`` conventions rather than a fixed set. That makes an env's
     own names unguessable, and they stack across the whole ``import:``
@@ -1548,7 +1591,7 @@ def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()
 
     by_name = _scripts_by_name(config, stage_ids)
     if not by_name:
-        print(f"env '{env_dir.name}' defines no 'scripts:' entries -- nothing to --run", file=sys.stderr)
+        print(f"env '{env_dir.name}' defines no 'scripts:' entries -- nothing to --action", file=sys.stderr)
         return
     _print_script_names(env_dir, by_name)
 
@@ -1568,13 +1611,13 @@ def _scripts_by_name(config, stage_ids):
 
 
 def _script_count_label(stage, count):
-    """One stage's contribution to a --run name, e.g. ``uv (2 scripts)``."""
+    """One stage's contribution to an --action name, e.g. ``uv (2 scripts)``."""
     return f"{stage} ({count} script{'s' if count != 1 else ''})"
 
 
 def _print_script_names(env_dir, by_name):
-    """Print every --run name this env defines, with the stages contributing to it."""
-    print(f"available --run names for env '{env_dir.name}':", file=sys.stderr)
+    """Print every --action name this env defines, with the stages contributing to it."""
+    print(f"available --action names for env '{env_dir.name}':", file=sys.stderr)
     for name in sorted(by_name):
         stages = ", ".join(_script_count_label(stage, count) for stage, count in by_name[name])
         print(f"  {name:<12} {stages}", file=sys.stderr)
@@ -2046,8 +2089,12 @@ def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers,
     if not setups:
         # pure wrapper: relocate the user's command (or default) directly.
         # skipped_setups were already shown in pipeline position by the walk
-        # above, since nothing will re-invoke to show them.
-        return resolve_command(config, forwarded)
+        # above, since nothing will re-invoke to show them. Only 'docker'
+        # actually relocates into a container -- a 'custom' wrapper's own
+        # 'launcher:' could prepend anything at all (ssh, nsenter, a plain
+        # wrapper script, ...), so completion is only wired in (in_container)
+        # when docker is genuinely among the wrappers relocating this cmd.
+        return resolve_command(config, forwarded, in_container=any(w.name == "docker" for w in active_wrappers))
     # setup providers run *inside* the wrapper: re-invoke denver there
     # -- it recomputes skipped_setups identically (same denver.yml,
     # same --until/--skip) and shows those banners itself.
@@ -2133,7 +2180,14 @@ def _run_stages_directly(
         _print_env_started(ctx, start_time)
     if not quiet:
         print_logo()
-    cmd = resolve_command(config, forwarded)
+    # ctx.in_container covers both ways this path is reached already inside
+    # one: the reinvoked-denver-in-docker case, and a container someone else
+    # started denver in directly (see _wrappers_inactive) -- either way,
+    # completion is wired into the fallback/configured interactive shell the
+    # same as the pure-wrapper case in _wrapper_target_cmd. --skip docker
+    # (ctx.in_container False here) is the one case genuinely running on the
+    # host, so cmd is left alone.
+    cmd = resolve_command(config, forwarded, in_container=ctx.in_container)
     run_hook(ctx, config_path, "pre-cmd")
     ctx.exec(cmd)
 
@@ -2473,81 +2527,17 @@ def _parsed_env_vars(entries):
     return result
 
 
-def build_arg_parser(config_args=None):
-    """The argparse.ArgumentParser for every denver-own flag (not the forwarded command).
-
-    A fresh instance per call (see main()), so its 'append' actions' default
-    lists are never shared/mutated across repeated main() calls in the same
-    process (as happens across denver.main() calls in the test suite).
-    ``add_help=False``: denver prints its own help (the module docstring, via
-    -h/--help handled explicitly in main()), not argparse's auto-generated
-    one -- but every other flag is a normal argparse action, so unknown
-    flags, a missing required value, etc. are all argparse's own problem to
-    report (its usual `usage: ...` + `error: ...` on stderr, exit code 2).
-
-    ``config_args`` is the env's own 'args:' (see add_config_args), added
-    last so those flags are indistinguishable from denver's own everywhere
-    after this -- in --help, in the parse, in the error messages. Omitted
-    (None) wherever the env isn't known yet, which is why parsing is a two
-    pass affair: the flags an env declares live in the file the <env>
-    argument names (see _run_cli).
-    """
-    parser = argparse.ArgumentParser(prog="denver", add_help=False)
+def _add_env_positional(parser):
+    """The <env> positional, taken by the 'run' subcommand."""
     parser.add_argument(
         "env",
         nargs="?",
         help="path to an env directory or a denver.yml file (falls back to $DENVER_ENV_DIR if omitted)",
     )
-    parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
-    parser.add_argument("--version", action="store_true", help="show the installed denver version and exit")
-    parser.add_argument("--license", action="store_true", help="show denver's LICENSE (Apache-2.0) and exit")
-    parser.add_argument("--show-config", action="store_true", help="print the final deep-merged denver.yml and exit")
-    parser.add_argument(
-        "--run",
-        metavar="NAME",
-        nargs="?",
-        const=LIST_SCRIPTS,
-        help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login'); "
-        "with no NAME, list the names this env defines",
-    )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="count",
-        default=0,
-        help="suppress denver's own output (repeatable: -q keeps the stage banner visible, -qq silences "
-        "everything, only the launched command speaks)",
-    )
-    # --fast and --force ask for opposite things ("don't build anything" vs
-    # "rebuild everything"), and --fast wins by construction: every provider
-    # takes its --fast path before ctx.force is ever read, silently
-    # discarding the --force. Rejected here rather than resolved, because
-    # either resolution would be a guess about which one the user meant.
-    # A group (not a hand-written check) so argparse reports it itself, the
-    # same way it reports every other malformed invocation.
-    rebuild = parser.add_mutually_exclusive_group()
-    rebuild.add_argument("--fast", action="store_true", help="only activate what's already built; never (re-)build it")
-    rebuild.add_argument(
-        "--force",
-        action="store_true",
-        help="force expensive recomputation (recreate venv, rerun west update, ...), bypassing every "
-        "checksum/skip-if-based skip",
-    )
-    parser.add_argument(
-        "--ci", action="store_true", help="CI mode: swap in narrower/faster args (e.g. a shallow `west update`)"
-    )
-    parser.add_argument(
-        "--no-wait",
-        action="store_true",
-        help="fail instead of waiting when another denver run already holds this env",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="show what each stage would run instead of running it: no command is executed for its effect, "
-        "nothing is written, and the final command is printed rather than launched (read-only queries and "
-        "sourced scripts do still run -- they are what the shown commands are derived from)",
-    )
+
+
+def _add_config_selection_args(parser):
+    """Flags that pick *which config* to act on, for the 'run' subcommand."""
     parser.add_argument(
         "-c",
         "--config",
@@ -2582,27 +2572,177 @@ def build_arg_parser(config_args=None):
         metavar="STAGE",
         help="run every stage except the given one(s) (repeatable)",
     )
+
+
+def _add_help_flag(parser):
+    """A plain store_true -h/--help, not argparse's own exiting action.
+
+    'run' needs this instead of the default add_help=True: its
+    --help must reflect the env's own 'args:' once known, which only the
+    second, config-aware parse in _run_cli adds -- an exiting help action
+    would fire during the first, config-agnostic pass and never see them.
+    See _handle_info_flags for where this ends up printed from.
+    """
+    parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
+
+
+def _add_run_parser(subparsers, config_args):
+    """'denver run <env>': the normal pipeline, or (with --action) the 'scripts:' mechanism."""
+    run_p = subparsers.add_parser(
+        "run",
+        add_help=False,
+        help="build/enter an env (or run one of its 'scripts:' actions, or just show its resolved config)",
+        description="Build/enter <env>, or (with --action) run one of its 'scripts:' actions instead, or "
+        "(with --show-config) just print its fully resolved denver.yml.",
+    )
+    _add_help_flag(run_p)
+    _add_env_positional(run_p)
+    run_p.add_argument(
+        "--action",
+        metavar="NAME",
+        nargs="?",
+        const=LIST_ACTIONS,
+        help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login'); "
+        "with no NAME, list the names this env defines",
+    )
+    run_p.add_argument(
+        "--show-config", action="store_true", help="print the fully resolved (deep-merged) denver.yml and exit"
+    )
+    run_p.add_argument(
+        "-q",
+        "--quiet",
+        action="count",
+        default=0,
+        help="suppress denver's own output (repeatable: -q keeps the stage banner visible, -qq silences "
+        "everything, only the launched command speaks)",
+    )
+    # --fast and --force ask for opposite things ("don't build anything" vs
+    # "rebuild everything"), and --fast wins by construction: every provider
+    # takes its --fast path before ctx.force is ever read, silently
+    # discarding the --force. Rejected here rather than resolved, because
+    # either resolution would be a guess about which one the user meant.
+    # A group (not a hand-written check) so argparse reports it itself, the
+    # same way it reports every other malformed invocation.
+    rebuild = run_p.add_mutually_exclusive_group()
+    rebuild.add_argument("--fast", action="store_true", help="only activate what's already built; never (re-)build it")
+    rebuild.add_argument(
+        "--force",
+        action="store_true",
+        help="force expensive recomputation (recreate venv, rerun west update, ...), bypassing every "
+        "checksum/skip-if-based skip",
+    )
+    run_p.add_argument(
+        "--ci", action="store_true", help="CI mode: swap in narrower/faster args (e.g. a shallow `west update`)"
+    )
+    run_p.add_argument(
+        "--no-wait",
+        action="store_true",
+        help="fail instead of waiting when another denver run already holds this env",
+    )
+    run_p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what each stage would run instead of running it: no command is executed for its effect, "
+        "nothing is written, and the final command is printed rather than launched (read-only queries and "
+        "sourced scripts do still run -- they are what the shown commands are derived from)",
+    )
+    _add_config_selection_args(run_p)
     # internal-only: how reinvoke_command() carries run_stages()'s own
     # startup clock across a wrapper reinvocation, for the "env started in
     # Ns" line -- never meant to be typed by a user, hence SUPPRESS instead
     # of a real --help entry.
-    parser.add_argument("--start-time", type=float, default=None, help=argparse.SUPPRESS)
-    add_config_args(parser, config_args)
+    run_p.add_argument("--start-time", type=float, default=None, help=argparse.SUPPRESS)
+    add_config_args(run_p, config_args)
+    return run_p
+
+
+def _add_complete_parser(subparsers):
+    """'denver complete [bash|fish|zsh]': print that shell's completion script for the installed 'denver' command.
+
+    The shell name is optional -- omitted, it's auto-detected from the
+    parent process (see _detect_shell); only worth spelling out explicitly
+    if that guess is ever wrong (e.g. under tmux/su/some login-shell chains).
+    """
+    complete_p = subparsers.add_parser(
+        "complete",
+        help="print a completion script for the installed 'denver' command",
+        description="Print a completion script for the 'denver' command, for the given shell (or the "
+        "current one, auto-detected, if omitted); wire it up with e.g. eval \"$(denver complete)\" in "
+        "your shell rc file (fish: denver complete | source).",
+    )
+    complete_p.add_argument(
+        "shell",
+        nargs="?",
+        choices=sorted(_COMPLETION_SCRIPTS),
+        default=None,
+        help="bash, zsh, or fish -- auto-detected from the parent process if omitted",
+    )
+    return complete_p
+
+
+def build_arg_parser(config_args=None):
+    """The argparse.ArgumentParser for every denver-own flag (not the forwarded command).
+
+    A fresh instance per call (see main()), so its 'append' actions' default
+    lists are never shared/mutated across repeated main() calls in the same
+    process (as happens across denver.main() calls in the test suite).
+
+    denver's own CLI is subcommand-based ('run'/'complete'): every
+    ``-h``/``--help`` in it, top-level or per-subcommand, is a plain
+    store_true rather than argparse's own exiting action (see
+    _add_help_flag), so it survives both the first, config-agnostic parse
+    and the second, config-aware one -- only the second run's --help can
+    show 'run''s own env-declared 'args:' alongside denver's own, and only
+    if help exits immediately does that never happen (see _handle_info_flags,
+    which prints the right (sub)parser's own format_help() based on
+    ``args.subcommand``). 'complete' has no config args of its own to wait
+    for, so it keeps argparse's normal ``add_help=True``. Every other flag is
+    a normal argparse action, so unknown flags, a missing required value,
+    etc. are all argparse's own problem to report (its usual `usage: ...` +
+    `error: ...` on stderr, exit code 2).
+
+    ``config_args`` is the env's own 'args:' (see add_config_args), added
+    last to 'run' so those flags are indistinguishable from denver's own
+    everywhere after this -- in --help, in the parse, in the error messages.
+    Omitted (None) wherever the env isn't known yet, which is why parsing is
+    a two pass affair: the flags an env declares live in the file the <env>
+    argument names (see _run_cli).
+    """
+    parser = argparse.ArgumentParser(prog="denver", add_help=False)
+    parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
+    parser.add_argument("--version", action="store_true", help="show the installed denver version and exit")
+    parser.add_argument("--license", action="store_true", help="show denver's LICENSE (Apache-2.0) and exit")
+    subparsers = parser.add_subparsers(dest="subcommand")
+    run_p = _add_run_parser(subparsers, config_args)
+    complete_p = _add_complete_parser(subparsers)
+    # Looked up by _handle_info_flags to print the *invoked* subcommand's own
+    # help (this parser instance's, config_args and all) rather than the
+    # top-level summary -- see the docstring above.
+    parser.subcommand_parsers = {"run": run_p, "complete": complete_p}
     return parser
 
 
+#: The one closing pointer print_help() adds after argparse's own summary --
+#: deliberately not the module's own (necessarily longer) docstring, see
+#: print_help.
+_HELP_FOOTER = (
+    "Run `denver run --help` to see more details about the run-specific flags."
+)
+
+
 def print_help(parser):
-    """Print the logo, argparse's own usage/options summary, then this module's short docstring.
+    """Print the logo, argparse's own usage/options summary, then one pointer sentence -- nothing else.
 
     Shown identically for a bare no-args invocation and an explicit
-    -h/--help (see main()) -- argparse's summary is the actual flag-by-flag
-    reference; the docstring below it is just a short synopsis plus a
-    pointer to README.md for the full behavioural detail (the forwarded-command
-    convention, -c's += semantics, the wrapper relocation model, ...).
+    -h/--help (see main()). argparse's summary is the actual flag-by-flag
+    reference; `denver run --help` has run's own, and README.md/the doc
+    site has the full behavioural detail -- this print stays that short
+    rather than also dumping the module's own (necessarily longer)
+    docstring.
     """
     print_logo()
     print(parser.format_help())
-    print((__doc__ or "").strip())
+    print(_HELP_FOOTER)
 
 
 def _command_failure_message(exc):
@@ -2665,6 +2805,237 @@ def main(argv=None):
     return 0
 
 
+def _complete_candidates(words):
+    """Completion candidates for the (possibly partial, possibly empty) trailing word of ``words``.
+
+    ``words`` are the argv tokens typed after 'denver' up to and including
+    the word currently being completed (see the shell functions in
+    _COMPLETION_SCRIPTS -- bash's forwards ``${COMP_WORDS[@]:1:COMP_CWORD}``,
+    zsh's and fish's the equivalent slice in their own words). Bare-except
+    on purpose (even SystemExit, hence not just ``Exception``): a completion
+    request must never dump a traceback or die() message into the user's
+    terminal mid-keystroke, and returning fewer candidates than ideal is a
+    fine failure mode here.
+    """
+    try:
+        return _complete_candidates_unsafe(words)
+    except BaseException:
+        return []
+
+
+_TOP_LEVEL_COMPLETIONS = ["run", "complete", "--help", "--version", "--license"]
+_RUN_FLAGS = [
+    "--action", "--show-config", "--fast", "--force", "--ci", "--no-wait", "--dry-run", "-q", "--quiet",
+    "-c", "--config", "-cf", "--config-file", "-e", "--env", "--until", "--skip", "-h", "--help",
+]
+_VALUE_FLAGS = {"-c", "--config", "-cf", "--config-file", "-e", "--env", "--until", "--skip", "--action"}
+
+
+def _complete_candidates_unsafe(words):
+    if not words:
+        return _TOP_LEVEL_COMPLETIONS
+    cur = words[-1]
+    prior = words[:-1]
+
+    if not prior:
+        return [c for c in _TOP_LEVEL_COMPLETIONS if c.startswith(cur)]
+
+    subcommand = prior[0]
+    if subcommand == "complete":
+        if len(prior) > 1:
+            return []  # 'complete' takes at most one positional (the shell name)
+        return [s for s in sorted(_COMPLETION_SCRIPTS) if s.startswith(cur)]
+    if subcommand != "run":
+        return []  # anything unrecognised takes no further args
+
+    rest = prior[1:]
+    if "--" in rest:
+        return []  # past the forwarded-command boundary: denver has no opinion on it
+
+    env_value = None
+    pending_flag = None
+    skip_next = False
+    for tok in rest:
+        if skip_next:
+            skip_next = False
+            continue
+        if tok.startswith("-"):
+            if tok in _VALUE_FLAGS:
+                skip_next = True
+            continue
+        if env_value is None:
+            env_value = tok
+    if skip_next:
+        pending_flag = rest[-1]
+
+    if pending_flag in ("--until", "--skip"):
+        return [s for s in _completion_stage_ids(env_value) if s.startswith(cur)]
+    if pending_flag == "--action":
+        return [name for name in _completion_action_names(env_value) if name.startswith(cur)]
+    if pending_flag in ("-e", "--env"):
+        return [name for name in os.environ if name.startswith(cur)]
+    if pending_flag is not None:
+        return []  # -c/-cf/...: no sensible dynamic completion; -o default falls back to filenames
+
+    if env_value is None and not cur.startswith("-"):
+        return _completion_path_candidates(cur)
+
+    if cur.startswith("-"):
+        flags = _RUN_FLAGS + _completion_declared_flags(env_value)
+        return [f for f in flags if f.startswith(cur)]
+
+    return []
+
+
+def _completion_env_paths(env_value):
+    """(env_dir, config_path) for completion purposes, or (None, None) if ``env_value`` isn't a real env yet."""
+    if not env_value:
+        return None, None
+    candidate = Path(env_value).expanduser()
+    if not candidate.exists():
+        return None, None
+    if candidate.is_file():
+        return candidate.parent, candidate
+    return candidate, candidate / CONFIG_NAME
+
+
+def _completion_config(env_value):
+    """This env's raw, whole-file-import-merged config, or None -- best-effort, for completion only."""
+    env_dir, config_path = _completion_env_paths(env_value)
+    if env_dir is None or not config_path.is_file():
+        return None
+    config = load_config(config_path)
+    config, _ = expand_section_imports(config, env_dir)
+    return config
+
+
+def _completion_stage_ids(env_value):
+    """This env's declared stage ids, for completing --until/--skip -- [] if unknown/unreadable."""
+    config = _completion_config(env_value)
+    stages = (config or {}).get("stages") or []
+    return [s for s in stages if isinstance(s, str)]
+
+
+def _completion_action_names(env_value):
+    """This env's 'scripts:' names, for completing --action -- [] if unknown/unreadable."""
+    config = _completion_config(env_value)
+    if config is None:
+        return []
+    stage_ids = _completion_stage_ids(env_value)
+    return sorted(_scripts_by_name(config, stage_ids))
+
+
+def _completion_declared_flags(env_value):
+    """This env's own 'args:'-declared flag spellings, for completing them alongside denver's own -- [] if none."""
+    config = _completion_config(env_value)
+    entries = (config or {}).get("args")
+    if not isinstance(entries, list):
+        return []
+    flags = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        raw = entry.get("flags")
+        if isinstance(raw, str):
+            flags.append(raw)
+        elif isinstance(raw, list):
+            flags += [f for f in raw if isinstance(f, str)]
+    return flags
+
+
+def _completion_path_candidates(cur):
+    """Directory/denver.yml completions for the <env> positional, honouring any 'dir/' prefix already in ``cur``."""
+    base = os.path.dirname(cur) or "."
+    prefix = os.path.basename(cur)
+    try:
+        entries = os.listdir(base)
+    except OSError:
+        return []
+    candidates = []
+    for name in sorted(entries):
+        if not name.startswith(prefix):
+            continue
+        full = os.path.join(base, name) if base != "." else name
+        if os.path.isdir(os.path.join(base, name)):
+            candidates.append(full + "/")
+        elif name == CONFIG_NAME or (name.startswith("denver.") and name.endswith(".yml")):
+            candidates.append(full)
+    return candidates
+
+
+_COMPLETION_SCRIPTS = {
+    "bash": '''\
+# denver bash completion -- wire up with: eval "$(denver complete)"
+_denver_complete() {
+    local IFS=$'\\n'
+    COMPREPLY=($(denver __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
+}
+complete -F _denver_complete -o default -o bashdefault denver
+''',
+    # zsh's own completion system (compsys), not bash's -F/COMPREPLY -- $words is
+    # the full command line (1-indexed, $words[1] == "denver"), $CURRENT the index
+    # of the word being completed, so $words[2,CURRENT] is the same slice bash's
+    # script passes to __complete. compadd, not COMPREPLY, is how compsys widgets
+    # report candidates.
+    "zsh": '''\
+# denver zsh completion -- wire up with: eval "$(denver complete)"
+_denver_complete() {
+    local -a completions
+    completions=("${(@f)$(denver __complete "${words[2,CURRENT]}" 2>/dev/null)}")
+    compadd -- "${completions[@]}"
+}
+compdef _denver_complete denver
+''',
+    # fish's own completion system: 'commandline -opc' is the current command's
+    # tokens before the cursor (command name included, current partial word
+    # excluded), 'commandline -ct' is that partial word -- together the same
+    # words __complete expects. No '-f': like bash's '-o default', filenames
+    # still complete alongside denver's own candidates.
+    "fish": '''\
+# denver fish completion -- wire up with: denver complete | source
+function __denver_complete
+    set -l tokens (commandline -opc) (commandline -ct)
+    denver __complete $tokens[2..-1] 2>/dev/null
+end
+complete -c denver -a '(__denver_complete)'
+''',
+}
+
+
+def _detect_shell():
+    """Best-effort guess at the interactive shell invoking us, for a shell-less 'denver complete'.
+
+    Looked up from the *parent* process's own command name -- 'denver
+    complete' run directly at a prompt (or from `eval "$(denver
+    complete)"`/`denver complete | source`) has that shell as its parent.
+    Falls back to $SHELL, then to "bash", if the parent can't be identified
+    at all or isn't recognised as one of bash/zsh/fish (e.g. it's a script,
+    or wrapped by tmux/su/... with an unrelated process in between) -- never
+    raises. An explicit `denver complete <shell>` bypasses this outright.
+    """
+    name = _parent_process_name() or os.environ.get("SHELL", "")
+    name = os.path.basename(name).lstrip("-")  # login shells prefix their name, e.g. "-zsh"
+    return name if name in _COMPLETION_SCRIPTS else "bash"
+
+
+def _parent_process_name():
+    """The parent process's command name, or None if it can't be determined. See _detect_shell."""
+    try:
+        ppid = os.getppid()
+    except OSError:
+        return None
+    try:
+        with open(f"/proc/{ppid}/comm") as f:
+            return f.read().strip()
+    except OSError:
+        pass
+    try:  # no /proc (e.g. macOS) -- ask the same question of 'ps' instead
+        completed = subprocess.run(["ps", "-o", "comm=", "-p", str(ppid)], capture_output=True, text=True)
+    except OSError:
+        return None
+    return completed.stdout.strip() if completed.returncode == 0 else None
+
+
 def _split_argv(argv):
     """Split ``argv`` on the first literal ``--``: denver's own flags, then the command to forward verbatim.
 
@@ -2683,7 +3054,11 @@ def _split_argv(argv):
 def _handle_info_flags(args, parser):
     """Handle --help/--version/--license, if given. Returns True if one was (each prints and/or dies)."""
     if args.help:
-        print_help(parser)
+        subcommand_parser = parser.subcommand_parsers.get(getattr(args, "subcommand", None))
+        if subcommand_parser is not None:
+            print(subcommand_parser.format_help())
+        else:
+            print_help(parser)
         return True
 
     if args.version:
@@ -2710,12 +3085,26 @@ def _run_cli(argv=None):
     """
     argv = list(sys.argv[1:] if argv is None else argv)
 
+    # Hidden, undocumented subcommand behind the shell functions 'denver
+    # complete' prints (see _COMPLETION_SCRIPTS): deliberately bypasses argparse
+    # and every bit of env resolution below, so a completion request can never
+    # itself trigger a usage error or a die() while the user is mid-keystroke.
+    if argv and argv[0] == "__complete":
+        for candidate in _complete_candidates(argv[1:]):
+            print(candidate)
+        return
+
     if not argv:
         print_help(build_arg_parser())
         return
 
     head, forwarded = _split_argv(argv)
     preliminary, extra_argv = _preliminary_args(head)
+
+    if preliminary.subcommand == "complete":
+        shell = preliminary.shell or _detect_shell()
+        print(_COMPLETION_SCRIPTS[shell], end="")
+        return
 
     if _handle_env_less_argv(preliminary, head):
         return
@@ -2764,10 +3153,13 @@ def _preliminary_args(head):
     <env> falls back to DENVER_ENV_DIR when omitted from argv entirely, so a
     shell/CI that already exports it (e.g. one denver invocation per project
     checkout) need not repeat it on every command line. An <env> actually
-    given on the command line always wins.
+    given on the command line always wins. Only meaningful for 'run': with
+    no subcommand (or 'complete', which has no <env> of its own at all) the
+    namespace simply has no ``env`` attribute, since argparse only adds one
+    when a subparser that declares it actually ran.
     """
     preliminary, extra_argv = build_arg_parser().parse_known_args(head)
-    if preliminary.env is None:
+    if preliminary.subcommand == "run" and preliminary.env is None:
         preliminary.env = os.environ.get("DENVER_ENV_DIR") or None
     return preliminary, extra_argv
 
@@ -2800,18 +3192,26 @@ def _handle_env_less_argv(preliminary, head):
     entire vocabulary, so a mistyped one is still argparse's usual error
     rather than a silently ignored token.
 
+    Also where a missing subcommand entirely is reported: 'complete' is
+    already handled by the caller before this runs, so by construction
+    ``preliminary.subcommand`` here is None or "run" -- and only "run" even
+    has an ``env`` attribute to check (see _preliminary_args).
+
     A non-existent <env> falls through (False) rather than being reported
-    here: resolve_env_dir says that far better, and says it for
-    --show-config/--run/a normal run alike.
+    here: resolve_env_dir says that far better.
     """
-    if preliminary.env is not None and Path(preliminary.env).expanduser().exists():
+    env = getattr(preliminary, "env", None)
+    if env is not None and Path(env).expanduser().exists():
         return False
 
     parser = build_arg_parser()
     if _handle_info_flags(parser.parse_args(head), parser):
         return True
 
-    if preliminary.env is None:
+    if preliminary.subcommand is None:
+        die("no subcommand given -- use 'run' or 'complete'; see `denver --help`")
+
+    if env is None:
         die("no environment given -- pass one, set $DENVER_ENV_DIR, or see `denver --help`")
 
     return False
@@ -2836,7 +3236,7 @@ def _load_cli_config(args, config_path) -> dict:
 
 
 def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=None, env_vars=None):
-    """Handle --show-config/--run, if given. Returns True if one of them ran (nothing is launched then)."""
+    """Handle 'run --show-config', or 'run --action', if that's what this is. Returns True if one ran (nothing is launched then)."""
     if args.show_config:
         show_config(
             env_dir,
@@ -2849,16 +3249,16 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
         )
         return True
 
-    if args.run == LIST_SCRIPTS:
+    if args.action == LIST_ACTIONS:
         list_named_scripts(env_dir, config_path, until_stage=args.until, skip_stages=args.skip)
         return True
 
-    if args.run:
+    if args.action:
         run_named_scripts(
             env_dir,
             config,
             config_path,
-            args.run,
+            args.action,
             until_stage=args.until,
             skip_stages=args.skip,
             quiet=args.quiet,
@@ -2876,9 +3276,10 @@ def _require_runnable(env_dir, config, config_path):
     """Die unless this env may be started directly, with stages to run.
 
     'runnable: false' marks a shared/base env (meant to be inherited via
-    import:, not started directly). --show-config/--run are diagnostic, not
-    "running", so they're exempt: inspecting a base env's resolved config is
-    still useful.
+    import:, not started directly). '--show-config'/'run --action' are
+    diagnostic, not "running", so they're exempt (see
+    _handle_config_subcommands, called before this): inspecting a base env's
+    resolved config is still useful.
     """
     if config_path.is_file() and not is_runnable_env(config_path):
         die(f"env '{env_dir.name}' sets 'runnable: false' -- it's meant to be imported, not started directly.")

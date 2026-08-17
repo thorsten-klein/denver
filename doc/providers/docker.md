@@ -29,7 +29,13 @@ isn't the right one.
 - **`default-cmd`** — the fallback interactive command once relocated into
   the container, read by denver's own command resolution (`command:` at
   the top level still wins over this if set) — not read by this provider
-  itself, but still a real `docker:` key, shown in `--show-config`.
+  itself, but still a real `docker:` key, shown in `--show-config`. When
+  it (or the top-level `command:`, or the plain `$SHELL`/`bash` fallback)
+  names a bare `bash`/`zsh`/`fish`, denver wires up `denver complete` for
+  it automatically before landing there — the container's own image,
+  unlike the host, is never something a user already has completion set
+  up in themselves. Anything else (extra args aside, which are preserved)
+  is left untouched.
 - **`image`** — the canonical local tag denver checks for before falling
   back to a build — checked whenever `image:` is set, whether or not
   `registries:` is also configured; a hit skips the build entirely

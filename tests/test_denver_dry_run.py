@@ -539,10 +539,10 @@ def test_main_dry_run_flag_reaches_run_stages(tmp_path, monkeypatch):
     config = {"stages": ["hello"], "hello": {"provider": "custom", "cmd": "echo hello"}}
     env_dir, _ = _env(tmp_path, config)
 
-    denver.main([str(env_dir), "--dry-run", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--dry-run", "--", "echo", "hi"])
     assert seen["options"].dry_run is True
 
-    denver.main([str(env_dir), "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--", "echo", "hi"])
     assert seen["options"].dry_run is False
 
 
@@ -552,10 +552,13 @@ def test_main_dry_run_flag_reaches_run_named_scripts(tmp_path, monkeypatch):
     config = {"stages": ["hello"], "hello": {"provider": "custom", "cmd": "echo hello"}}
     env_dir, _ = _env(tmp_path, config)
 
-    denver.main([str(env_dir), "--run", "setup", "--dry-run"])
+    denver.main(["run", str(env_dir), "--action", "setup", "--dry-run"])
     assert seen["dry_run"] is True
 
 
 def test_dry_run_flag_is_documented_in_help(capsys):
-    denver.main(["--help"])
+    # --dry-run is one of 'run''s own flags, not a top-level one -- see
+    # 'denver run --help', not the bare top-level 'denver --help' (which
+    # only lists the subcommands themselves, see print_help).
+    denver.main(["run", "--help"])
     assert "--dry-run" in capsys.readouterr().out

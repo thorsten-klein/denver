@@ -43,7 +43,7 @@ def echo_env(tmp_path, monkeypatch, exec_recorder):
                 sort_keys=False,
             )
         )
-        denver.main([str(env_dir), *argv, "--", "echo", "hi"])
+        denver.main(["run", str(env_dir), *argv, "--", "echo", "hi"])
         return exec_recorder["env"]
 
     return _run
@@ -111,7 +111,7 @@ def test_value_is_visible_to_interpolation_in_the_same_denver_yml(tmp_path, run_
         "  provider: custom\n"
         "  cmd: echo building ${DENVER_ARG_TARGET}\n"
     )
-    denver.main([str(env_dir), "--target", "release", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--target", "release", "--", "echo", "hi"])
     assert any("echo building release" in cmd for cmd in run_recorder.commands())
 
 
@@ -127,7 +127,7 @@ def test_a_flag_the_env_does_not_declare_is_still_an_error(echo_env):
     assert excinfo.value.code == 2
 
 
-# ---- --show-config / --run ------------------------------------------------- #
+# ---- show / --action -------------------------------------------------------- #
 def test_show_config_sees_the_passed_value(tmp_path, capsys, which):
     # a path resolved centrally, before any stage runs (see
     # resolve_provider_defaults) -- so --show-config and the real run agree
@@ -144,7 +144,7 @@ def test_show_config_sees_the_passed_value(tmp_path, capsys, which):
         "  skip-if:\n"
         "  - ${DENVER_ARG_WHO}.sh\n"
     )
-    assert denver.main([str(env_dir), "--who", "denver", "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config", "--who", "denver"]) == 0
     assert "denver.sh" in capsys.readouterr().out
 
 
@@ -154,7 +154,7 @@ def test_show_config_lists_the_args_section_itself(tmp_path, capsys):
     (env_dir / "denver.yml").write_text(
         "stages: [c]\nargs:\n- flags: [--who]\n  default: world\nc:\n  provider: custom\n  cmd: true\n"
     )
-    denver.main([str(env_dir), "--show-config"])
+    denver.main(["run", str(env_dir), "--show-config"])
     assert "--who" in capsys.readouterr().out
 
 
@@ -165,7 +165,7 @@ def test_run_scripts_see_the_value(tmp_path, run_recorder):
     (env_dir / "denver.yml").write_text(
         "stages: [c]\nargs:\n- flags: [--who]\nc:\n  provider: custom\n  cmd: true\n  scripts:\n    setup: [s.sh]\n"
     )
-    assert denver.main([str(env_dir), "--who", "denver", "--run", "setup"]) == 0
+    assert denver.main(["run", str(env_dir), "--who", "denver", "--action", "setup"]) == 0
     assert run_recorder.calls[-1].kwargs["env"]["DENVER_ARG_WHO"] == "denver"
 
 
@@ -176,28 +176,34 @@ def test_help_lists_the_envs_own_flags(tmp_path, capsys):
     (env_dir / "denver.yml").write_text(
         "stages: [c]\nargs:\n- flags: [--target]\n  help: what to build\nc:\n  provider: custom\n  cmd: true\n"
     )
-    assert denver.main([str(env_dir), "--help"]) == 0
+    # 'denver run <env> --help' returns normally (0), same as a bare
+    # top-level '--help': 'run' uses a plain store_true -h/--help
+    # (see _add_help_flag), not argparse's own exiting action, precisely so
+    # this second, config-aware parse (the one that registers --target) gets
+    # a chance to run before help is printed.
+    assert denver.main(["run", str(env_dir), "--help"]) == 0
     out = capsys.readouterr().out
+    assert "usage:" in out
     assert "--target" in out
     assert "what to build" in out
 
 
 def test_help_for_a_path_that_is_not_an_env_still_works(tmp_path, capsys):
-    assert denver.main([str(tmp_path / "nope"), "--help"]) == 0
+    assert denver.main(["run", str(tmp_path / "nope"), "--help"]) == 0
     assert "usage:" in capsys.readouterr().out
 
 
 def test_help_for_a_directory_without_a_denver_yml_still_works(tmp_path, capsys):
     (tmp_path / "empty").mkdir()
-    assert denver.main([str(tmp_path / "empty"), "--help"]) == 0
+    assert denver.main(["run", str(tmp_path / "empty"), "--help"]) == 0
     assert "usage:" in capsys.readouterr().out
 
 
 def test_a_mistyped_flag_without_an_env_is_still_an_error(tmp_path):
     # with no env to declare flags of its own, denver's own are the whole
-    # vocabulary -- so an unknown one cannot be somebody else's
+    # vocabulary -- so an unknown one cannot be somebody else's.
     with pytest.raises(SystemExit) as excinfo:
-        denver.main([str(tmp_path / "nope"), "--typo", "--help"])
+        denver.main(["run", str(tmp_path / "nope"), "--typo"])
     assert excinfo.value.code == 2
 
 
@@ -205,7 +211,7 @@ def test_a_non_existent_env_is_still_reported_as_such(tmp_path, caplog):
     # not "unknown flag" and not "no environment given": a path that isn't
     # there is resolve_env_dir's own message, as it is for every other run
     with pytest.raises(SystemExit):
-        denver.main([str(tmp_path / "nope"), "--show-config"])
+        denver.main(["run", str(tmp_path / "nope"), "--show-config"])
     assert "not found" in caplog.text
 
 
@@ -224,9 +230,8 @@ def test_args_stack_across_the_import_chain(tmp_path, capsys):
     (env_dir / "denver.yml").write_text(
         f"import: [{base}]\nstages: [c]\nargs:\n- flags: [--from-env]\nc:\n  provider: custom\n  cmd: true\n"
     )
-    assert denver.main([str(env_dir), "--help"]) == 0
+    assert denver.main(["run", str(env_dir), "--help"]) == 0
     out = capsys.readouterr().out
-    # a list merges by appending, so the derived env only lists what it adds
     assert "--from-base" in out
     assert "--from-env" in out
 
@@ -255,7 +260,7 @@ def test_invalid_args_entry_dies(tmp_path, caplog, args_yaml, expected):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text(f"stages: [c]\nc:\n  provider: custom\n  cmd: true\n{args_yaml}")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--show-config"])
+        denver.main(["run", str(env_dir), "--show-config"])
     assert expected in caplog.text
 
 
@@ -263,7 +268,7 @@ def test_an_env_declaring_no_args_is_unaffected(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [c]\nc:\n  provider: custom\n  cmd: true\n")
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     assert "args" not in capsys.readouterr().out
 
 
@@ -326,7 +331,7 @@ def test_flags_are_carried_into_the_wrapper(tmp_path, monkeypatch, exec_recorder
         "fakewrap:\n  provider: fakewrap\n"
         "fakesetup:\n  provider: fakesetup\n"
     )
-    denver.main([str(env_dir), "--target", "release", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--target", "release", "--", "echo", "hi"])
 
     relocated = exec_recorder["args"]
     assert relocated[0] == "WRAPPED"

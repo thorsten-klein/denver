@@ -296,6 +296,60 @@ def test_resolve_command_falls_back_to_default(monkeypatch):
     assert denver.resolve_command({"command": "zsh"}, []) == ["zsh"]
 
 
+def test_resolve_command_in_container_default_is_false_leaves_cmd_untouched(monkeypatch):
+    # in_container defaults to False -- a plain host run, unaffected by the
+    # container-only completion wiring covered below.
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    assert denver.resolve_command({"command": "zsh"}, []) == ["zsh"]
+
+
+def test_resolve_command_in_container_never_wraps_an_explicit_forwarded_command(monkeypatch):
+    # an explicit '-- command' is the user's own, verbatim -- never rewritten,
+    # in_container or not.
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    assert denver.resolve_command({}, ["bash", "-c", "true"], in_container=True) == ["bash", "-c", "true"]
+
+
+# ---- default_command / _completion_wrapped_shell -- in-container completion -#
+@pytest.mark.parametrize("shell", ["bash", "zsh", "fish"])
+def test_default_command_in_container_wires_completion_for_a_known_shell(monkeypatch, shell):
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    cmd = denver.default_command({"command": shell}, in_container=True)
+    assert cmd[0] == shell
+    assert cmd[1] == "-c"
+    assert f"complete {shell}" in cmd[2] or "complete fish" in cmd[2]
+    assert cmd[2].endswith(f"exec {shell} -i")
+
+
+def test_default_command_in_container_preserves_extra_args_on_the_final_exec(monkeypatch):
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    cmd = denver.default_command({"command": ["zsh", "-l"]}, in_container=True)
+    assert cmd == ["zsh", "-c", cmd[2]]
+    assert cmd[2].endswith("exec zsh -i -l")
+
+
+def test_default_command_in_container_leaves_an_unrecognised_command_untouched(monkeypatch):
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    assert denver.default_command({"command": "python3"}, in_container=True) == ["python3"]
+    assert denver.default_command({"command": "echo hi"}, in_container=True) == ["echo hi"]
+
+
+def test_default_command_not_in_container_never_wraps(monkeypatch):
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    assert denver.default_command({"command": "fish"}, in_container=False) == ["fish"]
+    assert denver.default_command({"command": "fish"}) == ["fish"]  # in_container defaults to False
+
+
+def test_completion_wrapped_shell_uses_the_shell_basename_of_a_path(monkeypatch):
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    cmd = denver.default_command({"command": "/usr/bin/zsh"}, in_container=True)
+    # the actual binary invoked is still the full path given -- only the
+    # completion-script lookup ('denver complete <shell>') uses its basename.
+    assert cmd[0] == "/usr/bin/zsh"
+    assert "complete zsh" in cmd[2]
+    assert cmd[2].endswith("exec /usr/bin/zsh -i")
+
+
 # ---- reinvoke_command -------------------------------------------------------#
 def test_reinvoke_command(tmp_path):
     config_path = tmp_path / "e" / "denver.yml"
@@ -304,7 +358,8 @@ def test_reinvoke_command(tmp_path):
     # this file's own path, independent of DENVER_DIR -- correct whether
     # denver runs from a checkout or an editable install (see docstring)
     assert cmd[1] == str(Path(denver.__file__).resolve())
-    assert cmd[2] == str(config_path)
+    assert cmd[2] == "run"
+    assert cmd[3] == str(config_path)
     # the active wrapper stage(s) are skipped, so the inner denver doesn't
     # try to relocate into them again
     assert cmd[cmd.index("--skip") + 1] == "docker"
@@ -330,7 +385,8 @@ def test_reinvoke_command_frozen_reinvokes_the_executable_itself(tmp_path, monke
     assert "python3" not in cmd
     assert str(Path(denver.__file__).resolve()) not in cmd
     # everything after the launcher is unchanged
-    assert cmd[1] == str(config_path)
+    assert cmd[1] == "run"
+    assert cmd[2] == str(config_path)
     assert cmd[cmd.index("--skip") + 1] == "docker"
     assert cmd[-3:] == ["--", "echo", "hi"]
 
@@ -393,7 +449,8 @@ def test_reinvoke_command_preserves_custom_config_filename(tmp_path):
     # just the directory (which would silently fall back to denver.yml).
     config_path = tmp_path / "e" / "denver.debug.yml"
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"])
-    assert cmd[2] == str(config_path)
+    assert cmd[2] == "run"
+    assert cmd[3] == str(config_path)
 
 
 # ---- run_stages -------------------------------------------------------------#
@@ -417,10 +474,25 @@ class RecordingWrapper(Provider):
         return ["WRAPPED", *cmd]
 
 
+class RecordingDockerWrapper(Provider):
+    """A minimal wrapper provider actually *named* 'docker' -- only that .name matters here: it's what
+    _wrapper_target_cmd's in_container check keys off of (see test_run_stages_pure_docker_wrapper_wires_completion_below)."""
+
+    name = "docker"
+    kind = "wrapper"
+
+    def setup(self, ctx):
+        pass
+
+    def wrap(self, ctx, cmd):
+        return cmd
+
+
 @pytest.fixture
 def fake_providers(monkeypatch):
     monkeypatch.setitem(providers.PROVIDERS, "fakesetup", RecordingSetup)
     monkeypatch.setitem(providers.PROVIDERS, "fakewrap", RecordingWrapper)
+    monkeypatch.setitem(providers.PROVIDERS, "fakedocker", RecordingDockerWrapper)
 
 
 def _env(tmp_path, config):
@@ -821,6 +893,34 @@ def test_run_stages_pure_wrapper_relocates_command_directly(tmp_path, fake_provi
     assert exec_recorder["args"] == ["WRAPPED", "echo", "hi"]
 
 
+def test_run_stages_pure_wrapper_named_docker_wires_completion_into_the_default_shell(
+    tmp_path, fake_providers, exec_recorder, monkeypatch
+):
+    # a wrapper whose .name is 'docker' (as opposed to test_run_stages_pure_
+    # wrapper_relocates_command_directly's 'fakewrap') is what
+    # _wrapper_target_cmd's in_container check keys off of -- so, with no
+    # forwarded command, the resolved default shell comes back wired for
+    # 'denver complete' (see _completion_wrapped_shell).
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {"stages": ["fakedocker"], "fakedocker": {"provider": "fakedocker"}, "command": "fish"}
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    denver.run_stages(env_dir, config, cfg_path, [])
+    assert exec_recorder["args"][0] == "fish"
+    assert exec_recorder["args"][1] == "-c"
+    assert "complete fish" in exec_recorder["args"][2]
+    assert exec_recorder["args"][2].endswith("exec fish -i")
+
+
+def test_run_stages_pure_wrapper_not_named_docker_never_wires_completion(
+    tmp_path, fake_providers, exec_recorder, monkeypatch
+):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {"stages": ["fakewrap"], "fakewrap": {"provider": "fakewrap"}, "command": "fish"}
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    denver.run_stages(env_dir, config, cfg_path, [])
+    assert exec_recorder["args"] == ["WRAPPED", "fish"]
+
+
 def test_run_stages_skip_wrapper_stage_runs_on_host(tmp_path, fake_providers, exec_recorder):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {
@@ -1145,7 +1245,7 @@ def test_run_stages_stacking_used_by_stage(tmp_path, fake_providers, exec_record
     assert exec_recorder["args"] == ["WRAPPED", "echo", "hi"]
 
 
-# ---- run_named_scripts (--run <name>, e.g. 'setup'/'login') -------------------#
+# ---- run_named_scripts (--action <name>, e.g. 'setup'/'login') ---------------#
 # parametrized over the name: the mechanism (run_named_scripts) doesn't care
 # what 'name' is, so one suite covers every convention (setup, login, or a
 # project-specific one) instead of a hand-duplicated copy per name.
@@ -1233,7 +1333,7 @@ def test_run_named_scripts_relocates_setup_entries_into_active_wrapper(
     # a setup stage's own entry needs the wrapper's context (e.g. conan only
     # exists once inside a docker-wrapped env) -- the wrapper's own entry
     # runs on the host first, then the wrapper is prepared (setup()) and
-    # denver re-invoked --skip <that wrapper stage> --run <name> inside it
+    # denver re-invoked --skip <that wrapper stage> --action <name> inside it
     # for the setup stage's own entry
     env_dir, cfg_path = _env(tmp_path, {})
     (env_dir / "wrap-script.sh").write_text("#!/bin/bash\n")
@@ -1249,7 +1349,7 @@ def test_run_named_scripts_relocates_setup_entries_into_active_wrapper(
     assert exec_recorder["args"][0] == "WRAPPED"
     args = exec_recorder["args"]
     assert args[args.index("--skip") + 1] == "fakewrap"
-    assert args[args.index("--run") + 1] == name
+    assert args[args.index("--action") + 1] == name
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])

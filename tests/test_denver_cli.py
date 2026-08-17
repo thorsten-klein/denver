@@ -19,7 +19,10 @@ def _raise(error):
 
 def test_main_no_args_prints_help(capsys):
     assert denver.main([]) == 0
-    assert "denver -- Development Environment Launcher" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "usage: denver" in out
+    assert "run" in out
+    assert "complete" in out
 
 
 @pytest.mark.parametrize("flag", ["--help", "-h"], ids=["long", "short"])
@@ -181,13 +184,27 @@ def test_scm_version_falls_back_to_none(monkeypatch, tmp_path, outcome):
     assert denver.scm_version() is None
 
 
-def test_main_no_env_given_dies(monkeypatch):
+def test_main_no_env_given_dies(monkeypatch, caplog):
     # a flag with no env positional and no help/list/version -- e.g. a typo'd
     # invocation missing the env argument entirely -- must die with a clear
     # message rather than proceeding with env=None.
     monkeypatch.delenv("DENVER_ENV_DIR", raising=False)
     with pytest.raises(SystemExit):
-        denver.main(["--fast"])
+        denver.main(["run", "--fast"])
+    assert "no environment given" in caplog.text
+
+
+def test_main_no_subcommand_given_dies(caplog):
+    # no 'run'/'complete' at all -- distinct from test_main_no_env_given_dies
+    # above, which has a subcommand ('run') but no <env>. A bare positional
+    # (e.g. denver.main([str(env_dir)])) does NOT reach this path: with no
+    # subcommand token, argparse itself rejects it as an invalid choice before
+    # _handle_env_less_argv's own "no subcommand given" die() ever runs. '--'
+    # (nothing before it, nothing after) is what actually gets there: no
+    # subcommand, and no env-less flag (--help/--version/--license) either.
+    with pytest.raises(SystemExit):
+        denver.main(["--"])
+    assert "no subcommand given" in caplog.text
 
 
 def test_main_falls_back_to_denver_env_dir_when_env_omitted(tmp_path, monkeypatch, exec_recorder):
@@ -196,7 +213,7 @@ def test_main_falls_back_to_denver_env_dir_when_env_omitted(tmp_path, monkeypatc
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     monkeypatch.setenv("DENVER_ENV_DIR", str(env_dir))
-    denver.main(["--", "echo", "hi"])
+    denver.main(["run", "--", "echo", "hi"])
     assert exec_recorder["args"] == ["echo", "hi"]
 
 
@@ -211,7 +228,7 @@ def test_main_cli_env_wins_over_denver_env_dir(tmp_path, monkeypatch, exec_recor
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
-    denver.main([str(env_dir), "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--", "echo", "hi"])
     assert exec_recorder["args"] == ["echo", "hi"]
     assert exec_recorder["env"]["DENVER_ENV_DIR"] == str(env_dir.resolve())
 
@@ -225,7 +242,7 @@ def test_main_denver_version_error_wins_over_unknown_key(tmp_path, monkeypatch, 
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text('denver-version: ">=99.0"\nfrom-the-future: true\nstages: [uv]\n')
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--show-config"])
+        denver.main(["run", str(env_dir), "--show-config"])
     assert ">=99.0" in caplog.text
     assert "unknown top-level key" not in caplog.text
 
@@ -235,7 +252,7 @@ def test_main_dies_without_stages(tmp_path):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("command: fish\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir)])
+        denver.main(["run", str(env_dir)])
 
 
 def test_main_reports_a_failing_command_instead_of_a_traceback(tmp_path, monkeypatch, caplog):
@@ -263,7 +280,7 @@ def test_main_reports_a_failing_command_instead_of_a_traceback(tmp_path, monkeyp
     (env_dir / "denver.yml").write_text("stages: [failer]\nfailer:\n  provider: failer\n")
 
     with pytest.raises(SystemExit) as exc:
-        denver.main([str(env_dir), "--", "echo", "hi"])
+        denver.main(["run", str(env_dir), "--", "echo", "hi"])
 
     assert exc.value.code == 1
     assert "command failed (exit 3): false-ish --flag" in caplog.text
@@ -305,7 +322,7 @@ def test_main_dispatches_to_providers(tmp_path, monkeypatch, exec_recorder, caps
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--", "echo", "hi"])
     # logo prints last, right before the command is invoked -- after the
     # stage-finished summary, not before it (see run_stages). Both are
     # denver's own noise, on stderr -- stdout stays reserved for the
@@ -325,19 +342,22 @@ def test_main_forwarded_command_without_separator_dies(tmp_path):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "echo", "hi"])
+        denver.main(["run", str(env_dir), "echo", "hi"])
 
 
-def test_main_unrecognised_flag_dies_immediately_even_in_show_config_mode(tmp_path):
+def test_main_unrecognised_flag_dies_immediately_even_in_show_mode(tmp_path):
     # flag parsing stops at the first unrecognised token and forwards
     # everything from there on -- so a mistyped flag (here '--exclude',
     # which isn't a real denver flag) must still be caught, even though
-    # --show-config itself never looks at 'forwarded'.
+    # '--show-config' itself never looks at 'forwarded'. '--help' stays in the mix:
+    # it's a plain store_true now (see _add_help_flag), not an eagerly
+    # exiting action, so it doesn't get to short-circuit past this error.
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
-    with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--show-config", "--exclude=docker", "--help"])
+    with pytest.raises(SystemExit) as excinfo:
+        denver.main(["run", str(env_dir), "--show-config", "--exclude=docker", "--help"])
+    assert excinfo.value.code == 2
 
 
 def test_main_skip_flag_disables_wrapper(tmp_path, monkeypatch, exec_recorder):
@@ -369,7 +389,7 @@ def test_main_skip_flag_disables_wrapper(tmp_path, monkeypatch, exec_recorder):
     (env_dir / "denver.yml").write_text(
         "stages: [fakewrap, fakesetup]\nfakewrap:\n  provider: fakewrap\nfakesetup:\n  provider: fakesetup\n"
     )
-    denver.main([str(env_dir), "--skip", "fakewrap", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--skip", "fakewrap", "--", "echo", "hi"])
     # --skip <wrapper stage> excludes it from 'stages:', so it's never
     # active -- its setup did not run, the remaining (setup) stage ran
     # directly on the host, and the command was executed directly (not
@@ -395,7 +415,7 @@ def test_main_quiet_flag_consumed(tmp_path, monkeypatch, capsys, exec_recorder):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "-q", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "-q", "--", "echo", "hi"])
     # the command still runs normally...
     assert exec_recorder["args"] == ["echo", "hi"]
     err = capsys.readouterr().err
@@ -425,7 +445,7 @@ def test_main_fast_flag_consumed(tmp_path, monkeypatch, exec_recorder):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "--fast", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--fast", "--", "echo", "hi"])
     assert exec_recorder["env"]["SAW_FAST"] == "1"
     assert exec_recorder["args"] == ["echo", "hi"]
 
@@ -446,7 +466,7 @@ def test_main_force_flag_consumed(tmp_path, monkeypatch, exec_recorder):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "--force", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--force", "--", "echo", "hi"])
     assert exec_recorder["env"]["SAW_FORCE"] == "1"
 
 
@@ -466,7 +486,7 @@ def test_main_no_force_flag_ctx_force_false(tmp_path, monkeypatch, exec_recorder
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--", "echo", "hi"])
     assert exec_recorder["env"]["SAW_FORCE"] == "0"
 
 
@@ -486,7 +506,7 @@ def test_main_ci_flag_consumed(tmp_path, monkeypatch, exec_recorder):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "--ci", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--ci", "--", "echo", "hi"])
     assert exec_recorder["env"]["SAW_CI"] == "1"
 
 
@@ -509,7 +529,7 @@ def test_main_real_ci_env_var_does_not_leak_into_ctx_ci(tmp_path, monkeypatch, e
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--", "echo", "hi"])
     assert exec_recorder["env"]["SAW_CI"] == "0"
 
 
@@ -530,7 +550,7 @@ def test_main_single_q_keeps_banner_visible(tmp_path, monkeypatch, capsys, exec_
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "-q", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "-q", "--", "echo", "hi"])
     assert "visible" in capsys.readouterr().err
     # a later non-quiet run resets the shared logger/flag for other tests
     import denver_providers.context as ctxmod
@@ -555,7 +575,7 @@ def test_main_double_q_hides_banner_too(tmp_path, monkeypatch, capsys, exec_reco
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "-qq", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "-qq", "--", "echo", "hi"])
     assert capsys.readouterr().err == ""
     # a later non-quiet run resets the shared logger/flag for other tests
     import denver_providers.context as ctxmod
@@ -564,14 +584,14 @@ def test_main_double_q_hides_banner_too(tmp_path, monkeypatch, capsys, exec_reco
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])
-def test_main_run_flag_runs_named_scripts_and_exits(tmp_path, run_recorder, which, exec_recorder, name):
+def test_main_action_flag_runs_named_scripts_and_exits(tmp_path, run_recorder, which, exec_recorder, name):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "prep.sh").write_text("#!/bin/bash\n")
     (env_dir / "denver.yml").write_text(f"stages: [uv]\nuv:\n  provider: uv\n  scripts:\n    {name}: [prep.sh]\n")
-    assert denver.main([str(env_dir), "--run", name]) == 0
+    assert denver.main(["run", str(env_dir), "--action", name]) == 0
     assert str((env_dir / "prep.sh").resolve()) in run_recorder.commands()[-1]
-    # --run never builds/enters the environment
+    # --action never builds/enters the environment
     assert exec_recorder == {}
 
 
@@ -584,7 +604,7 @@ def test_main_no_config_direction_dies(tmp_path):
 
     # a script next to the env is not enough: denver.yml must declare it
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir)])
+        denver.main(["run", str(env_dir)])
 
 
 def test_main_show_config_flag(tmp_path, capsys, which):
@@ -596,7 +616,7 @@ def test_main_show_config_flag(tmp_path, capsys, which):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("import: [../base]\nuv:\n  requirements: [r.txt]\n")
 
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     out = capsys.readouterr().out
     assert "import" not in out  # the directive itself is dropped, not the data
     printed = denver.yaml.safe_load(out)
@@ -627,7 +647,7 @@ def test_main_show_config_extension_provider(tmp_path, capsys, which):
         "greet:\n  provider: acme\n  greeting: hi\n"
     )
 
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["greet"]["provider"] == "acme"
     assert printed["greet"]["greeting"] == "hi"
@@ -647,7 +667,7 @@ def test_main_show_config_key_order(tmp_path, capsys, which):
         "uv:\n  provider: custom\n  cmd: echo p\n"
     )
 
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     out = capsys.readouterr().out
     top_level_keys = [line.split(":", 1)[0] for line in out.splitlines() if line and not line.startswith((" ", "-"))]
     assert top_level_keys == ["version", "command", "hooks", "stages", "zephyr", "uv"]
@@ -665,7 +685,7 @@ def test_main_show_config_lists_scripts_for_every_stage(tmp_path, capsys, which)
         "my-stage:\n  provider: custom\n  cmd: echo hi\n"
     )
 
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["scripts"] == {"setup": ["prep.sh"]}
     assert printed["my-stage"]["scripts"] is None
@@ -679,7 +699,7 @@ def test_main_show_config_lists_disabled_for_every_stage(tmp_path, capsys, which
         "stages: [uv, my-stage]\nuv:\n  provider: uv\n  disabled: true\nmy-stage:\n  provider: custom\n  cmd: echo hi\n"
     )
 
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["disabled"] is True
     assert printed["my-stage"]["disabled"] is False
@@ -690,7 +710,7 @@ def test_main_show_config_disabled_not_a_bool_dies(tmp_path, which):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  disabled: yes-please\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--show-config"])
+        denver.main(["run", str(env_dir), "--show-config"])
 
 
 def test_main_show_config_lists_description_for_every_stage(tmp_path, capsys, which):
@@ -703,7 +723,7 @@ def test_main_show_config_lists_description_for_every_stage(tmp_path, capsys, wh
         "my-stage:\n  provider: custom\n  cmd: echo hi\n"
     )
 
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["description"] == ["installs the venv"]
     assert printed["my-stage"]["description"] is None
@@ -714,7 +734,7 @@ def test_main_show_config_description_not_a_list_of_strings_dies(tmp_path, which
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  description: not-a-list\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--show-config"])
+        denver.main(["run", str(env_dir), "--show-config"])
 
 
 def test_main_show_config_resolves_hooks(tmp_path, capsys, which):
@@ -733,7 +753,7 @@ def test_main_show_config_resolves_hooks(tmp_path, capsys, which):
         "stages: [uv]\nuv:\n  provider: uv\nhooks:\n  env:\n  - hooks/env.sh\n  pre-uv: pre-uv.sh\n"
     )
 
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     hooks = printed["hooks"]
     assert hooks["env"] == [str((env_dir / "hooks" / "env.sh").resolve())]
@@ -756,7 +776,7 @@ def test_main_show_config_expands_section_stacking(tmp_path, capsys):
     )
     (env_dir / "docker-compose.yml").write_text("services: {}\n")
 
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     docker = printed["docker"]
     assert docker["exe"] == "docker"
@@ -777,7 +797,7 @@ def test_main_show_config_skip_drops_stage_and_section(tmp_path, capsys, which):
     )
     (env_dir / "docker-compose.yml").write_text("services: {}\n")
 
-    assert denver.main([str(env_dir), "--show-config", "--skip", "docker"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config", "--skip", "docker"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["stages"] == ["uv"]
     assert "docker" not in printed
@@ -800,7 +820,7 @@ def test_main_show_config_does_not_start_environment(tmp_path, monkeypatch, exec
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-    denver.main([str(env_dir), "--show-config"])
+    denver.main(["run", str(env_dir), "--show-config"])
     assert exec_recorder == {}
 
 
@@ -815,7 +835,7 @@ def test_main_config_flag_combines_with_show_config(tmp_path, capsys, which):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  python: '3.9'\n")
 
-    assert denver.main([str(env_dir), "-c", "uv.python=3.12.3", "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config", "-c", "uv.python=3.12.3"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["python"] == "3.12.3"
 
@@ -825,7 +845,7 @@ def test_main_config_flag_repeatable_last_wins(tmp_path, capsys, which):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
 
-    denver.main([str(env_dir), "-c", "uv.python=3.9", "--config", "uv.python=3.12.3", "--show-config"])
+    denver.main(["run", str(env_dir), "--show-config", "-c", "uv.python=3.9", "--config", "uv.python=3.12.3"])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["python"] == "3.12.3"
 
@@ -835,7 +855,7 @@ def test_main_config_flag_creates_new_section(tmp_path, capsys, which):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
 
-    denver.main([str(env_dir), "-c", "env.FOO=bar", "--show-config"])
+    denver.main(["run", str(env_dir), "--show-config", "-c", "env.FOO=bar"])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["env"] == {"FOO": "bar"}
 
@@ -847,7 +867,7 @@ def test_main_config_file_flag_overlays_denver_yml(tmp_path, capsys, which):
     overlay = tmp_path / "overlay.yml"
     overlay.write_text("uv:\n  python: '!3.12.3'\n")
 
-    denver.main([str(env_dir), "-cf", str(overlay), "--show-config"])
+    denver.main(["run", str(env_dir), "--show-config", "-cf", str(overlay)])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["python"] == "3.12.3"
 
@@ -861,7 +881,7 @@ def test_main_config_file_flag_multiple_applied_in_order(tmp_path, capsys, which
     second = tmp_path / "second.yml"
     second.write_text("uv:\n  python: '3.11'\n")
 
-    denver.main([str(env_dir), "--config-file", str(first), "--config-file", str(second), "--show-config"])
+    denver.main(["run", str(env_dir), "--show-config", "--config-file", str(first), "--config-file", str(second)])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["requirements"] == ["a"]
     assert printed["uv"]["python"] == "3.11"
@@ -874,7 +894,7 @@ def test_main_config_override_wins_over_config_file(tmp_path, capsys, which):
     overlay = tmp_path / "overlay.yml"
     overlay.write_text("uv:\n  python: '3.9'\n")
 
-    denver.main([str(env_dir), "-cf", str(overlay), "-c", "uv.python=3.12.3", "--show-config"])
+    denver.main(["run", str(env_dir), "--show-config", "-cf", str(overlay), "-c", "uv.python=3.12.3"])
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["python"] == "3.12.3"
 
@@ -884,7 +904,7 @@ def test_main_config_flag_missing_argument_dies(tmp_path):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "-c"])
+        denver.main(["run", str(env_dir), "-c"])
 
 
 def test_main_until_flag_truncates_stages(tmp_path, monkeypatch, exec_recorder):
@@ -913,7 +933,7 @@ def test_main_until_flag_truncates_stages(tmp_path, monkeypatch, exec_recorder):
     (env_dir / "denver.yml").write_text(
         "stages: [fakea, fakeb]\nfakea:\n  provider: fakea\nfakeb:\n  provider: fakeb\n"
     )
-    denver.main([str(env_dir), "--until", "fakea", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--until", "fakea", "--", "echo", "hi"])
     # --until keeps every stage up to and including the named one, and drops
     # only what comes after it.
     assert exec_recorder["env"]["RAN_A"] == "1"
@@ -946,7 +966,7 @@ def test_main_skip_flag_excludes_stage(tmp_path, monkeypatch, exec_recorder):
     (env_dir / "denver.yml").write_text(
         "stages: [fakea, fakeb]\nfakea:\n  provider: fakea\nfakeb:\n  provider: fakeb\n"
     )
-    denver.main([str(env_dir), "--skip", "fakea", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--skip", "fakea", "--", "echo", "hi"])
     assert "RAN_A" not in exec_recorder["env"]
     assert exec_recorder["env"]["RAN_B"] == "1"
 
@@ -978,7 +998,7 @@ def test_main_skip_flag_accepts_equals_syntax(tmp_path, monkeypatch, exec_record
         "stages: [fakea, fakeb]\nfakea:\n  provider: fakea\nfakeb:\n  provider: fakeb\n"
     )
     # '--flag=value' must work exactly like '--flag value'
-    denver.main([str(env_dir), "--skip=fakea", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--skip=fakea", "--", "echo", "hi"])
     assert "RAN_A" not in exec_recorder["env"]
     assert exec_recorder["env"]["RAN_B"] == "1"
     assert exec_recorder["args"] == ["echo", "hi"]
@@ -990,19 +1010,19 @@ def test_main_config_flag_equals_syntax_splits_on_first_equals_only(tmp_path, ca
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
-    assert denver.main([str(env_dir), "--config=uv.python=3.12.3", "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config", "--config=uv.python=3.12.3"]) == 0
     printed = denver.yaml.safe_load(capsys.readouterr().out)
     assert printed["uv"]["python"] == "3.12.3"
 
 
 def test_main_boolean_flag_with_equals_dies(tmp_path):
-    # a flag that never takes a value (e.g. --show-config) must reject
-    # '--show-config=foo' instead of silently ignoring the '=foo' part.
+    # a flag that never takes a value (e.g. --fast) must reject
+    # '--fast=foo' instead of silently ignoring the '=foo' part.
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--show-config=foo"])
+        denver.main(["run", str(env_dir), "--fast=foo"])
 
 
 def test_main_until_flag_unknown_stage_dies(tmp_path):
@@ -1010,11 +1030,11 @@ def test_main_until_flag_unknown_stage_dies(tmp_path):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--until", "typo-stage"])
+        denver.main(["run", str(env_dir), "--until", "typo-stage"])
 
 
-def test_main_run_without_a_name_lists_them(tmp_path, capsys):
-    # --run's names are open-ended, and 'scripts:' stacks across the whole
+def test_main_action_without_a_name_lists_them(tmp_path, capsys):
+    # --action's names are open-ended, and 'scripts:' stacks across the whole
     # import chain -- so reading one file does not answer "which names?"
     env_dir = tmp_path / "e"
     env_dir.mkdir()
@@ -1023,24 +1043,24 @@ def test_main_run_without_a_name_lists_them(tmp_path, capsys):
         "a:\n  provider: custom\n  cmd: x\n  scripts:\n    setup: [one.sh, two.sh]\n"
         "b:\n  provider: custom\n  cmd: x\n  scripts:\n    setup: [three.sh]\n    login: [l.sh]\n"
     )
-    assert denver.main([str(env_dir), "--run"]) == 0
+    assert denver.main(["run", str(env_dir), "--action"]) == 0
     err = capsys.readouterr().err
-    assert "available --run names" in err
+    assert "available --action names" in err
     assert "setup" in err
     assert "a (2 scripts)" in err
     assert "b (1 script)" in err
     assert "login" in err
 
 
-def test_main_run_without_a_name_says_when_there_are_none(tmp_path, capsys):
+def test_main_action_without_a_name_says_when_there_are_none(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [a]\na:\n  provider: custom\n  cmd: x\n")
-    assert denver.main([str(env_dir), "--run"]) == 0
+    assert denver.main(["run", str(env_dir), "--action"]) == 0
     assert "defines no 'scripts:' entries" in capsys.readouterr().err
 
 
-def test_main_run_listing_does_not_resolve_provider_defaults(tmp_path, capsys):
+def test_main_action_listing_does_not_resolve_provider_defaults(tmp_path, capsys):
     # a listing must not fail over an unrelated missing path: full resolution
     # runs every provider's existence checks, which have nothing to do with
     # which scripts an env declares.
@@ -1050,7 +1070,7 @@ def test_main_run_listing_does_not_resolve_provider_defaults(tmp_path, capsys):
         "stages: [d]\nd:\n  provider: docker\n  compose:\n    file: no-such-compose.yml\n"
         "  scripts:\n    login: [l.sh]\n"
     )
-    assert denver.main([str(env_dir), "--run"]) == 0
+    assert denver.main(["run", str(env_dir), "--action"]) == 0
     assert "login" in capsys.readouterr().err
 
 
@@ -1059,7 +1079,7 @@ def test_main_fast_and_force_together_are_rejected(tmp_path, capsys):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit) as exc:
-        denver.main([str(env_dir), "--fast", "--force"])
+        denver.main(["run", str(env_dir), "--fast", "--force"])
     # argparse's own error, not a die(): exit 2, and it names both flags so
     # the message says which pair conflicts.
     assert exc.value.code == 2
@@ -1068,7 +1088,7 @@ def test_main_fast_and_force_together_are_rejected(tmp_path, capsys):
 
 @pytest.mark.parametrize("flag", ["--fast", "--force"])
 def test_main_fast_or_force_alone_still_parses(flag):
-    args = denver.build_arg_parser().parse_args(["some-env", flag])
+    args = denver.build_arg_parser().parse_args(["run", "some-env", flag])
     assert getattr(args, flag.lstrip("-")) is True
 
 
@@ -1077,7 +1097,7 @@ def test_main_unknown_stage_section_key_dies(tmp_path):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  provider: uv\n  pythonn: '3.12.3'\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--show-config"])
+        denver.main(["run", str(env_dir), "--show-config"])
 
 
 def test_main_unsupported_config_version_dies(tmp_path):
@@ -1085,14 +1105,14 @@ def test_main_unsupported_config_version_dies(tmp_path):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("version: 2.0\nstages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir), "--show-config"])
+        denver.main(["run", str(env_dir), "--show-config"])
 
 
 def test_main_matching_config_version_ok(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("version: 1.0\nstages: [uv]\nuv:\n  provider: uv\n")
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
 
 
 def test_main_runnable_false_dies_when_run_directly(tmp_path):
@@ -1100,11 +1120,11 @@ def test_main_runnable_false_dies_when_run_directly(tmp_path):
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("runnable: false\nstages: [uv]\nuv:\n  provider: uv\n")
     with pytest.raises(SystemExit):
-        denver.main([str(env_dir)])
+        denver.main(["run", str(env_dir)])
 
 
 def test_main_runnable_false_still_allows_show_config(tmp_path, capsys, which):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("runnable: false\nstages: [uv]\nuv:\n  provider: uv\n")
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0

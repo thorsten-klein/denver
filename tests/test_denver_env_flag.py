@@ -33,7 +33,7 @@ def echo_env(tmp_path, exec_recorder):
             env_dir = tmp_path / "e"
             env_dir.mkdir(exist_ok=True)
             (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
-            denver.main([str(env_dir), *argv, "--", "echo", "hi"])
+            denver.main(["run", str(env_dir), *argv, "--", "echo", "hi"])
             return exec_recorder["env"]
 
         yield _run
@@ -97,7 +97,7 @@ def test_overrides_the_config_env_map(tmp_path, exec_recorder, monkeypatch):
     (env_dir / "denver.yml").write_text(
         "stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\nenv:\n  MY_VAR: from-config\n"
     )
-    denver.main([str(env_dir), "-e", "MY_VAR=from-cli", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "-e", "MY_VAR=from-cli", "--", "echo", "hi"])
     assert exec_recorder["env"]["MY_VAR"] == "from-cli"
 
 
@@ -165,7 +165,7 @@ def test_flags_are_carried_into_the_wrapper(tmp_path, monkeypatch, exec_recorder
     (env_dir / "denver.yml").write_text(
         "stages: [fakewrap, fakesetup]\nfakewrap:\n  provider: fakewrap\nfakesetup:\n  provider: fakesetup\n"
     )
-    denver.main([str(env_dir), "-e", "MY_VAR=hello", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "-e", "MY_VAR=hello", "--", "echo", "hi"])
 
     relocated = exec_recorder["args"]
     assert relocated[0] == "WRAPPED"

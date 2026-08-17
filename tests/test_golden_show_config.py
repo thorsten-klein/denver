@@ -75,7 +75,7 @@ def test_show_config_matches_golden(env_name, capsys, monkeypatch, which, tmp_pa
     monkeypatch.setattr(context_provider, "in_container", lambda env=None: False)
 
     env_dir = REPO_ROOT / "examples" / env_name
-    assert denver.main([str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     actual = _normalize(capsys.readouterr().out)
 
     golden_path = GOLDEN_DIR / f"{env_name}.yml"
