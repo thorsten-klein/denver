@@ -19,9 +19,12 @@ see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Eve
 **`docker` with the Compose plugin must be available** on the machine this
 stage runs on — denver never installs it, and every command it issues is a
 `docker compose ...` one (v2, the plugin — not the standalone
-`docker-compose` script). The daemon has to be reachable for the invoking
-user, too. Point `exe:` at a specific docker binary if the one on `PATH`
-isn't the right one.
+`docker-compose` script). The stage checks both upfront (`docker` on `PATH`,
+then `docker compose version`) and dies naming whichever is missing, rather
+than failing deep inside the first `compose build`/`compose run`. Skipped
+under `--dry-run`, so an env can still be previewed on a machine without
+docker. The daemon has to be reachable for the invoking user, too. Point
+`exe:` at a specific docker binary if `docker` isn't the right exe.
 
 ## Key reference
 

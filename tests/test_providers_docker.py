@@ -52,7 +52,16 @@ def test_exe_missing_dies(make_context, which):
         run_docker(config, ctx)
 
 
-def test_compose_file_missing_dies(make_context, which):
+def test_compose_v2_plugin_missing_dies(make_context, run_recorder, which):
+    config = {"docker": docker_cfg()}
+    ctx = make_context(config=config)
+    write_compose(ctx)
+    run_recorder.responses["compose version"] = lambda cmd: type("R", (), {"returncode": 1})()
+    with pytest.raises(SystemExit):
+        run_docker(config, ctx)
+
+
+def test_compose_file_missing_dies(make_context, run_recorder, which):
     config = {"docker": docker_cfg()}
     ctx = make_context(config=config)
     with pytest.raises(SystemExit):
@@ -156,7 +165,7 @@ def test_compose_file_list_produces_multiple_dash_f(make_context, run_recorder, 
     assert cmd.count("-f") == 2
 
 
-def test_compose_file_list_missing_file_dies(make_context, which):
+def test_compose_file_list_missing_file_dies(make_context, run_recorder, which):
     config = {"docker": {"compose": {"file": ["docker-compose.yml", "missing.yml"]}}}
     ctx = make_context(config=config)
     write_compose(ctx)
@@ -211,8 +220,9 @@ def test_no_env_scripts_no_op(make_context, run_recorder, which):
     write_compose(ctx)
     run_recorder.responses["image inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
     run_docker(config, ctx)  # must not raise despite no env-scripts configured
-    # only the image-inspect probe and the build command ran -- nothing env-script-related
-    assert len(run_recorder.commands()) == 2
+    # only the compose-version check, the image-inspect probe and the build
+    # command ran -- nothing env-script-related
+    assert len(run_recorder.commands()) == 3
     assert "build" in run_recorder.commands()[-1]
 
 
