@@ -1,102 +1,7 @@
-"""docker provider: run the command inside a docker compose service.
+"""docker provider: relocates the final command into a docker compose service.
 
-This is a *wrapper* provider -- it does not build the local environment, it
-relocates the final command into a container.
-
-Configured from denver.yml -> ``docker:``:
-
-    docker:
-      exe: docker
-      default-cmd: fish                # fallback interactive command once
-                                        # relocated into the container (read by
-                                        # denver.py's default_command(), not
-                                        # this provider -- 'command:' still wins
-                                        # if set)
-      image: "myproject:dev"           # canonical local tag -- must match the
-                                        # compose file's own service `image:`.
-      registries:                      # ordered list of registries to check
-                                        # (each as `<url>/<image>`, via `docker
-                                        # manifest inspect` -- never pulled here)
-                                        # before falling back to a build -- local
-                                        # cache first, then each entry in turn;
-                                        # first hit wins and $DENVER_DOCKER_IMAGE
-                                        # points at it, so `docker compose run`
-                                        # pulls it lazily, on demand
-      - url: registry.internal.example:5000  # 'username'/'password' are optional --
-        username: myusername           # when both are set, 'docker login'
-        password: ${DOCKER_PASSWORD}   # runs automatically (password via
-                                        # stdin, never argv) right before the
-                                        # manifest check against this entry;
-                                        # both fields go through denver's normal
-                                        # ${VAR} interpolation, so a literal and
-                                        # an env-sourced secret look the same.
-      - url: registry.example.com      # no username/password -> no login,
-                                        # assumed already-authenticated/public
-      compose:
-        file: docker-compose.yml       # REQUIRED: a single path, or a list for
-                                        # multiple `-f` overlays (base + override)
-        service: dev
-        build: true
-        args: []                       # extra `docker compose` args
-      run-args: ["--rm"]               # extra `docker compose run` args
-      env-scripts:                     # script(s) run before build/run, e.g. to
-      - create-env.sh                  #   write a compose .env file themselves
-
-denver has no notion of a compose env-file -- it just runs env-scripts and
-lets docker compose/the scripts sort out their own file naming and lookup.
-
-Every default above (exe, compose.service/build, run-args) is computed
-once, centrally, by ``DockerProvider.resolve_defaults`` -- not in setup().
-By the time this provider's setup() runs, its config section already has
-every default filled in (see ``denver.resolve_provider_defaults``), so
-nothing here ever falls back to a conventional value itself.
-
-``compose.file`` has no default: denver never guesses that a
-``docker-compose.yml`` next to the ``denver.yml`` is the one meant. An env
-must name its compose file(s) explicitly.
-
-Whenever ``image:`` is set (``registries:`` or not), setup() first checks
-the local image cache; a hit skips the build entirely. ``registries`` is
-empty by default -- nothing changes for an env that doesn't set it. When
-set, and the image is missing locally, setup() checks each entry in turn
-via ``docker manifest inspect`` -- never a real ``docker pull`` -- before
-ever considering a build; if none of them have it and ``compose.build:
-false``, that's a hard error rather than a silent no-op. Each entry's
-``url:`` is required; ``username:``/``password:`` are optional but, if
-either is set, both must be -- when present, ``docker login`` runs
-automatically (credentials via stdin, never argv) right before the
-manifest check against that entry; an entry with neither is assumed
-already-authenticated or public. The actual pull, if any, happens lazily
-later, when ``docker compose run`` itself needs the image.
-
-``--force`` rebuilds even a locally-cached image -- but a registry that
-already has it still wins over a forced local rebuild, so the local hit
-no longer short-circuits the registries search in that case; a rebuild
-only actually happens if none of them have it either.
-
-denver's --fast is not consulted anywhere in this provider's setup() --
-``compose.build:`` is read exactly as configured, so a real `docker compose
-build` still runs under --fast if the image wasn't found locally or on a
-registry. There is no "skip the rebuild, just activate" fast path here the
-way uv/conan/zephyr have one.
-
-A build (``compose.build: true``, the default) never actually runs without
-``image:`` set, regardless of --fast/--force: with no tag to check next
-time, it would just rebuild on every single run. An env that wants
-denver's own build-once behavior must set ``image:``; one that doesn't
-gets ``compose.build:`` fully ignored -- ``docker compose run`` still
-builds it itself if the compose file's own ``build:`` section is set and
-the image doesn't exist, denver just never calls ``compose build`` for it.
-
-Whatever ``image:`` resolves to (empty string if unset) is exported as
-``$DENVER_DOCKER_IMAGE`` before env-scripts/build/run -- so the compose file
-can say ``image: "${DENVER_DOCKER_IMAGE}"`` instead of hard-coding the same
-tag a second time.
-
-``docker`` with the Compose plugin (every command here is a ``docker
-compose ...`` one, v2 -- not the standalone ``docker-compose`` script) must
-already be available, with a reachable daemon, on the machine this stage
-runs on -- denver never installs it.
+A *wrapper* provider (see providers/base.py) -- it does not build the local
+environment itself. Configured from denver.yml -> ``docker:``.
 
 Full key reference, worked examples and design notes: ``doc/providers/docker.md``.
 """
@@ -169,7 +74,7 @@ def _relocation_mounts(ctx):
 
 
 class DockerProvider(Provider):
-    """Relocates the final command into a docker compose service -- see module docstring for denver.yml keys."""
+    """Relocates the final command into a docker compose service -- see doc/providers/docker.md for denver.yml keys."""
 
     name = "docker"
     kind = "wrapper"
@@ -189,7 +94,7 @@ class DockerProvider(Provider):
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve exe/compose.file/compose.service/compose.build/run-args defaults -- see module docstring."""
+        """Resolve exe/compose.file/compose.service/compose.build/run-args defaults -- see doc/providers/docker.md."""
         resolved = dict(cfg)
         resolved["exe"] = cfg.get("exe") or "docker"
         compose = dict(cfg.get("compose") or {})

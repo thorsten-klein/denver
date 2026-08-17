@@ -600,8 +600,8 @@ def validate_top_level_keys(config):
 
 
 # the denver.yml schema version this denver understands; bump together with
-# an actual breaking change to the schema (this module's own docstring and
-# each provider's module docstring are the schema's documentation).
+# an actual breaking change to the schema (doc/configuration/denver-yml.md
+# and each provider's doc/providers/*.md page are the schema's documentation).
 SUPPORTED_CONFIG_VERSION = "1.0"
 
 

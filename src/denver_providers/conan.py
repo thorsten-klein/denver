@@ -1,131 +1,8 @@
 """conan provider: provisions native tools via Conan and exposes them.
 
-Configured from denver.yml -> ``conan:``:
-
-    conan:
-      exe: conan                                # conan executable (default: PATH)
-      recipes-exporter: path/to/recipes.py      # default: bundled conan_scripts/recipes.py
-      deployer:     path/to/symlink.py          # default: bundled conan_scripts/extensions/symlink.py
-      base-classes:                             # optional; dirs of shared
-      - conan/base_classes                      #  conanfile base classes, each
-      - ../other-env/conan/base_classes         #  resolved (may live in a base env)
-      conanfiles:                               # list of units, in install order
-      - path: conan/conanfile.py                # required
-        recipe-dirs:                            # optional; dirs directly
-        - conan/recipes                         #  containing recipes, exported
-        - ../other-env/conan/recipes            #  before this unit installs
-        catalog: conan/catalog.yml              # optional; where this unit's
-                                                #  catalog is written (unset =>
-                                                #  built in memory, never written)
-        recipes-exporter: path/to/recipes.py    # optional; overrides the
-                                                #  top-level default above
-      build: missing                            # --build=<value> (str or list)
-      install-args: []                          # extra `conan install` args
-      no-auth: false                            # true => conan install --no-remote
-      profiles:                                 # each entry becomes its own
-        host: []                                # -pr:h=<value> / -pr:b=<value> flag,
-        build: []                               # in list order (default: none)
-      config:                                   # optional list of dirs, each
-      - path/to/config-dir                      # installed via `conan config
-                                                 # install <dir>` (see below)
-      remotes:                                  # optional, see below
-        conancenter:
-          url: https://example.invalid/artifactory/api/conan/conan
-          verify_ssl: true                      # default: true
-          enabled: true                         # default: true
-      cleanup-remotes: true                     # default: true, see below
-      user: denver                              # conan user for each generated reference
-      channel: snapshot                         # conan channel for each generated reference
-
-`config` entries are plain directories the env author controls: whatever
-conan's own `config install` understands there (profiles, `remotes.json`,
-`credentials.json`, `source_credentials.json`, `settings.yml`, ...) is
-installed into the conan cache by conan itself -- denver never opens or
-interprets any file inside them, it only runs `conan config install <dir>`
-for each, in order, before profile detection.
-
-`remotes` is a project-owned, exhaustive list of the conan remotes this env
-wants: when the prepare stage runs, the recipes-exporter adds/renames/enables
-exactly these remotes and disables every *other* remote already present in
-the conan home -- so `remotes:` should list every remote the env needs, not
-just ones being added. A remote's own login (if reachable) runs as part of
-the same stage. `CONAN_REMOTE_ENABLE_<NAME>` (env var, `ON`/`OFF`) overrides
-a given remote's `enabled:` at run time.
-
-`cleanup-remotes` (default `true`) makes `remotes:` exhaustive even when
-it's left unset/empty: the prepare stage then disables *every* remote
-already present in the conan home, so each env's remote configuration is
-fully self-contained regardless of what an earlier run of a *different* env
-left behind. Set `cleanup-remotes: false` to opt out instead: with no
-`remotes:` of its own, this env leaves the conan home's existing remote
-configuration alone entirely, rather than reconciling it to nothing.
-
-`cleanup-remotes` is automatically skipped (regardless of its own value)
-whenever `remotes:` is left unset/empty *and* this env also has a
-`config:` (its `conan config install <dir>` may itself have installed a
-`remotes.json` enabling/disabling remotes -- denver never opens or
-interprets that file, see `config` above, so it can't tell which remotes it
-owns): reconciling an empty `remotes:` to "exhaustive" would otherwise
-silently disable everything `config:` just set up. An explicit (non-empty)
-`remotes:` still reconciles/cleans up as normal regardless of `config:`; an
-env with no `config:` of its own also still gets the full exhaustive-cleanup
-behavior.
-
-`user`/`channel` (default `"denver"`/`"snapshot"`) become the user/channel
-half of every reference the recipes-exporter generates while exporting recipes
-(`name/version@user/channel`) -- never read from a real environment
-variable.
-
-The provider then detects a conan profile, (re)generates + exports each
-recipe source via the recipes-exporter, installs every conanfile with the
-symlink deployer, then sources the aggregated conanbuildenv.sh into ctx.env
-so the tools are on PATH.
-
-Every default above (exe/recipes-exporter/deployer paths, build) is computed
-once, centrally, by ``ConanProvider.resolve_defaults`` -- not in setup(). By
-the time this provider's setup() runs, its config section already has every
-default filled in (see ``denver.resolve_provider_defaults``), so nothing
-here ever falls back to a PATH lookup itself.
-
-`conanfiles` is a list of *units*, not of paths: each entry keeps a
-conanfile together with the recipes it is installed from, so stacking envs
-appends whole units instead of merging several parallel lists that the
-author has to keep aligned in their head. Only `path:` is required; a bare
-string entry is rejected outright, so a unit always says what it is. A
-unit's `recipe-dirs:` are exported (as one catalog, see below) immediately
-before the install pass, in unit order.
-
-`catalog:` is where a unit's catalog -- every one of its recipes pinned as
-`name/version@user/channel#rrev` -- is written. Without it the catalog is
-built in memory, handed straight to the export step and never touches disk,
-which is the default: a run leaves no generated file behind in the recipe
-tree unless an env asks for one, e.g. to review/commit the pinned
-references, or to have the unit's own `conanfile.py` read its pins back.
-Nothing else changes either way -- export/create/upload read the in-memory
-catalog regardless.
-
-A unit's catalog covers *all* of its `recipe-dirs:` together, so recipes in
-one dir may depend on recipes in another dir of the same unit, and so a
-unit's catalog content is determined by that unit's membership. Splitting
-recipes into their own unit is what keeps their catalog independent of what
-another unit does.
-
-`recipes-exporter:` may be set per unit, overriding the top-level default
-(itself defaulting to the bundled `conan_scripts/recipes.py`) for that unit
-only. `deployer`, `base-classes`, `user` and `channel` stay env-wide.
-
-`base-classes` and `conanfiles` are never guessed from the env's directory
-layout: denver does not go looking for a `conan/recipes`,
-`conan/base_classes` or `conan/conanfile.py` that happens to exist. Each is
-simply unset/empty unless the `denver.yml` says otherwise, and a path that
-*is* listed must exist (it's an error if it doesn't) -- so what conan
-exports and installs is always exactly what the config names, and an env
-that inherits a base's recipes says so explicitly.
-
-conan itself must already be available wherever this stage runs -- denver
-never installs it: in practice an earlier uv stage does, by listing
-``conan`` in its ``requirements:``, but a host-wide or in-image install
-works just as well (and ``exe:`` can name a specific one).
+Detects a conan profile, (re)generates + exports recipes, installs every
+``conanfiles:`` unit with the symlink deployer, then sources the aggregated
+conanbuildenv.sh into ctx.env. Configured from denver.yml -> ``conan:``.
 
 Full key reference, worked examples and design notes: ``doc/providers/conan.md``.
 """
@@ -147,7 +24,7 @@ CONANBUILDENV_NAME = "conanbuildenv.sh"
 
 
 class ConanProvider(Provider):
-    """Provisions native tools via Conan and exposes them on PATH -- see module docstring for denver.yml keys."""
+    """Provisions native tools via Conan and exposes them on PATH -- see doc/providers/conan.md for denver.yml keys."""
 
     name = "conan"
     KEYS = (
@@ -402,7 +279,7 @@ class ConanProvider(Provider):
 
     @classmethod
     def _resolve_remote_reconciliation(cls, cfg):
-        """Decide whether/how this run reconciles conan remotes -- see module docstring for the 'config:' exception.
+        """Decide whether/how this run reconciles conan remotes -- see doc/providers/conan.md for the 'config:' exception.
 
         Returns ``(remotes, cleanup_remotes, reconcile_remotes)``.
         """
@@ -410,7 +287,7 @@ class ConanProvider(Provider):
         # cleanup-remotes is skipped when both 'remotes:' is left unset/empty
         # *and* this env has its own 'config:' (whose `conan config install`
         # may itself have installed a remotes.json denver never interprets,
-        # see module docstring): reconciling an empty 'remotes:' to
+        # see doc/providers/conan.md): reconciling an empty 'remotes:' to
         # "exhaustive" in that case would silently disable every remote
         # config install just set up. An explicit (non-empty) 'remotes:'
         # still reconciles/cleans up as normal regardless of 'config:'.

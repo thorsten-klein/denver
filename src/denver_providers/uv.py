@@ -1,103 +1,7 @@
 """uv provider: a generic Python virtualenv managed with uv.
 
-Everything is configured from denver.yml -> ``uv:``:
-
-    uv:
-      python: "3.12.3"            # interpreter version for the venv (optional;
-                                   # unset => no '-p', uv's own discovery decides)
-      uv: uv                      # uv executable (default: uv on PATH)
-      requirements:               # -r files, installed together
-      - path/to/requirements.txt
-      install-args:                # extra literal `uv pip install` args (optional)
-      - --pre
-      - $(west packages pip)      # a '$(...)' entry is instead run as a shell
-                                   # command; its stdout is split on whitespace
-                                   # and each token appended as its own arg
-      overrides:                  # --override files (optional)
-      - path/to/overrides.txt
-      find-links:                 # extra wheel sources (optional, e.g. a cache)
-      - ${DENVER_ENV_WORKDIR}/.conan/...
-      lock:                       # uv project lockfiles (optional)
-        create: py/uv.lock        # `uv lock` writes/updates this lockfile
-        sync: py/uv.lock          # `uv sync` installs this lockfile
-      no-index: false             # true|false|auto (default false; 'auto' =>
-                                   # true inside docker, false on the host)
-      link-mode: copy             # uv link mode
-      venv-patcher:                # applies venv patches (optional); when set,
-        exe: venv-patcher          # executable (default: venv-patcher on PATH)
-        patches: uv/venv-patcher/patches.yml   # 'patches:' is required
-      skip-if:                    # skip (re)install if these scripts all exit 0
-      - check.sh                  # (optional; never guessed, see below)
-      freeze-to:                   # write `uv pip freeze`'s output here after
-        path/to/frozen.txt         # a real install (optional)
-      append-mode: false           # accumulate every 'uv pip install' arg ever
-                                    # seen across runs, instead of installing
-                                    # strictly from this run's own resolved
-                                    # args (default: false) -- see below
-
-The provider creates the venv (recreating it when the requirement files or
-any 'install-args:' command's output change), activates it into ctx.env,
-installs the requirements and applies venv patches.
-
-``lock:`` is the uv-project (pyproject.toml) side of the same venv, and is
-independent of the requirements above -- either, both or neither may be
-set. ``create:`` runs ``uv lock`` for the project owning that lockfile
-(the directory the lockfile sits in, which must hold its pyproject.toml),
-i.e. it *writes* the file, like 'freeze-to:' does. ``sync:`` runs ``uv
-sync`` for the project owning that lockfile, installing it into the venv
-this stage just activated (``--active``) without re-resolving it
-(``--frozen``) and without pruning packages the lockfile doesn't mention
-(``--inexact``, so a shared venv's other stages survive). With both set,
-``create:`` runs first, so a single stage can relock and then install what
-it locked. Only ``sync:``'s lockfile counts as an input for the checksum
-that recreates the venv; ``create:``'s is an output.
-
-``append-mode`` (default ``false``) makes every 'uv pip install' invocation
-reuse every -r/--override/--find-links/--no-index/literal arg any previous
-run of this stage ever resolved, appending only what's new this run -- so a
-source that drops out later (e.g. a project leaving `west packages pip`'s
-output) never causes uv to reconsider, and potentially downgrade or drop, a
-package only *that* source ever pulled in. The trade-off: the resulting venv
-depends on this machine's run history, not just the current denver.yml, so
-turning it on is a deliberate choice, not the default. The accumulated arg
-list is kept in ``<DENVER_DIR>/.envs/<env>/.logs/<stage>-install-args.json``,
-outside the venv itself (so it survives a checksum-triggered venv
-recreation); delete the file to reset it.
-
-One venv holds exactly one interpreter, and the one it already has wins: an
-existing venv is reused rather than silently rebuilt because ``python:``
-changed (that would discard everything installed into it too), and a
-``python:`` contradicting it is an error naming both ways out -- ``--force``
-to recreate it, or a ``venv:`` of this stage's own to keep both. The same
-rule covers several stages sharing a venv, so a later stage disagreeing is
-reported rather than silently ignored. A venv whose base interpreter has
-disappeared is the one case denver recreates unasked: it is broken rather
-than reusable. See ``doc/providers/uv.md``.
-
-Several uv stages may share one venv (via an unset/identical 'venv:') --
-e.g. so `west`'s own extension commands (imported into the *same* running
-`west` process) can see packages a later stage installs on top of what an
-earlier one built. Only the first such stage (in 'stages:' order) to touch a
-given venv this run ever decides whether to recreate it; every later stage
-sharing it only ever installs on top, never wipes what the first one built.
-
-Every default above (python's version, uv/venv-patcher's executable,
-no-index's auto-resolution, ...) is computed once, centrally, by
-``UvProvider.resolve_defaults`` -- not in setup(). By the time this
-provider's setup() runs, its config section already has every default
-filled in (see ``denver.resolve_provider_defaults``), so nothing here ever
-falls back to a PATH lookup itself.
-
-``skip-if`` and ``venv-patcher`` are never guessed from the env's directory
-layout: denver does not go looking for a ``uv/skip-if.sh``/``.py`` or a
-``uv/venv-patcher/patches.yml`` that happens to exist. With no ``skip-if:``
-there is no skip check, and the venv patcher runs only when a
-``venv-patcher:`` section names its ``patches:`` file explicitly (an
-unreadable or missing one is an error, not a silent no-op).
-
-``uv`` itself must already be installed wherever this stage runs -- denver
-never installs it: the host for a plain run, or the image when a ``docker``
-stage relocated the pipeline first.
+Creates/activates the venv, installs requirements, applies venv patches.
+Configured from denver.yml -> ``uv:``.
 
 Full key reference, worked examples and design notes: ``doc/providers/uv.md``.
 """
@@ -115,7 +19,7 @@ from .context import banner, die, info, sha256_of_files
 # --no-index, or a literal install-args token) is its own one-token unit.
 _VALUE_FLAGS = ("-r", "--override", "--find-links")
 
-# the only keys a 'lock:' section understands (see module docstring); unlike a
+# the only keys a 'lock:' section understands (see doc/providers/uv.md); unlike a
 # stage's top-level keys (checked centrally against KEYS by denver.py) a typo
 # in here would otherwise be silently ignored.
 _LOCK_KEYS = ("create", "sync")
@@ -183,7 +87,7 @@ def _release_matches(wanted, actual):
 
 
 class UvProvider(Provider):
-    """A generic Python virtualenv managed with uv -- see module docstring for denver.yml keys."""
+    """A generic Python virtualenv managed with uv -- see doc/providers/uv.md for denver.yml keys."""
 
     name = "uv"
     KEYS = (
@@ -224,7 +128,7 @@ class UvProvider(Provider):
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve python/uv/no-index/skip-if/venv-patcher defaults -- see module docstring."""
+        """Resolve python/uv/no-index/skip-if/venv-patcher defaults -- see doc/providers/uv.md."""
         resolved = dict(cfg)
         # No default: denver does not pick an interpreter nobody wrote down.
         # Unset means uv's own discovery decides (see _ensure_venv), and
@@ -262,7 +166,7 @@ class UvProvider(Provider):
 
     @classmethod
     def _resolve_lock_defaults(cls, ctx, cfg):
-        """Validate and resolve 'lock:'s paths, if set -- None otherwise (see module docstring)."""
+        """Validate and resolve 'lock:'s paths, if set -- None otherwise (see doc/providers/uv.md)."""
         if not cfg.get("lock"):
             return None
         lock_cfg = dict(cfg["lock"])
@@ -460,7 +364,7 @@ class UvProvider(Provider):
     def _ensure_venv(self, ctx, uv, venv_dir, version, checksum_files, command_outputs):
         """Create the venv if missing, or recreate it if forced or its requirements changed since last run.
 
-        Several uv stages may share one venv_dir (see module docstring) --
+        Several uv stages may share one venv_dir (see doc/providers/uv.md) --
         only the first stage (per denver run) to reach here for a given
         venv_dir gets to decide whether to recreate it; a later stage
         sharing the same venv_dir this run just installs on top of it,
