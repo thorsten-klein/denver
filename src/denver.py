@@ -1166,7 +1166,7 @@ def _resolve_default_cmd(config):
 def _completion_wrapped_shell(cmd):
     """Wire 'denver complete' into ``cmd`` before it lands, if ``cmd`` is recognisably an interactive bash/zsh/fish.
 
-    Only a shell denver has a completion script for (see _COMPLETION_SCRIPTS)
+    Only a shell denver has a completion script for (see _COMPLETION_SHELLS)
     is touched -- anything else (a custom 'command:', a provider's own tool)
     comes back unchanged, since denver has no idea whether it's even a shell,
     let alone how to wire completion into it. ``cmd``'s own extra args (e.g.
@@ -1186,7 +1186,7 @@ def _completion_wrapped_shell(cmd):
         return cmd
     binary = cmd[0]
     shell = Path(binary).name
-    if shell not in _COMPLETION_SCRIPTS:
+    if shell not in _COMPLETION_SHELLS:
         return cmd
 
     setup = _completion_setup_snippet(shell)
@@ -2397,7 +2397,7 @@ def _ordered_config(resolved, stage_ids):
 # An env may declare flags of its own: each 'args:' entry is one
 # ``parser.add_argument(*flags, **kwargs)`` call, so an env offering a
 # per-run knob ("which board?", "release or debug?") gets a real flag that
-# `denver <env> --help` lists, instead of asking its users for a generic
+# `denver run <env> --help` lists, instead of asking its users for a generic
 # `-c some.dotted.path=value`. What the user then passes is exported as
 # DENVER_ARG_<DEST> (see cli_arg_env), i.e. it reaches the denver.yml's own
 # ${...} interpolation, every hook, every stage and the final command
@@ -2739,7 +2739,7 @@ def _add_complete_parser(subparsers):
     complete_p.add_argument(
         "shell",
         nargs="?",
-        choices=sorted(_COMPLETION_SCRIPTS),
+        choices=sorted(_COMPLETION_SHELLS),
         default=None,
         help="bash, zsh, or fish -- auto-detected from the parent process if omitted",
     )
@@ -2884,8 +2884,8 @@ def _complete_candidates(words):
     """Completion candidates for the (possibly partial, possibly empty) trailing word of ``words``.
 
     ``words`` are the argv tokens typed after 'denver' up to and including
-    the word currently being completed (see the shell functions in
-    _COMPLETION_SCRIPTS -- bash's forwards ``${COMP_WORDS[@]:1:COMP_CWORD}``,
+    the word currently being completed (see _completion_script's shell
+    functions -- bash's forwards ``${COMP_WORDS[@]:1:COMP_CWORD}``,
     zsh's and fish's the equivalent slice in their own words). Bare-except
     on purpose (even SystemExit, hence not just ``Exception``): a completion
     request must never dump a traceback or die() message into the user's
@@ -2948,7 +2948,7 @@ def _complete_shell_names(prior, cur):
     """Completions for 'denver complete <TAB>' -- the shell names, or [] once one's already given."""
     if len(prior) > 1:
         return []  # 'complete' takes at most one positional (the shell name)
-    return _matching(sorted(_COMPLETION_SCRIPTS), cur)
+    return _matching(sorted(_COMPLETION_SHELLS), cur)
 
 
 def _complete_run_candidates(rest, cur):
@@ -3124,43 +3124,79 @@ def _completion_path_candidate(base, name):
     return None
 
 
-_COMPLETION_SCRIPTS = {
-    "bash": '''\
-# denver bash completion -- wire up with: eval "$(denver complete)"
-_denver_complete() {
-    local IFS=$'\\n'
-    COMPREPLY=($(denver __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))
-}
-complete -F _denver_complete -o default -o bashdefault denver
-''',
-    # zsh's own completion system (compsys), not bash's -F/COMPREPLY -- $words is
-    # the full command line (1-indexed, $words[1] == "denver"), $CURRENT the index
-    # of the word being completed, so $words[2,CURRENT] is the same slice bash's
-    # script passes to __complete. compadd, not COMPREPLY, is how compsys widgets
-    # report candidates.
-    "zsh": '''\
-# denver zsh completion -- wire up with: eval "$(denver complete)"
-_denver_complete() {
-    local -a completions
-    completions=("${(@f)$(denver __complete "${words[2,CURRENT]}" 2>/dev/null)}")
-    compadd -- "${completions[@]}"
-}
-compdef _denver_complete denver
-''',
-    # fish's own completion system: 'commandline -opc' is the current command's
-    # tokens before the cursor (command name included, current partial word
-    # excluded), 'commandline -ct' is that partial word -- together the same
-    # words __complete expects. No '-f': like bash's '-o default', filenames
-    # still complete alongside denver's own candidates.
-    "fish": '''\
-# denver fish completion -- wire up with: denver complete | source
-function __denver_complete
-    set -l tokens (commandline -opc) (commandline -ct)
-    denver __complete $tokens[2..-1] 2>/dev/null
-end
-complete -c denver -a '(__denver_complete)'
-''',
-}
+_COMPLETION_SHELLS = ("bash", "zsh", "fish")
+
+
+def _completion_bind_names():
+    """Every command word 'denver complete's own script should wire completion up for.
+
+    Always 'denver' -- the installed, on-PATH entry point most users have --
+    plus, so a checkout works too: however this denver was actually invoked
+    (``sys.argv[0]``, e.g. a checkout's './src/denver.py') and the absolute
+    path to the running script/executable itself (whatever _denver_launcher
+    would re-invoke, e.g. '/home/x/denver/src/denver.py'). Shell completion
+    is keyed on the literal word typed at the prompt, so registering all
+    three (deduplicated, order preserved) is what lets both
+    `eval "$(denver complete)"` and `./src/denver.py complete | source`
+    -- the same script either way -- end up completing whatever you actually
+    type later, not just an on-PATH 'denver'.
+    """
+    names = ["denver"]
+    for candidate in (sys.argv[0], _denver_launcher()[-1]):
+        if candidate and candidate not in names:
+            names.append(candidate)
+    return names
+
+
+def _completion_script(shell, names):
+    """The full 'denver complete <shell>' script, wired to every command word in ``names``.
+
+    Each function body re-invokes whatever word the shell resolved as the
+    command actually being completed (bash's ``${COMP_WORDS[0]}``, zsh's
+    ``${words[1]}``, fish's ``$tokens[1]``) rather than a hardcoded 'denver'
+    -- one shared function then works correctly no matter which of ``names``
+    triggered it (see _completion_bind_names for what ends up in that list).
+    '__complete' itself is the hidden subcommand all three shell out to.
+    """
+    quoted = [shlex.quote(name) for name in names]
+    if shell == "bash":
+        return (
+            '# denver bash completion -- wire up with: eval "$(denver complete)"\n'
+            "_denver_complete() {\n"
+            "    local IFS=$'\\n'\n"
+            '    COMPREPLY=($("${COMP_WORDS[0]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))\n'
+            "}\n"
+            f"complete -F _denver_complete -o default -o bashdefault {' '.join(quoted)}\n"
+        )
+    if shell == "zsh":
+        # zsh's own completion system (compsys), not bash's -F/COMPREPLY -- $words is
+        # the full command line (1-indexed), $CURRENT the index of the word being
+        # completed, so $words[2,CURRENT] is the same slice bash's script passes to
+        # __complete. compadd, not COMPREPLY, is how compsys widgets report candidates.
+        return (
+            '# denver zsh completion -- wire up with: eval "$(denver complete)"\n'
+            "_denver_complete() {\n"
+            "    local -a completions\n"
+            '    completions=("${(@f)$("${words[1]}" __complete "${words[2,CURRENT]}" 2>/dev/null)}")\n'
+            '    compadd -- "${completions[@]}"\n'
+            "}\n"
+            f"compdef _denver_complete {' '.join(quoted)}\n"
+        )
+    # fish's own completion system: 'commandline -opc' is the current command's tokens
+    # before the cursor (command name included, current partial word excluded),
+    # 'commandline -ct' is that partial word -- together the same words __complete
+    # expects. No '-f': like bash's '-o default', filenames still complete alongside
+    # denver's own candidates. One 'complete -c' per name -- fish takes only one
+    # command per invocation, unlike bash/zsh's space-separated list.
+    lines = [
+        "# denver fish completion -- wire up with: denver complete | source",
+        "function __denver_complete",
+        "    set -l tokens (commandline -opc) (commandline -ct)",
+        "    $tokens[1] __complete $tokens[2..-1] 2>/dev/null",
+        "end",
+    ]
+    lines += [f"complete -c {name} -a '(__denver_complete)'" for name in quoted]
+    return "\n".join(lines) + "\n"
 
 
 def _detect_shell():
@@ -3176,7 +3212,7 @@ def _detect_shell():
     """
     name = _parent_process_name() or os.environ.get("SHELL", "")
     name = Path(name).name.lstrip("-")  # login shells prefix their name, e.g. "-zsh"
-    return name if name in _COMPLETION_SCRIPTS else "bash"
+    return name if name in _COMPLETION_SHELLS else "bash"
 
 
 def _parent_process_name():
@@ -3324,7 +3360,7 @@ def _run_resolved_cli(argv):
 def _print_completion_script(preliminary):
     """Print the wiring script for 'denver complete [<shell>]' -- the given shell, or auto-detected."""
     shell = preliminary.shell or _detect_shell()
-    print(_COMPLETION_SCRIPTS[shell], end="")
+    print(_completion_script(shell, _completion_bind_names()), end="")
 
 
 def _preliminary_args(head):
