@@ -84,16 +84,16 @@ jobs:
       # Every mode against the same example, on one runner, so the expensive
       # work is done once as the caches are shared.and reused.
       - name: Option 1 -- run the script
-        run: .venv/bin/python src/denver.py examples/${{ matrix.example }} -- echo "ok (script)"
+        run: .venv/bin/python src/denver.py run examples/${{ matrix.example }} -- echo "ok (script)"
 
       - name: Option 2 -- run install from a wheel
-        run: /tmp/denver-wheel/bin/denver examples/${{ matrix.example }} -- echo "ok (wheel)"
+        run: /tmp/denver-wheel/bin/denver run examples/${{ matrix.example }} -- echo "ok (wheel)"
 
       - name: Option 3 -- run installed in editable mode
-        run: /tmp/denver-editable/bin/denver examples/${{ matrix.example }} -- echo "ok (editable)"
+        run: /tmp/denver-editable/bin/denver run examples/${{ matrix.example }} -- echo "ok (editable)"
 
       - name: Option 4 -- run the standalone executable
-        run: /tmp/denver examples/${{ matrix.example }} -- echo "ok (binary)"
+        run: /tmp/denver run examples/${{ matrix.example }} -- echo "ok (binary)"
 
       # A run must leave the checkout exactly as it found it. There should be neither
       # modified nor untracked files in git

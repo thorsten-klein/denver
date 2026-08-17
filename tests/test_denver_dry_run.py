@@ -499,7 +499,7 @@ def test_run_named_scripts_dry_run_prints_scripts_instead_of_running_them(
     env_dir, cfg_path = _env(tmp_path, config)
     (env_dir / "setup.sh").write_text("#!/bin/sh\ntouch $PWD/should-not-exist\n")
 
-    denver.run_named_scripts(env_dir, config, cfg_path, "setup", dry_run=True)
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup"], dry_run=True)
 
     assert run_recorder.calls == []
     assert dry_lines(capsys, "+") == [str(env_dir / "setup.sh")]
@@ -523,7 +523,7 @@ def test_run_named_scripts_dry_run_says_wrapper_relocated_scripts_are_not_previe
     env_dir, cfg_path = _env(tmp_path, config)
     (env_dir / "setup.sh").write_text("#!/bin/sh\n")
 
-    denver.run_named_scripts(env_dir, config, cfg_path, "setup", dry_run=True)
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup"], dry_run=True)
 
     note = dry_lines(capsys, "!")
     assert len(note) == 1
@@ -539,10 +539,10 @@ def test_main_dry_run_flag_reaches_run_stages(tmp_path, monkeypatch):
     config = {"stages": ["hello"], "hello": {"provider": "custom", "cmd": "echo hello"}}
     env_dir, _ = _env(tmp_path, config)
 
-    denver.main([str(env_dir), "--dry-run", "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--dry-run", "--", "echo", "hi"])
     assert seen["options"].dry_run is True
 
-    denver.main([str(env_dir), "--", "echo", "hi"])
+    denver.main(["run", str(env_dir), "--", "echo", "hi"])
     assert seen["options"].dry_run is False
 
 
@@ -552,10 +552,13 @@ def test_main_dry_run_flag_reaches_run_named_scripts(tmp_path, monkeypatch):
     config = {"stages": ["hello"], "hello": {"provider": "custom", "cmd": "echo hello"}}
     env_dir, _ = _env(tmp_path, config)
 
-    denver.main([str(env_dir), "--run", "setup", "--dry-run"])
+    denver.main(["run", str(env_dir), "--scripts", "setup", "--dry-run"])
     assert seen["dry_run"] is True
 
 
 def test_dry_run_flag_is_documented_in_help(capsys):
-    denver.main(["--help"])
+    # --dry-run is one of 'run''s own flags, not a top-level one -- see
+    # 'denver run --help', not the bare top-level 'denver --help' (which
+    # only lists the subcommands themselves, see print_help).
+    denver.main(["run", "--help"])
     assert "--dry-run" in capsys.readouterr().out

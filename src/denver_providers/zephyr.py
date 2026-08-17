@@ -1,47 +1,8 @@
 """zephyr provider: manages a West workspace (Zephyr RTOS).
 
-Configured from denver.yml -> ``zephyr:``:
-
-    zephyr:
-      west-yml: ${WEST_TOPDIR}/west.yml         # manifest (default: super-repo)
-      base:     ${WEST_TOPDIR}/zephyr-rtos       # ZEPHYR_BASE
-      west-config:               # extra/overriding `west config` key=value pairs
-        zephyr.base-prefer: env
-      blobs-cache: conan/recipes/west-blobs-cache/denver/blobs.txt
-      blobs-fetch-args: ["--auto-accept"]
-      patch-committer:           # identity used when applying project patches
-        GIT_COMMITTER_NAME: denver
-      update-args: []            # extra `west update` args
-
-The west executable is never configured here -- always the first `west` on
-PATH (installed by an earlier uv stage). Installing `west packages pip`'s
-own requirements is likewise not this provider's job: give a *separate* uv
-stage a ``requirements: [$(west packages pip)]`` entry instead (see
-providers/uv.py's own docstring), with its own ``overrides:``/
-``freeze-to:`` for pinning them.
-
-``WEST_CONFIG_SYSTEM`` (west's own base-config env var, e.g. the remotes/
-defaults denver ships) is not a denver.yml key -- set it directly via
-``env:``/``hooks.env`` like any other real environment variable; west reads
-it itself, so no provider-specific handling is needed here.
-
-In CI (``ctx.ci``), `west update` always adds a fixed ``--narrow
--o=--depth=1`` (shallow clone) on top of any configured ``update-args:`` --
-not itself a denver.yml key, since there's never a reason to want a
-*different* CI shallow-clone strategy per env. To skip this stage
-entirely for one invocation, use denver's own ``--skip <stage>`` (see
-denver.py's own docstring), not an env var.
-
-Every default above (west-yml/base paths, blobs-fetch-args,
-patch-committer) is computed once, centrally, by
-``ZephyrProvider.resolve_defaults`` -- not in setup(). By the time this
-provider's setup() runs, its config section already has every default
-filled in (see ``denver.resolve_provider_defaults``), so nothing here ever
-falls back to a conventional path or a PATH lookup itself.
-
-``west`` must already be installed wherever this stage runs (in practice by
-an earlier uv stage listing it in ``requirements:``) -- denver never
-installs it, and always uses the first one on PATH (see above).
+Configured from denver.yml -> ``zephyr:``. The west executable is never
+configured here -- always the first ``west`` on PATH (installed by an
+earlier uv stage).
 
 Full key reference, worked examples and design notes: ``doc/providers/zephyr.md``.
 """
@@ -53,7 +14,7 @@ from .base import Provider, fill_unset
 from .context import banner, die, find_in_parents, find_outermost_in_parents, fingerprint_label, info
 
 # extra `west update` args added on top of 'update-args:' whenever ctx.ci --
-# a fixed shallow-clone strategy, not a denver.yml key (see module docstring).
+# a fixed shallow-clone strategy, not a denver.yml key (see doc/providers/zephyr.md).
 CI_UPDATE_ARGS = ("--narrow", "-o=--depth=1")
 
 # west's own per-workspace marker dir, holding its config file.
@@ -69,7 +30,7 @@ def west_topdir(start):
 
 
 class ZephyrProvider(Provider):
-    """Manages a West workspace (Zephyr RTOS) -- see module docstring for denver.yml keys."""
+    """Manages a West workspace (Zephyr RTOS) -- see doc/providers/zephyr.md for denver.yml keys."""
 
     name = "zephyr"
     KEYS = (
@@ -108,7 +69,7 @@ class ZephyrProvider(Provider):
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve west-yml/base/blobs-fetch-args/patch-committer -- see module docstring."""
+        """Resolve west-yml/base/blobs-fetch-args/patch-committer -- see doc/providers/zephyr.md."""
         # WEST_TOPDIR is a zephyr concept, not a denver built-in -- computed
         # and exported here (not in Context) so non-zephyr envs never pay for
         # the parent-directory walk or carry an irrelevant env var. setdefault
