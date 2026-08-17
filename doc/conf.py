@@ -84,6 +84,11 @@ html_title = "denver"
 # published site carries its own copy rather than hotlinking GitHub.
 html_logo = "../src/denver_assets/logo.svg"
 
+# browser tab icon -- the logo's staircase mark alone, square-cropped.
+# Modern browsers render SVG favicons directly; Sphinx copies it into
+# _static/ the same way it does html_logo above.
+html_favicon = "../src/denver_assets/favicon.svg"
+
 html_theme_options = {
     "collapse_navigation": False,
     # sphinx_rtd_theme's sidebar ignores each {toctree}'s own :maxdepth: and
