@@ -94,7 +94,7 @@ jobs:
           docker run --rm \
             -v "$PWD:/work" -w /work \
             ${{ matrix.image }} \
-            sh -c 'export PATH="/work:$PATH"; denver --version && denver /work/examples/simple-env -c denver-version=null -- echo "denver runs on ${{ matrix.image }}"'
+            sh -c 'export PATH="/work:$PATH"; denver --version && denver run /work/examples/simple-env -c denver-version=null -- echo "denver runs on ${{ matrix.image }}"'
 
   upload:
     # 'build' listed directly (not just transitively via 'verify') because a

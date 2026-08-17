@@ -115,4 +115,4 @@ jobs:
           python3 -m venv /tmp/denver-smoke-test
           /tmp/denver-smoke-test/bin/pip install dist/*.whl
           /tmp/denver-smoke-test/bin/denver --help
-          /tmp/denver-smoke-test/bin/denver "$(pwd)/examples/simple-env" --show-config -c denver-version=null
+          /tmp/denver-smoke-test/bin/denver run "$(pwd)/examples/simple-env" --show-config -c denver-version=null

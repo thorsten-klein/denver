@@ -2890,7 +2890,7 @@ def _complete_candidates(words):
     """
     try:
         return _complete_candidates_unsafe(words)
-    except BaseException:
+    except BaseException:  # NOSONAR -- deliberately broad, see this function's own docstring
         return []
 
 
