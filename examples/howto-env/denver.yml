@@ -26,7 +26,7 @@ docker-base:
   # writes the compose .env file (host UID/GID/HOME) right before build/run
   env-scripts:
   - create-env.sh
-  # one-time host bootstrap: `denver examples/howto-env --run setup`
+  # one-time host bootstrap: `denver run examples/howto-env --scripts setup`
   scripts:
     setup:
     - setup/install_host_tools.sh

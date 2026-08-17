@@ -6,7 +6,7 @@ these definitions.
 ## The core model
 
 **Environment** — a directory containing a `denver.yml`, and the unit denver
-launches: `denver <env>`. An environment is fully described by its
+launches: `denver run <env>`. An environment is fully described by its
 `denver.yml` (plus whatever that file explicitly points at); reading the file
 tells you everything the environment does. `<env>` may also be a path
 directly to a YAML file, so one directory can hold several variants side by
@@ -60,7 +60,7 @@ container. `docker` is denver's wrapper provider; a `custom` stage with
 actually does: denver builds/enters the container and re-invokes *itself*
 inside it with `--skip <that stage>`, so the remaining setup stages build the
 environment in there rather than on the host. Skipping the wrapper yourself
-(`denver <env> --skip docker`) runs the exact same stack directly on the
+(`denver run <env> --skip docker`) runs the exact same stack directly on the
 host.
 
 ## Configuration
@@ -95,11 +95,11 @@ exports become part of the environment everything after it runs in. The hook
 points are `env` (once, before any stage), `pre-<stage>` / `post-<stage>`
 (around each stage), and `pre-cmd` (right before the final command).
 
-**`scripts:` / `--run <name>`** — the generic, open-ended one-shot mechanism,
-distinct from hooks: any stage section may declare `scripts: <name>: [...]`,
-and `denver <env> --run <name>` runs every stage's `<name>` entries and then
-exits without running the pipeline. `<name>` is arbitrary — `setup` and
-`login` are conventions, not built-in flags.
+**`scripts:` / `--scripts <name>`** — the generic, open-ended one-shot
+mechanism, distinct from hooks: any stage section may declare `scripts:
+<name>: [...]`, and `denver run <env> --scripts <name>` runs every stage's
+`<name>` entries and then exits without running the pipeline. `<name>` is
+arbitrary — `setup` and `login` are conventions, not built-in flags.
 
 ## Execution
 

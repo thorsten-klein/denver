@@ -8,7 +8,7 @@ script. No Docker, no Conan, no Python packaging.**
 Running it prints three lines and drops you into a shell:
 
 ```console
-$ denver examples/simple-env -- true
+$ denver run examples/simple-env -- true
 [print-vars-before] MYVAR= FOO= BAR=
 [set-vars] sourcing custom.sh...
 [print-vars-after] MYVAR=1 FOO=2 BAR=3 greeting=hello
@@ -22,7 +22,7 @@ That last `greeting=hello` comes from this env's own command-line flag,
 declared under `args:` — so it is also `--greeting`'s default:
 
 ```console
-$ denver examples/simple-env --greeting "hi there" -- true
+$ denver run examples/simple-env --greeting "hi there" -- true
 ...
 [print-vars-after] MYVAR=1 FOO=2 BAR=3 greeting=hi there
 ```
@@ -55,7 +55,7 @@ see that boundary being crossed.
 
 **And, in passing, as the smallest `args:` demo.** `--greeting` is one
 `args:` entry — an `argparse.add_argument` call written in YAML — and
-`denver examples/simple-env --help` lists it next to denver's own flags. Its
+`denver run examples/simple-env --help` lists it next to denver's own flags. Its
 value arrives in the config as `${DENVER_ARG_GREETING}`, which is expanded
 by *denver*, before `print-vars-after`'s `cmd:` reaches a shell at all —
 unlike `$MYVAR` in that same line, which the shell expands from what

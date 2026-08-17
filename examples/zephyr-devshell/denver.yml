@@ -65,7 +65,7 @@ uv:
 zephyr:
   provider: zephyr
   # JLink debugger udev rule, so it's usable without root on the host --
-  # not built/run every time, run via `denver <env> --run setup`.
+  # not built/run every time, run via `denver run <env> --scripts setup`.
   scripts:
     setup:
     - setup/install_jlink_udev_rules.sh

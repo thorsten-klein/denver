@@ -41,9 +41,9 @@ environment needs to look like them.
 ## Running one
 
 ```bash
-denver examples/simple-env                 # start it (opens a shell)
-denver examples/simple-env -- echo hi      # run one command in it instead
-denver examples/simple-env --show-config   # print the merged config and exit
+denver run examples/simple-env                 # start it (opens a shell)
+denver run examples/simple-env -- echo hi      # run one command in it instead
+denver run examples/simple-env --show-config   # print the merged config and exit
 ```
 
 `--show-config` is the fastest way to understand an env you didn't write: it

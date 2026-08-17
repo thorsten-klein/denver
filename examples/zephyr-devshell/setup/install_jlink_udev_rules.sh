@@ -1,6 +1,6 @@
 #!/bin/bash -e
 # One-time host setup for the zephyr-devshell envs, run via
-# `denver examples/zephyr-devshell-4.3.1 --run setup`.
+# `denver run examples/zephyr-devshell-4.3.1 --scripts setup`.
 #
 # Installs udev rules into the host system, so the JLink debugger is usable
 # without root. udev runs on the host, so this is needed there regardless of

@@ -8,12 +8,12 @@ no SDK, no container. It is named for the role it plays in a Zephyr setup
 
 ## What it does
 
-`denver examples/zephyr-uv` creates a [uv](https://docs.astral.sh/uv/)-managed
+`denver run examples/zephyr-uv` creates a [uv](https://docs.astral.sh/uv/)-managed
 virtualenv, installs the two pinned packages from `requirements.txt`, and
 drops you into a `bash` with that venv on `PATH`:
 
 ```console
-$ denver examples/zephyr-uv -- conan --version
+$ denver run examples/zephyr-uv -- conan --version
 Conan version 2.23.0
 ```
 

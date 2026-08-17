@@ -1,12 +1,18 @@
 # Arguments
 
 You have already used a handful of these in
-[Quickstart](../quickstart/five-minutes.md) — `--run`, `--fast`, `--skip`,
-`--dry-run`. This page is the full list.
+[Quickstart](../quickstart/five-minutes.md) — `--scripts`, `--fast`,
+`--skip`, `--dry-run`. This page is the full list.
 
-`denver --help` is always authoritative and lists *every* flag; the notes
-below are for the ones whose behavior isn't obvious from a one-line
-description.
+denver's CLI is subcommand-based: `denver run <env> ...` is the normal entry
+point, and every flag below except `--version`/`--license` belongs to it.
+(`--version` and `--license` are top-level, before the subcommand, e.g.
+`denver --version`. `denver complete` is the other subcommand — see
+[Shell completion](completion.md) — and takes no flags of its own.)
+
+`denver run --help` is always authoritative and lists *every* `run` flag;
+the notes below are for the ones whose behavior isn't obvious from a
+one-line description.
 
 ## Control the stages: Choosing what runs
 
@@ -19,12 +25,15 @@ description.
   left; repeatable. Skipping a wrapper stage (`--skip docker`) is how you
   run the stack directly on the host instead of relocating into a
   container.
-- **`--run <name>`** runs every (filtered) stage's own `scripts: <name>:`
-  list, then exits without running the rest of the pipeline — see "One-time
-  host setup" in [Quickstart](../quickstart/five-minutes.md#one-time-host-setup)
-  for an example. `<name>` is open-ended, not a fixed set of flags: a
-  project can declare `scripts: migrate:` and run `denver <env> --run
-  migrate` without denver itself changing.
+- **`--scripts <name>`** runs every (filtered) stage's own `scripts:
+  <name>:` list, then exits without running the rest of the pipeline — see
+  "One-time host setup" in
+  [Quickstart](../quickstart/five-minutes.md#one-time-host-setup) for an
+  example. `<name>` is open-ended, not a fixed set of flags: a project can
+  declare `scripts: migrate:` and run `denver run <env> --scripts migrate`
+  without denver itself changing. Repeatable — each name's entries run in
+  the order given. With no `<name>` (on any occurrence), it lists the names
+  this env defines instead of running anything.
 
 ## Control the config: Change values for one run
 
@@ -99,7 +108,8 @@ Both follow the same merge rules as `import:`, explained in
   banner and "stage finished" summary visible. `-qq` additionally silences
   those too, so only the launched command's own output reaches the
   terminal. Errors are always reported.
-- **`--version`** prints the running denver's version and exits — derived
+- **`--version`** (top-level: `denver --version`, before any subcommand)
+  prints the running denver's version and exits — derived
   from the checkout's git tags when denver runs from a checkout (script or
   editable install), otherwise from the installed package's metadata. A
   checkout ahead of its last tag reports as a development build of the
@@ -114,7 +124,8 @@ Event Format events — concatenate them into a `{"traceEvents": [...]}`
 document to load at chrome://tracing or https://ui.perfetto.dev.
 
 ```{note}
-**Next:** [Environment variables](environment-variables.md) — the two
-variables denver itself reads, and where an environment's state lives on
-disk.
+**Next:** [Shell completion](completion.md) — tab-complete subcommands, env
+paths and flags with `denver complete`. Then
+[Environment variables](environment-variables.md) — the two variables
+denver itself reads, and where an environment's state lives on disk.
 ```

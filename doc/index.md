@@ -83,6 +83,7 @@ Everything you can pass to `denver`, and the environment variables it reads.
 :caption: denver command
 
 cli/arguments
+cli/completion
 cli/environment-variables
 ```
 

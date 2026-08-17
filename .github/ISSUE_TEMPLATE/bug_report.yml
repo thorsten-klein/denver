@@ -51,7 +51,7 @@ body:
   attributes:
     label: Output of --show-config
     description: >
-      Run `denver <env> --show-config` and paste the result. It shows the
+      Run `denver run <env> --show-config` and paste the result. It shows the
       settings denver ended up with, which is often where the surprise is.
       Leave this empty if denver fails before it gets there.
     render: shell

@@ -47,7 +47,8 @@ Browsing on GitHub instead:
 | [`doc/quickstart/examples.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/examples.md) | The eight bundled environments, smallest to largest |
 | [`doc/concepts/glossary.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/concepts/glossary.md) | Every term denver uses, defined once |
 | [`doc/concepts/philosophy.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/concepts/philosophy.md) | The design principles behind it |
-| [`doc/cli/arguments.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/arguments.md) | Every `denver --help` flag, grouped by what you reach for it for |
+| [`doc/cli/arguments.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/arguments.md) | Every `denver run --help` flag, grouped by what you reach for it for |
+| [`doc/cli/completion.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/completion.md) | Tab completion via `denver complete` (bash/zsh/fish) |
 | [`doc/cli/environment-variables.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/environment-variables.md) | The variables denver reads and exports, and where env state lives |
 | [`doc/configuration/denver-yml.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/configuration/denver-yml.md) | The `denver.yml` schema and how the system works |
 | [`doc/providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers/) | One key reference per provider: [uv](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/uv.md), [conan](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/conan.md), [docker](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/docker.md), [zephyr](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/zephyr.md), [custom](https://github.com/thorsten-klein/denver/blob/develop/doc/providers/custom.md) |
@@ -65,10 +66,16 @@ editable install for hacking on denver itself, and vendoring straight into
 your own monorepo via [git-nested](https://github.com/thorsten-klein/git-nested)
 — see **[Install denver →](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/install.md)**.
 
+Tab completion (bash/zsh/fish): `eval "$(denver complete)"` in your shell rc
+file. Works for the installed `denver` command and, run straight from a
+checkout instead (`./src/denver.py complete`), for that too — no alias
+needed — see
+**[Shell completion →](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/completion.md)**.
+
 ## Try it
 
 ```bash
-denver examples/howto-env -- pytest examples/howto-env/tests
+denver run examples/howto-env -- pytest examples/howto-env/tests
 ```
 
 A minute or two later (much less on repeat runs) that command has built a

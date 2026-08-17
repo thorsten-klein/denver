@@ -4,7 +4,7 @@
 environment — the largest example in the tree, and the one to actually run.**
 
 ```console
-$ denver examples/zephyr-devshell-4.3.1
+$ denver run examples/zephyr-devshell-4.3.1
 ... denver builds/enters each layer ...
 dev@container ~/workspace> west build -b nrf52840dk/nrf52840 samples/hello_world
 dev@container ~/workspace> exit      # back to your normal shell

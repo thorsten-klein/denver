@@ -4,7 +4,7 @@
 runnable — it is ingredients, not a meal.**
 
 ```console
-$ denver examples/zephyr-devshell
+$ denver run examples/zephyr-devshell
 ERROR: env 'zephyr-devshell' sets 'runnable: false' -- it's meant to be imported, not started directly.
 ```
 
@@ -117,7 +117,7 @@ installs has to be importable by the interpreter stage 3 set up.
 | `conan/base_classes/` | Shared conanfile base classes (`base-classes:`) |
 | `conan/recipes/` | Shared tool recipes, claimed by importing envs |
 | `configs/west_base_config` | West system config (via `WEST_CONFIG_SYSTEM`) |
-| `configs/99-jlink.rules` | The udev rule installed by `--run setup` |
+| `configs/99-jlink.rules` | The udev rule installed by `--scripts setup` |
 | `setup/install_jlink_udev_rules.sh` | Host setup for the `zephyr` stage |
 
 ## Next
