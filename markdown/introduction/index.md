@@ -1,9 +1,9 @@
 # About denver
 
-<img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="denver logo" width="50%"/>
+![denver logo](../src/denver_assets/logo.svg)
 
-**D**evelopment **Env**ironment Launch**er** — describe your environments in a
-`denver.yml`: reproducible and layerable to fit your project’s needs.
+**D**evelopment **Env**ironment Launch**er** — describe your environments as
+Code in a `denver.yml`: reproducible and layerable to fit your project’s needs.
 
 ## What problem does denver solve?
 

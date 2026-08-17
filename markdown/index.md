@@ -1,6 +1,6 @@
 # denver
 
-<img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="denver logo" width="50%"/>
+![denver logo](../src/denver_assets/logo.svg)
 
 Development Environments as code — reproducible, flexible, simple and fast.
 
