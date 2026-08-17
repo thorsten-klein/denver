@@ -116,6 +116,27 @@ class DockerProvider(Provider):
         if not ctx.which(exe, dry_fallback=True):
             die(f"docker[{self.stage}]: needs '{exe}' on PATH")
 
+    def _require_compose(self, ctx, exe):
+        """Die unless ``<exe> compose`` (the v2 plugin) actually works.
+
+        Compose v2 ships as a plugin subcommand, not a standalone binary, so
+        ``exe`` being on PATH (_require_exe) says nothing about whether it's
+        installed -- a docker without the plugin (or a standalone v1
+        docker-compose only) would otherwise fail deep inside the first
+        'compose build'/'compose run' with a bare "docker: 'compose' is not
+        a docker command" instead of naming the actual problem up front.
+
+        Skipped entirely under --dry-run, for the same reason _require_exe's
+        dry_fallback is: a dry run never actually starts docker compose, so
+        previewing an env's docker stage on a machine without the plugin is
+        legitimate too.
+        """
+        if ctx.dry_run:
+            return
+        result = ctx.run([exe, "compose", "version"], check=False, capture=True, echo=False)
+        if result.returncode != 0:
+            die(f"docker[{self.stage}]: needs the 'docker compose' (v2) plugin -- '{exe} compose version' failed")
+
     @staticmethod
     def _resolved_compose_files(ctx, compose):
         """Every 'compose.file:' entry resolved to a path that exists (a lone string is a one-entry list)."""
@@ -174,6 +195,7 @@ class DockerProvider(Provider):
 
         exe = cfg["exe"]
         self._require_exe(ctx, exe)
+        self._require_compose(ctx, exe)
 
         compose = cfg["compose"]
         compose_files = self._resolved_compose_files(ctx, compose)
