@@ -275,9 +275,12 @@ see “Generic stage keys” in <a class="reference internal" href="../configura
 <p><strong><code class="docutils literal notranslate"><span class="pre">docker</span></code> with the Compose plugin must be available</strong> on the machine this
 stage runs on — denver never installs it, and every command it issues is a
 <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">...</span></code> one (v2, the plugin — not the standalone
-<code class="docutils literal notranslate"><span class="pre">docker-compose</span></code> script). The daemon has to be reachable for the invoking
-user, too. Point <code class="docutils literal notranslate"><span class="pre">exe:</span></code> at a specific docker binary if the one on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>
-isn’t the right one.</p>
+<code class="docutils literal notranslate"><span class="pre">docker-compose</span></code> script). The stage checks both upfront (<code class="docutils literal notranslate"><span class="pre">docker</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>,
+then <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">version</span></code>) and dies naming whichever is missing, rather
+than failing deep inside the first <code class="docutils literal notranslate"><span class="pre">compose</span> <span class="pre">build</span></code>/<code class="docutils literal notranslate"><span class="pre">compose</span> <span class="pre">run</span></code>. Skipped
+under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>, so an env can still be previewed on a machine without
+docker. The daemon has to be reachable for the invoking user, too. Point
+<code class="docutils literal notranslate"><span class="pre">exe:</span></code> at a specific docker binary if <code class="docutils literal notranslate"><span class="pre">docker</span></code> isn’t the right exe.</p>
 </section>
 <section id="key-reference">
 <h2>Key reference<a class="headerlink" href="#key-reference" title="Link to this heading"></a></h2>
