@@ -756,13 +756,17 @@ def _unmet_requirements(requirements, parsed):
 
 def validate_stage_filters(config, until_stage, skip_stages):
     """Die if --until/--skip name a stage id not declared in 'stages:'."""
-    declared = set(config.get("stages") or [])
+    declared = _declared_stage_ids(config)
     named = set(skip_stages) | ({until_stage} if until_stage else set())
-    unknown = sorted(named - declared)
+    unknown = sorted(named - set(declared))
     if unknown:
+        # declared, not sorted(declared): a bullet per id, in the pipeline's
+        # own 'stages:' order -- alphabetical would misstate the order
+        # stages actually run in, which is exactly what --until relies on.
+        available = "\n".join(f"  - {s}" for s in declared) or "  (none)"
         die(
             f"--until/--skip: unknown stage id(s) {', '.join(unknown)} -- "
-            f"not declared in 'stages:' ({', '.join(sorted(declared)) or 'none'})"
+            f"not declared in 'stages:'. Available stages:\n{available}"
         )
 
 
