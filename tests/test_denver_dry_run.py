@@ -499,7 +499,7 @@ def test_run_named_scripts_dry_run_prints_scripts_instead_of_running_them(
     env_dir, cfg_path = _env(tmp_path, config)
     (env_dir / "setup.sh").write_text("#!/bin/sh\ntouch $PWD/should-not-exist\n")
 
-    denver.run_named_scripts(env_dir, config, cfg_path, "setup", dry_run=True)
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup"], dry_run=True)
 
     assert run_recorder.calls == []
     assert dry_lines(capsys, "+") == [str(env_dir / "setup.sh")]
@@ -523,7 +523,7 @@ def test_run_named_scripts_dry_run_says_wrapper_relocated_scripts_are_not_previe
     env_dir, cfg_path = _env(tmp_path, config)
     (env_dir / "setup.sh").write_text("#!/bin/sh\n")
 
-    denver.run_named_scripts(env_dir, config, cfg_path, "setup", dry_run=True)
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup"], dry_run=True)
 
     note = dry_lines(capsys, "!")
     assert len(note) == 1
@@ -552,7 +552,7 @@ def test_main_dry_run_flag_reaches_run_named_scripts(tmp_path, monkeypatch):
     config = {"stages": ["hello"], "hello": {"provider": "custom", "cmd": "echo hello"}}
     env_dir, _ = _env(tmp_path, config)
 
-    denver.main(["run", str(env_dir), "--action", "setup", "--dry-run"])
+    denver.main(["run", str(env_dir), "--scripts", "setup", "--dry-run"])
     assert seen["dry_run"] is True
 
 

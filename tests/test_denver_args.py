@@ -127,7 +127,7 @@ def test_a_flag_the_env_does_not_declare_is_still_an_error(echo_env):
     assert excinfo.value.code == 2
 
 
-# ---- show / --action -------------------------------------------------------- #
+# ---- show / --scripts -------------------------------------------------------- #
 def test_show_config_sees_the_passed_value(tmp_path, capsys, which):
     # a path resolved centrally, before any stage runs (see
     # resolve_provider_defaults) -- so --show-config and the real run agree
@@ -165,7 +165,7 @@ def test_run_scripts_see_the_value(tmp_path, run_recorder):
     (env_dir / "denver.yml").write_text(
         "stages: [c]\nargs:\n- flags: [--who]\nc:\n  provider: custom\n  cmd: true\n  scripts:\n    setup: [s.sh]\n"
     )
-    assert denver.main(["run", str(env_dir), "--who", "denver", "--action", "setup"]) == 0
+    assert denver.main(["run", str(env_dir), "--who", "denver", "--scripts", "setup"]) == 0
     assert run_recorder.calls[-1].kwargs["env"]["DENVER_ARG_WHO"] == "denver"
 
 
@@ -291,7 +291,7 @@ def test_reinvoke_command_re_passes_the_flags(tmp_path):
 def test_relocated_run_cmd_re_passes_the_flags(tmp_path):
     cmd = denver._relocated_run_cmd(
         tmp_path / "denver.yml",
-        "setup",
+        ["setup"],
         quiet=0,
         until_stage=None,
         skip_stages=(),

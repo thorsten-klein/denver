@@ -129,7 +129,7 @@ def test_reinvoke_command_re_passes_the_flags(tmp_path):
 def test_relocated_run_cmd_re_passes_the_flags(tmp_path):
     cmd = denver._relocated_run_cmd(
         tmp_path / "denver.yml",
-        "setup",
+        ["setup"],
         quiet=0,
         until_stage=None,
         skip_stages=(),

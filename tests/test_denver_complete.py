@@ -98,15 +98,15 @@ def test_dunder_complete_completes_env_paths_from_the_current_directory(tmp_path
     assert "myenv/" in out
 
 
-# ---- 'denver __complete run <env> --action <partial>' -- action names ------ #
-def test_dunder_complete_completes_action_names_from_the_envs_own_scripts(tmp_path, capsys):
+# ---- 'denver __complete run <env> --scripts <partial>' -- action names ------ #
+def test_dunder_complete_completes_script_names_from_the_envs_own_scripts(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text(
         "stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n  scripts:\n    setup: [a.sh]\n    login: [b.sh]\n"
     )
 
-    assert denver.main(["__complete", "run", str(env_dir), "--action", ""]) == 0
+    assert denver.main(["__complete", "run", str(env_dir), "--scripts", ""]) == 0
     out = capsys.readouterr().out
     assert "setup" in out
     assert "login" in out
@@ -128,7 +128,7 @@ def test_dunder_complete_offers_nothing_past_the_forwarded_command_boundary(tmp_
 
 # ---- robustness: must never raise, even for a nonexistent env -------------- #
 def test_dunder_complete_is_a_no_op_for_a_nonexistent_env_rather_than_raising(capsys):
-    assert denver.main(["__complete", "run", "/definitely/does/not/exist", "--action", ""]) == 0
+    assert denver.main(["__complete", "run", "/definitely/does/not/exist", "--scripts", ""]) == 0
     assert capsys.readouterr().out == ""
 
 
@@ -228,7 +228,7 @@ def test_dunder_complete_completes_flags_including_the_envs_own_declared_ones(tm
 
     assert denver.main(["__complete", "run", str(env_dir), "-"]) == 0
     out = set(capsys.readouterr().out.splitlines())
-    assert {"--board", "--release", "-r", "--action", "--show-config"} <= out
+    assert {"--board", "--release", "-r", "--scripts", "--show-config"} <= out
 
 
 def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tmp_path, capsys):

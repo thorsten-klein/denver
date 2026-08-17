@@ -141,7 +141,7 @@ Four keys may appear in *any* stage's section, whatever its provider:
   it had been `--skip`ped, without deleting its configuration. Must be a
   real boolean.
 - **`scripts`** — the generic one-shot mechanism: `scripts: <name>: [...]`
-  declares scripts run by `denver run <env> --action <name>` instead of the
+  declares scripts run by `denver run <env> --scripts <name>` instead of the
   normal pipeline. See "Hooks and scripts" below.
 
 Every other key in a stage's section must be one the stage's own provider
@@ -401,17 +401,17 @@ first.
 
 Separately, `scripts:` is a generic, open-ended mechanism for one-shot
 actions that are *not* part of the normal pipeline: any stage's section can
-declare `scripts: <name>: [...]`, and `denver run <env> --action <name>` runs
+declare `scripts: <name>: [...]`, and `denver run <env> --scripts <name>` runs
 every stage's own `<name>` entries, then exits without doing anything else.
 Nothing about `<name>` is fixed — `setup` and `login` are just conventions,
-not flags of their own. Which is why `denver run <env> --action`, with no
+not flags of their own. Which is why `denver run <env> --scripts`, with no
 name at all, lists the names that env actually defines: they are unguessable
 by design, and `scripts:` stacks across the whole `import:` chain, so reading
 one file does not answer it either.
 
 ```
-$ denver run examples/zephyr-devshell-4.3.1 --action
-available --action names for env 'zephyr-devshell-4.3.1':
+$ denver run examples/zephyr-devshell-4.3.1 --scripts
+available --scripts names for env 'zephyr-devshell-4.3.1':
   setup        docker (1 script), zephyr (1 script)
 ``` This is where one-time host setup belongs: installing
 Docker itself, `udev` rules for flashing a board, a registry login — things

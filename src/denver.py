@@ -9,13 +9,13 @@ generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker,
 denver's own CLI is subcommand-based:
 
     denver run <env> [flags] [-- command]
-    denver run <env> --action <name> [flags]
+    denver run <env> --scripts <name> [flags]
     denver run <env> --show-config [flags]
     denver complete [bash|fish|zsh]
 
 ``run`` is the normal entry point: with no command, denver starts an
 interactive shell; a command after '--' (e.g. `denver run <env> -- echo
-hi`) is forwarded as-is instead. ``--action <name>`` runs one of the env's
+hi`) is forwarded as-is instead. ``--scripts <name>`` runs one of the env's
 own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
 ``login``; with no name, lists the names this env defines).
 ``--show-config`` prints the fully resolved, deep-merged denver.yml and
@@ -781,7 +781,7 @@ def validate_stage_filters(config, until_stage, skip_stages):
 # --------------------------------------------------------------------------- #
 # keys every stage section may carry regardless of provider: 'provider:'
 # picks the class (see providers.make_stage), 'scripts:' is the generic
-# --action <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
+# --scripts <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
 # opts a stage out of the normal pipeline by default (see run_stages) --
 # none of these are part of any one provider's own KEYS. Order matters:
 # this is also the fixed display order used by _ordered_stage_section for
@@ -990,10 +990,10 @@ def run_hook(ctx, config_path, name):
 
 PERFORMANCE_FILE_NAME = "performance.jsonl"
 
-# what argparse stores for a bare '--action' (no name): list the names this
+# what argparse stores for a bare '--scripts' (no name): list the names this
 # env defines rather than running one. A sentinel object, not a string, so it
 # can never collide with a name an env actually uses.
-LIST_ACTIONS = object()
+LIST_SCRIPTS = object()
 
 
 def _append_trace_event(path, event):
@@ -1452,7 +1452,7 @@ def run_named_scripts(
     env_dir,
     config,
     config_path,
-    name,
+    names,
     *,
     until_stage=None,
     skip_stages=(),
@@ -1462,22 +1462,24 @@ def run_named_scripts(
     cli_args=None,
     env_vars=None,
 ):
-    """Run every (filtered) stage's ``scripts: <name>:`` entries, each in the context it actually needs.
+    """Run every (filtered) stage's ``scripts: <name>:`` entries for each of ``names``, in the order given.
 
-    This is ``denver run <env> --action <name>``; ``name`` is open-ended --
-    any string an env's ``scripts:`` sections happen to use (e.g. ``setup``,
-    ``login``, or a project-specific one like ``migrate``), not a fixed,
-    hard-coded set of names. Unlike the normal pipeline, this never
+    This is ``denver run <env> --scripts <name>`` (repeatable -- each
+    occurrence's name lands in ``names``, run in that order); a name is
+    open-ended -- any string an env's ``scripts:`` sections happen to use
+    (e.g. ``setup``, ``login``, or a project-specific one like ``migrate``),
+    not a fixed, hard-coded set. Unlike the normal pipeline, this never
     builds/enters the environment or runs any provider's setup()/wrap() for
     its own sake -- but a *wrapper* stage's (e.g. docker) own entries run on
     the host, since that's where the wrapper itself operates, while a *setup*
     stage's entries need whatever that stage's own setup() would install
     (e.g. conan, only present once inside a docker-wrapped env's container).
-    So when an active wrapper exists and any setup stage declares this name,
-    the wrapper is prepared (its setup() runs, same as run_stages() would)
-    and denver is re-invoked `--skip <that wrapper stage> --action <name>`
-    inside it for the setup stages' own entries -- mirroring run_stages()'s
-    own host/wrapper relocation exactly.
+    So when an active wrapper exists and any setup stage declares any of
+    ``names``, the wrapper is prepared (its setup() runs, same as
+    run_stages() would) and denver is re-invoked `--skip <that wrapper
+    stage>`, with one `--scripts <name>` per name that actually had
+    something to relocate, for the setup stages' own entries -- mirroring
+    run_stages()'s own host/wrapper relocation exactly.
 
     Under ``dry_run`` each entry is printed rather than executed, with the
     same wrapper caveat as run_stages(): the reinvocation that would carry
@@ -1505,27 +1507,72 @@ def run_named_scripts(
     active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
     if not active_wrappers:
-        _run_stage_scripts(ctx, _stage_ids_of(setups), name)
+        _run_named_scripts_directly(ctx, setups, names)
         return
 
-    # the wrapper's own entries (e.g. `docker login` to a private registry)
-    # run here, on the host, before preparing it
-    _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
+    _relocate_named_scripts(
+        ctx,
+        config,
+        config_path,
+        stages,
+        setups,
+        active_wrappers,
+        names,
+        quiet=quiet,
+        until_stage=until_stage,
+        skip_stages=skip_stages,
+        cli_args=cli_args,
+        env_vars=env_vars,
+    )
 
-    if not _collect_stage_scripts(ctx, _stage_ids_of(setups), name):
-        return  # nothing to relocate into the wrapper for
+
+def _run_named_scripts_directly(ctx, setups, names):
+    """Run every one of ``names`` for the given setup stages, in order -- the no-active-wrapper case."""
+    for name in names:
+        _run_stage_scripts(ctx, _stage_ids_of(setups), name)
+
+
+def _relocate_named_scripts(
+    ctx,
+    config,
+    config_path,
+    stages,
+    setups,
+    active_wrappers,
+    names,
+    *,
+    quiet,
+    until_stage,
+    skip_stages,
+    cli_args,
+    env_vars,
+):
+    """Run each of ``names``' wrapper-stage entries on the host, then relocate whichever names still need the wrapper.
+
+    See run_named_scripts, whose own docstring covers the host/wrapper split
+    this implements.
+    """
+    # the wrapper's own entries (e.g. `docker login` to a private registry)
+    # run here, on the host, before preparing it -- one name at a time, in order
+    for name in names:
+        _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
+
+    setup_names = [name for name in names if _collect_stage_scripts(ctx, _stage_ids_of(setups), name)]
+    if not setup_names:
+        return  # nothing to relocate into the wrapper for, for any of ``names``
 
     # same limit as run_stages(): the reinvocation carrying these entries
     # into the wrapper is itself not run under --dry-run, so they can't be
     # previewed -- see _note_not_previewed for why not.
-    _note_not_previewed(ctx, f"'{name}' scripts of stages", setups, active_wrappers)
+    names_label = ", ".join(f"'{n}'" for n in setup_names)
+    _note_not_previewed(ctx, f"{names_label} scripts of stages", setups, active_wrappers)
 
     stage_index = _stage_positions(stages)
     _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, len(stages), quiet=quiet)
 
     cmd = _relocated_run_cmd(
         config_path,
-        name,
+        setup_names,
         quiet=quiet,
         until_stage=until_stage,
         skip_stages=(*skip_stages, *_stage_ids_of(active_wrappers)),
@@ -1550,15 +1597,18 @@ def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stag
         )
 
 
-def _relocated_run_cmd(config_path, name, *, quiet, until_stage, skip_stages, cli_argv=(), env_vars=None):
-    """The ``denver run <config> --action <name>`` argv the wrapper re-invokes, this run's own filters re-passed.
+def _relocated_run_cmd(config_path, names, *, quiet, until_stage, skip_stages, cli_argv=(), env_vars=None):
+    """The ``denver run <config> --scripts <name>`` argv (one pair per name) the wrapper re-invokes.
 
-    ``cli_argv`` -- the tokens this env's own 'args:' flags consumed -- is
-    re-passed for the same reason reinvoke_command does it: the inner
-    denver declares the same flags and would otherwise only see their
-    defaults. ``env_vars`` (-e/--env) is re-passed for the same reason.
+    This run's own filters are re-passed. ``cli_argv`` -- the tokens this
+    env's own 'args:' flags consumed -- is re-passed for the same reason
+    reinvoke_command does it: the inner denver declares the same flags and
+    would otherwise only see their defaults. ``env_vars`` (-e/--env) is
+    re-passed for the same reason.
     """
-    cmd = ["python3", str(Path(__file__).resolve()), "run", str(config_path), "--action", name]
+    cmd = ["python3", str(Path(__file__).resolve()), "run", str(config_path)]
+    for name in names:
+        cmd += ["--scripts", name]
     if quiet:
         cmd.append("-q")
     if until_stage:
@@ -1581,9 +1631,9 @@ def _wrap_cmd(ctx, cmd, active_wrappers, stage_index, stage_count):
 
 
 def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()):
-    """Print every ``scripts: <name>:`` an env defines, grouped by name -- ``denver run <env> --action``.
+    """Print every ``scripts: <name>:`` an env defines, grouped by name -- ``denver run <env> --scripts``.
 
-    ``--action``'s names are deliberately open-ended (see run_named_scripts):
+    ``--scripts``'s names are deliberately open-ended (see run_named_scripts):
     any string an env's ``scripts:`` sections happen to use, with ``setup``
     and ``login`` conventions rather than a fixed set. That makes an env's
     own names unguessable, and they stack across the whole ``import:``
@@ -1601,7 +1651,7 @@ def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()
 
     by_name = _scripts_by_name(config, stage_ids)
     if not by_name:
-        print(f"env '{env_dir.name}' defines no 'scripts:' entries -- nothing to --action", file=sys.stderr)
+        print(f"env '{env_dir.name}' defines no 'scripts:' entries -- nothing to --scripts", file=sys.stderr)
         return
     _print_script_names(env_dir, by_name)
 
@@ -1621,13 +1671,13 @@ def _scripts_by_name(config, stage_ids):
 
 
 def _script_count_label(stage, count):
-    """One stage's contribution to an --action name, e.g. ``uv (2 scripts)``."""
+    """One stage's contribution to a --scripts name, e.g. ``uv (2 scripts)``."""
     return f"{stage} ({count} script{'s' if count != 1 else ''})"
 
 
 def _print_script_names(env_dir, by_name):
-    """Print every --action name this env defines, with the stages contributing to it."""
-    print(f"available --action names for env '{env_dir.name}':", file=sys.stderr)
+    """Print every --scripts name this env defines, with the stages contributing to it."""
+    print(f"available --scripts names for env '{env_dir.name}':", file=sys.stderr)
     for name in sorted(by_name):
         stages = ", ".join(_script_count_label(stage, count) for stage, count in by_name[name])
         print(f"  {name:<12} {stages}", file=sys.stderr)
@@ -2597,23 +2647,25 @@ def _add_help_flag(parser):
 
 
 def _add_run_parser(subparsers, config_args):
-    """'denver run <env>': the normal pipeline, or (with --action) the 'scripts:' mechanism."""
+    """'denver run <env>': the normal pipeline, or (with --scripts) the 'scripts:' mechanism."""
     run_p = subparsers.add_parser(
         "run",
         add_help=False,
-        help="build/enter an env (or run one of its 'scripts:' actions, or just show its resolved config)",
-        description="Build/enter <env>, or (with --action) run one of its 'scripts:' actions instead, or "
+        help="build/enter an env (or run one of its 'scripts:' entries, or just show its resolved config)",
+        description="Build/enter <env>, or (with --scripts) run one of its 'scripts:' entries instead, or "
         "(with --show-config) just print its fully resolved denver.yml.",
     )
     _add_help_flag(run_p)
     _add_env_positional(run_p)
     run_p.add_argument(
-        "--action",
+        "--scripts",
         metavar="NAME",
         nargs="?",
-        const=LIST_ACTIONS,
-        help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login'); "
-        "with no NAME, list the names this env defines",
+        action="append",
+        const=LIST_SCRIPTS,
+        help="run each stage's 'scripts: NAME:' entries, then exit (e.g. 'setup', 'login'); repeatable, "
+        "each name's entries run in the order given; with no NAME (on any occurrence), list the names "
+        "this env defines instead",
     )
     run_p.add_argument(
         "--show-config", action="store_true", help="print the fully resolved (deep-merged) denver.yml and exit"
@@ -2844,7 +2896,7 @@ def _complete_candidates(words):
 
 _TOP_LEVEL_COMPLETIONS = ["run", "complete", "--help", "--version", "--license"]
 _RUN_FLAGS = [
-    "--action",
+    "--scripts",
     "--show-config",
     "--fast",
     "--force",
@@ -2864,7 +2916,7 @@ _RUN_FLAGS = [
     "-h",
     "--help",
 ]
-_VALUE_FLAGS = {"-c", "--config", "-cf", "--config-file", "-e", "--env", "--until", "--skip", "--action"}
+_VALUE_FLAGS = {"-c", "--config", "-cf", "--config-file", "-e", "--env", "--until", "--skip", "--scripts"}
 
 
 def _matching(candidates, cur):
@@ -2952,8 +3004,8 @@ def _pending_flag_value_candidates(pending_flag, env_value, cur):
     """
     if pending_flag in ("--until", "--skip"):
         return _matching(_completion_stage_ids(env_value), cur)
-    if pending_flag == "--action":
-        return _matching(_completion_action_names(env_value), cur)
+    if pending_flag == "--scripts":
+        return _matching(_completion_script_names(env_value), cur)
     if pending_flag in ("-e", "--env"):
         return _matching(list(os.environ), cur)
     if pending_flag is not None:
@@ -2990,8 +3042,8 @@ def _completion_stage_ids(env_value):
     return [s for s in stages if isinstance(s, str)]
 
 
-def _completion_action_names(env_value):
-    """This env's 'scripts:' names, for completing --action -- [] if unknown/unreadable."""
+def _completion_script_names(env_value):
+    """This env's 'scripts:' names, for completing --scripts -- [] if unknown/unreadable."""
     config = _completion_config(env_value)
     if config is None:
         return []
@@ -3366,7 +3418,7 @@ def _load_cli_config(args, config_path) -> dict:
 
 
 def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=None, env_vars=None):
-    """Handle 'run --show-config', or 'run --action', if that's what this is. Returns True if one ran (nothing is launched then)."""
+    """Handle 'run --show-config', or 'run --scripts', if that's what this is. Returns True if one ran (nothing is launched then)."""
     if args.show_config:
         show_config(
             env_dir,
@@ -3379,16 +3431,16 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
         )
         return True
 
-    if args.action == LIST_ACTIONS:
-        list_named_scripts(env_dir, config_path, until_stage=args.until, skip_stages=args.skip)
-        return True
+    if args.scripts:
+        if LIST_SCRIPTS in args.scripts:
+            list_named_scripts(env_dir, config_path, until_stage=args.until, skip_stages=args.skip)
+            return True
 
-    if args.action:
         run_named_scripts(
             env_dir,
             config,
             config_path,
-            args.action,
+            args.scripts,
             until_stage=args.until,
             skip_stages=args.skip,
             quiet=args.quiet,
@@ -3406,7 +3458,7 @@ def _require_runnable(env_dir, config, config_path):
     """Die unless this env may be started directly, with stages to run.
 
     'runnable: false' marks a shared/base env (meant to be inherited via
-    import:, not started directly). '--show-config'/'run --action' are
+    import:, not started directly). '--show-config'/'run --scripts' are
     diagnostic, not "running", so they're exempt (see
     _handle_config_subcommands, called before this): inspecting a base env's
     resolved config is still useful.

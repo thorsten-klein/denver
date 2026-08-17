@@ -1245,7 +1245,7 @@ def test_run_stages_stacking_used_by_stage(tmp_path, fake_providers, exec_record
     assert exec_recorder["args"] == ["WRAPPED", "echo", "hi"]
 
 
-# ---- run_named_scripts (--action <name>, e.g. 'setup'/'login') ---------------#
+# ---- run_named_scripts (--scripts <name>, e.g. 'setup'/'login') ---------------#
 # parametrized over the name: the mechanism (run_named_scripts) doesn't care
 # what 'name' is, so one suite covers every convention (setup, login, or a
 # project-specific one) instead of a hand-duplicated copy per name.
@@ -1260,7 +1260,7 @@ def test_run_named_scripts_runs_each_setup_stage_in_order(tmp_path, fake_provide
         "fakesetup-a": {"provider": "fakesetup", "scripts": {name: ["a.sh"]}},
         "fakesetup-b": {"provider": "fakesetup", "scripts": {name: ["b.sh"]}},
     }
-    denver.run_named_scripts(env_dir, config, cfg_path, name)
+    denver.run_named_scripts(env_dir, config, cfg_path, [name])
     commands = run_recorder.commands()
     assert str((env_dir / "a.sh").resolve()) in commands[-2]
     assert str((env_dir / "b.sh").resolve()) in commands[-1]
@@ -1272,7 +1272,7 @@ def test_run_named_scripts_runs_each_setup_stage_in_order(tmp_path, fake_provide
 def test_run_named_scripts_skips_stage_without_entry(tmp_path, fake_providers, run_recorder, name):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup"}}
-    denver.run_named_scripts(env_dir, config, cfg_path, name)
+    denver.run_named_scripts(env_dir, config, cfg_path, [name])
     assert run_recorder.commands() == []
 
 
@@ -1281,7 +1281,7 @@ def test_run_named_scripts_missing_file_dies(tmp_path, fake_providers, run_recor
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "scripts": {name: ["nope.sh"]}}}
     with pytest.raises(SystemExit):
-        denver.run_named_scripts(env_dir, config, cfg_path, name)
+        denver.run_named_scripts(env_dir, config, cfg_path, [name])
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])
@@ -1289,7 +1289,7 @@ def test_run_named_scripts_non_list_dies(tmp_path, fake_providers, run_recorder,
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "scripts": {name: "a.sh"}}}
     with pytest.raises(SystemExit):
-        denver.run_named_scripts(env_dir, config, cfg_path, name)
+        denver.run_named_scripts(env_dir, config, cfg_path, [name])
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])
@@ -1302,7 +1302,7 @@ def test_run_named_scripts_only_filters_to_named_stage(tmp_path, fake_providers,
         "fakesetup-a": {"provider": "fakesetup", "scripts": {name: ["a.sh"]}},
         "fakesetup-b": {"provider": "fakesetup", "scripts": {name: ["b.sh"]}},
     }
-    denver.run_named_scripts(env_dir, config, cfg_path, name, until_stage="fakesetup-a")
+    denver.run_named_scripts(env_dir, config, cfg_path, [name], until_stage="fakesetup-a")
     commands = run_recorder.commands()
     assert len(commands) == 1
     assert str((env_dir / "a.sh").resolve()) in commands[0]
@@ -1320,7 +1320,7 @@ def test_run_named_scripts_wrapper_runs_on_host_no_relocation_needed(tmp_path, f
         "fakewrap": {"provider": "fakewrap", "scripts": {name: ["a.sh"]}},
         "fakesetup": {"provider": "fakesetup"},
     }
-    denver.run_named_scripts(env_dir, config, cfg_path, name)
+    denver.run_named_scripts(env_dir, config, cfg_path, [name])
     commands = run_recorder.commands()
     assert str((env_dir / "a.sh").resolve()) in commands[-1]
     assert not any("WRAPPED" in c for c in commands)
@@ -1333,7 +1333,7 @@ def test_run_named_scripts_relocates_setup_entries_into_active_wrapper(
     # a setup stage's own entry needs the wrapper's context (e.g. conan only
     # exists once inside a docker-wrapped env) -- the wrapper's own entry
     # runs on the host first, then the wrapper is prepared (setup()) and
-    # denver re-invoked --skip <that wrapper stage> --action <name> inside it
+    # denver re-invoked --skip <that wrapper stage> --scripts <name> inside it
     # for the setup stage's own entry
     env_dir, cfg_path = _env(tmp_path, {})
     (env_dir / "wrap-script.sh").write_text("#!/bin/bash\n")
@@ -1343,13 +1343,13 @@ def test_run_named_scripts_relocates_setup_entries_into_active_wrapper(
         "fakewrap": {"provider": "fakewrap", "scripts": {name: ["wrap-script.sh"]}},
         "fakesetup": {"provider": "fakesetup", "scripts": {name: ["setup-script.sh"]}},
     }
-    denver.run_named_scripts(env_dir, config, cfg_path, name)
+    denver.run_named_scripts(env_dir, config, cfg_path, [name])
     assert str((env_dir / "wrap-script.sh").resolve()) in run_recorder.commands()[0]
     assert exec_recorder["env"]["WRAP_SETUP"] == "1"
     assert exec_recorder["args"][0] == "WRAPPED"
     args = exec_recorder["args"]
     assert args[args.index("--skip") + 1] == "fakewrap"
-    assert args[args.index("--action") + 1] == name
+    assert args[args.index("--scripts") + 1] == name
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])
@@ -1363,7 +1363,7 @@ def test_run_named_scripts_skip_wrapper_stage_runs_entirely_on_host(
         "fakewrap": {"provider": "fakewrap", "scripts": {name: ["wrap-script.sh"]}},
         "fakesetup": {"provider": "fakesetup", "scripts": {name: ["setup-script.sh"]}},
     }
-    denver.run_named_scripts(env_dir, config, cfg_path, name, skip_stages=["fakewrap"])
+    denver.run_named_scripts(env_dir, config, cfg_path, [name], skip_stages=["fakewrap"])
     commands = run_recorder.commands()
     assert str((env_dir / "setup-script.sh").resolve()) in commands[-1]
     assert not any("wrap-script.sh" in c for c in commands)
@@ -1379,7 +1379,7 @@ def test_run_named_scripts_relocation_forwards_quiet(tmp_path, fake_providers, r
         "fakewrap": {"provider": "fakewrap"},
         "fakesetup": {"provider": "fakesetup", "scripts": {name: ["setup-script.sh"]}},
     }
-    denver.run_named_scripts(env_dir, config, cfg_path, name, quiet=True)
+    denver.run_named_scripts(env_dir, config, cfg_path, [name], quiet=True)
     assert "-q" in exec_recorder["args"]
 
 
@@ -1394,7 +1394,7 @@ def test_run_named_scripts_relocation_forwards_until_and_skip(
         "fakewrap": {"provider": "fakewrap"},
         "fakesetup": {"provider": "fakesetup", "scripts": {name: ["setup-script.sh"]}},
     }
-    denver.run_named_scripts(env_dir, config, cfg_path, name, until_stage="fakesetup", skip_stages=["x"])
+    denver.run_named_scripts(env_dir, config, cfg_path, [name], until_stage="fakesetup", skip_stages=["x"])
     args = exec_recorder["args"]
     assert args[args.index("--until") + 1] == "fakesetup"
     # the caller's own --skip ("x") is forwarded first, then the active
@@ -1402,3 +1402,77 @@ def test_run_named_scripts_relocation_forwards_until_and_skip(
     # try to relocate into it again
     skip_positions = [i for i, tok in enumerate(args) if tok == "--skip"]
     assert [args[i + 1] for i in skip_positions] == ["x", "fakewrap"]
+
+
+# ---- run_named_scripts: repeatable --scripts (multiple names, one call) ----#
+def test_run_named_scripts_runs_multiple_names_in_order(tmp_path, fake_providers, run_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    (env_dir / "setup.sh").write_text("#!/bin/bash\n")
+    (env_dir / "login.sh").write_text("#!/bin/bash\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "scripts": {"setup": ["setup.sh"], "login": ["login.sh"]}},
+    }
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup", "login"])
+    commands = run_recorder.commands()
+    assert str((env_dir / "setup.sh").resolve()) in commands[0]
+    assert str((env_dir / "login.sh").resolve()) in commands[1]
+
+
+def test_run_named_scripts_relocation_carries_every_name_that_needs_it(
+    tmp_path, fake_providers, run_recorder, exec_recorder
+):
+    # both names have a setup-stage entry -- both land in the single
+    # reinvocation, in the order given.
+    env_dir, cfg_path = _env(tmp_path, {})
+    (env_dir / "setup-script.sh").write_text("#!/bin/bash\n")
+    (env_dir / "login-script.sh").write_text("#!/bin/bash\n")
+    config = {
+        "stages": ["fakewrap", "fakesetup"],
+        "fakewrap": {"provider": "fakewrap"},
+        "fakesetup": {
+            "provider": "fakesetup",
+            "scripts": {"setup": ["setup-script.sh"], "login": ["login-script.sh"]},
+        },
+    }
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup", "login"])
+    args = exec_recorder["args"]
+    scripts_positions = [i for i, tok in enumerate(args) if tok == "--scripts"]
+    assert [args[i + 1] for i in scripts_positions] == ["setup", "login"]
+
+
+def test_run_named_scripts_relocation_only_carries_names_that_actually_need_it(
+    tmp_path, fake_providers, run_recorder, exec_recorder
+):
+    # 'setup' only has a wrapper-stage entry (runs on the host, no
+    # relocation needed for it); 'login' has a setup-stage entry too -- only
+    # 'login' is worth carrying into the reinvocation.
+    env_dir, cfg_path = _env(tmp_path, {})
+    (env_dir / "wrap-script.sh").write_text("#!/bin/bash\n")
+    (env_dir / "login-script.sh").write_text("#!/bin/bash\n")
+    config = {
+        "stages": ["fakewrap", "fakesetup"],
+        "fakewrap": {"provider": "fakewrap", "scripts": {"setup": ["wrap-script.sh"]}},
+        "fakesetup": {"provider": "fakesetup", "scripts": {"login": ["login-script.sh"]}},
+    }
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup", "login"])
+    assert str((env_dir / "wrap-script.sh").resolve()) in run_recorder.commands()[0]
+    args = exec_recorder["args"]
+    scripts_positions = [i for i, tok in enumerate(args) if tok == "--scripts"]
+    assert [args[i + 1] for i in scripts_positions] == ["login"]
+
+
+def test_run_named_scripts_relocation_skipped_when_no_name_needs_it(tmp_path, fake_providers, run_recorder):
+    # neither name has any setup-stage entry -- both run entirely on the
+    # host, no reinvocation at all.
+    env_dir, cfg_path = _env(tmp_path, {})
+    (env_dir / "wrap-a.sh").write_text("#!/bin/bash\n")
+    (env_dir / "wrap-b.sh").write_text("#!/bin/bash\n")
+    config = {
+        "stages": ["fakewrap", "fakesetup"],
+        "fakewrap": {"provider": "fakewrap", "scripts": {"setup": ["wrap-a.sh"], "login": ["wrap-b.sh"]}},
+        "fakesetup": {"provider": "fakesetup"},
+    }
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup", "login"])
+    commands = run_recorder.commands()
+    assert not any("WRAPPED" in c for c in commands)

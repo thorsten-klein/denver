@@ -584,15 +584,43 @@ def test_main_double_q_hides_banner_too(tmp_path, monkeypatch, capsys, exec_reco
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])
-def test_main_action_flag_runs_named_scripts_and_exits(tmp_path, run_recorder, which, exec_recorder, name):
+def test_main_scripts_flag_runs_named_scripts_and_exits(tmp_path, run_recorder, which, exec_recorder, name):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "prep.sh").write_text("#!/bin/bash\n")
     (env_dir / "denver.yml").write_text(f"stages: [uv]\nuv:\n  provider: uv\n  scripts:\n    {name}: [prep.sh]\n")
-    assert denver.main(["run", str(env_dir), "--action", name]) == 0
+    assert denver.main(["run", str(env_dir), "--scripts", name]) == 0
     assert str((env_dir / "prep.sh").resolve()) in run_recorder.commands()[-1]
-    # --action never builds/enters the environment
+    # --scripts never builds/enters the environment
     assert exec_recorder == {}
+
+
+def test_main_scripts_flag_is_repeatable_and_runs_each_name_in_order(tmp_path, run_recorder, which, exec_recorder):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "setup.sh").write_text("#!/bin/bash\n")
+    (env_dir / "login.sh").write_text("#!/bin/bash\n")
+    (env_dir / "denver.yml").write_text(
+        "stages: [uv]\nuv:\n  provider: uv\n  scripts:\n    setup: [setup.sh]\n    login: [login.sh]\n"
+    )
+    assert denver.main(["run", str(env_dir), "--scripts", "setup", "--scripts", "login"]) == 0
+    commands = run_recorder.commands()
+    setup_at = next(i for i, c in enumerate(commands) if "setup.sh" in c)
+    login_at = next(i for i, c in enumerate(commands) if "login.sh" in c)
+    assert setup_at < login_at
+    assert exec_recorder == {}
+
+
+def test_main_scripts_flag_given_bare_lists_names_even_mixed_with_a_real_one(tmp_path, capsys):
+    # a bare '--scripts' anywhere among repeated occurrences means "list the
+    # names", same as it being the only occurrence -- it wins outright.
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        "stages: [a]\na:\n  provider: custom\n  cmd: x\n  scripts:\n    setup: [x.sh]\n"
+    )
+    assert denver.main(["run", str(env_dir), "--scripts", "setup", "--scripts"]) == 0
+    assert "available --scripts names" in capsys.readouterr().err
 
 
 def test_main_no_config_direction_dies(tmp_path):
@@ -1033,8 +1061,8 @@ def test_main_until_flag_unknown_stage_dies(tmp_path):
         denver.main(["run", str(env_dir), "--until", "typo-stage"])
 
 
-def test_main_action_without_a_name_lists_them(tmp_path, capsys):
-    # --action's names are open-ended, and 'scripts:' stacks across the whole
+def test_main_scripts_without_a_name_lists_them(tmp_path, capsys):
+    # --scripts's names are open-ended, and 'scripts:' stacks across the whole
     # import chain -- so reading one file does not answer "which names?"
     env_dir = tmp_path / "e"
     env_dir.mkdir()
@@ -1043,24 +1071,24 @@ def test_main_action_without_a_name_lists_them(tmp_path, capsys):
         "a:\n  provider: custom\n  cmd: x\n  scripts:\n    setup: [one.sh, two.sh]\n"
         "b:\n  provider: custom\n  cmd: x\n  scripts:\n    setup: [three.sh]\n    login: [l.sh]\n"
     )
-    assert denver.main(["run", str(env_dir), "--action"]) == 0
+    assert denver.main(["run", str(env_dir), "--scripts"]) == 0
     err = capsys.readouterr().err
-    assert "available --action names" in err
+    assert "available --scripts names" in err
     assert "setup" in err
     assert "a (2 scripts)" in err
     assert "b (1 script)" in err
     assert "login" in err
 
 
-def test_main_action_without_a_name_says_when_there_are_none(tmp_path, capsys):
+def test_main_scripts_without_a_name_says_when_there_are_none(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text("stages: [a]\na:\n  provider: custom\n  cmd: x\n")
-    assert denver.main(["run", str(env_dir), "--action"]) == 0
+    assert denver.main(["run", str(env_dir), "--scripts"]) == 0
     assert "defines no 'scripts:' entries" in capsys.readouterr().err
 
 
-def test_main_action_listing_does_not_resolve_provider_defaults(tmp_path, capsys):
+def test_main_scripts_listing_does_not_resolve_provider_defaults(tmp_path, capsys):
     # a listing must not fail over an unrelated missing path: full resolution
     # runs every provider's existence checks, which have nothing to do with
     # which scripts an env declares.
@@ -1070,7 +1098,7 @@ def test_main_action_listing_does_not_resolve_provider_defaults(tmp_path, capsys
         "stages: [d]\nd:\n  provider: docker\n  compose:\n    file: no-such-compose.yml\n"
         "  scripts:\n    login: [l.sh]\n"
     )
-    assert denver.main(["run", str(env_dir), "--action"]) == 0
+    assert denver.main(["run", str(env_dir), "--scripts"]) == 0
     assert "login" in capsys.readouterr().err
 
 
