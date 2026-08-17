@@ -1142,15 +1142,21 @@ def default_command(config, in_container=False):
     """
     if not sys.stdin.isatty():
         die("cannot determine command to run (non-interactive and no command given)")
-
-    # 'command:' is the generic top-level default; a wrapper provider
-    # (currently only 'docker') may contribute its own fallback via
-    # <provider>.default-cmd, e.g. the command to land in once relocated
-    # into a container. With neither set, fall back to the user's own shell
-    # (not a specific one denver would otherwise be guessing).
-    cmd = config.get("command") or (config.get("docker") or {}).get("default-cmd") or os.environ.get("SHELL") or "bash"
-    cmd = [cmd] if isinstance(cmd, str) else [str(c) for c in cmd]
+    cmd = _resolve_default_cmd(config)
     return _completion_wrapped_shell(cmd) if in_container else cmd
+
+
+def _resolve_default_cmd(config):
+    """'command:'/'docker.default-cmd:'/$SHELL/"bash", in that order, normalised to a list. See default_command.
+
+    'command:' is the generic top-level default; a wrapper provider
+    (currently only 'docker') may contribute its own fallback via
+    <provider>.default-cmd, e.g. the command to land in once relocated
+    into a container. With neither set, fall back to the user's own shell
+    (not a specific one denver would otherwise be guessing).
+    """
+    cmd = config.get("command") or (config.get("docker") or {}).get("default-cmd") or os.environ.get("SHELL") or "bash"
+    return [cmd] if isinstance(cmd, str) else [str(c) for c in cmd]
 
 
 def _completion_wrapped_shell(cmd):
@@ -1175,17 +1181,21 @@ def _completion_wrapped_shell(cmd):
     if not cmd:
         return cmd
     binary = cmd[0]
-    shell = os.path.basename(binary)
+    shell = Path(binary).name
     if shell not in _COMPLETION_SCRIPTS:
         return cmd
 
-    launcher = " ".join(shlex.quote(part) for part in _denver_launcher())
-    if shell == "fish":
-        setup = f"{launcher} complete fish 2>/dev/null | source"
-    else:
-        setup = f'eval "$({launcher} complete {shell} 2>/dev/null)"'
+    setup = _completion_setup_snippet(shell)
     extra_args = "".join(f" {shlex.quote(a)}" for a in cmd[1:])
     return [binary, "-c", f"{setup}; exec {shlex.quote(binary)} -i{extra_args}"]
+
+
+def _completion_setup_snippet(shell):
+    """The shell-specific line wiring 'denver complete' up before exec -- see _completion_wrapped_shell."""
+    launcher = " ".join(shlex.quote(part) for part in _denver_launcher())
+    if shell == "fish":
+        return f"{launcher} complete fish 2>/dev/null | source"
+    return f'eval "$({launcher} complete {shell} 2>/dev/null)"'
 
 
 def resolve_command(config, forwarded, in_container=False):
@@ -2708,7 +2718,7 @@ def build_arg_parser(config_args=None):
     a two pass affair: the flags an env declares live in the file the <env>
     argument names (see _run_cli).
     """
-    parser = argparse.ArgumentParser(prog="denver", add_help=False)
+    parser = _DenverArgParser(prog="denver", add_help=False)
     parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
     parser.add_argument("--version", action="store_true", help="show the installed denver version and exit")
     parser.add_argument("--license", action="store_true", help="show denver's LICENSE (Apache-2.0) and exit")
@@ -2722,12 +2732,21 @@ def build_arg_parser(config_args=None):
     return parser
 
 
+class _DenverArgParser(argparse.ArgumentParser):
+    """argparse.ArgumentParser, plus a name -> subparser lookup -- see build_arg_parser/_handle_info_flags.
+
+    A subclass (declaring the attribute) rather than just assigning it onto
+    a plain ArgumentParser dynamically, so pyright/mypy see it as real,
+    typed state instead of an unknown attribute.
+    """
+
+    subcommand_parsers: dict[str, argparse.ArgumentParser]
+
+
 #: The one closing pointer print_help() adds after argparse's own summary --
 #: deliberately not the module's own (necessarily longer) docstring, see
 #: print_help.
-_HELP_FOOTER = (
-    "Run `denver run --help` to see more details about the run-specific flags."
-)
+_HELP_FOOTER = "Run `denver run --help` to see more details about the run-specific flags."
 
 
 def print_help(parser):
@@ -2825,10 +2844,32 @@ def _complete_candidates(words):
 
 _TOP_LEVEL_COMPLETIONS = ["run", "complete", "--help", "--version", "--license"]
 _RUN_FLAGS = [
-    "--action", "--show-config", "--fast", "--force", "--ci", "--no-wait", "--dry-run", "-q", "--quiet",
-    "-c", "--config", "-cf", "--config-file", "-e", "--env", "--until", "--skip", "-h", "--help",
+    "--action",
+    "--show-config",
+    "--fast",
+    "--force",
+    "--ci",
+    "--no-wait",
+    "--dry-run",
+    "-q",
+    "--quiet",
+    "-c",
+    "--config",
+    "-cf",
+    "--config-file",
+    "-e",
+    "--env",
+    "--until",
+    "--skip",
+    "-h",
+    "--help",
 ]
 _VALUE_FLAGS = {"-c", "--config", "-cf", "--config-file", "-e", "--env", "--until", "--skip", "--action"}
+
+
+def _matching(candidates, cur):
+    """Every one of ``candidates`` that starts with ``cur`` -- the shape every completion list here takes."""
+    return [c for c in candidates if c.startswith(cur)]
 
 
 def _complete_candidates_unsafe(words):
@@ -2836,55 +2877,88 @@ def _complete_candidates_unsafe(words):
         return _TOP_LEVEL_COMPLETIONS
     cur = words[-1]
     prior = words[:-1]
-
     if not prior:
-        return [c for c in _TOP_LEVEL_COMPLETIONS if c.startswith(cur)]
+        return _matching(_TOP_LEVEL_COMPLETIONS, cur)
 
     subcommand = prior[0]
     if subcommand == "complete":
-        if len(prior) > 1:
-            return []  # 'complete' takes at most one positional (the shell name)
-        return [s for s in sorted(_COMPLETION_SCRIPTS) if s.startswith(cur)]
+        return _complete_shell_names(prior, cur)
     if subcommand != "run":
         return []  # anything unrecognised takes no further args
+    return _complete_run_candidates(prior[1:], cur)
 
-    rest = prior[1:]
+
+def _complete_shell_names(prior, cur):
+    """Completions for 'denver complete <TAB>' -- the shell names, or [] once one's already given."""
+    if len(prior) > 1:
+        return []  # 'complete' takes at most one positional (the shell name)
+    return _matching(sorted(_COMPLETION_SCRIPTS), cur)
+
+
+def _complete_run_candidates(rest, cur):
+    """Completions for 'denver run ...<TAB>' -- everything past the subcommand word itself."""
     if "--" in rest:
         return []  # past the forwarded-command boundary: denver has no opinion on it
 
-    env_value = None
-    pending_flag = None
-    skip_next = False
-    for tok in rest:
-        if skip_next:
-            skip_next = False
-            continue
-        if tok.startswith("-"):
-            if tok in _VALUE_FLAGS:
-                skip_next = True
-            continue
-        if env_value is None:
-            env_value = tok
-    if skip_next:
-        pending_flag = rest[-1]
+    env_value, pending_flag = _run_completion_state(rest)
+    flag_value_candidates = _pending_flag_value_candidates(pending_flag, env_value, cur)
+    if flag_value_candidates is not None:
+        return flag_value_candidates
+    return _complete_env_or_flag(env_value, cur)
 
+
+def _complete_env_or_flag(env_value, cur):
+    """<env> path completions, or denver's own (and this env's declared) run flags, depending on ``cur``."""
+    if cur.startswith("-"):
+        return _matching(_RUN_FLAGS + _completion_declared_flags(env_value), cur)
+    if env_value is None:
+        return _completion_path_candidates(cur)
+    return []
+
+
+def _run_completion_state(rest):
+    """(env_value, pending_flag) so far in 'rest' -- see _complete_run_candidates.
+
+    Walks 'rest' the same way argparse would: each _VALUE_FLAGS token
+    consumes the very next token as its own value (whatever that token
+    looks like), so a token only counts as the <env> positional if nothing
+    earlier swallowed it. 'pending_flag' is set only when the walk ends
+    mid-flag -- i.e. rest's own last token is a value flag with nothing
+    after it yet for ``cur`` to be.
+    """
+    consumed_as_value = [False] * len(rest)
+    for i in range(1, len(rest)):
+        consumed_as_value[i] = not consumed_as_value[i - 1] and rest[i - 1] in _VALUE_FLAGS
+
+    env_value = _first_positional(rest, consumed_as_value)
+    is_open_value_flag = rest and not consumed_as_value[-1] and rest[-1] in _VALUE_FLAGS
+    pending_flag = rest[-1] if is_open_value_flag else None
+    return env_value, pending_flag
+
+
+def _first_positional(rest, consumed_as_value):
+    """The first token in 'rest' that's neither a flag nor already consumed as one's value, or None."""
+    for tok, consumed in zip(rest, consumed_as_value):
+        if not consumed and not tok.startswith("-"):
+            return tok
+    return None
+
+
+def _pending_flag_value_candidates(pending_flag, env_value, cur):
+    """Completions for the value of a flag still awaiting one, or None if 'rest' isn't mid-flag at all.
+
+    None means "no pending flag" -- the caller falls through to <env>/flag
+    completion instead; every other return (including []) is final.
+    """
     if pending_flag in ("--until", "--skip"):
-        return [s for s in _completion_stage_ids(env_value) if s.startswith(cur)]
+        return _matching(_completion_stage_ids(env_value), cur)
     if pending_flag == "--action":
-        return [name for name in _completion_action_names(env_value) if name.startswith(cur)]
+        return _matching(_completion_action_names(env_value), cur)
     if pending_flag in ("-e", "--env"):
-        return [name for name in os.environ if name.startswith(cur)]
+        return _matching(list(os.environ), cur)
     if pending_flag is not None:
         return []  # -c/-cf/...: no sensible dynamic completion; -o default falls back to filenames
-
-    if env_value is None and not cur.startswith("-"):
-        return _completion_path_candidates(cur)
-
-    if cur.startswith("-"):
-        flags = _RUN_FLAGS + _completion_declared_flags(env_value)
-        return [f for f in flags if f.startswith(cur)]
-
-    return []
+    return None
 
 
 def _completion_env_paths(env_value):
@@ -2902,7 +2976,7 @@ def _completion_env_paths(env_value):
 def _completion_config(env_value):
     """This env's raw, whole-file-import-merged config, or None -- best-effort, for completion only."""
     env_dir, config_path = _completion_env_paths(env_value)
-    if env_dir is None or not config_path.is_file():
+    if env_dir is None or config_path is None or not config_path.is_file():
         return None
     config = load_config(config_path)
     config, _ = expand_section_imports(config, env_dir)
@@ -2933,34 +3007,65 @@ def _completion_declared_flags(env_value):
         return []
     flags = []
     for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        raw = entry.get("flags")
-        if isinstance(raw, str):
-            flags.append(raw)
-        elif isinstance(raw, list):
-            flags += [f for f in raw if isinstance(f, str)]
+        flags += _entry_flag_spellings(entry)
     return flags
+
+
+def _entry_flag_spellings(entry):
+    """One 'args:' entry's own 'flags:' spelling(s), normalised to a list of strings -- [] if malformed."""
+    if not isinstance(entry, dict):
+        return []
+    return _flags_value_as_list(entry.get("flags"))
+
+
+def _flags_value_as_list(raw):
+    """A 'flags:' value normalised to a list of strings -- a bare string becomes a one-item list."""
+    if isinstance(raw, str):
+        return [raw]
+    if isinstance(raw, list):
+        return [f for f in raw if isinstance(f, str)]
+    return []
 
 
 def _completion_path_candidates(cur):
     """Directory/denver.yml completions for the <env> positional, honouring any 'dir/' prefix already in ``cur``."""
-    base = os.path.dirname(cur) or "."
-    prefix = os.path.basename(cur)
+    base, prefix = _completion_base_and_prefix(cur)
+    names = [name for name in sorted(_listdir_or_empty(base)) if name.startswith(prefix)]
+    candidates = [_completion_path_candidate(base, name) for name in names]
+    return [c for c in candidates if c is not None]
+
+
+def _completion_base_and_prefix(cur):
+    """Split ``cur`` into (dir to list, name prefix to filter by) -- see _completion_path_candidates.
+
+    A manual rpartition, not Path(cur).parent/.name: pathlib collapses a
+    trailing '/' (Path("foo/") == Path("foo")), which would wrongly turn
+    "already typed a whole dir, tab for its contents" (cur == "foo/") into
+    "list '.' for names starting with 'foo'" instead of "list 'foo/'
+    itself, with no prefix filter".
+    """
+    if "/" not in cur:
+        return ".", cur
+    base, _, prefix = cur.rpartition("/")
+    return base or "/", prefix
+
+
+def _listdir_or_empty(base):
+    """``base``'s entry names, or [] if it can't be listed (doesn't exist, not a dir, no permission, ...)."""
     try:
-        entries = os.listdir(base)
+        return [p.name for p in Path(base).iterdir()]
     except OSError:
         return []
-    candidates = []
-    for name in sorted(entries):
-        if not name.startswith(prefix):
-            continue
-        full = os.path.join(base, name) if base != "." else name
-        if os.path.isdir(os.path.join(base, name)):
-            candidates.append(full + "/")
-        elif name == CONFIG_NAME or (name.startswith("denver.") and name.endswith(".yml")):
-            candidates.append(full)
-    return candidates
+
+
+def _completion_path_candidate(base, name):
+    """One dir entry as a completion candidate -- a subdirectory (trailing '/') or a denver config file, else None."""
+    full = str(Path(base) / name) if base != "." else name
+    if (Path(base) / name).is_dir():
+        return full + "/"
+    if name == CONFIG_NAME or (name.startswith("denver.") and name.endswith(".yml")):
+        return full
+    return None
 
 
 _COMPLETION_SCRIPTS = {
@@ -3014,7 +3119,7 @@ def _detect_shell():
     raises. An explicit `denver complete <shell>` bypasses this outright.
     """
     name = _parent_process_name() or os.environ.get("SHELL", "")
-    name = os.path.basename(name).lstrip("-")  # login shells prefix their name, e.g. "-zsh"
+    name = Path(name).name.lstrip("-")  # login shells prefix their name, e.g. "-zsh"
     return name if name in _COMPLETION_SCRIPTS else "bash"
 
 
@@ -3025,8 +3130,7 @@ def _parent_process_name():
     except OSError:
         return None
     try:
-        with open(f"/proc/{ppid}/comm") as f:
-            return f.read().strip()
+        return Path(f"/proc/{ppid}/comm").read_text().strip()
     except OSError:
         pass
     try:  # no /proc (e.g. macOS) -- ask the same question of 'ps' instead
@@ -3054,25 +3158,32 @@ def _split_argv(argv):
 def _handle_info_flags(args, parser):
     """Handle --help/--version/--license, if given. Returns True if one was (each prints and/or dies)."""
     if args.help:
-        subcommand_parser = parser.subcommand_parsers.get(getattr(args, "subcommand", None))
-        if subcommand_parser is not None:
-            print(subcommand_parser.format_help())
-        else:
-            print_help(parser)
+        _print_help_for(args, parser)
         return True
-
     if args.version:
         print(f"denver {package_version() or UNKNOWN_VERSION}")
         return True
-
     if args.license:
-        text = license_text()
-        if text is None:
-            die("LICENSE not found -- neither a checkout nor installed package metadata has it")
-        print(text)
+        _print_license()
         return True
-
     return False
+
+
+def _print_help_for(args, parser):
+    """Print the invoked subcommand's own help, or the top-level one with no (recognised) subcommand."""
+    subcommand_parser = parser.subcommand_parsers.get(getattr(args, "subcommand", None))
+    if subcommand_parser is not None:
+        print(subcommand_parser.format_help())
+    else:
+        print_help(parser)
+
+
+def _print_license():
+    """Print denver's own LICENSE text, or die if it can't be found (neither a checkout nor installed metadata)."""
+    text = license_text()
+    if text is None:
+        die("LICENSE not found -- neither a checkout nor installed package metadata has it")
+    print(text)
 
 
 def _run_cli(argv=None):
@@ -3084,26 +3195,39 @@ def _run_cli(argv=None):
     returns normally on success, or exits via ``die()``.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
-
-    # Hidden, undocumented subcommand behind the shell functions 'denver
-    # complete' prints (see _COMPLETION_SCRIPTS): deliberately bypasses argparse
-    # and every bit of env resolution below, so a completion request can never
-    # itself trigger a usage error or a die() while the user is mid-keystroke.
-    if argv and argv[0] == "__complete":
-        for candidate in _complete_candidates(argv[1:]):
-            print(candidate)
+    if _handle_dunder_complete(argv):
         return
-
     if not argv:
         print_help(build_arg_parser())
         return
+    _run_resolved_cli(argv)
 
+
+def _handle_dunder_complete(argv):
+    """Handle the hidden 'denver __complete' subcommand, if that's what this is. Returns True if it ran.
+
+    Deliberately bypasses argparse and every bit of env resolution below
+    (see _run_resolved_cli), so a completion request can never itself
+    trigger a usage error or a die() while the user is mid-keystroke.
+    """
+    if not argv or argv[0] != "__complete":
+        return False
+    for candidate in _complete_candidates(argv[1:]):
+        print(candidate)
+    return True
+
+
+def _run_resolved_cli(argv):
+    """The real argv parse: resolve the env, then either exec its command or dispatch a denver-only subcommand.
+
+    Only reached once _run_cli's own argv-shape guards (empty argv, the
+    hidden __complete subcommand) are out of the way.
+    """
     head, forwarded = _split_argv(argv)
     preliminary, extra_argv = _preliminary_args(head)
 
     if preliminary.subcommand == "complete":
-        shell = preliminary.shell or _detect_shell()
-        print(_COMPLETION_SCRIPTS[shell], end="")
+        _print_completion_script(preliminary)
         return
 
     if _handle_env_less_argv(preliminary, head):
@@ -3139,6 +3263,12 @@ def _run_cli(argv=None):
 
     _require_runnable(env_dir, config, config_path)
     run_stages(env_dir, config, config_path, forwarded, options=_run_options(args, cli_args, env_vars))
+
+
+def _print_completion_script(preliminary):
+    """Print the wiring script for 'denver complete [<shell>]' -- the given shell, or auto-detected."""
+    shell = preliminary.shell or _detect_shell()
+    print(_COMPLETION_SCRIPTS[shell], end="")
 
 
 def _preliminary_args(head):

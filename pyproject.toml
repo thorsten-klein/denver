@@ -203,5 +203,5 @@ build = ["clean", {cmd = "uv build"}]
 # provides sphinx-build, denver's 'build-docs' stage runs it) -- '-- true'
 # runs that env's stages and exits instead of dropping into its shell, so
 # this is dogfooding, not a second recipe to keep in sync with that env's.
-docs = "src/denver.py examples/doc-env -- echo 'Finished!'"
+docs = "src/denver.py run examples/doc-env -- echo 'Finished!'"
 "docs-clean" = "rm -rf doc/_build"
