@@ -348,8 +348,8 @@ never bumps the schema version, but a <code class="docutils literal notranslate"
 a denver new enough to have it. Without <code class="docutils literal notranslate"><span class="pre">denver-version:</span></code>, running such a
 file on an older denver fails somewhere deep inside a stage, or quietly does
 something subtly different; with it, denver says so up front:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0&quot;</span>
-<span class="nt">denver-version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=1.0.4&quot;</span><span class="w">   </span><span class="c1"># directly below version:, always</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0"</span>
+<span class="nt">denver-version</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=1.0.4"</span><span class="w">   </span><span class="c1"># directly below version:, always</span>
 </pre></div>
 </div>
 <ul class="simple">
@@ -396,8 +396,8 @@ configured this way. denver never reads it; it is only surfaced in
 it had been <code class="docutils literal notranslate"><span class="pre">--skip</span></code>ped, without deleting its configuration. Must be a
 real boolean.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">scripts</span></code></strong> — the generic one-shot mechanism: <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span> <span class="pre">[...]</span></code>
-declares scripts run by <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--run</span> <span class="pre">&lt;name&gt;</span></code> instead of the normal
-pipeline. See “Hooks and scripts” below.</p></li>
+declares scripts run by <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code> instead of the
+normal pipeline. See “Hooks and scripts” below.</p></li>
 </ul>
 <p>Every other key in a stage’s section must be one the stage’s own provider
 recognises — see that provider’s page under <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/doc/providers"><code class="docutils literal notranslate"><span class="pre">providers/</span></code></a>. An
@@ -599,7 +599,7 @@ keyword argument</strong> — so an env has argparse’s whole vocabulary (<code
 <span class="w">  </span><span class="nt">help</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build with optimisations</span>
 </pre></div>
 </div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>my-project<span class="w"> </span>--board<span class="w"> </span>nrf5340dk<span class="w"> </span>--release<span class="w"> </span>--<span class="w"> </span>west<span class="w"> </span>build
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>my-project<span class="w"> </span>--board<span class="w"> </span>nrf5340dk<span class="w"> </span>--release<span class="w"> </span>--<span class="w"> </span>west<span class="w"> </span>build
 </pre></div>
 </div>
 <p>What the user passed is exported as <strong><code class="docutils literal notranslate"><span class="pre">DENVER_ARG_&lt;DEST&gt;</span></code></strong>, where <code class="docutils literal notranslate"><span class="pre">&lt;DEST&gt;</span></code>
@@ -628,12 +628,12 @@ Use <code class="docutils literal notranslate"><span class="pre">choices:</span>
 <code class="docutils literal notranslate"><span class="pre">action:</span></code>.</p>
 <p>A few more properties worth knowing:</p>
 <ul class="simple">
-<li><p>The flags are ordinary argparse flags, so <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--help</span></code> lists them
-alongside denver’s own, and a mistyped one is argparse’s usual
+<li><p>The flags are ordinary argparse flags, so <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--help</span></code> lists
+them alongside denver’s own, and a mistyped one is argparse’s usual
 <code class="docutils literal notranslate"><span class="pre">usage:</span></code>/<code class="docutils literal notranslate"><span class="pre">error:</span></code> on stderr — never a silently ignored token.</p></li>
-<li><p>Write them <strong>after</strong> <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> (<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">my-project</span> <span class="pre">--board</span> <span class="pre">x</span></code>): the flags an
-env declares live in the very file <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> names, so denver has to resolve
-<code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> before it can know them.</p></li>
+<li><p>Write them <strong>after</strong> <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> (<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">my-project</span> <span class="pre">--board</span> <span class="pre">x</span></code>): the flags
+an env declares live in the very file <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> names, so denver has to
+resolve <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> before it can know them.</p></li>
 <li><p>A flag that would collide with one of denver’s own (<code class="docutils literal notranslate"><span class="pre">--force</span></code>, or a <code class="docutils literal notranslate"><span class="pre">dest:</span></code>
 of <code class="docutils literal notranslate"><span class="pre">ci</span></code>) is a hard error, not a silent override.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">args:</span></code> is a list, so it follows the normal list-merge rule: an env
@@ -660,15 +660,15 @@ silently replaces a base env’s hook of the same name — both run, base
 first.</p>
 <p>Separately, <code class="docutils literal notranslate"><span class="pre">scripts:</span></code> is a generic, open-ended mechanism for one-shot
 actions that are <em>not</em> part of the normal pipeline: any stage’s section can
-declare <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span> <span class="pre">[...]</span></code>, and <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--run</span> <span class="pre">&lt;name&gt;</span></code> runs
+declare <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span> <span class="pre">[...]</span></code>, and <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code> runs
 every stage’s own <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> entries, then exits without doing anything else.
 Nothing about <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> is fixed — <code class="docutils literal notranslate"><span class="pre">setup</span></code> and <code class="docutils literal notranslate"><span class="pre">login</span></code> are just conventions,
-not flags of their own. Which is why <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--run</span></code>, with no name at
-all, lists the names that env actually defines: they are unguessable by
-design, and <code class="docutils literal notranslate"><span class="pre">scripts:</span></code> stacks across the whole <code class="docutils literal notranslate"><span class="pre">import:</span></code> chain, so reading
+not flags of their own. Which is why <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span></code>, with no
+name at all, lists the names that env actually defines: they are unguessable
+by design, and <code class="docutils literal notranslate"><span class="pre">scripts:</span></code> stacks across the whole <code class="docutils literal notranslate"><span class="pre">import:</span></code> chain, so reading
 one file does not answer it either.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ denver examples/zephyr-devshell-4.3.1 --run
-available --run names for env &#39;zephyr-devshell-4.3.1&#39;:
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>$ denver run examples/zephyr-devshell-4.3.1 --scripts
+available --scripts names for env 'zephyr-devshell-4.3.1':
   setup        docker (1 script), zephyr (1 script)
 ``` This is where one-time host setup belongs: installing
 Docker itself, `udev` rules for flashing a board, a registry login — things
@@ -687,7 +687,7 @@ maintaining a fork of denver:
 extensions:
   providers:
     dirs:
-    - my_providers   # resolved like conan&#39;s base-classes: env dir, then imported base envs
+    - my_providers   # resolved like conan's base-classes: env dir, then imported base envs
 </pre></div>
 </div>
 <p>Every <code class="docutils literal notranslate"><span class="pre">*.py</span></code> file directly inside each listed dir — except those whose name
@@ -698,12 +698,12 @@ starts with <code class="docutils literal notranslate"><span class="pre">_</span
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">AcmeProvider</span><span class="p">(</span><span class="n">Provider</span><span class="p">):</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;acme&quot;</span>  <span class="c1"># the &#39;provider: acme&#39; name a stage&#39;s section sets</span>
-    <span class="n">KEYS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;target&quot;</span><span class="p">,)</span>  <span class="c1"># denver.yml keys this provider reads</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"acme"</span>  <span class="c1"># the 'provider: acme' name a stage's section sets</span>
+    <span class="n">KEYS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"target"</span><span class="p">,)</span>  <span class="c1"># denver.yml keys this provider reads</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">):</span>
         <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_section</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
-        <span class="n">ctx</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">&quot;acme-build&quot;</span><span class="p">,</span> <span class="s2">&quot;--target&quot;</span><span class="p">,</span> <span class="n">cfg</span><span class="p">[</span><span class="s2">&quot;target&quot;</span><span class="p">]])</span>
+        <span class="n">ctx</span><span class="o">.</span><span class="n">run</span><span class="p">([</span><span class="s2">"acme-build"</span><span class="p">,</span> <span class="s2">"--target"</span><span class="p">,</span> <span class="n">cfg</span><span class="p">[</span><span class="s2">"target"</span><span class="p">]])</span>
 
 
 <span class="n">PROVIDER</span> <span class="o">=</span> <span class="n">AcmeProvider</span>

@@ -379,7 +379,7 @@ handy when a folder holds several variants side by side (e.g.
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uv-packages</span><span class="w">            </span><span class="c1"># 2. the python 3.12 venv</span>
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nvim-setup</span><span class="w">             </span><span class="c1"># 3. one prebuilt release, fetched by hand</span>
 <span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conan-packages</span><span class="w">         </span><span class="c1"># 4. cmake 3.31.9 and the ARM toolchain 15.3, exactly</span>
-<span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">best-practices</span><span class="w">         </span><span class="c1"># 5. the team&#39;s PYTEST_ADDOPTS convention</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">best-practices</span><span class="w">         </span><span class="c1"># 5. the team's PYTEST_ADDOPTS convention</span>
 </pre></div>
 </div>
 <table class="docutils align-default">
@@ -441,10 +441,10 @@ its inputs changed and skip its expensive work if they didn’t — for this
 example’s conan stage specifically, the difference between roughly three
 minutes and about two seconds.</p>
 <p>Two useful flags around this:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># don&#39;t build anything, only activate what already exists (fastest)</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># don't build anything, only activate what already exists (fastest)</span>
 denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--fast
 
-<span class="c1"># ignore all &quot;nothing changed&quot; shortcuts and redo the expensive work</span>
+<span class="c1"># ignore all "nothing changed" shortcuts and redo the expensive work</span>
 denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--force
 </pre></div>
 </div>
@@ -452,15 +452,15 @@ denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--force
 <section id="the-handful-of-options-you-ll-actually-use">
 <h3>The handful of options you’ll actually use<a class="headerlink" href="#the-handful-of-options-you-ll-actually-use" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># run ONE command inside the environment instead of opening a shell.</span>
-<span class="c1"># everything after &#39;--&#39; is passed through untouched.</span>
+<span class="c1"># everything after '--' is passed through untouched.</span>
 denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--<span class="w"> </span><span class="nb">echo</span><span class="w"> </span>inside
 
 <span class="c1"># show what the stages would run, without running any of it</span>
 denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--dry-run
 
 <span class="c1"># stop after a given stage: that stage and every stage before it runs.</span>
-<span class="c1"># (there is no &quot;run just this one stage&quot; -- a stage practically always</span>
-<span class="c1"># needs its predecessors: nvim-setup needs uv-packages&#39; venv on PATH)</span>
+<span class="c1"># (there is no "run just this one stage" -- a stage practically always</span>
+<span class="c1"># needs its predecessors: nvim-setup needs uv-packages' venv on PATH)</span>
 denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--until<span class="w"> </span>uv-packages
 
 <span class="c1"># print the final, fully merged configuration and exit -- the best way to</span>

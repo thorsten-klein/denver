@@ -286,7 +286,13 @@ isn’t the right one.</p>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">default-cmd</span></code></strong> — the fallback interactive command once relocated into
 the container, read by denver’s own command resolution (<code class="docutils literal notranslate"><span class="pre">command:</span></code> at
 the top level still wins over this if set) — not read by this provider
-itself, but still a real <code class="docutils literal notranslate"><span class="pre">docker:</span></code> key, shown in <code class="docutils literal notranslate"><span class="pre">--show-config</span></code>.</p></li>
+itself, but still a real <code class="docutils literal notranslate"><span class="pre">docker:</span></code> key, shown in <code class="docutils literal notranslate"><span class="pre">--show-config</span></code>. When
+it (or the top-level <code class="docutils literal notranslate"><span class="pre">command:</span></code>, or the plain <code class="docutils literal notranslate"><span class="pre">$SHELL</span></code>/<code class="docutils literal notranslate"><span class="pre">bash</span></code> fallback)
+names a bare <code class="docutils literal notranslate"><span class="pre">bash</span></code>/<code class="docutils literal notranslate"><span class="pre">zsh</span></code>/<code class="docutils literal notranslate"><span class="pre">fish</span></code>, denver wires up <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code> for
+it automatically before landing there — the container’s own image,
+unlike the host, is never something a user already has completion set
+up in themselves. Anything else (extra args aside, which are preserved)
+is left untouched.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">image</span></code></strong> — the canonical local tag denver checks for before falling
 back to a build — checked whenever <code class="docutils literal notranslate"><span class="pre">image:</span></code> is set, whether or not
 <code class="docutils literal notranslate"><span class="pre">registries:</span></code> is also configured; a hit skips the build entirely

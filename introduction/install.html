@@ -282,10 +282,10 @@ to every <a class="reference external" href="https://github.com/thorsten-klein/d
 instead — it bundles denver, its providers and a Python interpreter in one
 file:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Find Asset from latest release</span>
-<span class="nv">ASSET</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-sSL<span class="w"> </span>https://api.github.com/repos/thorsten-klein/denver/releases/latest<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-o<span class="w"> </span><span class="s1">&#39;https://[^&quot;]*\.tar\.xz&#39;</span><span class="k">)</span>
+<span class="nv">ASSET</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-sSL<span class="w"> </span>https://api.github.com/repos/thorsten-klein/denver/releases/latest<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-o<span class="w"> </span><span class="s1">'https://[^"]*\.tar\.xz'</span><span class="k">)</span>
 
 <span class="c1"># Download the Asset and untar it</span>
-curl<span class="w"> </span>-sSL<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$ASSET</span><span class="s2">&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-xJf<span class="w"> </span>-
+curl<span class="w"> </span>-sSL<span class="w"> </span><span class="s2">"</span><span class="nv">$ASSET</span><span class="s2">"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>tar<span class="w"> </span>-xJf<span class="w"> </span>-
 
 <span class="c1"># Run denver</span>
 ./denver<span class="w"> </span>--version

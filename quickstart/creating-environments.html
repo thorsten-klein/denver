@@ -323,8 +323,8 @@ touch<span class="w"> </span>envs/howto-env/denver.yml
 </pre></div>
 </div>
 <p>We add the first general entries to <code class="docutils literal notranslate"><span class="pre">envs/howto-env/denver.yml</span></code>:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1.0&quot;</span><span class="w">            </span><span class="c1"># the denver.yml schema version -- currently only &quot;1.0&quot; exists</span>
-<span class="nt">denver-version</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&gt;=1.1.0&quot;</span><span class="w"> </span><span class="c1"># the minimum denver *tool* this file needs</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0"</span><span class="w">            </span><span class="c1"># the denver.yml schema version -- currently only "1.0" exists</span>
+<span class="nt">denver-version</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=1.1.0"</span><span class="w"> </span><span class="c1"># the minimum denver *tool* this file needs</span>
 </pre></div>
 </div>
 <p>Two different questions, so two keys: <code class="docutils literal notranslate"><span class="pre">version:</span></code> pins the schema, and
@@ -457,7 +457,7 @@ them at pinned versions instead — one by hand, one via <code class="docutils l
 When we specify it in <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> as <code class="docutils literal notranslate"><span class="pre">env-scripts:</span></code>, it will run right before build/run (on the host machine).
 Background: Dynamic values a compose file cannot compute itself (host UID/GID, user-specific cache dirs, …).</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash -e</span>
-<span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">&quot;</span><span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
+<span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">"</span><span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
 <span class="nv">HOST_HOME</span><span class="o">=</span><span class="nv">$HOME</span>
 <span class="o">(</span>
 <span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="nv">HOST_UID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-u<span class="k">)</span>
@@ -474,7 +474,7 @@ Note: This setup script will only run when the user invokes <code class="docutil
 <span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>containerd<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>containerd
 <span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>jq<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>jq
 
-<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>docker<span class="w"> </span>compose<span class="w"> </span>version<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">&#39;Docker Compose version&#39;</span><span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>docker<span class="w"> </span>compose<span class="w"> </span>version<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span><span class="s1">'Docker Compose version'</span><span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">""</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
 <span class="w">    </span>apt_install<span class="w"> </span>docker-compose-v2
 <span class="k">fi</span>
 </pre></div>
@@ -516,10 +516,10 @@ an <code class="docutils literal notranslate"><span class="pre">image:</span></c
 above relocated everything after it in there.</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">uv-packages</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uv</span>
-<span class="w">  </span><span class="c1"># in a docker-wrapped env this is checked against the image&#39;s own python</span>
+<span class="w">  </span><span class="c1"># in a docker-wrapped env this is checked against the image's own python</span>
 <span class="w">  </span><span class="c1"># rather than installed -- and checked as an exact string, so it has to be</span>
-<span class="w">  </span><span class="c1"># the container&#39;s full `python3 --version` (Ubuntu 24.04: 3.12.3)</span>
-<span class="w">  </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;3.12.3&quot;</span>
+<span class="w">  </span><span class="c1"># the container's full `python3 --version` (Ubuntu 24.04: 3.12.3)</span>
+<span class="w">  </span><span class="nt">python</span><span class="p">:</span><span class="w"> </span><span class="s">"3.12.3"</span>
 <span class="w">  </span><span class="nt">requirements</span><span class="p">:</span>
 <span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">requirements.txt</span>
 </pre></div>
@@ -597,10 +597,10 @@ none of that: it is resolved relative to the <code class="docutils literal notra
 <p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/nvim/nvim.env</span></code> — the pin itself, in one place, so the
 installing and the activating script can never disagree about which version
 they mean or where it lives:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">NVIM_VERSION</span><span class="o">=</span><span class="s2">&quot;0.12.4&quot;</span>
-<span class="nv">NVIM_URL</span><span class="o">=</span><span class="s2">&quot;https://github.com/neovim/neovim/releases/download/v</span><span class="si">${</span><span class="nv">NVIM_VERSION</span><span class="si">}</span><span class="s2">/nvim-linux-x86_64.tar.gz&quot;</span>
-<span class="nv">NVIM_SHA256</span><span class="o">=</span><span class="s2">&quot;012bf3fcac5ade43914df3f174668bf64d05e049a4f032a388c027b1ebd78628&quot;</span>
-<span class="nv">NVIM_PREFIX</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">DENVER_ENV_WORKDIR</span><span class="si">}</span><span class="s2">/nvim/</span><span class="si">${</span><span class="nv">NVIM_VERSION</span><span class="si">}</span><span class="s2">&quot;</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">NVIM_VERSION</span><span class="o">=</span><span class="s2">"0.12.4"</span>
+<span class="nv">NVIM_URL</span><span class="o">=</span><span class="s2">"https://github.com/neovim/neovim/releases/download/v</span><span class="si">${</span><span class="nv">NVIM_VERSION</span><span class="si">}</span><span class="s2">/nvim-linux-x86_64.tar.gz"</span>
+<span class="nv">NVIM_SHA256</span><span class="o">=</span><span class="s2">"012bf3fcac5ade43914df3f174668bf64d05e049a4f032a388c027b1ebd78628"</span>
+<span class="nv">NVIM_PREFIX</span><span class="o">=</span><span class="s2">"</span><span class="si">${</span><span class="nv">DENVER_ENV_WORKDIR</span><span class="si">}</span><span class="s2">/nvim/</span><span class="si">${</span><span class="nv">NVIM_VERSION</span><span class="si">}</span><span class="s2">"</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code> is the other built-in worth knowing here: denver’s own
@@ -613,38 +613,38 @@ would need root and would leak into every other environment on the machine
 <code class="docutils literal notranslate"><span class="pre">NVIM_VERSION</span></code> installs next to the old release rather than on top of it.</p>
 <p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/nvim/install.sh</span></code> — download, verify, unpack:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash -e</span>
-<span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">&quot;</span><span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
-<span class="nb">source</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$SELF_DIR</span><span class="s2">/nvim.env&quot;</span>
+<span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">"</span><span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
+<span class="nb">source</span><span class="w"> </span><span class="s2">"</span><span class="nv">$SELF_DIR</span><span class="s2">/nvim.env"</span>
 
 <span class="c1"># runs on every start, so it has to recognise what it already installed</span>
-<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-x<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$NVIM_PREFIX</span><span class="s2">/bin/nvim&quot;</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
-<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;nvim </span><span class="nv">$NVIM_VERSION</span><span class="s2"> already installed: </span><span class="nv">$NVIM_PREFIX</span><span class="s2">&quot;</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-x<span class="w"> </span><span class="s2">"</span><span class="nv">$NVIM_PREFIX</span><span class="s2">/bin/nvim"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"nvim </span><span class="nv">$NVIM_VERSION</span><span class="s2"> already installed: </span><span class="nv">$NVIM_PREFIX</span><span class="s2">"</span>
 <span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
 <span class="k">fi</span>
 
-<span class="nb">cd</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DENVER_ENV_DIR</span><span class="s2">&quot;</span>
-mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$NVIM_PREFIX</span><span class="s2">&quot;</span><span class="k">)</span><span class="s2">&quot;</span>
-<span class="nv">STAGING</span><span class="o">=</span><span class="k">$(</span>mktemp<span class="w"> </span>-d<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$NVIM_PREFIX</span><span class="s2">.XXXXXX&quot;</span><span class="k">)</span>
-<span class="nb">trap</span><span class="w"> </span><span class="s1">&#39;rm -rf &quot;$STAGING&quot;&#39;</span><span class="w"> </span>EXIT
+<span class="nb">cd</span><span class="w"> </span><span class="s2">"</span><span class="nv">$DENVER_ENV_DIR</span><span class="s2">"</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">"</span><span class="nv">$NVIM_PREFIX</span><span class="s2">"</span><span class="k">)</span><span class="s2">"</span>
+<span class="nv">STAGING</span><span class="o">=</span><span class="k">$(</span>mktemp<span class="w"> </span>-d<span class="w"> </span><span class="s2">"</span><span class="nv">$NVIM_PREFIX</span><span class="s2">.XXXXXX"</span><span class="k">)</span>
+<span class="nb">trap</span><span class="w"> </span><span class="s1">'rm -rf "$STAGING"'</span><span class="w"> </span>EXIT
 
 <span class="c1"># download and unpack</span>
-curl<span class="w"> </span>-fLsS<span class="w"> </span>-o<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$STAGING</span><span class="s2">/nvim.tar.gz&quot;</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$NVIM_URL</span><span class="s2">&quot;</span>
-<span class="nb">echo</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$NVIM_SHA256</span><span class="s2">  </span><span class="nv">$STAGING</span><span class="s2">/nvim.tar.gz&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sha256sum<span class="w"> </span>-c<span class="w"> </span>-
-tar<span class="w"> </span>-xzf<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$STAGING</span><span class="s2">/nvim.tar.gz&quot;</span><span class="w"> </span>-C<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$STAGING</span><span class="s2">&quot;</span><span class="w"> </span>--strip-components<span class="o">=</span><span class="m">1</span>
-rm<span class="w"> </span>-f<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$STAGING</span><span class="s2">/nvim.tar.gz&quot;</span>
+curl<span class="w"> </span>-fLsS<span class="w"> </span>-o<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</span><span class="s2">/nvim.tar.gz"</span><span class="w"> </span><span class="s2">"</span><span class="nv">$NVIM_URL</span><span class="s2">"</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"</span><span class="nv">$NVIM_SHA256</span><span class="s2">  </span><span class="nv">$STAGING</span><span class="s2">/nvim.tar.gz"</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>sha256sum<span class="w"> </span>-c<span class="w"> </span>-
+tar<span class="w"> </span>-xzf<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</span><span class="s2">/nvim.tar.gz"</span><span class="w"> </span>-C<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</span><span class="s2">"</span><span class="w"> </span>--strip-components<span class="o">=</span><span class="m">1</span>
+rm<span class="w"> </span>-f<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</span><span class="s2">/nvim.tar.gz"</span>
 
 <span class="c1"># moved into place only once complete: a failed download must not leave a</span>
 <span class="c1"># half-unpacked tree that the check above would then accept forever</span>
-mv<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$STAGING</span><span class="s2">&quot;</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$NVIM_PREFIX</span><span class="s2">&quot;</span>
+mv<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</span><span class="s2">"</span><span class="w"> </span><span class="s2">"</span><span class="nv">$NVIM_PREFIX</span><span class="s2">"</span>
 <span class="nb">trap</span><span class="w"> </span>-<span class="w"> </span>EXIT
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/nvim/activate.sh</span></code> — the one line that makes it usable:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
-<span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">&quot;</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">&quot;</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">&quot;</span><span class="k">)</span><span class="s2">&quot;</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
-<span class="nb">source</span><span class="w"> </span><span class="s2">&quot;</span><span class="nv">$SELF_DIR</span><span class="s2">/nvim.env&quot;</span>
+<span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">"</span><span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
+<span class="nb">source</span><span class="w"> </span><span class="s2">"</span><span class="nv">$SELF_DIR</span><span class="s2">/nvim.env"</span>
 
-<span class="nb">export</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">&quot;</span><span class="nv">$NVIM_PREFIX</span><span class="s2">/bin:</span><span class="nv">$PATH</span><span class="s2">&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">PATH</span><span class="o">=</span><span class="s2">"</span><span class="nv">$NVIM_PREFIX</span><span class="s2">/bin:</span><span class="nv">$PATH</span><span class="s2">"</span>
 </pre></div>
 </div>
 </section>
@@ -689,12 +689,12 @@ versions:</p>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">HowtoEnv</span><span class="p">(</span><span class="n">ConanFile</span><span class="p">):</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;howto-env&quot;</span>
-    <span class="n">version</span> <span class="o">=</span> <span class="s2">&quot;1.0&quot;</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"howto-env"</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="s2">"1.0"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">build_requirements</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tool_requires</span><span class="p">(</span><span class="s2">&quot;cmake/3.31.9@denver/snapshot&quot;</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tool_requires</span><span class="p">(</span><span class="s2">&quot;arm-none-eabi/15.3@denver/snapshot&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tool_requires</span><span class="p">(</span><span class="s2">"cmake/3.31.9@denver/snapshot"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tool_requires</span><span class="p">(</span><span class="s2">"arm-none-eabi/15.3@denver/snapshot"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p><strong>Note</strong>: The <code class="docutils literal notranslate"><span class="pre">&#64;denver/snapshot</span></code> half is the user/channel denver’s recipes-exporter
@@ -722,14 +722,14 @@ layout is what names the reference, so <code class="docutils literal notranslate
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ConanRecipe</span><span class="p">(</span><span class="n">ConanFile</span><span class="p">):</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="s2">&quot;cmake&quot;</span>
-    <span class="n">version</span> <span class="o">=</span> <span class="s2">&quot;3.31.9&quot;</span>
-    <span class="n">settings</span> <span class="o">=</span> <span class="s2">&quot;os&quot;</span><span class="p">,</span> <span class="s2">&quot;arch&quot;</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"cmake"</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="s2">"3.31.9"</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="s2">"os"</span><span class="p">,</span> <span class="s2">"arch"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="c1"># the one archive pinned in conandata.yml, unpacked straight into the</span>
         <span class="c1"># package folder -- there is nothing to build</span>
-        <span class="p">(</span><span class="n">source</span><span class="p">,)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conan_data</span><span class="p">[</span><span class="s2">&quot;sources&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+        <span class="p">(</span><span class="n">source</span><span class="p">,)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">conan_data</span><span class="p">[</span><span class="s2">"sources"</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
         <span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">**</span><span class="n">source</span><span class="p">,</span> <span class="n">destination</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">package_folder</span><span class="p">,</span> <span class="n">strip_root</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">package</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -802,7 +802,7 @@ second one in this environment, and this time with no <code class="docutils lite
 there is nothing to install.</p>
 <p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/best-practices.sh</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">PYTEST_ADDOPTS</span><span class="o">=</span><span class="s2">&quot;-v -s&quot;</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">PYTEST_ADDOPTS</span><span class="o">=</span><span class="s2">"-v -s"</span>
 </pre></div>
 </div>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">best-practices</span><span class="p">:</span>
@@ -813,7 +813,7 @@ there is nothing to install.</p>
 <p>The key is <code class="docutils literal notranslate"><span class="pre">source:</span></code>, not <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>, as the script shall be sourced so that the export of environment variables persists for subsequent commands.</p>
 <p><strong>Note</strong>: For a plain constant, by the way, a whole stage is more than you need. Actually you could also do this via docker environment variables (<code class="docutils literal notranslate"><span class="pre">create-env.sh</span></code> or <code class="docutils literal notranslate"><span class="pre">env:</span></code> in <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code>):</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">env</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">PYTEST_ADDOPTS</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;-v</span><span class="nv"> </span><span class="s">-s&quot;</span><span class="w">    </span><span class="c1"># top-level, applied once, before any stage</span>
+<span class="w">  </span><span class="nt">PYTEST_ADDOPTS</span><span class="p">:</span><span class="w"> </span><span class="s">"-v</span><span class="nv"> </span><span class="s">-s"</span><span class="w">    </span><span class="c1"># top-level, applied once, before any stage</span>
 </pre></div>
 </div>
 <p>A <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage earns its place as soon as the script is reused (e.g. reused in other environments), or if actual shell logic is necessary
@@ -856,25 +856,25 @@ be started with <code class="docutils literal notranslate"><span class="pre">den
 checks what each stage promised. <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env/tests"><code class="docutils literal notranslate"><span class="pre">examples/howto-env/tests/</span></code></a>
 does exactly that — one assertion per stage:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_docker_stage_gave_us_ubuntu_24_04</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="s2">&quot;Ubuntu 24.04&quot;</span> <span class="ow">in</span> <span class="n">platform</span><span class="o">.</span><span class="n">freedesktop_os_release</span><span class="p">()[</span><span class="s2">&quot;PRETTY_NAME&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="s2">"Ubuntu 24.04"</span> <span class="ow">in</span> <span class="n">platform</span><span class="o">.</span><span class="n">freedesktop_os_release</span><span class="p">()[</span><span class="s2">"PRETTY_NAME"</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">test_uv_stage_gave_us_python_3_12_and_pytest</span><span class="p">():</span>
     <span class="k">assert</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">12</span><span class="p">)</span>
-    <span class="k">assert</span> <span class="n">pytest</span><span class="o">.</span><span class="n">__version__</span> <span class="o">==</span> <span class="s2">&quot;9.1.1&quot;</span>
+    <span class="k">assert</span> <span class="n">pytest</span><span class="o">.</span><span class="n">__version__</span> <span class="o">==</span> <span class="s2">"9.1.1"</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">test_custom_stage_put_the_hand_installed_nvim_on_path</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="s2">&quot;NVIM v0.12.4&quot;</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">&quot;nvim&quot;</span><span class="p">,</span> <span class="s2">&quot;--version&quot;</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
+    <span class="k">assert</span> <span class="s2">"NVIM v0.12.4"</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">"nvim"</span><span class="p">,</span> <span class="s2">"--version"</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">test_conan_stage_gave_us_the_pinned_tool_versions</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="s2">&quot;3.31.9&quot;</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">&quot;cmake&quot;</span><span class="p">,</span> <span class="s2">&quot;--version&quot;</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
-    <span class="k">assert</span> <span class="s2">&quot;15.3&quot;</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">&quot;arm-none-eabi-gcc&quot;</span><span class="p">,</span> <span class="s2">&quot;--version&quot;</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
+    <span class="k">assert</span> <span class="s2">"3.31.9"</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">"cmake"</span><span class="p">,</span> <span class="s2">"--version"</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
+    <span class="k">assert</span> <span class="s2">"15.3"</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">"arm-none-eabi-gcc"</span><span class="p">,</span> <span class="s2">"--version"</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">test_custom_stage_exported_the_team_convention</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;PYTEST_ADDOPTS&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;-v -s&quot;</span>
+    <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"PYTEST_ADDOPTS"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"-v -s"</span>
 </pre></div>
 </div>
 <div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>denver<span class="w"> </span>examples/howto-env<span class="w"> </span>-q<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
@@ -895,7 +895,7 @@ denver<span class="w"> </span>envs/howto-env<span class="w">                    
 denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w">            </span><span class="c1"># run one command instead of interactive shell</span>
 
 denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--fast<span class="w">               </span><span class="c1"># activate what is already built; run no build step</span>
-denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--force<span class="w">              </span><span class="c1"># ignore every &quot;nothing changed&quot; shortcut</span>
+denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--force<span class="w">              </span><span class="c1"># ignore every "nothing changed" shortcut</span>
 denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--skip<span class="w"> </span>docker-base<span class="w">      </span><span class="c1"># same stack, directly on the host</span>
 denver<span class="w"> </span>envs/howto-env<span class="w"> </span>-c<span class="w"> </span>uv-packages.python<span class="o">=</span><span class="m">3</span>.13<span class="w">    </span><span class="c1"># override one value, this run</span>
 </pre></div>
