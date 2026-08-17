@@ -1,4 +1,4 @@
-"""The test `denver examples/howto-env` runs by default.
+"""The test `denver run examples/howto-env` runs by default.
 
 It asserts what each stage of the pipeline promised: the OS from the docker
 stage, the interpreter and packages from the uv stage, the hand-installed

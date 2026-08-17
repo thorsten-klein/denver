@@ -67,10 +67,13 @@ Everything after that is reference you dip into as needed.
 
 ## `denver` command
 
-- **[`cli/arguments.md`](cli/arguments.md)** — every flag `denver --help`
-  lists, grouped by what you reach for it for: choosing what runs, changing
-  the config for one run, trading speed against freshness, looking without
-  running.
+- **[`cli/arguments.md`](cli/arguments.md)** — every flag `denver run
+  --help` lists, grouped by what you reach for it for: choosing what runs,
+  changing the config for one run, trading speed against freshness, looking
+  without running.
+- **[`cli/completion.md`](cli/completion.md)** — tab-complete subcommands,
+  env paths, flags and an env's own `args:` with `denver complete`; wired up
+  automatically inside a docker-relocated shell too.
 - **[`cli/environment-variables.md`](cli/environment-variables.md)** — the
   two variables denver itself reads (`DENVER_STATE_DIR`,
   `DENVER_CACHE_DIR`), the ones it exports for `${...}` interpolation, and

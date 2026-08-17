@@ -7,7 +7,7 @@ via denver itself — a `uv` stage for the toolchain, a `custom` stage that runs
 ## What it does
 
 ```console
-$ denver examples/doc-env -- echo Done
+$ denver run examples/doc-env -- echo Done
 ...
 build succeeded.
 
@@ -31,7 +31,7 @@ Two stages run in order:
    Not fingerprinted, so it reruns on every start — the right behavior for a
    doc build.
 
-With no trailing command, `denver examples/doc-env` rebuilds the docs and
+With no trailing command, `denver run examples/doc-env` rebuilds the docs and
 drops into a shell with `sphinx-build` on `PATH`.
 
 ## Why it exists

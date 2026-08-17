@@ -1,7 +1,8 @@
 """Tests for 'denver complete' and the hidden 'denver __complete' subcommand.
 
 'complete [bash|fish|zsh]' prints that shell's wiring script (see
-_COMPLETION_SCRIPTS in src/denver.py), auto-detecting the shell from the
+_completion_script in src/denver.py), wired up to every command word
+_completion_bind_names comes up with, auto-detecting the shell from the
 parent process (_detect_shell) when none is given; '__complete' is what
 each of those scripts' completion function actually shells out to on every
 keystroke, and is deliberately bare-except-wrapped in _run_cli so a
@@ -16,6 +17,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -55,7 +57,55 @@ def test_complete_rejects_an_unknown_shell_name(capsys):
 def test_complete_with_no_shell_auto_detects_from_the_parent_process(monkeypatch, capsys, shell):
     monkeypatch.setattr(denver, "_parent_process_name", lambda: shell)
     assert denver.main(["complete"]) == 0
-    assert capsys.readouterr().out == denver._COMPLETION_SCRIPTS[shell]
+    assert capsys.readouterr().out == denver._completion_script(shell, denver._completion_bind_names())
+
+
+# ---- _completion_bind_names -- which command words get wired up ------------- #
+def test_completion_bind_names_always_starts_with_denver():
+    assert denver._completion_bind_names()[0] == "denver"
+
+
+def test_completion_bind_names_includes_the_absolute_path_to_denver_py():
+    assert str(Path(denver.__file__).resolve()) in denver._completion_bind_names()
+
+
+def test_completion_bind_names_includes_however_it_was_actually_invoked(monkeypatch):
+    monkeypatch.setattr(denver.sys, "argv", ["./src/denver.py", "complete"])
+    assert "./src/denver.py" in denver._completion_bind_names()
+
+
+def test_completion_bind_names_dedupes_argv0_against_denver(monkeypatch):
+    monkeypatch.setattr(denver.sys, "argv", ["denver", "complete"])
+    assert denver._completion_bind_names().count("denver") == 1
+
+
+def test_completion_bind_names_dedupes_argv0_against_the_absolute_path(monkeypatch):
+    monkeypatch.setattr(denver.sys, "argv", [denver._denver_launcher()[-1], "complete"])
+    names = denver._completion_bind_names()
+    assert names.count(denver._denver_launcher()[-1]) == 1
+
+
+# ---- _completion_script -- wiring every bound name, self-invoking ----------- #
+def test_completion_script_bash_registers_every_name_and_reinvokes_via_comp_words_0():
+    out = denver._completion_script("bash", ["denver", "./src/denver.py"])
+    assert "complete -F _denver_complete -o default -o bashdefault denver ./src/denver.py" in out
+    assert '"${COMP_WORDS[0]}" __complete' in out
+    assert "denver __complete" not in out  # never hardcoded -- see COMP_WORDS[0] above
+
+
+def test_completion_script_zsh_registers_every_name_and_reinvokes_via_words_1():
+    out = denver._completion_script("zsh", ["denver", "./src/denver.py"])
+    assert "compdef _denver_complete denver ./src/denver.py" in out
+    assert '"${words[1]}" __complete' in out
+    assert "denver __complete" not in out
+
+
+def test_completion_script_fish_registers_one_complete_c_line_per_name():
+    out = denver._completion_script("fish", ["denver", "./src/denver.py"])
+    assert "complete -c denver -a '(__denver_complete)'" in out
+    assert "complete -c ./src/denver.py -a '(__denver_complete)'" in out
+    assert "$tokens[1] __complete" in out
+    assert "denver __complete" not in out
 
 
 def test_detect_shell_reads_the_parent_processs_name(monkeypatch):

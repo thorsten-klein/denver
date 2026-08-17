@@ -1,6 +1,6 @@
 #!/bin/bash -e
 # One-time host bootstrap for the zephyr-docker env, run via
-# `denver examples/zephyr-docker --run setup` -- deliberately not part of the
+# `denver run examples/zephyr-docker --scripts setup` -- deliberately not part of the
 # normal stage pipeline, because everything here touches the host system
 # (apt, systemd) and needs sudo.
 
@@ -65,7 +65,7 @@ cat <<'EOF'
 
 Host setup complete. You can now start the env with:
 
-    denver examples/zephyr-docker
+    denver run examples/zephyr-docker
 
 If `docker` was installed just now, you may need to log out and back in
 (or run `newgrp docker`) before you can use it without sudo.

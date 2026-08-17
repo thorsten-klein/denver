@@ -15,7 +15,7 @@ denver-version: ">=1.1.0"
 # 'print-vars-after' below (and the final command).
 
 # This env's own command-line flag: one argparse.add_argument entry, so
-# `denver examples/simple-env --help` lists it like any denver flag, and
+# `denver run examples/simple-env --help` lists it like any denver flag, and
 # what the user passes arrives as DENVER_ARG_GREETING below (see
 # "Environment-specific CLI arguments" in doc/configuration/denver-yml.md).
 args:

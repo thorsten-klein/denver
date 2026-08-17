@@ -5,7 +5,7 @@ it. The container half of the Zephyr setup, kept in an env of its own.**
 
 ## What it does
 
-`denver examples/zephyr-docker` builds the `dev` service from
+`denver run examples/zephyr-docker` builds the `dev` service from
 `docker-compose.yml` and drops you into a `fish` shell inside the resulting
 container — as your own host UID/GID, with your workspace, home directory and
 caches mounted at *the same absolute paths* they have outside.
@@ -63,11 +63,11 @@ cannot install Docker from inside Docker, and udev rules belong to the host
 kernel. Those live in a named script list that is **not** run on every start:
 
 ```bash
-denver examples/zephyr-docker --run setup    # once per machine
+denver run examples/zephyr-docker --scripts setup    # once per machine
 ```
 
-`--run <name>` is open-ended, not a fixed set of flags — an env can declare
-`scripts: migrate:` and get `--run migrate` without denver changing.
+`--scripts <name>` is open-ended, not a fixed set of flags — an env can declare
+`scripts: migrate:` and get `--scripts migrate` without denver changing.
 
 **3. What a real `docker-compose.yml` ends up carrying.** It is heavily
 commented and worth skimming as a catalogue of the problems that show up once
@@ -88,7 +88,7 @@ has to be *copied* in because git rewrites it in place rather than editing it
 | `container/Dockerfile` | The image itself |
 | `container/fixuid/` | Maps the container user onto your host UID/GID |
 | `configs/` | Shell/git config mounted into the container |
-| `setup/install_host_tools.sh` | Host bootstrap, run via `--run setup` |
+| `setup/install_host_tools.sh` | Host bootstrap, run via `--scripts setup` |
 
 ## Note
 

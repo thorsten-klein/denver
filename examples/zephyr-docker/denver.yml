@@ -25,7 +25,7 @@ docker:
   - create-env.sh
 
   # host-side bootstrap (containerd/docker/make/jq/QEMU/udev rules); run via
-  # `denver examples/zephyr-docker --run setup`, not on every normal run.
+  # `denver run examples/zephyr-docker --scripts setup`, not on every normal run.
   scripts:
     setup:
     - setup/install_host_tools.sh

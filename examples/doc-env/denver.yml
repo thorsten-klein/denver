@@ -9,8 +9,8 @@ denver-version: ">=1.1.0"
 # markdown/ subdirectory so one publish step carries both. This is the
 # actual recipe -- the top-level 'docs' poe task and .github/workflows/docs.yml
 # both just run this env rather than calling sphinx-build themselves. Every
-# run rebuilds doc/_build/html -- 'denver examples/doc-env -- echo Done'
-# both builds the docs and confirms it succeeded; 'denver examples/doc-env'
+# run rebuilds doc/_build/html -- 'denver run examples/doc-env -- echo Done'
+# both builds the docs and confirms it succeeded; 'denver run examples/doc-env'
 # (no trailing command) rebuilds them and drops into a shell with
 # sphinx-build on PATH.
 stages:

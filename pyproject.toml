@@ -37,7 +37,7 @@ Issues = "https://github.com/thorsten-klein/denver/issues"
 Changelog = "https://github.com/thorsten-klein/denver/releases"
 
 [project.scripts]
-# After installation, 'denver <env>' works the same as 'src/denver.py <env>'.
+# After installation, 'denver run <env>' works the same as 'src/denver.py run <env>'.
 denver = "denver:main"
 
 [dependency-groups]

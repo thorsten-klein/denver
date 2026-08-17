@@ -5,7 +5,7 @@ Pico SDK and CMake — with no container involved.**
 
 ## What it does
 
-`denver examples/raspberry-pico` gives you a shell in which you can build
+`denver run examples/raspberry-pico` gives you a shell in which you can build
 firmware for the [Raspberry Pi Pico](https://www.raspberrypi.com/documentation/microcontrollers/):
 
 - `arm-none-eabi-gcc` 15.3 — the ARM bare-metal cross-compiler

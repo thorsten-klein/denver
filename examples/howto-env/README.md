@@ -18,7 +18,7 @@ It turns this onboarding note:
 into one command:
 
 ```console
-$ denver examples/howto-env -- pytest examples/howto-env/tests
+$ denver run examples/howto-env -- pytest examples/howto-env/tests
 test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED
 test_environment.py::test_docker_stage_installed_the_apt_packages PASSED
 test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED
@@ -83,7 +83,7 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
 | `denver.yml` | the whole env: five stages |
 | `docker-compose.yml`, `container/Dockerfile` | the container the pipeline is relocated into |
 | `create-env.sh` | `env-scripts:` — writes the compose `.env` (host UID/GID/HOME) |
-| `setup/install_host_tools.sh` | `scripts: setup:` — one-time host bootstrap, run via `--run setup` |
+| `setup/install_host_tools.sh` | `scripts: setup:` — one-time host bootstrap, run via `--scripts setup` |
 | `requirements.txt` | the venv's packages (`pytest`, plus `conan` for the next stage) |
 | `nvim/nvim.env` | the pin — version, url, sha256, install prefix — shared by the two scripts below |
 | `nvim/install.sh` | `cmd:` — downloads, verifies and unpacks the release (idempotent) |

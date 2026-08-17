@@ -487,7 +487,7 @@ def test_run_stages_dry_run_wrapper_note_names_the_skip_that_would_show_them(
     assert "--skip fakewrap" in note[0]
 
 
-# ---- --run <name> ------------------------------------------------------------#
+# ---- --scripts <name> ----------------------------------------------------#
 def test_run_named_scripts_dry_run_prints_scripts_instead_of_running_them(
     tmp_path, run_recorder, exec_recorder, monkeypatch, capsys
 ):
