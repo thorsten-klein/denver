@@ -440,3 +440,12 @@ def test_validate_stage_filters_unknown_skip_dies():
     config = {"stages": ["uv"]}
     with pytest.raises(SystemExit):
         denver.validate_stage_filters(config, None, ["typo"])
+
+
+def test_validate_stage_filters_unknown_lists_available_as_ordered_bullets(caplog):
+    # deliberately not alphabetical -- the message must preserve 'stages:'
+    # declaration order, not sort it
+    config = {"stages": ["zephyr", "conan", "uv"]}
+    with pytest.raises(SystemExit):
+        denver.validate_stage_filters(config, None, ["typo"])
+    assert "  - zephyr\n  - conan\n  - uv" in caplog.text
