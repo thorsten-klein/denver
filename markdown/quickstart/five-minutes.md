@@ -24,7 +24,7 @@ an env’s `scripts: setup:`, so an env can bring its own host tools along —
 run those once with:
 
 ```bash
-denver <env> --run setup
+denver run <env> --scripts setup
 ```
 
 See [One-time host setup]() below.
@@ -52,21 +52,22 @@ For the *biggest* bundled example — a full
 [`examples/zephyr-devshell-4.3.1`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell-4.3.1)
 instead.
 
-Note that every command below works as `denver <env> ...` or `src/denver.py <env> ...`.
+Note that every command below works as `denver run <env> ...` or
+`src/denver.py run <env> ...`.
 
 ### The one command you need
 
 You can run pytest in the final example environment like this:
 
 ```bash
-denver examples/howto-env -- pytest examples/howto-env/tests
+denver run examples/howto-env -- pytest examples/howto-env/tests
 ```
 
 That’s it. A minute or two later (much less on repeat runs) that onboarding
 note’s every claim has been turned into a passing test:
 
 ```console
-$ denver examples/howto-env -- pytest examples/howto-env/tests
+$ denver run examples/howto-env -- pytest examples/howto-env/tests
 test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED
 test_environment.py::test_docker_stage_installed_the_apt_packages PASSED
 test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED
@@ -79,7 +80,7 @@ You did not install a compiler. You did not create a virtualenv. You did not
 write a bootstrap script. denver did all of it, and it will do exactly the
 same on your colleague’s machine.
 
-Info: Run `denver examples/howto-env` with no trailing command and you get a shell instead.
+Info: Run `denver run examples/howto-env` with no trailing command and you get a shell instead.
 
 ### What just happened
 
@@ -107,7 +108,7 @@ handy when a folder holds several variants side by side (e.g.
 `denver.debug.yml`, `denver.release.yml`):
 
 ```bash
-denver examples/howto-env/denver.yml -- pytest examples/howto-env/tests
+denver run examples/howto-env/denver.yml -- pytest examples/howto-env/tests
 ```
 
 ### The 5 stages of this example
@@ -141,7 +142,7 @@ itself, or the `udev` rules that let you flash a board over USB without
 They must be run explicitly (but necessary only once):
 
 ```bash
-denver examples/howto-env --run setup
+denver run examples/howto-env --scripts setup
 ```
 
 ### First run vs. every run after
@@ -157,10 +158,10 @@ Two useful flags around this:
 
 ```bash
 # don't build anything, only activate what already exists (fastest)
-denver examples/howto-env --fast
+denver run examples/howto-env --fast
 
 # ignore all "nothing changed" shortcuts and redo the expensive work
-denver examples/howto-env --force
+denver run examples/howto-env --force
 ```
 
 ### The handful of options you’ll actually use
@@ -168,25 +169,27 @@ denver examples/howto-env --force
 ```bash
 # run ONE command inside the environment instead of opening a shell.
 # everything after '--' is passed through untouched.
-denver examples/howto-env -- echo inside
+denver run examples/howto-env -- echo inside
 
 # show what the stages would run, without running any of it
-denver examples/howto-env --dry-run
+denver run examples/howto-env --dry-run
 
 # stop after a given stage: that stage and every stage before it runs.
 # (there is no "run just this one stage" -- a stage practically always
 # needs its predecessors: nvim-setup needs uv-packages' venv on PATH)
-denver examples/howto-env --until uv-packages
+denver run examples/howto-env --until uv-packages
 
 # print the final, fully merged configuration and exit -- the best way to
 # understand what an environment really does, imports included
-denver examples/howto-env --show-config
+denver run examples/howto-env --show-config
 
 # quieter output (-q keeps stage banners, -qq silences denver completely)
-denver examples/howto-env -qq -- nvim --version
+denver run examples/howto-env -qq -- nvim --version
 ```
 
-See [CLI Arguments](../cli/arguments.md) for the full flag reference.
+See [CLI Arguments](../cli/arguments.md) for the full flag reference, or
+[Shell completion](../cli/completion.md) to tab-complete all of it instead
+of memorizing it.
 
 ### Sharing one setup across repositories
 

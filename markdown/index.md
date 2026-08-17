@@ -68,6 +68,7 @@ Everything you can pass to `denver`, and the environment variables it reads.
 ## denver command
 
 * [Arguments](cli/arguments.md)
+* [Shell completion](cli/completion.md)
 * [Environment variables](cli/environment-variables.md)
 
 ## Configuration

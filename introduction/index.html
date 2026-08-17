@@ -141,6 +141,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/completion.html">Shell completion</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#what-gets-completed">What gets completed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../cli/environment-variables.html">Environment variables</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-reads">What denver reads</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-exports">What denver exports</a></li>
@@ -285,7 +291,7 @@ Nothing enforces it, nothing checks it, and nothing tells you when your
 machine has drifted away from it.</p>
 <p>denver replaces that suggestion with a file — <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> — that <em>defines</em>
 the environment: what it needs, in what order. You then run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>my-project
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>my-project
 </pre></div>
 </div>
 <p>and denver builds whatever isn’t built yet, reuses whatever is, and drops
@@ -311,7 +317,7 @@ smallest to largest.</p>
 <h2>What is a denver environment?<a class="headerlink" href="#what-is-a-denver-environment" title="Link to this heading"></a></h2>
 <p>Three words carry most of the model, so they are worth pinning down.</p>
 <p>An <strong>environment</strong> is simply a directory containing a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, and it is
-the thing denver launches: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span></code>. The file describes it completely —
+the thing denver launches: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span></code>. The file describes it completely —
 read the file and you know what the environment does. (<code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> can also point
 straight at a YAML file, so one directory can hold several variants side by
 side, e.g. <code class="docutils literal notranslate"><span class="pre">denver.debug.yml</span></code> and <code class="docutils literal notranslate"><span class="pre">denver.release.yml</span></code>.)</p>

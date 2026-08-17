@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arguments &mdash; denver</title>
+  <title>Shell completion &mdash; denver</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -23,8 +23,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Shell completion" href="completion.html" />
-    <link rel="prev" title="Philosophy" href="../concepts/philosophy.html" /> 
+    <link rel="next" title="Environment variables" href="environment-variables.html" />
+    <link rel="prev" title="Arguments" href="arguments.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -133,18 +133,18 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">denver command</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Arguments</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#control-the-stages-choosing-what-runs">Control the stages: Choosing what runs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#control-the-config-change-values-for-one-run">Control the config: Change values for one run</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#inspect-an-environment">Inspect an environment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#output-and-version">Output and version</a></li>
+<li class="toctree-l1"><a class="reference internal" href="arguments.html">Arguments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="arguments.html#control-the-stages-choosing-what-runs">Control the stages: Choosing what runs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arguments.html#control-the-config-change-values-for-one-run">Control the config: Change values for one run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arguments.html#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arguments.html#inspect-an-environment">Inspect an environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="completion.html">Shell completion</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="completion.html#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
-<li class="toctree-l2"><a class="reference internal" href="completion.html#what-gets-completed">What gets completed</a></li>
-<li class="toctree-l2"><a class="reference internal" href="completion.html#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Shell completion</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-gets-completed">What gets completed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="environment-variables.html">Environment variables</a><ul>
@@ -253,9 +253,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Arguments</li>
+      <li class="breadcrumb-item active">Shell completion</li>
       <li class="wy-breadcrumbs-aside">
-              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/cli/arguments.md" class="fa fa-github"> Edit on GitHub</a>
+              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/cli/completion.md" class="fa fa-github"> Edit on GitHub</a>
       </li>
   </ul>
   <hr/>
@@ -263,155 +263,87 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="arguments">
-<h1>Arguments<a class="headerlink" href="#arguments" title="Link to this heading"></a></h1>
-<p>You have already used a handful of these in
-<a class="reference internal" href="../quickstart/five-minutes.html"><span class="std std-doc">Quickstart</span></a> — <code class="docutils literal notranslate"><span class="pre">--scripts</span></code>, <code class="docutils literal notranslate"><span class="pre">--fast</span></code>,
-<code class="docutils literal notranslate"><span class="pre">--skip</span></code>, <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>. This page is the full list.</p>
-<p>denver’s CLI is subcommand-based: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code> is the normal entry
-point, and every flag below except <code class="docutils literal notranslate"><span class="pre">--version</span></code>/<code class="docutils literal notranslate"><span class="pre">--license</span></code> belongs to it.
-(<code class="docutils literal notranslate"><span class="pre">--version</span></code> and <code class="docutils literal notranslate"><span class="pre">--license</span></code> are top-level, before the subcommand, e.g.
-<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">--version</span></code>. <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code> is the other subcommand — see
-<a class="reference internal" href="completion.html"><span class="std std-doc">Shell completion</span></a> — and takes no flags of its own.)</p>
-<p><code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">--help</span></code> is always authoritative and lists <em>every</em> <code class="docutils literal notranslate"><span class="pre">run</span></code> flag;
-the notes below are for the ones whose behavior isn’t obvious from a
-one-line description.</p>
-<section id="control-the-stages-choosing-what-runs">
-<h2>Control the stages: Choosing what runs<a class="headerlink" href="#control-the-stages-choosing-what-runs" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--until</span> <span class="pre">&lt;stage&gt;</span></code></strong> truncates the pipeline: every stage up to and
-including <code class="docutils literal notranslate"><span class="pre">&lt;stage&gt;</span></code> runs, everything after it is dropped — there’s no
-“run only this one stage” flag, since a stage practically always needs
-the ones before it. The command (if any) still runs afterwards, in
-whatever partial environment those stages built.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">&lt;stage&gt;</span></code></strong> removes individual stages from whatever <code class="docutils literal notranslate"><span class="pre">--until</span></code>
-left; repeatable. Skipping a wrapper stage (<code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">docker</span></code>) is how you
-run the stack directly on the host instead of relocating into a
-container.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code></strong> runs every (filtered) stage’s own <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span></code> list, then exits without running the rest of the pipeline — see
-“One-time host setup” in
-<a class="reference internal" href="../quickstart/five-minutes.html#one-time-host-setup"><span class="std std-ref">Quickstart</span></a> for an
-example. <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> is open-ended, not a fixed set of flags: a project can
-declare <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">migrate:</span></code> and run <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span> <span class="pre">migrate</span></code>
-without denver itself changing. Repeatable — each name’s entries run in
-the order given. With no <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> (on any occurrence), it lists the names
-this env defines instead of running anything.</p></li>
-</ul>
+  <section id="shell-completion">
+<h1>Shell completion<a class="headerlink" href="#shell-completion" title="Link to this heading"></a></h1>
+<p><code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code> prints a completion script for the installed <code class="docutils literal notranslate"><span class="pre">denver</span></code>
+command, for bash, zsh or fish. Wire it up once in your shell rc file:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># bash / zsh (~/.bashrc or ~/.zshrc)</span>
+<span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>denver<span class="w"> </span><span class="nb">complete</span><span class="k">)</span><span class="s2">"</span>
+</pre></div>
+</div>
+<div class="highlight-fish notranslate"><div class="highlight"><pre><span></span><span class="c"># fish (~/.config/fish/config.fish)</span>
+denver <span class="nb">complete</span> <span class="o">|</span> <span class="nb">source</span>
+</pre></div>
+</div>
+<p>With no shell named, <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code> auto-detects it from the parent
+process invoking it — which is exactly what’s doing the invoking above, so
+in practice you never have to pass one. Only spell it out explicitly
+(<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span> <span class="pre">zsh</span></code>) if that guess is ever wrong, e.g. under tmux, <code class="docutils literal notranslate"><span class="pre">su</span></code>,
+or some other login-shell chain that puts an unrelated process in between.</p>
+<section id="works-no-matter-how-you-invoke-it">
+<h2>Works no matter how you invoke it<a class="headerlink" href="#works-no-matter-how-you-invoke-it" title="Link to this heading"></a></h2>
+<p>The printed script wires completion to every command word you could
+plausibly type, not just an installed, on-PATH <code class="docutils literal notranslate"><span class="pre">denver</span></code>: the literal word
+<code class="docutils literal notranslate"><span class="pre">denver</span></code>, however this <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code> was actually invoked (e.g. a
+checkout’s <code class="docutils literal notranslate"><span class="pre">./src/denver.py</span></code>), and the absolute path to that same
+script/executable — deduplicated, so an already-installed <code class="docutils literal notranslate"><span class="pre">denver</span></code> prints
+just the one line you’d expect. Run it from a checkout and you get all
+three for free, no alias needed:</p>
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>./src/denver.py<span class="w"> </span><span class="nb">complete</span><span class="w"> </span>bash
+<span class="gp"># </span>denver<span class="w"> </span>bash<span class="w"> </span>completion<span class="w"> </span>--<span class="w"> </span>wire<span class="w"> </span>up<span class="w"> </span>with:<span class="w"> </span><span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>denver<span class="w"> </span><span class="nb">complete</span><span class="k">)</span><span class="s2">"</span>
+<span class="go">_denver_complete() { ... }</span>
+<span class="go">complete -F _denver_complete -o default -o bashdefault denver ./src/denver.py /home/you/denver/src/denver.py</span>
+</pre></div>
+</div>
+<p>Each registered name shares the same function, and that function re-invokes
+whichever one you actually typed (bash’s <code class="docutils literal notranslate"><span class="pre">${COMP_WORDS[0]}</span></code>, zsh’s
+<code class="docutils literal notranslate"><span class="pre">${words[1]}</span></code>, fish’s <code class="docutils literal notranslate"><span class="pre">$tokens[1]</span></code>) rather than a hardcoded <code class="docutils literal notranslate"><span class="pre">denver</span></code> — so
+<code class="docutils literal notranslate"><span class="pre">./src/denver.py</span> <span class="pre">&lt;TAB&gt;</span></code> and <code class="docutils literal notranslate"><span class="pre">/home/you/denver/src/denver.py</span> <span class="pre">&lt;TAB&gt;</span></code> both work
+correctly after sourcing the exact same script <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;TAB&gt;</span></code> uses. This
+only helps when the script itself is the word typed at the prompt (its
+shebang makes <code class="docutils literal notranslate"><span class="pre">./src/denver.py</span></code> directly executable) — <code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">src/denver.py</span> <span class="pre">&lt;TAB&gt;</span></code> still can’t be completed this way, since bash keys
+completion off the first word (<code class="docutils literal notranslate"><span class="pre">python3</span></code>), not the script path after it.</p>
 </section>
-<section id="control-the-config-change-values-for-one-run">
-<h2>Control the config: Change values for one run<a class="headerlink" href="#control-the-config-change-values-for-one-run" title="Link to this heading"></a></h2>
+<section id="what-gets-completed">
+<h2>What gets completed<a class="headerlink" href="#what-gets-completed" title="Link to this heading"></a></h2>
+<p>Every <code class="docutils literal notranslate"><span class="pre">&lt;TAB&gt;</span></code> shells out to a hidden <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">__complete</span></code> subcommand that
+inspects the real, current state to answer, so completion always tracks
+whatever’s true right now rather than whatever was true when you sourced
+the script — the only part of the printed script that varies by <em>how</em> you
+invoked <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code> is the registration line above; the completion
+logic itself never has to be regenerated:</p>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">-c</span></code>/<code class="docutils literal notranslate"><span class="pre">--config</span> <span class="pre">KEY.PATH=VALUE</span></code></strong> overrides a single value in the merged
-<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">uv.python=3.13</span></code>); any missing parent section is
-created as an empty mapping. <code class="docutils literal notranslate"><span class="pre">KEY.PATH+=VALUE</span></code> appends to an existing
-list/string/number instead of replacing it (behaves like <code class="docutils literal notranslate"><span class="pre">=</span></code> if the path
-doesn’t exist yet). <code class="docutils literal notranslate"><span class="pre">VALUE</span></code> is parsed as YAML, so <code class="docutils literal notranslate"><span class="pre">&quot;true&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;3&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">&quot;[a,</span> <span class="pre">b]&quot;</span></code> become their real type, not a string. Repeatable; later <code class="docutils literal notranslate"><span class="pre">-c</span></code>s win
-when they target the same path.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">-cf</span></code>/<code class="docutils literal notranslate"><span class="pre">--config-file</span> <span class="pre">FILE</span></code></strong> overlays a whole YAML file on top of the
-env’s <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, using the same merge rules as <code class="docutils literal notranslate"><span class="pre">import:</span></code>. Repeatable,
-applied in the order given; <code class="docutils literal notranslate"><span class="pre">-c</span></code> overrides are applied last, on top of
-every <code class="docutils literal notranslate"><span class="pre">-cf</span></code> file.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run</span></code> and <code class="docutils literal notranslate"><span class="pre">complete</span></code>, the two subcommands themselves</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> — directories and <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>/<code class="docutils literal notranslate"><span class="pre">denver.*.yml</span></code> files on disk</p></li>
+<li><p>denver’s own <code class="docutils literal notranslate"><span class="pre">run</span></code> flags (<code class="docutils literal notranslate"><span class="pre">--fast</span></code>, <code class="docutils literal notranslate"><span class="pre">--until</span></code>, <code class="docutils literal notranslate"><span class="pre">--skip</span></code>, <code class="docutils literal notranslate"><span class="pre">--scripts</span></code>, …)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--until</span></code>/<code class="docutils literal notranslate"><span class="pre">--skip</span></code>’s values — the stage ids the given <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> actually
+declares</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--scripts</span></code>’ value — the names that env’s <code class="docutils literal notranslate"><span class="pre">scripts:</span></code> sections actually
+define</p></li>
+<li><p>an env’s own <code class="docutils literal notranslate"><span class="pre">args:</span></code> — whatever extra flags its <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> declares (see
+“Environment-specific arguments” in
+<a class="reference internal" href="../configuration/denver-yml.html"><span class="std std-doc">Configuration</span></a>), completed the same way
+denver’s own flags are</p></li>
 </ul>
-<p>Both follow the same merge rules as <code class="docutils literal notranslate"><span class="pre">import:</span></code>, explained in
-<a class="reference internal" href="../configuration/denver-yml.html"><span class="std std-doc">Configuration</span></a>.</p>
+<p>That last point is why there’s nothing to regenerate: add a stage, rename a
+<code class="docutils literal notranslate"><span class="pre">scripts:</span></code> entry, declare a new <code class="docutils literal notranslate"><span class="pre">args:</span></code> flag, and completion picks it up on
+the next <code class="docutils literal notranslate"><span class="pre">&lt;TAB&gt;</span></code> — the script you sourced once never has to change.</p>
 </section>
-<section id="control-the-speed-trading-speed-against-freshness">
-<h2>Control the speed: Trading speed against freshness<a class="headerlink" href="#control-the-speed-trading-speed-against-freshness" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code></strong> skips every provider’s (re-)build step and only activates
-what a previous full run already built (each provider’s own page under
-<a class="reference internal" href="../providers/uv.html"><span class="std std-doc">Providers</span></a> documents exactly what that means for
-it). Run once without <code class="docutils literal notranslate"><span class="pre">--fast</span></code> first — a provider dies with a clear
-message if what it needs isn’t there yet.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--force</span></code></strong> forces a provider to redo expensive work it would otherwise
-skip because nothing looked like it changed (again, see each provider’s
-own page for specifics). Like <code class="docutils literal notranslate"><span class="pre">--ci</span></code> below, this is only ever set by
-the flag itself, never inherited from a same-named real environment
-variable.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--ci</span></code></strong> swaps in narrower/faster args a provider judges appropriate
-for a CI runner (currently just zephyr’s <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code>, adding a shallow-clone
-strategy on top of whatever <code class="docutils literal notranslate"><span class="pre">update-args:</span></code> already configures).</p></li>
-</ul>
-</section>
-<section id="inspect-an-environment">
-<h2>Inspect an environment<a class="headerlink" href="#inspect-an-environment" title="Link to this heading"></a></h2>
-<ul>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--show-config</span></code></strong> prints the fully merged configuration — <code class="docutils literal notranslate"><span class="pre">import:</span></code>
-chain resolved, overrides applied, every default filled in — then exits.
-The fastest way to understand an env you didn’t write, and it needs no
-toolchain, no network and no Docker.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> shows what each stage <em>would</em> do instead of doing it: no
-command is executed for its effect, no file is written, and the final
-command is printed rather than launched. Useful for answering “what does
-this env actually run?” without waiting for (or committing to) a real
-build. Every line is prefixed <code class="docutils literal notranslate"><span class="pre">[dry-run]</span></code>:</p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>marker</p></th>
-<th class="head"><p>meaning</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">+</span></code></p></td>
-<td><p>a command that would run (skipped)</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">?</span></code></p></td>
-<td><p>a read-only query, <strong>really run</strong> — its output is what decides the commands below it</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">~</span></code></p></td>
-<td><p>a file or directory write that would happen (skipped)</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">.</span></code></p></td>
-<td><p>a script sourced into the environment, <strong>really done</strong></p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">!</span></code></p></td>
-<td><p>a note about what this preview cannot show</p></td>
-</tr>
-</tbody>
-</table>
-<p>The two “really” rows are the deliberate limit. A dry run has to answer
-questions like <em>is the image already cached?</em>, <em>which conan home?</em>, <em>what
-does <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">list</span></code> say?</em> to render the commands that follow — so those
-read-only queries execute, and scripts are still sourced (that is how
-denver computes the environment a command is rendered against). Two
-further consequences worth knowing: the preview reflects the state your
-machine is in <em>now</em>, so an already-built env legitimately shows fewer
-commands than a clean one (that is what a real run would do too); and a
-wrapper stage (<code class="docutils literal notranslate"><span class="pre">docker</span></code>) can’t be previewed past its own boundary, since
-entering the container is itself one of the commands not being run —
-denver says so and points you at <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">docker</span></code> to preview those stages
-on the host instead.</p>
-</li>
-</ul>
-</section>
-<section id="output-and-version">
-<h2>Output and version<a class="headerlink" href="#output-and-version" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">-q</span></code>/<code class="docutils literal notranslate"><span class="pre">-qq</span></code></strong> are two quiet levels. <code class="docutils literal notranslate"><span class="pre">-q</span></code> silences info lines, <code class="docutils literal notranslate"><span class="pre">+</span> <span class="pre">cmd</span></code>
-echoes, and build-tool subprocess output, but leaves each stage’s own
-banner and “stage finished” summary visible. <code class="docutils literal notranslate"><span class="pre">-qq</span></code> additionally silences
-those too, so only the launched command’s own output reaches the
-terminal. Errors are always reported.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--version</span></code></strong> (top-level: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">--version</span></code>, before any subcommand)
-prints the running denver’s version and exits — derived
-from the checkout’s git tags when denver runs from a checkout (script or
-editable install), otherwise from the installed package’s metadata. A
-checkout ahead of its last tag reports as a development build of the
-release it is heading for (<code class="docutils literal notranslate"><span class="pre">1.1.0-17-gabc1234</span></code>). A <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> can
-require a minimum with <code class="docutils literal notranslate"><span class="pre">denver-version:</span> <span class="pre">&quot;&gt;=1.1.0&quot;</span></code>, and is rejected up
-front by a denver older than that (see
-<a class="reference internal" href="../configuration/denver-yml.html"><span class="std std-doc">Configuration</span></a>).</p></li>
-</ul>
-<p>Each stage’s runtime is also appended to
-<code class="docutils literal notranslate"><span class="pre">&lt;DENVER_DIR&gt;/.envs/&lt;env&gt;/performance.jsonl</span></code> as JSON Lines of Chrome Trace
-Event Format events — concatenate them into a <code class="docutils literal notranslate"><span class="pre">{&quot;traceEvents&quot;:</span> <span class="pre">[...]}</span></code>
-document to load at chrome://tracing or https://ui.perfetto.dev.</p>
+<section id="inside-a-docker-relocated-shell-automatically">
+<h2>Inside a docker-relocated shell, automatically<a class="headerlink" href="#inside-a-docker-relocated-shell-automatically" title="Link to this heading"></a></h2>
+<p>A <code class="docutils literal notranslate"><span class="pre">docker</span></code> stage that lands you in a bare interactive <code class="docutils literal notranslate"><span class="pre">bash</span></code>/<code class="docutils literal notranslate"><span class="pre">zsh</span></code>/<code class="docutils literal notranslate"><span class="pre">fish</span></code>
+(via <code class="docutils literal notranslate"><span class="pre">command:</span></code>, the docker stage’s own <code class="docutils literal notranslate"><span class="pre">default-cmd:</span></code>, or the plain
+<code class="docutils literal notranslate"><span class="pre">$SHELL</span></code>/<code class="docutils literal notranslate"><span class="pre">bash</span></code> fallback) gets this wired up for you, with no setup of your
+own: denver routes the shell through <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span> <span class="pre">&lt;shell&gt;</span></code> before
+handing over control. The container’s own image, unlike your host, is never
+somewhere you already have completion configured — so denver configures it
+for that one shell, every time. See “<code class="docutils literal notranslate"><span class="pre">default-cmd</span></code>” in
+<a class="reference internal" href="../providers/docker.html"><span class="std std-doc">docker</span></a> for the exact conditions.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p><strong>Next:</strong> <a class="reference internal" href="completion.html"><span class="std std-doc">Shell completion</span></a> — tab-complete subcommands, env
-paths and flags with <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code>. Then
-<a class="reference internal" href="environment-variables.html"><span class="std std-doc">Environment variables</span></a> — the two variables
-denver itself reads, and where an environment’s state lives on disk.</p>
+<p><strong>Next:</strong> <a class="reference internal" href="environment-variables.html"><span class="std std-doc">Environment variables</span></a> — the two
+variables denver itself reads, and where an environment’s state lives on
+disk.</p>
 </div>
 </section>
 </section>
@@ -420,8 +352,8 @@ denver itself reads, and where an environment’s state lives on disk.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="../concepts/philosophy.html" class="btn btn-neutral float-left" title="Philosophy" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="completion.html" class="btn btn-neutral float-right" title="Shell completion" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="arguments.html" class="btn btn-neutral float-left" title="Arguments" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="environment-variables.html" class="btn btn-neutral float-right" title="Environment variables" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

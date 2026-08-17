@@ -31,7 +31,7 @@ denver replaces that suggestion with a file — `denver.yml` — that *defines*
 the environment: what it needs, in what order. You then run:
 
 ```bash
-denver my-project
+denver run my-project
 ```
 
 and denver builds whatever isn’t built yet, reuses whatever is, and drops
@@ -59,7 +59,7 @@ smallest to largest.
 Three words carry most of the model, so they are worth pinning down.
 
 An **environment** is simply a directory containing a `denver.yml`, and it is
-the thing denver launches: `denver <env>`. The file describes it completely —
+the thing denver launches: `denver run <env>`. The file describes it completely —
 read the file and you know what the environment does. (`<env>` can also point
 straight at a YAML file, so one directory can hold several variants side by
 side, e.g. `denver.debug.yml` and `denver.release.yml`.)

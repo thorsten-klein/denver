@@ -52,7 +52,7 @@ But in total it is a lot of setup effort for the user.
 Let’s create a `denver.yml` for this so the user can just run:
 
 ```bash
-denver envs/howto-env
+denver run envs/howto-env
 ```
 
 ## Pre-Requisites for denver
@@ -85,7 +85,7 @@ gets a clear message upfront.
 Check it loads:
 
 ```bash
-denver envs/howto-env --show-config
+denver run envs/howto-env --show-config
 ```
 
 `--show-config` resolves the whole config — imports, merges, defaults — and
@@ -213,7 +213,7 @@ HOST_HOME=$HOME
 ```
 
 `envs/howto-env/setup/install_host_tools.sh` — This script will ensure the host requirements for the docker are installed.
-Note: This setup script will only run when the user invokes `denver denver envs/howto-env --run setup`.
+Note: This setup script will only run when the user invokes `denver run envs/howto-env --scripts setup`.
 
 ```bash
 #!/bin/bash
@@ -246,7 +246,7 @@ Hint: You may add `.env` (the generated file) to `envs/howto-env/.gitignore`.
 ### Check it — the container
 
 ```bash
-denver envs/howto-env --until docker-base -- cat /etc/os-release
+denver run envs/howto-env --until docker-base -- cat /etc/os-release
 ```
 
 `--until` only runs the pipeline until the named stage, so this builds and
@@ -305,7 +305,7 @@ named after it. Three keys worth knowing early:
 Check the environment now with
 
 ```bash
-denver envs/howto-env --until uv-packages -- pytest --version
+denver run envs/howto-env --until uv-packages -- pytest --version
 ```
 
 ## Step 4 — the `nvim-setup` stage
@@ -418,7 +418,7 @@ export PATH="$NVIM_PREFIX/bin:$PATH"
 ### Check it — nvim on PATH
 
 ```bash
-denver envs/howto-env --until nvim-setup -- nvim --version
+denver run envs/howto-env --until nvim-setup -- nvim --version
 ```
 
 Expected: `NVIM v0.12.4`. Run it a second time — the download is gone and the
@@ -521,8 +521,8 @@ class ConanRecipe(ConanFile):
 Now check if it works:
 
 ```bash
-denver envs/howto-env --until conan-packages -- cmake --version
-denver envs/howto-env --until conan-packages -- arm-none-eabi-gcc --version
+denver run envs/howto-env --until conan-packages -- cmake --version
+denver run envs/howto-env --until conan-packages -- arm-none-eabi-gcc --version
 ```
 
 It is expected that both tools are present in their pinned versions.
@@ -604,20 +604,20 @@ Command resolution, first hit wins:
 
 `command: bash` drops you into a shell with everything set up, and `pytest`
 is then just something you type. Setting `command: pytest` instead would make
-`denver envs/howto-env` *run the tests* and exit — a good choice for an
+`denver run envs/howto-env` *run the tests* and exit — a good choice for an
 environment whose whole job is one command (a CI env, a linter env), and
-`denver envs/howto-env -- bash` still gets you the shell.
+`denver run envs/howto-env -- bash` still gets you the shell.
 
 ## The finished `denver.yml`
 
 See [`examples/howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env) for all of this as a
 real, runnable environment: every file below, complete and working, ready to
-be started with `denver examples/howto-env`.
+be started with `denver run examples/howto-env`.
 
 The many manual steps a new colleague used to be told about are now:
 
 ```bash
-denver envs/howto-env
+denver run envs/howto-env
 ```
 
 ## Prove it, rather than hope
@@ -650,7 +650,7 @@ def test_custom_stage_exported_the_team_convention():
 ```
 
 ```console
-$ denver examples/howto-env -q -- pytest examples/howto-env/tests
+$ denver run examples/howto-env -q -- pytest examples/howto-env/tests
 
 test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED
 test_environment.py::test_docker_stage_installed_the_apt_packages PASSED
@@ -663,15 +663,19 @@ test_environment.py::test_custom_stage_exported_the_team_convention PASSED
 ## Everyday use
 
 ```bash
-denver envs/howto-env --run setup          # one-time initial host setup, then never again
-denver envs/howto-env                      # open interactive bash in the environment (bash is configured as command:)
-denver envs/howto-env -- pytest            # run one command instead of interactive shell
+denver run envs/howto-env --scripts setup            # one-time initial host setup, then never again
+denver run envs/howto-env                            # open interactive bash in the environment (bash is configured as command:)
+denver run envs/howto-env -- pytest                  # run one command instead of interactive shell
 
-denver envs/howto-env --fast               # activate what is already built; run no build step
-denver envs/howto-env --force              # ignore every "nothing changed" shortcut
-denver envs/howto-env --skip docker-base      # same stack, directly on the host
-denver envs/howto-env -c uv-packages.python=3.13    # override one value, this run
+denver run envs/howto-env --fast                     # activate what is already built; run no build step
+denver run envs/howto-env --force                    # ignore every "nothing changed" shortcut
+denver run envs/howto-env --skip docker-base          # same stack, directly on the host
+denver run envs/howto-env -c uv-packages.python=3.13  # override one value, this run
 ```
+
+Tip: `eval "$(denver complete)"` in your shell rc file tab-completes all of
+the above — subcommands, `<env>` paths, flags, `--until`/`--skip`’s stage
+ids and `--scripts`’ names — see [Shell completion](../cli/completion.md).
 
 The first run is the slow one. After that, each stage fingerprints its own
 inputs — the requirement files, the recipe contents — and skips its expensive

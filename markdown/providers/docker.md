@@ -38,7 +38,8 @@ docker. The daemon has to be reachable for the invoking user, too. Point
   it automatically before landing there — the container’s own image,
   unlike the host, is never something a user already has completion set
   up in themselves. Anything else (extra args aside, which are preserved)
-  is left untouched.
+  is left untouched. See [Shell completion](../cli/completion.md) for the
+  full mechanism.
 - **`image`** — the canonical local tag denver checks for before falling
   back to a build — checked whenever `image:` is set, whether or not
   `registries:` is also configured; a hit skips the build entirely
@@ -129,6 +130,6 @@ docker. The daemon has to be reachable for the invoking user, too. Point
 - **Automated per-registry login, inline.** Each `registries:` entry can
   carry its own `username:`/`password:` right alongside its `url:`, so a
   private registry in the search list doesn’t need a separate manual
-  login step (e.g. a `scripts: login:` entry run via `denver <env> --run login`, [Configuration](../configuration/denver-yml.md)’s generic one-shot mechanism) — denver logs in
+  login step (e.g. a `scripts: login:` entry run via `denver run <env> --scripts login`, [Configuration](../configuration/denver-yml.md)’s generic one-shot mechanism) — denver logs in
   for you, right before it’s actually needed, only for entries that carry
   credentials.

@@ -141,6 +141,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/completion.html">Shell completion</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#what-gets-completed">What gets completed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../cli/environment-variables.html">Environment variables</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-reads">What denver reads</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-exports">What denver exports</a></li>
@@ -264,7 +270,7 @@ these definitions.</p>
 <section id="the-core-model">
 <h2>The core model<a class="headerlink" href="#the-core-model" title="Link to this heading"></a></h2>
 <p><strong>Environment</strong> — a directory containing a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, and the unit denver
-launches: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span></code>. An environment is fully described by its
+launches: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span></code>. An environment is fully described by its
 <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> (plus whatever that file explicitly points at); reading the file
 tells you everything the environment does. <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> may also be a path
 directly to a YAML file, so one directory can hold several variants side by
@@ -309,7 +315,7 @@ container. <code class="docutils literal notranslate"><span class="pre">docker</
 actually does: denver builds/enters the container and re-invokes <em>itself</em>
 inside it with <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">&lt;that</span> <span class="pre">stage&gt;</span></code>, so the remaining setup stages build the
 environment in there rather than on the host. Skipping the wrapper yourself
-(<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--skip</span> <span class="pre">docker</span></code>) runs the exact same stack directly on the
+(<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--skip</span> <span class="pre">docker</span></code>) runs the exact same stack directly on the
 host.</p>
 </section>
 <section id="configuration">
@@ -338,11 +344,10 @@ own built-ins such as <code class="docutils literal notranslate"><span class="pr
 exports become part of the environment everything after it runs in. The hook
 points are <code class="docutils literal notranslate"><span class="pre">env</span></code> (once, before any stage), <code class="docutils literal notranslate"><span class="pre">pre-&lt;stage&gt;</span></code> / <code class="docutils literal notranslate"><span class="pre">post-&lt;stage&gt;</span></code>
 (around each stage), and <code class="docutils literal notranslate"><span class="pre">pre-cmd</span></code> (right before the final command).</p>
-<p><strong><code class="docutils literal notranslate"><span class="pre">scripts:</span></code> / <code class="docutils literal notranslate"><span class="pre">--run</span> <span class="pre">&lt;name&gt;</span></code></strong> — the generic, open-ended one-shot mechanism,
-distinct from hooks: any stage section may declare <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span> <span class="pre">[...]</span></code>,
-and <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--run</span> <span class="pre">&lt;name&gt;</span></code> runs every stage’s <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> entries and then
-exits without running the pipeline. <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> is arbitrary — <code class="docutils literal notranslate"><span class="pre">setup</span></code> and
-<code class="docutils literal notranslate"><span class="pre">login</span></code> are conventions, not built-in flags.</p>
+<p><strong><code class="docutils literal notranslate"><span class="pre">scripts:</span></code> / <code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code></strong> — the generic, open-ended one-shot
+mechanism, distinct from hooks: any stage section may declare <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span> <span class="pre">[...]</span></code>, and <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code> runs every stage’s
+<code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> entries and then exits without running the pipeline. <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> is
+arbitrary — <code class="docutils literal notranslate"><span class="pre">setup</span></code> and <code class="docutils literal notranslate"><span class="pre">login</span></code> are conventions, not built-in flags.</p>
 </section>
 <section id="execution">
 <h2>Execution<a class="headerlink" href="#execution" title="Link to this heading"></a></h2>

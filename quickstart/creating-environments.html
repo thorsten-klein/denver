@@ -141,6 +141,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/completion.html">Shell completion</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#what-gets-completed">What gets completed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../cli/environment-variables.html">Environment variables</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-reads">What denver reads</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-exports">What denver exports</a></li>
@@ -302,7 +308,7 @@ Then create a Python 3.12 virtualenv via <code class="docutils literal notransla
 <p>Every step of that is one simple action.
 But in total it is a lot of setup effort for the user.</p>
 <p>Let’s create a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> for this so the user can just run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>envs/howto-env
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env
 </pre></div>
 </div>
 </section>
@@ -331,7 +337,7 @@ touch<span class="w"> </span>envs/howto-env/denver.yml
 <code class="docutils literal notranslate"><span class="pre">denver-version:</span></code> pins the tool, so for example a colleague on an older denver
 gets a clear message upfront.</p>
 <p>Check it loads:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--show-config
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--show-config
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">--show-config</span></code> resolves the whole config — imports, merges, defaults — and
@@ -468,7 +474,7 @@ Background: Dynamic values a compose file cannot compute itself (host UID/GID, u
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/setup/install_host_tools.sh</span></code> — This script will ensure the host requirements for the docker are installed.
-Note: This setup script will only run when the user invokes <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">denver</span> <span class="pre">envs/howto-env</span> <span class="pre">--run</span> <span class="pre">setup</span></code>.</p>
+Note: This setup script will only run when the user invokes <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/howto-env</span> <span class="pre">--scripts</span> <span class="pre">setup</span></code>.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>docker<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>docker.io
 <span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>containerd<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>containerd
@@ -496,7 +502,7 @@ Note: This setup script will only run when the user invokes <code class="docutil
 </section>
 <section id="check-it-the-container">
 <h3>Check it — the container<a class="headerlink" href="#check-it-the-container" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>docker-base<span class="w"> </span>--<span class="w"> </span>cat<span class="w"> </span>/etc/os-release
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>docker-base<span class="w"> </span>--<span class="w"> </span>cat<span class="w"> </span>/etc/os-release
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">--until</span></code> only runs the pipeline until the named stage, so this builds and
@@ -548,7 +554,7 @@ install, not one install per entry.</p></li>
 file — a lockfile a later run can read back via <code class="docutils literal notranslate"><span class="pre">requirements:</span></code>.</p></li>
 </ul>
 <p>Check the environment now with</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>uv-packages<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>--version
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>uv-packages<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>--version
 </pre></div>
 </div>
 </section>
@@ -650,7 +656,7 @@ mv<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</sp
 </section>
 <section id="check-it-nvim-on-path">
 <h3>Check it — nvim on PATH<a class="headerlink" href="#check-it-nvim-on-path" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>nvim-setup<span class="w"> </span>--<span class="w"> </span>nvim<span class="w"> </span>--version
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>nvim-setup<span class="w"> </span>--<span class="w"> </span>nvim<span class="w"> </span>--version
 </pre></div>
 </div>
 <p>Expected: <code class="docutils literal notranslate"><span class="pre">NVIM</span> <span class="pre">v0.12.4</span></code>. Run it a second time — the download is gone and the
@@ -737,8 +743,8 @@ layout is what names the reference, so <code class="docutils literal notranslate
 </pre></div>
 </div>
 <p>Now check if it works:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>conan-packages<span class="w"> </span>--<span class="w"> </span>cmake<span class="w"> </span>--version
-denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>conan-packages<span class="w"> </span>--<span class="w"> </span>arm-none-eabi-gcc<span class="w"> </span>--version
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>conan-packages<span class="w"> </span>--<span class="w"> </span>cmake<span class="w"> </span>--version
+denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>conan-packages<span class="w"> </span>--<span class="w"> </span>arm-none-eabi-gcc<span class="w"> </span>--version
 </pre></div>
 </div>
 <p>It is expected that both tools are present in their pinned versions.</p>
@@ -836,17 +842,17 @@ is one top-level key:</p>
 </ol>
 <p><code class="docutils literal notranslate"><span class="pre">command:</span> <span class="pre">bash</span></code> drops you into a shell with everything set up, and <code class="docutils literal notranslate"><span class="pre">pytest</span></code>
 is then just something you type. Setting <code class="docutils literal notranslate"><span class="pre">command:</span> <span class="pre">pytest</span></code> instead would make
-<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">envs/howto-env</span></code> <em>run the tests</em> and exit — a good choice for an
+<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/howto-env</span></code> <em>run the tests</em> and exit — a good choice for an
 environment whose whole job is one command (a CI env, a linter env), and
-<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">envs/howto-env</span> <span class="pre">--</span> <span class="pre">bash</span></code> still gets you the shell.</p>
+<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/howto-env</span> <span class="pre">--</span> <span class="pre">bash</span></code> still gets you the shell.</p>
 </section>
 <section id="the-finished-denver-yml">
 <h2>The finished <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code><a class="headerlink" href="#the-finished-denver-yml" title="Link to this heading"></a></h2>
 <p>See <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env"><code class="docutils literal notranslate"><span class="pre">examples/howto-env</span></code></a> for all of this as a
 real, runnable environment: every file below, complete and working, ready to
-be started with <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">examples/howto-env</span></code>.</p>
+be started with <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">examples/howto-env</span></code>.</p>
 <p>The many manual steps a new colleague used to be told about are now:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>envs/howto-env
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env
 </pre></div>
 </div>
 </section>
@@ -877,7 +883,7 @@ does exactly that — one assertion per stage:</p>
     <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"PYTEST_ADDOPTS"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"-v -s"</span>
 </pre></div>
 </div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>denver<span class="w"> </span>examples/howto-env<span class="w"> </span>-q<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>-q<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
 
 <span class="go">test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED</span>
 <span class="go">test_environment.py::test_docker_stage_installed_the_apt_packages PASSED</span>
@@ -890,16 +896,19 @@ does exactly that — one assertion per stage:</p>
 </section>
 <section id="everyday-use">
 <h2>Everyday use<a class="headerlink" href="#everyday-use" title="Link to this heading"></a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--run<span class="w"> </span>setup<span class="w">          </span><span class="c1"># one-time initial host setup, then never again</span>
-denver<span class="w"> </span>envs/howto-env<span class="w">                      </span><span class="c1"># open interactive bash in the environment (bash is configured as command:)</span>
-denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w">            </span><span class="c1"># run one command instead of interactive shell</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--scripts<span class="w"> </span>setup<span class="w">            </span><span class="c1"># one-time initial host setup, then never again</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w">                            </span><span class="c1"># open interactive bash in the environment (bash is configured as command:)</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w">                  </span><span class="c1"># run one command instead of interactive shell</span>
 
-denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--fast<span class="w">               </span><span class="c1"># activate what is already built; run no build step</span>
-denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--force<span class="w">              </span><span class="c1"># ignore every "nothing changed" shortcut</span>
-denver<span class="w"> </span>envs/howto-env<span class="w"> </span>--skip<span class="w"> </span>docker-base<span class="w">      </span><span class="c1"># same stack, directly on the host</span>
-denver<span class="w"> </span>envs/howto-env<span class="w"> </span>-c<span class="w"> </span>uv-packages.python<span class="o">=</span><span class="m">3</span>.13<span class="w">    </span><span class="c1"># override one value, this run</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--fast<span class="w">                     </span><span class="c1"># activate what is already built; run no build step</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--force<span class="w">                    </span><span class="c1"># ignore every "nothing changed" shortcut</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--skip<span class="w"> </span>docker-base<span class="w">          </span><span class="c1"># same stack, directly on the host</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>-c<span class="w"> </span>uv-packages.python<span class="o">=</span><span class="m">3</span>.13<span class="w">  </span><span class="c1"># override one value, this run</span>
 </pre></div>
 </div>
+<p>Tip: <code class="docutils literal notranslate"><span class="pre">eval</span> <span class="pre">&quot;$(denver</span> <span class="pre">complete)&quot;</span></code> in your shell rc file tab-completes all of
+the above — subcommands, <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> paths, flags, <code class="docutils literal notranslate"><span class="pre">--until</span></code>/<code class="docutils literal notranslate"><span class="pre">--skip</span></code>’s stage
+ids and <code class="docutils literal notranslate"><span class="pre">--scripts</span></code>’ names — see <a class="reference internal" href="../cli/completion.html"><span class="std std-doc">Shell completion</span></a>.</p>
 <p>The first run is the slow one. After that, each stage fingerprints its own
 inputs — the requirement files, the recipe contents — and skips its expensive
 step when nothing relevant changed, so a repeat run costs seconds. <code class="docutils literal notranslate"><span class="pre">--force</span></code>

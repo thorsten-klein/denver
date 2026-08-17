@@ -68,8 +68,8 @@ see “Fail loud” in [`philosophy.md`](../concepts/philosophy.md)).
   `docker:` section’s `default-cmd:`, then `$SHELL`, then `bash`. A command
   passed on the CLI after `--` always wins over this.
 - **`runnable`** — set to `false` to mark this file as a base meant only to
-  be imported, never started directly; `denver <that env>` then fails with an
-  explanatory message. Deliberately *not* inherited: an env importing a
+  be imported, never started directly; `denver run <that env>` then fails
+  with an explanatory message. Deliberately *not* inherited: an env importing a
   `runnable: false` base is itself runnable unless it says otherwise.
 - **`env`** — a mapping of environment variables to set for the whole
   environment (values go through `${...}` interpolation). Applied once,

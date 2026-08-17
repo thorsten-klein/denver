@@ -141,6 +141,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/completion.html">Shell completion</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#what-gets-completed">What gets completed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../cli/environment-variables.html">Environment variables</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-reads">What denver reads</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-exports">What denver exports</a></li>
@@ -323,8 +329,8 @@ when none is given on the command line. If unset, denver falls back to the
 <code class="docutils literal notranslate"><span class="pre">docker:</span></code> section’s <code class="docutils literal notranslate"><span class="pre">default-cmd:</span></code>, then <code class="docutils literal notranslate"><span class="pre">$SHELL</span></code>, then <code class="docutils literal notranslate"><span class="pre">bash</span></code>. A command
 passed on the CLI after <code class="docutils literal notranslate"><span class="pre">--</span></code> always wins over this.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">runnable</span></code></strong> — set to <code class="docutils literal notranslate"><span class="pre">false</span></code> to mark this file as a base meant only to
-be imported, never started directly; <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;that</span> <span class="pre">env&gt;</span></code> then fails with an
-explanatory message. Deliberately <em>not</em> inherited: an env importing a
+be imported, never started directly; <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;that</span> <span class="pre">env&gt;</span></code> then fails
+with an explanatory message. Deliberately <em>not</em> inherited: an env importing a
 <code class="docutils literal notranslate"><span class="pre">runnable:</span> <span class="pre">false</span></code> base is itself runnable unless it says otherwise.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">env</span></code></strong> — a mapping of environment variables to set for the whole
 environment (values go through <code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation). Applied once,

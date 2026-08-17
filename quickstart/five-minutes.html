@@ -141,6 +141,12 @@
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/completion.html">Shell completion</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#what-gets-completed">What gets completed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../cli/environment-variables.html">Environment variables</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-reads">What denver reads</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-exports">What denver exports</a></li>
@@ -296,7 +302,7 @@ including how to point at a specific binary via <code class="docutils literal no
 installed on the <em>host</em> (docker itself, <code class="docutils literal notranslate"><span class="pre">udev</span></code> rules, …) typically lives in
 an env’s <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">setup:</span></code>, so an env can bring its own host tools along —
 run those once with:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>&lt;env&gt;<span class="w"> </span>--run<span class="w"> </span>setup
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>&lt;env&gt;<span class="w"> </span>--scripts<span class="w"> </span>setup
 </pre></div>
 </div>
 <p>See <a class="reference internal" href="#one-time-host-setup">One-time host setup</a> below.</p>
@@ -322,16 +328,17 @@ For the <em>biggest</em> bundled example — a full
 <a class="reference external" href="https://zephyrproject.org">Zephyr RTOS</a> toolchain across five stages — see
 <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell-4.3.1"><code class="docutils literal notranslate"><span class="pre">examples/zephyr-devshell-4.3.1</span></code></a>
 instead.</p>
-<p>Note that every command below works as <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code> or <code class="docutils literal notranslate"><span class="pre">src/denver.py</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code>.</p>
+<p>Note that every command below works as <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code> or
+<code class="docutils literal notranslate"><span class="pre">src/denver.py</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code>.</p>
 <section id="the-one-command-you-need">
 <h3>The one command you need<a class="headerlink" href="#the-one-command-you-need" title="Link to this heading"></a></h3>
 <p>You can run pytest in the final example environment like this:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
 </pre></div>
 </div>
 <p>That’s it. A minute or two later (much less on repeat runs) that onboarding
 note’s every claim has been turned into a passing test:</p>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
+<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
 <span class="go">test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED</span>
 <span class="go">test_environment.py::test_docker_stage_installed_the_apt_packages PASSED</span>
 <span class="go">test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED</span>
@@ -343,7 +350,7 @@ note’s every claim has been turned into a passing test:</p>
 <p>You did not install a compiler. You did not create a virtualenv. You did not
 write a bootstrap script. denver did all of it, and it will do exactly the
 same on your colleague’s machine.</p>
-<p>Info: Run <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">examples/howto-env</span></code> with no trailing command and you get a shell instead.</p>
+<p>Info: Run <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">examples/howto-env</span></code> with no trailing command and you get a shell instead.</p>
 </section>
 <section id="what-just-happened">
 <h3>What just happened<a class="headerlink" href="#what-just-happened" title="Link to this heading"></a></h3>
@@ -368,7 +375,7 @@ environment run two different <code class="docutils literal notranslate"><span c
 <p><code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> also accepts a path straight to a YAML file instead of a folder —
 handy when a folder holds several variants side by side (e.g.
 <code class="docutils literal notranslate"><span class="pre">denver.debug.yml</span></code>, <code class="docutils literal notranslate"><span class="pre">denver.release.yml</span></code>):</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>examples/howto-env/denver.yml<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env/denver.yml<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
 </pre></div>
 </div>
 </section>
@@ -428,7 +435,7 @@ you are back on your host machine and nothing was installed on it.</p>
 itself, or the <code class="docutils literal notranslate"><span class="pre">udev</span></code> rules that let you flash a board over USB without
 <code class="docutils literal notranslate"><span class="pre">sudo</span></code>. Such things may live in <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">setup:</span></code> and are <strong>not</strong> run on every start.
 They must be run explicitly (but necessary only once):</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--run<span class="w"> </span>setup
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--scripts<span class="w"> </span>setup
 </pre></div>
 </div>
 </section>
@@ -442,10 +449,10 @@ example’s conan stage specifically, the difference between roughly three
 minutes and about two seconds.</p>
 <p>Two useful flags around this:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># don't build anything, only activate what already exists (fastest)</span>
-denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--fast
+denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--fast
 
 <span class="c1"># ignore all "nothing changed" shortcuts and redo the expensive work</span>
-denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--force
+denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--force
 </pre></div>
 </div>
 </section>
@@ -453,25 +460,27 @@ denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--force
 <h3>The handful of options you’ll actually use<a class="headerlink" href="#the-handful-of-options-you-ll-actually-use" title="Link to this heading"></a></h3>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># run ONE command inside the environment instead of opening a shell.</span>
 <span class="c1"># everything after '--' is passed through untouched.</span>
-denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--<span class="w"> </span><span class="nb">echo</span><span class="w"> </span>inside
+denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--<span class="w"> </span><span class="nb">echo</span><span class="w"> </span>inside
 
 <span class="c1"># show what the stages would run, without running any of it</span>
-denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--dry-run
+denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--dry-run
 
 <span class="c1"># stop after a given stage: that stage and every stage before it runs.</span>
 <span class="c1"># (there is no "run just this one stage" -- a stage practically always</span>
 <span class="c1"># needs its predecessors: nvim-setup needs uv-packages' venv on PATH)</span>
-denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--until<span class="w"> </span>uv-packages
+denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--until<span class="w"> </span>uv-packages
 
 <span class="c1"># print the final, fully merged configuration and exit -- the best way to</span>
 <span class="c1"># understand what an environment really does, imports included</span>
-denver<span class="w"> </span>examples/howto-env<span class="w"> </span>--show-config
+denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--show-config
 
 <span class="c1"># quieter output (-q keeps stage banners, -qq silences denver completely)</span>
-denver<span class="w"> </span>examples/howto-env<span class="w"> </span>-qq<span class="w"> </span>--<span class="w"> </span>nvim<span class="w"> </span>--version
+denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>-qq<span class="w"> </span>--<span class="w"> </span>nvim<span class="w"> </span>--version
 </pre></div>
 </div>
-<p>See <a class="reference internal" href="../cli/arguments.html"><span class="std std-doc">CLI Arguments</span></a> for the full flag reference.</p>
+<p>See <a class="reference internal" href="../cli/arguments.html"><span class="std std-doc">CLI Arguments</span></a> for the full flag reference, or
+<a class="reference internal" href="../cli/completion.html"><span class="std std-doc">Shell completion</span></a> to tab-complete all of it instead
+of memorizing it.</p>
 </section>
 <section id="sharing-one-setup-across-repositories">
 <h3>Sharing one setup across repositories<a class="headerlink" href="#sharing-one-setup-across-repositories" title="Link to this heading"></a></h3>

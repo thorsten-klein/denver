@@ -19,6 +19,10 @@ uv tool install git+https://github.com/thorsten-klein/denver.git
 
 This installs the `denver` script/entry point.
 
+Tip: once it's on `PATH`, `eval "$(denver complete)"` in your shell rc file
+gets you tab completion for subcommands, env paths and flags — see
+[Shell completion](../cli/completion.md).
+
 ## Prebuilt Binary
 
 On a machine with no Python at all, take the standalone executable attached
@@ -66,8 +70,8 @@ git-nested clone https://github.com/thorsten-klein/denver.git
 ```
 
 With that approach nothing needs installing — just call `src/denver.py` (or
-the vendored copy's equivalent path) directly, exactly as `denver <env> ...`
-is used throughout the rest of this documentation.
+the vendored copy's equivalent path) directly, exactly as `denver run <env>
+...` is used throughout the rest of this documentation.
 
 ```{note}
 **Next:** [Denver in 5 minutes](../quickstart/five-minutes.md) — run a real
