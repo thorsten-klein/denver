@@ -532,13 +532,17 @@ helpers is a review-visible mistake, not a silent hole in `--dry-run`.
 Two categories deliberately still execute, because the preview is derived
 from them:
 
-- **read-only queries** — a `Context.run(..., capture=True)` call exists for
-  its *output*, which the provider immediately branches on (`docker image
-  inspect`, `conan config home`, `west list`, a `skip-if-0:`/`skip-if-1:`
-  script). Skipping
-  those would leave a dry run with nothing to decide with, and it would stop
-  reflecting what a real run does. They are reported with a `?` marker, and a
-  missing executable degrades to a failed query instead of aborting.
+- **read-only queries** — a `Context.run(..., query=True)` call exists so the
+  provider can immediately branch on it (`docker image inspect`, `conan
+  config home`, `west list`, a `skip-if-0:`/`skip-if-1:` script's exit
+  code). Skipping those would leave a dry run with nothing to decide with,
+  and it would stop reflecting what a real run does. They are reported with
+  a `?` marker, and a missing executable degrades to a failed query instead
+  of aborting. `query` defaults to `capture` — a caller that also needs the
+  real *output* back (not just the guarantee it ran) passes `capture=True`
+  too; a caller like `skip-if-0:`/`skip-if-1:` that only branches on the
+  exit code passes `query=True` alone, so the script's own stdout/stderr
+  stay live on the terminal on a real run.
 - **sourced scripts** — `Context.source()` is how denver *computes* the
   environment. Without it, every rendered command would show empty `${...}`
   values and a PATH missing whatever an earlier stage put there.

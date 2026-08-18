@@ -46,6 +46,11 @@ shebang makes `./src/denver.py` directly executable) — `python3
 src/denver.py <TAB>` still can't be completed this way, since bash keys
 completion off the first word (`python3`), not the script path after it.
 
+A bash/zsh `alias denver=/path/to/denver.py` also works: the printed
+script resolves the typed word through `BASH_ALIASES`/`$aliases` before
+re-invoking it, since alias expansion itself happens at parse time, on the
+literal token, never on a variable holding it.
+
 ## What gets completed
 
 Every `<TAB>` shells out to a hidden `denver __complete` subcommand that
