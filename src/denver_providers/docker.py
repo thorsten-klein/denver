@@ -1,7 +1,7 @@
 """docker provider: relocates the final command into a docker compose service.
 
 A *wrapper* provider (see providers/base.py) -- it does not build the local
-environment itself. Configured from denver.yml -> ``docker:``.
+environment itself. Configured from denver.toml -> ``docker:``.
 
 Full key reference, worked examples and design notes: ``doc/providers/docker.md``.
 """
@@ -74,37 +74,45 @@ def _relocation_mounts(ctx):
 
 
 class DockerProvider(Provider):
-    """Relocates the final command into a docker compose service -- see doc/providers/docker.md for denver.yml keys."""
+    """Relocates the final command into a docker compose service -- see doc/providers/docker.md for denver.toml keys."""
 
     name = "docker"
     kind = "wrapper"
-    # 'default-cmd' isn't resolved here -- it's read by denver.py's
+    KEYS = ("exe", "registries", "compose")
+    # 'compose.default-cmd' isn't resolved here -- it's read by denver.py's
     # default_command() ('command:' still wins if set) -- but it's a real
-    # docker: key, so it's still listed for --show-config's sake.
-    KEYS = ("exe", "default-cmd", "image", "registries", "compose", "run-args", "env-scripts")
+    # 'compose:' key, so it's still listed for --show-config's sake.
+    COMPOSE_KEYS = ("file", "service", "build", "default-cmd", "image", "run-args")
 
     def __init__(self, config):
         """Init the bits setup() stashes for wrap() as None, so wrap() can tell "not run yet" from a real value."""
         super().__init__(config)
         self._exe = None
         self._compose_files = None
-        self._compose_args = None
         self._service = None
         self._run_args = None
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve exe/compose.file/compose.service/compose.build/run-args defaults -- see doc/providers/docker.md."""
+        """Resolve exe/compose.* defaults -- see doc/providers/docker.md."""
         resolved = dict(cfg)
         resolved["exe"] = cfg.get("exe") or "docker"
-        compose = dict(cfg.get("compose") or {})
+        resolved["compose"] = cls._resolve_compose(cfg.get("compose") or {})
+        return fill_unset(resolved, cls.KEYS)
+
+    @classmethod
+    def _resolve_compose(cls, compose):
+        """Resolve one 'compose:' subtable's own defaults, after checking it for unknown keys."""
+        unknown = sorted(set(compose) - set(cls.COMPOSE_KEYS))
+        if unknown:
+            die(f"docker: unknown key(s) in 'compose:': {', '.join(unknown)}")
         if not compose.get("file"):
             die("docker: 'compose.file:' is required -- denver never guesses a docker-compose.yml")
-        compose["service"] = compose.get("service") or "dev"
-        compose["build"] = compose.get("build", True)
-        resolved["compose"] = fill_unset(compose, ["args"])
-        resolved["run-args"] = cfg.get("run-args") or ["--rm"]
-        return fill_unset(resolved, cls.KEYS)
+        resolved = dict(compose)
+        resolved["service"] = compose.get("service") or "dev"
+        resolved["build"] = compose.get("build", True)
+        resolved["run-args"] = compose.get("run-args") or ["--rm"]
+        return fill_unset(resolved, cls.COMPOSE_KEYS)
 
     def _require_exe(self, ctx, exe):
         """Die unless the configured docker executable is on PATH.
@@ -173,21 +181,20 @@ class DockerProvider(Provider):
             remote_ref = self._use_remote_image(ctx, exe, image, registries)
         return remote_ref, found_locally
 
-    def _stash_for_wrap(self, exe, compose_files, compose, cfg):
+    def _stash_for_wrap(self, exe, compose_files, compose):
         """Hand the bits setup() resolved over to wrap(), which runs long after setup() returned."""
         self._exe = exe
         self._compose_files = compose_files
-        self._compose_args = [str(a) for a in (compose.get("args") or [])]
         self._service = compose["service"]
-        self._run_args = [str(a) for a in cfg["run-args"]]
+        self._run_args = [str(a) for a in compose["run-args"]]
 
     def setup(self, ctx):
-        """Validate the compose files/exe, run env-scripts, and build the image if not found locally/remotely."""
+        """Validate the compose files/exe, and build the image if not found locally/remotely."""
         if ctx.in_container:
             die(f"docker[{self.stage}]: already running inside a container")
 
         # seed convenience variables BEFORE the config section is interpolated,
-        # so ${UID}/${GID} in denver.yml resolve correctly.
+        # so ${UID}/${GID} in denver.toml resolve correctly.
         ctx.setdefault("UID", str(os.getuid()))
         ctx.setdefault("GID", str(os.getgid()))
 
@@ -200,27 +207,24 @@ class DockerProvider(Provider):
         compose = cfg["compose"]
         compose_files = self._resolved_compose_files(ctx, compose)
 
-        image = cfg.get("image")
+        image = compose.get("image")
         registries = self._resolved_registries(cfg, image)
 
-        # bannered first so its own visible work (a registry login's echo,
-        # an env-script's echo/output) never prints ahead of any banner,
-        # the way create-env.sh's output used to.
+        # bannered first so its own visible work (a registry login's echo)
+        # never prints ahead of any banner.
         banner(ctx, self.stage, "prepare")
 
         remote_ref, found_locally = self._resolve_image_ref(ctx, exe, image, registries)
 
         # export $DENVER_DOCKER_IMAGE -- the registry ref if one was found,
         # else the bare local tag (empty string if 'image:' is unset) -- so
-        # the compose file, and any env-scripts run below, reference the
-        # exact same ref denver resolved instead of hard-coding it a second
-        # time, e.g. `image: "${DENVER_DOCKER_IMAGE}"`. Every
-        # docker-compose/env-script subprocess inherits ctx.env, so setting
-        # it here, once, centrally, is enough.
+        # the compose file references the exact same ref denver resolved
+        # instead of hard-coding it a second time, e.g.
+        # `image: "${DENVER_DOCKER_IMAGE}"`. Every docker-compose subprocess
+        # inherits ctx.env, so setting it here, once, centrally, is enough.
         ctx.set("DENVER_DOCKER_IMAGE", remote_ref or image)
 
-        self._run_env_scripts(ctx, cfg)
-        self._stash_for_wrap(exe, compose_files, compose, cfg)
+        self._stash_for_wrap(exe, compose_files, compose)
 
         self._build_or_skip(ctx, exe, image, compose, registries, remote_ref, found_locally)
 
@@ -229,13 +233,12 @@ class DockerProvider(Provider):
         if self._exe is None:
             die(f"docker provider: wrap() called before setup() for stage '{self.stage}' -- this is a denver bug")
         banner(ctx, self.stage, "run")
-        # setup() stashes _compose_args/_run_args alongside _exe (see __init__),
-        # so the guard above already establishes they're real lists too.
+        # setup() stashes _run_args alongside _exe (see __init__), so the
+        # guard above already establishes it's a real list too.
         return [
             self._exe,
             "compose",
             *self._compose_file_args(),
-            *cast(list, self._compose_args),
             "run",
             *cast(list, self._run_args),
             *_relocation_env(ctx),
@@ -263,7 +266,7 @@ class DockerProvider(Provider):
         as configured, so a real 'docker compose build' still runs if
         nothing was found locally/on a registry, --fast or not. The
         'found locally'/'found on a registry' banners above always take
-        priority, though. A build never runs without 'image:' either --
+        priority, though. A build never runs without 'compose.image:' either --
         there'd be nothing to check for next run, so it'd rebuild every
         single time regardless of --fast/found_locally.
         """
@@ -272,7 +275,7 @@ class DockerProvider(Provider):
             banner(ctx, self.stage, already_available)
         elif image and compose["build"]:
             ctx.run(
-                [exe, "compose", *self._compose_file_args(), *cast(list, self._compose_args), "build", self._service],
+                [exe, "compose", *self._compose_file_args(), "build", self._service],
                 step="build",
             )
         else:
@@ -298,7 +301,7 @@ class DockerProvider(Provider):
         if not compose["build"]:
             banner(ctx, self.stage, "build (skipped: compose.build=false)")
         else:
-            banner(ctx, self.stage, "build (skipped: 'image:' is not set)")
+            banner(ctx, self.stage, "build (skipped: 'compose.image:' is not set)")
 
     def _image_present_locally(self, ctx, exe, image):
         """True if ``image`` already exists in the local docker image cache."""
@@ -336,14 +339,3 @@ class DockerProvider(Provider):
         for f in cast(list, self._compose_files):
             args += ["-f", str(f)]
         return args
-
-    # ------------------------------------------------------------------ #
-    def _run_env_scripts(self, ctx, cfg):
-        """Run each 'env-scripts:' entry (host-side, before build/run) -- e.g. to write a compose .env file."""
-        entry = cfg.get("env-scripts")
-        scripts = [entry] if isinstance(entry, str) else (entry or [])
-        for script in scripts:
-            script_path = ctx.resolve_path(script)
-            if not script_path.is_file():
-                die(f"docker: env script not found: {script_path}")
-            ctx.run([str(script_path)])

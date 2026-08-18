@@ -38,19 +38,21 @@ one-line description.
 ## Control the config: Change values for one run
 
 - **`-c`/`--config KEY.PATH=VALUE`** overrides a single value in the merged
-  `denver.yml` (e.g. `-c uv.python=3.13`); any missing parent section is
+  `denver.toml` (e.g. `-c uv.python=3.13`); any missing parent section is
   created as an empty mapping. `KEY.PATH+=VALUE` appends to an existing
   list/string/number instead of replacing it (behaves like `=` if the path
-  doesn't exist yet). `VALUE` is parsed as YAML, so `"true"`/`"3"`/`"[a,
-  b]"` become their real type, not a string. Repeatable; later `-c`s win
-  when they target the same path.
-- **`-cf`/`--config-file FILE`** overlays a whole YAML file on top of the
-  env's `denver.yml`, using the same merge rules as `import:`. Repeatable,
+  doesn't exist yet). `VALUE` is parsed as JSON when that succeeds, so
+  `"true"`/`"3"`/`'["a", "b"]'` become their real type; anything that isn't
+  valid JSON on its own (a bare word, an unquoted version string like
+  `3.12.3`) is kept as a plain string. Repeatable; later `-c`s win when they
+  target the same path.
+- **`-cf`/`--config-file FILE`** overlays a whole TOML file on top of the
+  env's `denver.toml`, using the same merge rules as `import:`. Repeatable,
   applied in the order given; `-c` overrides are applied last, on top of
   every `-cf` file.
 
 Both follow the same merge rules as `import:`, explained in
-[Configuration](../configuration/denver-yml.md).
+[Configuration](../configuration/denver-toml.md).
 
 ## Control the speed: Trading speed against freshness
 
@@ -113,10 +115,10 @@ Both follow the same merge rules as `import:`, explained in
   from the checkout's git tags when denver runs from a checkout (script or
   editable install), otherwise from the installed package's metadata. A
   checkout ahead of its last tag reports as a development build of the
-  release it is heading for (`1.1.0-17-gabc1234`). A `denver.yml` can
+  release it is heading for (`1.1.0-17-gabc1234`). A `denver.toml` can
   require a minimum with `denver-version: ">=1.1.0"`, and is rejected up
   front by a denver older than that (see
-  [Configuration](../configuration/denver-yml.md)).
+  [Configuration](../configuration/denver-toml.md)).
 
 Each stage's runtime is also appended to
 `<DENVER_DIR>/.envs/<env>/performance.jsonl` as JSON Lines of Chrome Trace

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wired via 'source:' on the 'set-vars' stage in denver.yml (provider:
+# Wired via 'source:' on the 'set-vars' stage in denver.toml (provider:
 # custom) -- not the global hooks: mechanism. Sourced, so these exports
 # persist into every later stage and the final command. Set whatever you
 # like here -- this is just a dummy demo.

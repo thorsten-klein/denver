@@ -61,15 +61,15 @@ invoked `denver complete` is the registration line above; the completion
 logic itself never has to be regenerated:
 
 - `run` and `complete`, the two subcommands themselves
-- `<env>` — directories and `denver.yml`/`denver.*.yml` files on disk
+- `<env>` — directories and `denver.toml`/`denver.*.toml` files on disk
 - denver's own `run` flags (`--fast`, `--until`, `--skip`, `--scripts`, ...)
 - `--until`/`--skip`'s values — the stage ids the given `<env>` actually
   declares
 - `--scripts`' value — the names that env's `scripts:` sections actually
   define
-- an env's own `args:` — whatever extra flags its `denver.yml` declares (see
+- an env's own `args:` — whatever extra flags its `denver.toml` declares (see
   "Environment-specific arguments" in
-  [Configuration](../configuration/denver-yml.md)), completed the same way
+  [Configuration](../configuration/denver-toml.md)), completed the same way
   denver's own flags are
 
 That last point is why there's nothing to regenerate: add a stage, rename a

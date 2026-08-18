@@ -29,9 +29,9 @@ Going the other way, denver *sets* a handful of built-in variables in the
 environment it builds — `DENVER_ENV_DIR`, `DENVER_ENV_NAME`,
 `DENVER_ENV_WORKDIR`, `DENVER_SRC_DIR`, `DENVER_CACHE_DIR` — so your
 scripts, compose files and the final command can read them as ordinary
-variables. They are also what `${...}` interpolation inside a `denver.yml`
+variables. They are also what `${...}` interpolation inside a `denver.toml`
 resolves against. The full list and their exact values are documented under
-"Variable interpolation" in [Configuration](../configuration/denver-yml.md).
+"Variable interpolation" in [Configuration](../configuration/denver-toml.md).
 
 ## Where an environment's state lives
 
@@ -39,9 +39,9 @@ By default, **inside the environment's own directory**:
 
 ```
 my-project/env/
-├── denver.yml
+├── denver.toml
 └── .denver/            # denver's state, ignores itself via its own .gitignore
-    └── denver/         # one subdirectory per denver*.yml in this folder
+    └── denver/         # one subdirectory per denver.*.<ext> config in this folder
         ├── .venv.host
         ├── .conan/
         └── performance.jsonl
@@ -52,8 +52,8 @@ exactly its own state, two checkouts of one project can never share (or
 destroy) each other's, and a `docker` stage carries it into the container
 for free, since the workspace is already bind-mounted there.
 
-The `<denver.yml stem>` level exists because one folder may hold several
-variants (`denver.debug.yml`, `denver.release.yml`) — those are *different*
+The `<config file stem>` level exists because one folder may hold several
+variants (`denver.debug.toml`, `denver.release.toml`) — those are *different*
 environments sharing a folder, and must not share a venv.
 
 denver falls back to `~/.denver/<env>-<hash>` when it cannot write to the
@@ -61,7 +61,7 @@ env directory (a read-only mount, a vendored base env, an env shipped inside
 an image), and `DENVER_STATE_DIR` overrides both.
 
 ```{note}
-**Next:** [Configuration](../configuration/denver-yml.md) — the complete
-`denver.yml` schema: every key, how imports merge, and the mechanisms behind
+**Next:** [Configuration](../configuration/denver-toml.md) — the complete
+`denver.toml` schema: every key, how imports merge, and the mechanisms behind
 everything you have used so far.
 ```

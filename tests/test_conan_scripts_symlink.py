@@ -1,7 +1,6 @@
 """Tests for providers.conan_scripts.extensions.symlink -- the deployer
-conan.py passes as --deployer to every `conan install` (see conan.py's
-_install, which shares one --deployer-folder across every conanfile in an
-env, and reruns on every build)."""
+conan.py passes as --deployer to `conan install` (see conan.py's _install,
+which reruns on every build)."""
 
 from __future__ import annotations
 
@@ -90,15 +89,15 @@ def test_deploy_replaces_non_symlink_in_the_way(tmp_path):
     assert link.resolve() == pkg.resolve()
 
 
-def test_deploy_multiple_conanfiles_shared_output_folder(tmp_path):
-    # two conanfiles' deploy() calls sharing one --deployer-folder (conan.py's
-    # real usage) must not collide on an overlapping dependency.
+def test_deploy_is_idempotent_on_a_shared_output_folder(tmp_path):
+    # two deploy() calls against the same --deployer-folder (e.g. a rerun)
+    # must not collide on an overlapping dependency.
     pkg = tmp_path / "shared-dep"
     pkg.mkdir()
     output_folder = tmp_path / "out"
 
     symlink.deploy(_graph({"shared": pkg}), str(output_folder))
-    symlink.deploy(_graph({"shared": pkg}), str(output_folder))  # second conanfile, same dep
+    symlink.deploy(_graph({"shared": pkg}), str(output_folder))  # rerun, same dep
 
     link = output_folder / "shared"
     assert link.is_symlink()

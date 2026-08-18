@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """denver -- Development Environment Launcher.
 
-Launch a reproducible development environment described by a ``denver.yml``
+Launch a reproducible development environment described by a ``denver.toml``
 file: denver resolves it (following ``import:`` inheritance), then runs the
 generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker,
 ...) to build/enter the environment purely from config.
@@ -18,10 +18,10 @@ interactive shell; a command after '--' (e.g. `denver run <env> -- echo
 hi`) is forwarded as-is instead. ``--scripts <name>`` runs one of the env's
 own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
 ``login``; with no name, lists the names this env defines).
-``--show-config`` prints the fully resolved, deep-merged denver.yml and
+``--show-config`` prints the fully resolved, deep-merged denver.toml and
 exits. ``--show-config-min`` does the same but drops every key left unset
-(shown as ``null`` by ``--show-config``), so only keys with an actual value
-remain.
+(shown as a commented-out ``# key = null`` line by ``--show-config`` -- TOML
+has no ``null``), so only keys with an actual value remain.
 
 ``complete`` prints a script wiring up completion for the installed
 ``denver`` command, for the given shell (bash/fish/zsh) or, if omitted,
@@ -29,8 +29,8 @@ the one it's run from (auto-detected); wire it up with e.g. ``eval
 "$(denver complete)"`` in your shell rc file (fish: ``denver complete |
 source``).
 
-<env> is a path to a directory containing a denver.yml, or a path
-directly to a YAML config file (any name, e.g. denver.debug.yml). If
+<env> is a path to a directory containing a denver.toml, or a path
+directly to a TOML config file (any name, e.g. denver.debug.toml). If
 omitted, it falls back to the DENVER_ENV_DIR environment variable.
 
 Run `denver run --help` to see more details about the run-specific flags.
@@ -47,35 +47,15 @@ import shlex
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 from typing import NoReturn, cast
-
-try:
-    import yaml
-except ImportError:  # pragma: no cover - depends on the interpreter denver runs on
-    # PyYAML is denver's only runtime dependency, so a pip/uv install always
-    # has it -- but a docker-wrapped env re-invokes denver with the
-    # *container's* bare `python3` (see reinvoke_command), which resolves
-    # imports against the image, not against whatever installed denver on the
-    # host. That process is one the user never asked for by name, so the bare
-    # ImportError traceback points at neither the cause nor the fix. Printed
-    # rather than logged: logging isn't configured this early, and the same
-    # "ERROR: " prefix keeps it looking like every other denver error.
-    sys.stderr.write(
-        f"ERROR: denver requires PyYAML, but 'import yaml' failed in {sys.executable} "
-        f"(python {'.'.join(str(n) for n in sys.version_info[:3])}).\n"
-        f"ERROR: Install it there, e.g. 'pip install pyyaml' / 'uv pip install pyyaml', "
-        f"or 'apt-get install python3-yaml' on Debian/Ubuntu.\n"
-        f"ERROR: If this ran inside a container, that interpreter is the image's: "
-        f"add PyYAML to the Dockerfile of the docker stage's image.\n"
-    )
-    sys.exit(1)
 
 # Make the bundled ``providers`` package importable both when run as
 # ``src/denver.py`` and when installed as the ``denver`` module.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-CONFIG_NAME = "denver.yml"
+CONFIG_NAME = "denver.toml"
 
 
 # where denver's own code lives (this file's directory, containing denver.py
@@ -175,7 +155,7 @@ def print_logo():
 # --------------------------------------------------------------------------- #
 # denver's own version
 #
-# Needed twice: for `--version`, and to check a denver.yml's
+# Needed twice: for `--version`, and to check a denver.toml's
 # 'denver-version:' requirement (see validate_denver_version). Both must
 # report the *running* denver in every supported way of running it -- an
 # installed wheel, an editable install, or the plain script out of a
@@ -320,15 +300,15 @@ def license_text():
 # --------------------------------------------------------------------------- #
 # Config loading & merging
 # --------------------------------------------------------------------------- #
-def load_yaml(path):
-    """Load a YAML file, returning a dict ({} for empty files)."""
-    with Path(path).open() as f:
-        data = yaml.safe_load(f)
-    if data is None:
-        return {}
-    if not isinstance(data, dict):
-        die(f"{path}: expected a mapping at the top level, got {type(data).__name__}")
-    return data
+def load_config_file(path):
+    """Load a TOML file, returning a dict ({} for empty files).
+
+    No "is this a mapping?" check here -- TOML's grammar makes that structurally impossible to get
+    wrong: a document is always a table (dict) at the top level, never a bare array or scalar (unlike
+    JSON/YAML), so tomllib.load() already guarantees this.
+    """
+    with Path(path).open("rb") as f:
+        return tomllib.load(f)
 
 
 _UNSET = object()  # marks "this key has no value from a lower layer yet"
@@ -431,10 +411,10 @@ def _merge_scalar(base, override, path):
 
 
 def resolve_import(entry, base_dir):
-    """Resolve an ``import:`` entry to the denver.yml path it refers to.
+    """Resolve an ``import:`` entry to the denver.toml path it refers to.
 
-    An entry may point at a directory (its ``denver.yml`` is used) or directly
-    at a YAML file, relative to the importing config's directory.
+    An entry may point at a directory (its ``denver.toml`` is used) or directly
+    at a TOML file, relative to the importing config's directory.
     """
     target = (base_dir / entry).resolve()
     if target.is_dir():
@@ -445,7 +425,7 @@ def resolve_import(entry, base_dir):
 
 
 def load_config(config_path, _seen=None) -> dict:
-    """Load a denver.yml and all of its imports into one merged config.
+    """Load a denver.toml and all of its imports into one merged config.
 
     Imports are merged first (base), then the importing file overlays on top,
     so a version-specific env can override values inherited from its base.
@@ -457,15 +437,15 @@ def load_config(config_path, _seen=None) -> dict:
         die(f"circular import detected at {config_path}")
     _seen.add(config_path)
 
-    raw = load_yaml(config_path)
+    raw = load_config_file(config_path)
     merged = _merged_imports(raw, config_path.parent, _seen)
 
-    # 'runnable' marks one specific denver.yml (e.g. a shared base meant only
+    # 'runnable' marks one specific denver.toml (e.g. a shared base meant only
     # to be imported, never started directly) -- it must never leak from an
     # imported base into a derived env's own resolved config, or every env
     # importing a 'runnable: false' base would incorrectly inherit it too.
     # is_runnable_env() already reads it straight from each file's own raw
-    # YAML, never through this merge, for exactly this reason; dropping it
+    # TOML, never through this merge, for exactly this reason; dropping it
     # here keeps --show-config's output consistent with that.
     merged.pop("runnable", None)
 
@@ -542,6 +522,19 @@ def _appended_config_value(current, value):
     return None
 
 
+def _coerce_cli_value(raw_value):
+    """Best-effort scalar coercion for a '-c KEY=VALUE' CLI override's raw string.
+
+    Parsed as JSON when that succeeds (numbers, true/false/null, quoted strings, arrays, objects),
+    else kept as a plain string -- this is what lets '-c uv.python=3.12.3' stay the string "3.12.3"
+    (not valid JSON on its own) while '-c uv.no-index=true' still becomes the bool True.
+    """
+    try:
+        return json.loads(raw_value)
+    except json.JSONDecodeError:
+        return raw_value
+
+
 def apply_config_override(config, spec):
     """Apply one ``-c``/``--config`` KEY.PATH=VALUE (or +=VALUE) spec.
 
@@ -549,7 +542,7 @@ def apply_config_override(config, spec):
     Does not mutate ``config`` or any of its nested dicts in place.
     """
     path_parts, op, raw_value = parse_config_override_spec(spec)
-    value = yaml.safe_load(raw_value)
+    value = _coerce_cli_value(raw_value)
 
     config = dict(config)
     node = config
@@ -570,7 +563,7 @@ def apply_config_overrides(config, specs):
     return config
 
 
-# Top-level denver.yml keys that aren't a stage's own config section.
+# Top-level denver.toml keys that aren't a stage's own config section.
 KNOWN_TOP_LEVEL_KEYS = {
     "version",
     "denver-version",
@@ -586,7 +579,7 @@ KNOWN_TOP_LEVEL_KEYS = {
 
 
 def validate_top_level_keys(config):
-    """Die on a top-level key that's neither a known denver.yml key nor a stage id declared in 'stages:'.
+    """Die on a top-level key that's neither a known denver.toml key nor a stage id declared in 'stages:'.
 
     Without this, a typo'd section (or one left behind after a stage was
     renamed/removed from 'stages:') is just silently ignored -- no stage
@@ -596,13 +589,13 @@ def validate_top_level_keys(config):
     unknown = sorted(set(config) - allowed)
     if unknown:
         die(
-            f"denver.yml: unknown top-level key(s) {', '.join(unknown)} -- "
+            f"denver.toml: unknown top-level key(s) {', '.join(unknown)} -- "
             f"not a recognised key and not a stage id in 'stages:'"
         )
 
 
-# the denver.yml schema version this denver understands; bump together with
-# an actual breaking change to the schema (doc/configuration/denver-yml.md
+# the denver.toml schema version this denver understands; bump together with
+# an actual breaking change to the schema (doc/configuration/denver-toml.md
 # and each provider's doc/providers/*.md page are the schema's documentation).
 SUPPORTED_CONFIG_VERSION = "1.0"
 
@@ -610,16 +603,16 @@ SUPPORTED_CONFIG_VERSION = "1.0"
 def validate_config_version(config):
     """Die if 'version:' is set to a schema version this denver doesn't understand.
 
-    'version:' exists precisely so a future, incompatible denver.yml schema
+    'version:' exists precisely so a future, incompatible denver.toml schema
     change can be rejected with a clear message instead of silently
     misinterpreted -- so it must actually gate something, not just be
-    accepted and ignored. Compared as a string so YAML's own numeric parsing
-    (``1.0`` -> a float) doesn't matter.
+    accepted and ignored. Compared as a string so TOML's own numeric parsing
+    (a bare ``1.0`` -> a float) doesn't matter.
     """
     version = config.get("version")
     if version is not None and str(version) != SUPPORTED_CONFIG_VERSION:
         die(
-            f"denver.yml: unsupported 'version: {version}' -- "
+            f"denver.toml: unsupported 'version: {version}' -- "
             f"this denver understands version {SUPPORTED_CONFIG_VERSION}."
         )
 
@@ -630,9 +623,9 @@ def validate_config_version(config):
 # release: a pre-release (1.1.0rc1, or setuptools-scm's 1.1.0.dev3+g1234567
 # for an untagged commit) sorts *before* 1.1.0, anything else (git
 # describe's 1.0.3-2-gabc1234, i.e. two commits past the 1.0.3 tag) *after*
-# the release it builds on. No PEP 440 library is used -- denver's only
-# runtime dependency is pyyaml, and this ordering is all a 'denver-version:'
-# requirement needs.
+# the release it builds on. No PEP 440 library is used -- denver has no
+# runtime dependency to spend on this (see load_config_file, stdlib tomllib),
+# and this ordering is all a 'denver-version:' requirement needs.
 _VERSION_RE = re.compile(r"v?(\d+(?:\.\d+)*)(.*)", re.DOTALL)
 _PRERELEASE_RE = re.compile(r"[.\-_]?(a|b|c|rc|alpha|beta|dev|pre)\d*", re.IGNORECASE)
 
@@ -694,7 +687,7 @@ def _parse_version_requirement(part, spec):
     wanted = parse_version(match.group(2)) if match else None
     if match is None or wanted is None:
         die(
-            f"denver.yml: invalid 'denver-version: {spec}' -- {part.strip()!r} is not a version requirement "
+            f"denver.toml: invalid 'denver-version: {spec}' -- {part.strip()!r} is not a version requirement "
             f"(expected e.g. \">=1.0.3\", \"1.0.3\" or \">=1.0.3, <2\")."
         )
     operator = match.group(1) or ">="
@@ -704,12 +697,12 @@ def _parse_version_requirement(part, spec):
 def validate_denver_version(config):
     """Die if 'denver-version:' isn't satisfied by the denver actually running.
 
-    A denver.yml using a key or behaviour only a newer denver knows would
+    A denver.toml using a key or behaviour only a newer denver knows would
     otherwise fail somewhere deep in a stage (or, worse, quietly do
     something else); this states the requirement up front, in the file that
     has it, and reports it as exactly that.
 
-    Distinct from 'version:', which pins the *schema* denver.yml is written
+    Distinct from 'version:', which pins the *schema* denver.toml is written
     against (bumped only on a breaking schema change, see
     SUPPORTED_CONFIG_VERSION). This one pins the *tool*: a purely additive
     feature -- a new provider key, say -- never changes the schema version,
@@ -734,7 +727,7 @@ def validate_denver_version(config):
     parsed = parse_version(running) if running is not None else None
     if parsed is None:
         logger.warning(
-            f"denver.yml requires 'denver-version: {spec}', but this denver's own version is "
+            f"denver.toml requires 'denver-version: {spec}', but this denver's own version is "
             f"{running or 'unknown'} -- cannot verify the requirement, continuing."
         )
         return
@@ -742,7 +735,7 @@ def validate_denver_version(config):
     unmet = _unmet_requirements(requirements, parsed)
     if unmet:
         die(
-            f"denver.yml requires 'denver-version: {spec}', but this denver is {running} "
+            f"denver.toml requires 'denver-version: {spec}', but this denver is {running} "
             f"(unmet: {', '.join(unmet)}) -- upgrade it, e.g. `pip install --upgrade {DISTRIBUTION_NAME}`."
         )
 
@@ -788,12 +781,15 @@ def validate_stage_filters(config, until_stage, skip_stages):
 # keys every stage section may carry regardless of provider: 'provider:'
 # picks the class (see providers.make_stage), 'scripts:' is the generic
 # --scripts <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
-# opts a stage out of the normal pipeline by default (see run_stages) --
-# none of these are part of any one provider's own KEYS. Order matters:
-# this is also the fixed display order used by _ordered_stage_section for
-# --show-config (provider first -- it picks the class -- then description,
-# disabled, scripts), before every provider-specific key (alphabetically).
-GENERIC_STAGE_KEYS = ("provider", "description", "disabled", "scripts")
+# opts a stage out of the normal pipeline by default (see run_stages),
+# 'skip-on-success:'/'skip-on-failure:' skip a stage's setup() at run time
+# instead (see _stage_skip_reason) -- none of these are part of any one
+# provider's own KEYS. Order matters: this is also the fixed display order
+# used by _ordered_stage_section for --show-config (provider first -- it
+# picks the class -- then description, disabled, skip-on-success,
+# skip-on-failure, scripts), before every provider-specific key
+# (alphabetically).
+GENERIC_STAGE_KEYS = ("provider", "description", "disabled", "skip-on-success", "skip-on-failure", "scripts")
 
 
 def validate_stage_section_keys(stage, section):
@@ -815,7 +811,7 @@ def validate_stage_section_keys(stage, section):
 def resolve_stage_section(stage, raw_section, config, ctx):
     """Resolve one stage's *raw* section into its complete effective one.
 
-    Always given the section as the denver.yml spelled it, never a section
+    Always given the section as the denver.toml spelled it, never a section
     this function already resolved: a resolver reads an unset key's default
     back as though the author had written it (``cfg.get("exe") or
     ctx.which(...)``), so feeding it its own output turns every default it
@@ -823,11 +819,12 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     That distinction is what lets this run a second time, per stage, once
     earlier stages have changed the world -- see _run_stage_setup.
 
-    'scripts:'/'disabled:' are filled in for every stage regardless of
-    provider -- both are generic, provider-agnostic keys any stage's
-    section may declare (see _run_stage_scripts_in_context and
-    run_stages's 'disabled:' handling), not part of any one provider's own
-    KEYS, so they belong here, not in Provider.resolve_defaults's default.
+    'scripts:'/'disabled:'/'skip-on-success:'/'skip-on-failure:' are filled
+    in for every stage regardless of provider -- all generic,
+    provider-agnostic keys any stage's section may declare (see
+    _run_stage_scripts_in_context, run_stages's 'disabled:' handling, and
+    _stage_skip_reason), not part of any one provider's own KEYS, so they
+    belong here, not in Provider.resolve_defaults's default.
     """
     from denver_providers.base import fill_unset
 
@@ -837,12 +834,27 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     if not isinstance(disabled, bool):
         die(f"stage '{stage.stage}': 'disabled:' must be true or false, got {disabled!r}")
     section["disabled"] = disabled
+    section["skip-on-success"] = _resolved_skip_scripts(ctx, stage.stage, raw_section, "skip-on-success")
+    section["skip-on-failure"] = _resolved_skip_scripts(ctx, stage.stage, raw_section, "skip-on-failure")
     description = raw_section.get("description")
     if description is not None and (
         not isinstance(description, list) or not all(isinstance(line, str) for line in description)
     ):
         die(f"stage '{stage.stage}': 'description:' must be a list of strings, got {description!r}")
     return fill_unset(section, ["scripts", "description"])
+
+
+def _resolved_skip_scripts(ctx, stage_id, raw_section, key):
+    """One generic 'skip-on-success:'/'skip-on-failure:' list, resolved to absolute paths (empty when unset).
+
+    Resolved centrally like every other path (see Context.resolve_path) so
+    --show-config shows the real script; whether it actually exists is
+    checked at run time, right before it would run (_stage_skip_reason).
+    """
+    scripts = raw_section.get(key) or []
+    if not isinstance(scripts, list) or not all(isinstance(s, str) for s in scripts):
+        die(f"stage '{stage_id}': '{key}:' must be a list of script paths, got {scripts!r}")
+    return [str(ctx.resolve_path(s)) for s in scripts]
 
 
 def resolve_provider_defaults(config, ctx):
@@ -873,16 +885,16 @@ def resolve_provider_defaults(config, ctx):
 def resolve_env_dir(env_arg):
     """Resolve the <env> argument to (env_dir, config_path).
 
-    Accepts a path to an env directory (its denver.yml is used) or a path
-    directly to a YAML config file (any name, e.g. denver.debug.yml -- lets
-    a folder hold several denver.xxx.yml variants side by side). Mirrors
+    Accepts a path to an env directory (its denver.toml is used) or a path
+    directly to a TOML config file (any name, e.g. denver.debug.toml -- lets
+    a folder hold several denver.xxx.toml variants side by side). Mirrors
     resolve_import()'s own directory-or-file convention for 'import:'
     entries, so both the top-level <env> and imports resolve the same way.
     """
     candidate = Path(env_arg).expanduser()
 
     if not candidate.exists():
-        die(f"environment '{env_arg}' not found. Give a path to an env directory or a denver.yml file.")
+        die(f"environment '{env_arg}' not found. Give a path to an env directory or a denver.toml file.")
     if candidate.is_file():
         return candidate.parent.resolve(), candidate.resolve()
     env_dir = candidate.resolve()
@@ -890,16 +902,16 @@ def resolve_env_dir(env_arg):
 
 
 def is_runnable_env(config_path):
-    """An env is runnable unless its denver.yml sets ``runnable: false``.
+    """An env is runnable unless its denver.toml sets ``runnable: false``.
 
     Used to reject starting a shared/base env directly (meant to be
     inherited via ``import:`` only) -- see its use in main() below.
     """
-    return load_yaml(config_path).get("runnable", True) is not False
+    return load_config_file(config_path).get("runnable", True) is not False
 
 
 # --------------------------------------------------------------------------- #
-# Provider orchestration (denver.yml-driven)
+# Provider orchestration (denver.toml-driven)
 # --------------------------------------------------------------------------- #
 def collect_import_dirs(config_path, _seen=None):
     """Directories of every env in the whole-file ``import:`` chain, nearest first.
@@ -907,7 +919,7 @@ def collect_import_dirs(config_path, _seen=None):
     Breadth-first: the env's own direct imports, then their imports, etc.
     This is the search order ``Context.resolve_path`` uses to fall back to a
     base env's file when the leaf doesn't have one -- e.g. a conventional
-    default like ``uv/skip-if-0.sh`` or ``conan/base_classes``. Walking the
+    default like ``uv/skip-on-success.sh`` or ``conan/base_classes``. Walking the
     whole chain (not just the direct imports) is what makes those
     conventions work through multiple levels of ``import:`` stacking: each
     layer, closest to the leaf first, is checked in turn, so a more-derived
@@ -915,7 +927,7 @@ def collect_import_dirs(config_path, _seen=None):
     that doesn't have one simply falls through to the next.
     """
     config_path, _seen = _register_seen(config_path, _seen)
-    imported = _imported_paths(load_yaml(config_path), config_path.parent)
+    imported = _imported_paths(load_config_file(config_path), config_path.parent)
 
     dirs = [p.parent for p in imported]
     for imported_path in imported:
@@ -940,7 +952,7 @@ def _register_seen(config_path, _seen):
 
 
 def _imported_paths(raw, base_dir):
-    """Every whole-file 'import:' entry of ``raw``, resolved to the denver.yml it names."""
+    """Every whole-file 'import:' entry of ``raw``, resolved to the denver.toml it names."""
     return [resolve_import(entry, base_dir) for entry in (raw.get("import", []) or [])]
 
 
@@ -954,11 +966,11 @@ def collect_hook_entries(config_path, name, _seen=None):
     is never silently lost just because a derived env also declares one.
 
     Nothing is discovered from the directory layout: a ``hooks/<name>.sh``
-    (or ``hooks/<name>.user.sh``) sitting next to a ``denver.yml`` is only
-    ever run if that ``denver.yml`` actually lists it.
+    (or ``hooks/<name>.user.sh``) sitting next to a ``denver.toml`` is only
+    ever run if that ``denver.toml`` actually lists it.
     """
     config_path, _seen = _register_seen(config_path, _seen)
-    raw = load_yaml(config_path)
+    raw = load_config_file(config_path)
     base_dir = config_path.parent
 
     entries = []
@@ -1075,8 +1087,8 @@ def parse_section_import_ref(ref):
 
     A bare path (``../zephyr-docker``) stacks the current section's
     same-named section from the referenced env. A ``path:section`` suffix
-    (``../zephyr-devshell/denver.yml:conan``) makes the source section
-    explicit -- pointing straight at a specific env's ``denver.yml`` and
+    (``../zephyr-devshell/denver.toml:conan``) makes the source section
+    explicit -- pointing straight at a specific env's ``denver.toml`` and
     picking a (possibly differently-named) section out of it -- instead of
     always inferring both from the current key.
     """
@@ -1093,12 +1105,12 @@ def expand_section_imports(config, env_dir):
           import:
           - ../zephyr-docker      # stack that env's `docker:` section here
 
-    An entry may also point directly at a YAML file and/or name an explicit
+    An entry may also point directly at a config file and/or name an explicit
     source section with ``path:section``::
 
         conan:
           import:
-          - ../zephyr-devshell/denver.yml:conan
+          - ../zephyr-devshell/denver.toml:conan
 
     The referenced sections are merged in (base-first), then the local keys
     override. Returns (expanded_config, extra_search_dirs) where the extra
@@ -1153,15 +1165,16 @@ def default_command(config, in_container=False):
 
 
 def _resolve_default_cmd(config):
-    """'command:'/'docker.default-cmd:'/$SHELL/"bash", in that order, normalised to a list. See default_command.
+    """'command:'/'docker.compose.default-cmd:'/$SHELL/"bash", in that order, normalised to a list. See default_command.
 
     'command:' is the generic top-level default; a wrapper provider
     (currently only 'docker') may contribute its own fallback via
-    <provider>.default-cmd, e.g. the command to land in once relocated
+    <provider>.compose.default-cmd, e.g. the command to land in once relocated
     into a container. With neither set, fall back to the user's own shell
     (not a specific one denver would otherwise be guessing).
     """
-    cmd = config.get("command") or (config.get("docker") or {}).get("default-cmd") or os.environ.get("SHELL") or "bash"
+    docker_compose = (config.get("docker") or {}).get("compose") or {}
+    cmd = config.get("command") or docker_compose.get("default-cmd") or os.environ.get("SHELL") or "bash"
     return [cmd] if isinstance(cmd, str) else [str(c) for c in cmd]
 
 
@@ -1172,9 +1185,9 @@ def _completion_wrapped_shell(cmd):
     is touched -- anything else (a custom 'command:', a provider's own tool)
     comes back unchanged, since denver has no idea whether it's even a shell,
     let alone how to wire completion into it. ``cmd``'s own extra args (e.g.
-    'docker.default-cmd: [zsh, -l]') are preserved on the final exec, right
-    alongside completion's own '-i' (needed since 'sh -c' would otherwise
-    hand back a non-interactive shell).
+    'docker.compose.default-cmd: [zsh, -l]') are preserved on the final exec,
+    right alongside completion's own '-i' (needed since 'sh -c' would
+    otherwise hand back a non-interactive shell).
 
     The wiring itself: run 'denver complete <shell>' (routed through
     _denver_launcher -- the same way reinvoke_command finds itself inside
@@ -1262,7 +1275,7 @@ def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None)
       _relocation_env for how the raw container environment itself gets
       them too);
     * the env's own 'args:' flags (``options.cli_args.argv``): the inner
-      denver re-reads the same denver.yml, so it declares the same flags --
+      denver re-reads the same denver.toml, so it declares the same flags --
       but nobody would have given them to it, and every one would quietly
       fall back to its 'default:';
     * ``start_time`` (the hidden --start-time flag), the outer denver's own
@@ -1425,9 +1438,8 @@ def _collect_stage_scripts(ctx, stage_ids, name):
 
     Shared by run_named_scripts (via _run_stage_scripts_in_context): 'scripts:'
     is a generic, per-stage config key (any provider's section may declare
-    it), not provider-specific -- like docker's env-scripts, entries are
-    paths, resolved the same way (relative to the env dir, falling back to
-    imported base env dirs).
+    it), not provider-specific -- entries are paths, resolved the same way
+    (relative to the env dir, falling back to imported base env dirs).
     """
     resolved = []
     for stage_id in stage_ids:
@@ -1689,6 +1701,44 @@ def _print_script_names(env_dir, by_name):
         print(f"  {name:<12} {stages}", file=sys.stderr)
 
 
+def _stage_skip_reason(ctx, cfg):
+    """Why this stage's setup() should be a no-op this run, per its generic 'skip-on-*:' scripts -- None if it should run.
+
+    Checked fresh right before setup(), the same way 'disabled:' is checked
+    ahead of time in active_stage_ids -- but this can't be decided ahead of
+    time: it depends on running each script, a real side effect that must
+    happen exactly once, right when the stage would otherwise run (an
+    earlier stage may have changed what these scripts would report).
+    '--force' bypasses both checks, same as it bypasses every provider's own
+    checksum/skip-if logic.
+    """
+    if ctx.force:
+        return None
+    return _skip_kind_reason(ctx, cfg, "skip-on-success", 0, "skip-on-success scripts all exited 0") or (
+        _skip_kind_reason(ctx, cfg, "skip-on-failure", 1, "skip-on-failure scripts all exited 1")
+    )
+
+
+def _skip_kind_reason(ctx, cfg, key, expected_code, message):
+    """``message`` if ``cfg[key]``'s scripts all exit ``expected_code``, else None -- one 'skip-on-*:' kind (see _stage_skip_reason)."""
+    scripts = cfg.get(key) or []
+    if scripts and _skip_scripts_exit(ctx, key, scripts, expected_code):
+        return message
+    return None
+
+
+def _skip_scripts_exit(ctx, label, scripts, expected_code):
+    """True if every ``scripts`` entry exits with ``expected_code`` (see _stage_skip_reason)."""
+    for script in scripts:
+        path = Path(script)
+        if not path.is_file():
+            die(f"{label}: script not found: {path}")
+        result = ctx.run([path], check=False, capture=False, query=True, echo=False)
+        if result.returncode != expected_code:
+            return False
+    return True
+
+
 def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1, stage_count=1):
     """Resolve defaults, then run one stage's provider.setup(), hooks and all.
 
@@ -1726,6 +1776,10 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     raw_section = ctx.raw_sections.get(provider.stage)
     if raw_section is not None:
         config[provider.stage] = resolve_stage_section(provider, copy.deepcopy(raw_section), config, ctx)
+    skip_reason = _stage_skip_reason(ctx, config.get(provider.stage) or {})
+    if skip_reason:
+        info(f"{provider.name}[{provider.stage}]: {skip_reason}; skipping stage")
+        return
     run_hook(ctx, config_path, f"pre-{provider.stage}")
     start = time.time()
     provider.setup(ctx)
@@ -1791,7 +1845,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     5 declared stages shows '[5/5] ... skipped by --skip', never silently
     drops to a 4-stage trail. This numbering needs no cross-process
     plumbing (unlike start_time): both the outer and any reinvoked inner
-    denver derive it identically, straight from the *same* denver.yml's
+    denver derive it identically, straight from the *same* denver.toml's
     'stages:' list, which --until/--skip never changes.
 
     Under ``dry_run`` every stage still runs in order and still resolves its
@@ -1892,7 +1946,7 @@ def _prepare_context(env_dir, config, config_path, *, no_wait, env_vars=None, **
     even read, so without this second application 'env:' would silently win
     over an explicit -e of the same name. -e is meant to always have the
     final word, the same way '-c' always wins over 'import:'/'-cf' (see
-    doc/configuration/denver-yml.md).
+    doc/configuration/denver-toml.md).
     """
     config, ctx = resolve_full_config(env_dir, config, config_path, env_vars=env_vars, **resolve_kwargs)
     ctx.acquire_lock(wait=not no_wait)
@@ -2162,7 +2216,7 @@ def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers,
         # when docker is genuinely among the wrappers relocating this cmd.
         return resolve_command(config, forwarded, in_container=any(w.name == "docker" for w in active_wrappers))
     # setup providers run *inside* the wrapper: re-invoke denver there
-    # -- it recomputes skipped_setups identically (same denver.yml,
+    # -- it recomputes skipped_setups identically (same denver.toml,
     # same --until/--skip) and shows those banners itself.
     _note_not_previewed(ctx, "stages", setups, active_wrappers)
     return reinvoke_command(config_path, forwarded, _stage_ids_of(active_wrappers), options=options)
@@ -2337,10 +2391,193 @@ def _provider_keys(section):
     return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
+# --------------------------------------------------------------------------- #
+# --show-config rendering
+# --------------------------------------------------------------------------- #
+def dump_toml(data):
+    """A minimal, hand-written TOML rendering of ``data`` for --show-config.
+
+    Covers exactly the shapes a resolved denver config can take (nested dicts, lists of scalars or of
+    dicts, strings, numbers, bools, ``None``), not the full TOML spec. No dependency needed: this is
+    denver's own display format, not something round-tripped through a TOML library.
+
+    TOML has no ``null`` -- a ``None`` value (fill_unset()'s placeholder for a documented-but-unset
+    key, see show_config) is rendered as a commented-out ``# key = null`` line instead of dropping it
+    silently, so --show-config's "every possible key, unset ones included" contract still holds.
+    """
+    lines = []
+    _dump_toml_table(data, (), lines)
+    return "\n".join(lines) + ("\n" if lines else "")
+
+
+def _dump_toml_table(table, path, lines):
+    """Append ``table``'s TOML rendering to ``lines``.
+
+    Plain keys (scalars, ``None``, arrays) come first, then nested tables/array-of-tables get their
+    own '[section]'/'[[section]]' header -- TOML requires a table's own keys to precede its
+    sub-tables, so grouping here (rather than emitting strictly in ``table``'s own key order) is
+    unavoidable; each group keeps its own relative order.
+    """
+    plain, nested = _toml_partition_table(table)
+    for key, value in plain:
+        _dump_toml_plain_key(key, value, lines)
+    for key, value in nested:
+        _dump_toml_nested_key(value, (*path, key), lines)
+
+
+def _toml_partition_table(table):
+    """``table``'s items split into (plain, nested) -- see _dump_toml_table for why the split matters."""
+    plain = [(k, v) for k, v in table.items() if not _toml_is_table_like(v)]
+    nested = [(k, v) for k, v in table.items() if _toml_is_table_like(v)]
+    return plain, nested
+
+
+def _dump_toml_plain_key(key, value, lines):
+    """Append one plain (non-table-like) ``key = value`` line -- commented out (``None``) if unset."""
+    if value is None:
+        lines.append(f"# {_toml_key(key)} = null")
+    else:
+        lines.append(f"{_toml_key(key)} = {_toml_value(value)}")
+
+
+def _dump_toml_nested_key(value, child_path, lines):
+    """Append one table-like key's '[section]' (a dict) or '[[section]]' blocks (a list of dicts)."""
+    if lines and lines[-1] != "":
+        lines.append("")
+    if isinstance(value, dict):
+        lines.append(f"[{_toml_path(child_path)}]")
+        _dump_toml_table(value, child_path, lines)
+    else:
+        _dump_toml_array_of_tables(value, child_path, lines)
+
+
+def _dump_toml_array_of_tables(entries, child_path, lines):
+    """Append one '[[section]]' block per entry of a non-empty list of dicts."""
+    for i, entry in enumerate(entries):
+        if i:
+            lines.append("")
+        lines.append(f"[[{_toml_path(child_path)}]]")
+        _dump_toml_table(entry, child_path, lines)
+
+
+def _toml_is_table_like(value):
+    """Whether ``value`` needs a '[section]'/'[[section]]' header rather than an inline value.
+
+    True for a non-empty dict, or a non-empty list whose entries are all dicts. An empty dict/list is
+    rendered inline instead ('{}'/'[]') -- a header with nothing under it would be a pointless empty
+    section.
+    """
+    if isinstance(value, dict):
+        return bool(value)
+    if isinstance(value, list) and value:
+        return all(isinstance(v, dict) for v in value)
+    return False
+
+
+_TOML_BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _toml_key(key):
+    """One TOML key -- bare, or quoted if it isn't plain identifier-ish text.
+
+    Bare covers every real denver.toml key (letters/digits/underscore/dash); anything else is quoted.
+    """
+    key = str(key)
+    return key if _TOML_BARE_KEY_RE.match(key) else _toml_string(key)
+
+
+def _toml_path(path):
+    """A dotted '[a.b.c]'/'[[a.b.c]]' table header path from a tuple of keys."""
+    return ".".join(_toml_key(p) for p in path)
+
+
+def _toml_value(value):
+    """One TOML value expression for a plain (non-table-like) ``value``.
+
+    An empty dict/list, or a scalar -- non-empty dicts/lists-of-dicts are table-like (see
+    _toml_is_table_like) and never reach here.
+    """
+    if isinstance(value, dict):
+        return "{}"  # only reached for an empty dict; non-empty ones are handled as nested tables
+    if isinstance(value, list):
+        return _toml_array(value)
+    return _toml_scalar(value)
+
+
+def _toml_array(values):
+    """A multi-line TOML array literal, one entry per line.
+
+    Denver's config lists (file paths, requirements, ...) are usually short, but this stays readable
+    even when they aren't.
+    """
+    if not values:
+        return "[]"
+    entries = ",\n".join(f"  {_toml_inline_value(v)}" for v in values)
+    return f"[\n{entries},\n]"
+
+
+def _toml_inline_value(value):
+    """One TOML value for an array *entry*.
+
+    Like ``_toml_value``, but a dict/list entry can't get its own '[section]' header (arrays have no
+    headers), so a non-empty dict renders as an inline table (``{ k = v, ... }``) here instead. Reached
+    for e.g. a malformed ``args:`` entry mixing mapping and non-mapping items in one list -- not
+    table-like as a whole (see _toml_is_table_like), but each dict entry in it still needs *some*
+    rendering.
+    """
+    if isinstance(value, dict):
+        return _toml_inline_table(value)
+    if isinstance(value, list):
+        return _toml_array(value)
+    return _toml_scalar(value)
+
+
+def _toml_inline_table(value):
+    """One inline TOML table (``{ k = v, ... }``) for a dict reached outside a '[section]' context."""
+    if not value:
+        return "{}"
+    items = ", ".join(f"{_toml_key(k)} = {_toml_inline_value(v)}" for k, v in value.items())
+    return "{ " + items + " }"
+
+
+def _toml_scalar(value):
+    """One TOML scalar literal -- bool/int/float/str.
+
+    Anything else (e.g. a bare ``None`` reaching here, which shouldn't happen -- fill_unset() only
+    ever nulls a dict *value*, never a list entry) is a bug in the caller, so this raises rather than
+    silently rendering something wrong.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return repr(value)
+    if isinstance(value, str):
+        return _toml_string(value)
+    raise TypeError(f"cannot render {value!r} as a TOML scalar")
+
+
+def _toml_string(value):
+    r"""A TOML string literal for ``value``.
+
+    A multi-line literal string ('''...''') for embedded newlines (matches YAML's '|' block scalars
+    almost exactly -- raw content, no escaping needed), falling back to an escaped basic string
+    otherwise (or if the content itself contains ''').
+
+    The ``\n`` placed right after the opening ``'''`` below is a pure formatting separator (so the
+    content starts on its own line) -- TOML's own "trim one newline immediately after the opening
+    delimiter" rule removes exactly that one on read-back, regardless of what ``value`` itself starts
+    with, so this always round-trips to ``value`` unchanged.
+    """
+    if "\n" in value and "'''" not in value:
+        return f"'''\n{value}'''"
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return '"' + escaped.replace("\n", "\\n") + '"'
+
+
 def show_config(
     env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None, env_vars=None, minimal=False
 ):
-    """Print the fully resolved config as YAML -- exactly what the real run would use.
+    """Print the fully resolved config as TOML -- exactly what the real run would use.
 
     Whole-file 'import:' stacking, section-level 'import:' stacking, and
     every provider's defaults are all baked in. 'stages:' is narrowed by
@@ -2383,7 +2620,7 @@ def show_config(
             ordered[stage_id] = _drop_defaulted_stage_keys(ordered[stage_id], ctx.raw_sections.get(stage_id, {}))
         ordered = _drop_null_values(ordered)
 
-    print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
+    print(dump_toml(ordered))
 
 
 def _drop_defaulted_stage_keys(section, raw_section):
@@ -2392,13 +2629,7 @@ def _drop_defaulted_stage_keys(section, raw_section):
     Every key resolve_stage_section() added on its own -- a provider's
     static/filesystem/PATH-derived default, or fill_unset()'s ``None`` for a
     documented-but-unset one -- is a default, not something the env
-    configured, so it's left out here. ``raw_section``
-    (ctx.raw_sections[stage_id], see resolve_provider_defaults) is this same
-    section exactly as the env's denver.yml (after import stacking) wrote
-    it, before any default was baked in, so a key's presence there -- not
-    its value -- is what "explicitly configured" means; a nested default
-    (e.g. one 'lock:' sub-key left unset while another is given) is still
-    caught afterward by _drop_null_values.
+    configured, so it's left out here.
     """
     return {key: value for key, value in section.items() if key in raw_section}
 
@@ -2462,14 +2693,14 @@ def _ordered_config(resolved, stage_ids):
 
 
 # --------------------------------------------------------------------------- #
-# denver.yml-declared CLI arguments ('args:')
+# denver.toml-declared CLI arguments ('args:')
 #
 # An env may declare flags of its own: each 'args:' entry is one
 # ``parser.add_argument(*flags, **kwargs)`` call, so an env offering a
 # per-run knob ("which board?", "release or debug?") gets a real flag that
 # `denver run <env> --help` lists, instead of asking its users for a generic
 # `-c some.dotted.path=value`. What the user then passes is exported as
-# DENVER_ARG_<DEST> (see cli_arg_env), i.e. it reaches the denver.yml's own
+# DENVER_ARG_<DEST> (see cli_arg_env), i.e. it reaches the denver.toml's own
 # ${...} interpolation, every hook, every stage and the final command
 # through the one mechanism all of those already read.
 # --------------------------------------------------------------------------- #
@@ -2479,7 +2710,7 @@ ARG_ENV_PREFIX = "DENVER_ARG_"
 
 
 def add_config_args(parser, entries):
-    """Add every denver.yml 'args:' entry to ``parser`` as an ordinary argparse flag.
+    """Add every denver.toml 'args:' entry to ``parser`` as an ordinary argparse flag.
 
     ``entries`` is the raw 'args:' value (None when the env declares none).
     Each entry is a mapping: 'flags:' names the flag(s), everything else is
@@ -2491,7 +2722,7 @@ def add_config_args(parser, entries):
     if entries is None:
         return
     if not isinstance(entries, list):
-        die(f"denver.yml: 'args:' must be a list of argument definitions, got {entries!r}")
+        die(f"denver.toml: 'args:' must be a list of argument definitions, got {entries!r}")
     # every dest already spoken for: denver's own flags first (so an entry
     # can never quietly overwrite args.force et al.), then each entry added
     # here, so two entries cannot silently collide with each other either.
@@ -2503,14 +2734,14 @@ def add_config_args(parser, entries):
 def _add_config_arg(parser, entry, taken):
     """Add one 'args:' entry, refusing a dest that is already spoken for."""
     if not isinstance(entry, dict):
-        die(f"denver.yml 'args:': every entry must be a mapping of add_argument arguments, got {entry!r}")
+        die(f"denver.toml 'args:': every entry must be a mapping of add_argument arguments, got {entry!r}")
     flags = config_arg_flags(entry)
     kwargs = {key: value for key, value in entry.items() if key != "flags"}
     _reject_type_key(flags, kwargs)
     dest = config_arg_dest(flags, entry)
     if dest in taken:
         die(
-            f"denver.yml 'args:': {', '.join(flags)} resolves to '{dest}', which denver's own arguments "
+            f"denver.toml 'args:': {', '.join(flags)} resolves to '{dest}', which denver's own arguments "
             f"already use -- rename the flag or give the entry a different 'dest:'."
         )
     _add_argument(parser, flags, kwargs)
@@ -2528,7 +2759,7 @@ def config_arg_flags(entry):
     if isinstance(flags, str):
         flags = [flags]
     if not isinstance(flags, list) or not flags:
-        die(f"denver.yml 'args:': entry {entry!r} needs 'flags:' -- a flag string, or a list of them")
+        die(f"denver.toml 'args:': entry {entry!r} needs 'flags:' -- a flag string, or a list of them")
     for flag in flags:
         _validate_flag(flag, entry)
     return flags
@@ -2538,23 +2769,23 @@ def _validate_flag(flag, entry):
     """Die unless one 'flags:' element is a string starting with '-'."""
     if not isinstance(flag, str) or not flag.startswith("-"):
         die(
-            f"denver.yml 'args:': flag {flag!r} in entry {entry!r} must be a string starting with '-' -- "
+            f"denver.toml 'args:': flag {flag!r} in entry {entry!r} must be a string starting with '-' -- "
             f"an env cannot declare a positional argument (denver's own <env> is the only one)."
         )
 
 
 def _reject_type_key(flags, kwargs):
-    """Die on 'type:', which a denver.yml cannot express.
+    """Die on 'type:', which a denver.toml cannot express.
 
-    argparse's ``type=`` is a *callable*, and YAML only ever hands over a
-    string -- accepting one would mean denver picking which conversions
-    exist, or importing whatever a config names. Neither is needed: every
-    value arrives as a string anyway (an environment variable is a string),
-    and 'choices:'/'action:' cover the cases a type would have.
+    argparse's ``type=`` is a *callable*, and TOML cannot express one -- a config file only ever hands
+    over a string/number/bool/list/mapping. Accepting one anyway would mean denver
+    picking which conversions exist, or importing whatever a config names. Neither is needed: every
+    value arrives as a string anyway (an environment variable is a string), and 'choices:'/'action:'
+    cover the cases a type would have.
     """
     if "type" in kwargs:
         die(
-            f"denver.yml 'args:': {', '.join(flags)} sets 'type:', which denver.yml cannot express "
+            f"denver.toml 'args:': {', '.join(flags)} sets 'type:', which denver.toml cannot express "
             f"(argparse needs a callable) -- values are always strings; use 'choices:' or 'action:' instead."
         )
 
@@ -2564,7 +2795,7 @@ def _add_argument(parser, flags, kwargs):
     try:
         parser.add_argument(*flags, **kwargs)
     except (argparse.ArgumentError, TypeError, ValueError) as exc:
-        die(f"denver.yml 'args:': cannot add {', '.join(flags)} -- {exc}")
+        die(f"denver.toml 'args:': cannot add {', '.join(flags)} -- {exc}")
 
 
 def config_arg_dest(flags, entry):
@@ -2620,7 +2851,7 @@ class CliArgs:
     environment gets to see (DENVER_ARG_<DEST> for every entry with a
     value), while ``argv`` is the user's own tokens, kept verbatim so a
     wrapper reinvocation can re-pass them (see reinvoke_command) -- the
-    inner denver re-reads the same denver.yml and would otherwise fall back
+    inner denver re-reads the same denver.toml and would otherwise fall back
     to each entry's 'default:'.
     """
 
@@ -2666,7 +2897,7 @@ def _add_env_positional(parser):
     parser.add_argument(
         "env",
         nargs="?",
-        help="path to an env directory or a denver.yml file (falls back to $DENVER_ENV_DIR if omitted)",
+        help="path to an env directory or a denver.toml file (falls back to $DENVER_ENV_DIR if omitted)",
     )
 
 
@@ -2727,7 +2958,7 @@ def _add_run_parser(subparsers, config_args):
         add_help=False,
         help="build/enter an env (or run one of its 'scripts:' entries, or just show its resolved config)",
         description="Build/enter <env>, or (with --scripts) run one of its 'scripts:' entries instead, or "
-        "(with --show-config) just print its fully resolved denver.yml.",
+        "(with --show-config) just print its fully resolved denver.toml.",
     )
     _add_help_flag(run_p)
     _add_env_positional(run_p)
@@ -2742,7 +2973,7 @@ def _add_run_parser(subparsers, config_args):
         "this env defines instead",
     )
     run_p.add_argument(
-        "--show-config", action="store_true", help="print the fully resolved (deep-merged) denver.yml and exit"
+        "--show-config", action="store_true", help="print the fully resolved (deep-merged) denver.toml and exit"
     )
     run_p.add_argument(
         "--show-config-min",
@@ -2770,7 +3001,7 @@ def _add_run_parser(subparsers, config_args):
         "--force",
         action="store_true",
         help="force expensive recomputation (recreate venv, rerun west update, ...), bypassing every "
-        "checksum/skip-if-0/skip-if-1-based skip",
+        "checksum/skip-on-success/skip-on-failure-based skip",
     )
     run_p.add_argument(
         "--ci", action="store_true", help="CI mode: swap in narrower/faster args (e.g. a shallow `west update`)"
@@ -3074,7 +3305,7 @@ def _run_completion_state(rest):
 
 def _first_positional(rest, consumed_as_value):
     """The first token in 'rest' that's neither a flag nor already consumed as one's value, or None."""
-    for tok, consumed in zip(rest, consumed_as_value):
+    for tok, consumed in zip(rest, consumed_as_value, strict=True):
         if not consumed and not tok.startswith("-"):
             return tok
     return None
@@ -3164,7 +3395,7 @@ def _flags_value_as_list(raw):
 
 
 def _completion_path_candidates(cur):
-    """Directory/denver.yml completions for the <env> positional, honouring any 'dir/' prefix already in ``cur``."""
+    """Directory/denver.toml completions for the <env> positional, honouring any 'dir/' prefix already in ``cur``."""
     base, prefix = _completion_base_and_prefix(cur)
     names = [name for name in sorted(_listdir_or_empty(base)) if name.startswith(prefix)]
     candidates = [_completion_path_candidate(base, name) for name in names]
@@ -3199,7 +3430,7 @@ def _completion_path_candidate(base, name):
     full = str(Path(base) / name) if base != "." else name
     if (Path(base) / name).is_dir():
         return full + "/"
-    if name == CONFIG_NAME or (name.startswith("denver.") and name.endswith(".yml")):
+    if name == CONFIG_NAME or (name.startswith("denver.") and name.endswith(".toml")):
         return full
     return None
 
@@ -3317,7 +3548,7 @@ def _completion_script_fish(names, quoted):
     # drowned out by every file in the cwd -- unlike bash's '-o default', fish shows
     # filenames alongside custom candidates by default. That's exactly right for most
     # positions (denver's own __complete already returns the relevant directories/
-    # denver.yml files for the <env> positional itself, see _completion_path_candidate),
+    # denver.toml files for the <env> positional itself, see _completion_path_candidate),
     # but _PATH_VALUE_FLAGS (-c/--config/-cf/--config-file) take an arbitrary path
     # __complete can't enumerate -- so a second entry, gated by '-n __denver_expects_path'
     # and forcing files back on with '-F', covers just that one case.
@@ -3333,7 +3564,7 @@ def _completion_script_fish(names, quoted):
         f"    contains -- $prev {path_value_flags}",
         "end",
     ]
-    for name, quoted_name in zip(names, quoted):
+    for name, quoted_name in zip(names, quoted, strict=True):
         flag = "-p" if "/" in name else "-c"
         lines.append(f"complete {flag} {quoted_name} -f -a '(__denver_complete)'")
         lines.append(f"complete {flag} {quoted_name} -n __denver_expects_path -F -a '(__denver_complete)'")
@@ -3343,34 +3574,98 @@ def _completion_script_fish(names, quoted):
 def _detect_shell():
     """Best-effort guess at the interactive shell invoking us, for a shell-less 'denver complete'.
 
-    Looked up from the *parent* process's own command name -- 'denver
+    Looked up from the nearest *ancestor* process's own command name -- 'denver
     complete' run directly at a prompt (or from `eval "$(denver
-    complete)"`/`denver complete | source`) has that shell as its parent.
-    Falls back to $SHELL, then to "bash", if the parent can't be identified
-    at all or isn't recognised as one of bash/zsh/fish (e.g. it's a script,
-    or wrapped by tmux/su/... with an unrelated process in between) -- never
-    raises. An explicit `denver complete <shell>` bypasses this outright.
+    complete)"`/`denver complete | source`) has that shell as its parent, or
+    grandparent past a frozen build's PyInstaller bootloader hop (see
+    _parent_process_name). Falls back to $SHELL, then to "bash", if no ancestor
+    can be identified at all or none is recognised as one of bash/zsh/fish
+    (e.g. it's a script, or wrapped by tmux/su/... with an unrelated process
+    in between) -- never raises. An explicit `denver complete <shell>` bypasses
+    this outright.
     """
     name = _parent_process_name() or os.environ.get("SHELL", "")
     name = Path(name).name.lstrip("-")  # login shells prefix their name, e.g. "-zsh"
     return name if name in _COMPLETION_SHELLS else "bash"
 
 
+def _own_process_names():
+    """Basenames this process could show up as in its own ancestry. See _parent_process_name."""
+    names = {Path(sys.argv[0]).name}
+    if getattr(sys, "frozen", False):  # a frozen build's PyInstaller bootloader shares its own name
+        names.add(Path(sys.executable).name)
+    return names
+
+
 def _parent_process_name():
-    """The parent process's command name, or None if it can't be determined. See _detect_shell."""
+    """The nearest ancestor process's command name that isn't this program itself, or None. See _detect_shell.
+
+    A frozen (PyInstaller ``--onefile``) build's bootloader clone()s a child
+    to run the actual interpreter in -- that child's immediate parent is the
+    bootloader itself, whose command name is this same program's, never the
+    shell that invoked it. Walking past ancestors that match one of
+    _own_process_names' names skips that hop so the shell underneath is
+    found instead. Bounded to a handful of hops so a pathological /proc (or
+    ``ps``) can never spin forever.
+    """
+    pid = _own_ppid()
+    own_names = _own_process_names()
+    for _ in range(5):
+        if pid is None:
+            return None
+        name = _process_name(pid)
+        if name not in own_names:  # also covers name is None -- never a member of own_names
+            return name
+        pid = _parent_pid(pid)
+    return None
+
+
+def _own_ppid():
+    """os.getppid(), or None if it can't be determined. See _parent_process_name."""
     try:
-        ppid = os.getppid()
+        return os.getppid()
     except OSError:
         return None
+
+
+def _process_name(pid):
+    """``pid``'s own command name, or None if it can't be determined. See _parent_process_name."""
     try:
-        return Path(f"/proc/{ppid}/comm").read_text().strip()
+        return Path(f"/proc/{pid}/comm").read_text().strip()
     except OSError:
         pass
     try:  # no /proc (e.g. macOS) -- ask the same question of 'ps' instead
-        completed = subprocess.run(["ps", "-o", "comm=", "-p", str(ppid)], capture_output=True, text=True)
+        completed = subprocess.run(["ps", "-o", "comm=", "-p", str(pid)], capture_output=True, text=True)
     except OSError:
         return None
     return completed.stdout.strip() if completed.returncode == 0 else None
+
+
+def _parent_pid(pid):
+    """``pid``'s own parent pid, or None if it can't be determined. See _parent_process_name."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        pass
+    else:
+        # comm (2nd field) is parenthesised and may itself contain spaces/parens, so
+        # only the tail after its closing ')' is safe to split on whitespace --
+        # state is first there, ppid second.
+        fields = stat.rsplit(")", 1)[-1].split()
+        try:
+            return int(fields[1])
+        except (IndexError, ValueError):
+            return None
+    try:  # no /proc (e.g. macOS) -- ask the same question of 'ps' instead
+        completed = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True, text=True)
+    except OSError:
+        return None
+    if completed.returncode != 0:
+        return None
+    try:
+        return int(completed.stdout.strip())
+    except ValueError:
+        return None
 
 
 def _split_argv(argv):
@@ -3594,7 +3889,7 @@ def _load_cli_config(args, config_path) -> dict:
     validate_top_level_keys(config)
     validate_stage_filters(config, args.until, args.skip)
     # deep_merge/apply_config_overrides are typed for config *values* (a
-    # mapping, a list, a scalar); a whole denver.yml is always the mapping.
+    # mapping, a list, a scalar); a whole denver.toml is always the mapping.
     return cast(dict, config)
 
 

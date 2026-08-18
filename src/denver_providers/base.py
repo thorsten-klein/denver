@@ -1,7 +1,7 @@
 """Base class for denver providers.
 
 A provider is a generic, reusable engine (uv, conan, zephyr, docker, ...).
-It is configured entirely from the env's denver.yml -- a provider never
+It is configured entirely from the env's denver.toml -- a provider never
 hard-codes project specifics.
 
 Lifecycle:
@@ -46,18 +46,18 @@ class Provider:
     override it.
     """
 
-    #: the denver.yml section this provider reads (defaults to its name)
+    #: the denver.toml section this provider reads (defaults to its name)
     name: str | None = None
     #: "setup" providers build the local environment; "wrapper" providers
     #: relocate the final command (e.g. into a container).
     kind: str = "setup"
-    #: every denver.yml key this provider's section understands -- shown
+    #: every denver.toml key this provider's section understands -- shown
     #: (as null if unset) in --show-config; see resolve_defaults.
     KEYS: tuple[str, ...] = ()
 
     def __init__(self, config):
-        """Store the whole merged denver.yml ``config`` and default this provider's stage id to its type name."""
-        # the full merged denver.yml config; a provider reads its own section
+        """Store the whole merged denver.toml ``config`` and default this provider's stage id to its type name."""
+        # the full merged denver.toml config; a provider reads its own section
         self.config = config or {}
         # the stage id: the key of this provider's config section and its
         # hook prefix. Defaults to the provider type, but multiple stages of
@@ -70,7 +70,7 @@ class Provider:
         return self.stage
 
     def config_section(self, ctx):
-        """This provider's interpolated config section from denver.yml."""
+        """This provider's interpolated config section from denver.toml."""
         return ctx.section(self.section_name)
 
     # ---- config defaults (override what you need) ------------------------ #

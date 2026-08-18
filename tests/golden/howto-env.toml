@@ -1,0 +1,137 @@
+version = "1.0"
+denver-version = ">=1.1.0"
+command = "bash"
+stages = [
+  "docker-base",
+  "uv-packages",
+  "nvim-setup",
+  "conan-packages",
+  "best-practices",
+]
+
+[hooks]
+# env = null
+# post-best-practices = null
+# post-conan-packages = null
+# post-docker-base = null
+# post-nvim-setup = null
+# post-uv-packages = null
+# pre-best-practices = null
+# pre-cmd = null
+# pre-conan-packages = null
+pre-docker-base = [
+  "<REPO>/examples/howto-env/create-env.sh",
+]
+# pre-nvim-setup = null
+# pre-uv-packages = null
+
+[docker-base]
+provider = "docker"
+description = [
+  "Relocates every stage below into an Ubuntu 24.04 container, so the OS and the apt packages are the same for everyone.",
+]
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+exe = "docker"
+# registries = null
+
+[docker-base.scripts]
+setup = [
+  "setup/install_host_tools.sh",
+]
+
+[docker-base.compose]
+build = true
+# default-cmd = null
+file = "docker-compose.yml"
+# image = null
+run-args = [
+  "--rm",
+]
+service = "dev"
+
+[uv-packages]
+provider = "uv"
+description = [
+  "The python 3.12 virtualenv. 'conan' is in requirements.txt because the next stage needs it on PATH -- the conan provider never installs it.",
+]
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+exe = "uv"
+# freeze-to = null
+# install-args = null
+# lockfile = null
+no-index = false
+# overrides = null
+# patches-apply = null
+python = "3.12.3"
+reinstall = false
+requirements = [
+  "requirements.txt",
+]
+# venv = null
+
+[nvim-setup]
+provider = "custom"
+description = [
+  "Brings one prebuilt binary release (neovim 0.12.4) into the environment the manual way -- download, checksum, unpack, PATH -- so the stage below can be read as what conan does with that same job.",
+]
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+cmd = "bash ${DENVER_ENV_DIR}/nvim/install.sh"
+# launcher = null
+source = "nvim/activate.sh"
+
+[conan-packages]
+provider = "conan"
+description = [
+  "Downloads cmake and the ARM toolchain at exactly the pinned versions and puts them on PATH. One conanfile plus the recipes it installs. The same job as 'nvim-setup' above, minus the shell script -- conan owns the download, the checksum, the cache and the PATH.",
+]
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+authentication = true
+base-classes = []
+build = "missing"
+channel = "snapshot"
+conanfile = "<REPO>/examples/howto-env/conan/conanfile.py"
+# config = null
+deployers = [
+  "<REPO>/src/denver_providers/conan_scripts/extensions/symlink.py",
+]
+exe = "conan"
+# install-args = null
+keep-remotes = false
+remotes = {}
+user = "denver"
+
+[conan-packages.profiles]
+build = []
+host = []
+
+[[conan-packages.recipes]]
+catalog = ""
+dirs = [
+  "<REPO>/examples/howto-env/conan/recipes",
+]
+export-tool = "<REPO>/src/denver_providers/conan_scripts/recipes.py"
+
+[best-practices]
+provider = "custom"
+description = [
+  "Team convention: pytest always verbose, with live logs. Declared as 'source:' rather than 'cmd:', so the export survives into the final command.",
+]
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+# cmd = null
+# launcher = null
+source = "best-practices.sh"
+

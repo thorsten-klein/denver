@@ -1,0 +1,38 @@
+version = 1.0
+denver-version = ">=1.1.0"
+stages = [
+  "docker",
+]
+
+[hooks]
+# env = null
+# post-docker = null
+# pre-cmd = null
+pre-docker = [
+  "<REPO>/examples/zephyr-docker/create-env.sh",
+]
+
+[docker]
+provider = "docker"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+exe = "docker"
+# registries = null
+
+[docker.scripts]
+setup = [
+  "setup/install_host_tools.sh",
+]
+
+[docker.compose]
+build = true
+default-cmd = "fish"
+file = "docker-compose.yml"
+# image = null
+run-args = [
+  "--rm",
+]
+service = "dev"
+

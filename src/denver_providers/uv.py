@@ -1,7 +1,7 @@
 """uv provider: a generic Python virtualenv managed with uv.
 
 Creates/activates the venv, installs requirements, applies venv patches.
-Configured from denver.yml -> ``uv:``.
+Configured from denver.toml -> ``uv:``.
 
 Full key reference, worked examples and design notes: ``doc/providers/uv.md``.
 """
@@ -17,12 +17,7 @@ from .context import banner, die, info, sha256_of_files
 # a flag and its value together as one atomic unit when accumulating args
 # across runs (see UvProvider._group_args); anything else (a bare flag like
 # --no-index, or a literal install-args token) is its own one-token unit.
-_VALUE_FLAGS = ("-r", "--override", "--find-links")
-
-# the only keys a 'lock:' section understands (see doc/providers/uv.md); unlike a
-# stage's top-level keys (checked centrally against KEYS by denver.py) a typo
-# in here would otherwise be silently ignored.
-_LOCK_KEYS = ("create", "sync")
+_VALUE_FLAGS = ("-r", "--override")
 
 
 def _pyvenv_cfg(venv_dir):
@@ -87,25 +82,21 @@ def _release_matches(wanted, actual):
 
 
 class UvProvider(Provider):
-    """A generic Python virtualenv managed with uv -- see doc/providers/uv.md for denver.yml keys."""
+    """A generic Python virtualenv managed with uv -- see doc/providers/uv.md for denver.toml keys."""
 
     name = "uv"
     KEYS = (
+        "exe",
         "python",
-        "uv",
         "no-index",
-        "link-mode",
-        "skip-if-0",
-        "skip-if-1",
-        "venv-patcher",
+        "patches-apply",
         "requirements",
-        "lock",
+        "lockfile",
         "install-args",
         "overrides",
-        "find-links",
         "venv",
         "freeze-to",
-        "append-mode",
+        "reinstall",
     )
 
     @staticmethod
@@ -115,50 +106,33 @@ class UvProvider(Provider):
         return no_index if no_index == "auto" else bool(no_index)
 
     @staticmethod
-    def _resolved_skip_if(ctx, cfg, key):
-        """One 'skip-if-N:' list of scripts, resolved to absolute paths (empty when unset)."""
-        return [str(ctx.resolve_path(s)) for s in cfg.get(key) or []]
-
-    @classmethod
-    def _resolve_optional_sections(cls, ctx, cfg, resolved):
-        """Fill 'lock:'/'venv-patcher:' into ``resolved`` only when the env configured them at all."""
-        lock_cfg = cls._resolve_lock_defaults(ctx, cfg)
-        if lock_cfg is not None:
-            resolved["lock"] = lock_cfg
-
-        vp_cfg = cls._resolve_venv_patcher_defaults(ctx, cfg)
-        if vp_cfg is not None:
-            resolved["venv-patcher"] = vp_cfg
+    def _resolved_patches_apply(ctx, cfg):
+        """'patches-apply:' with any relative-path-looking token resolved (see ctx.resolve_command) -- None if unset."""
+        patches_apply = cfg.get("patches-apply")
+        return ctx.resolve_command(patches_apply) if patches_apply else None
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve python/uv/no-index/skip-if-0/skip-if-1/venv-patcher defaults -- see doc/providers/uv.md."""
+        """Resolve python/exe/no-index/lockfile/patches-apply defaults -- see doc/providers/uv.md."""
         resolved = dict(cfg)
         # No default: denver does not pick an interpreter nobody wrote down.
         # Unset means uv's own discovery decides (see _ensure_venv), and
         # --show-config shows it as null rather than as a version that looks
         # like configuration.
         resolved["python"] = str(cfg["python"]) if cfg.get("python") else None
-        # dry_fallback: under --dry-run an unavailable uv still renders every
-        # command below it, instead of aborting the preview (see Context.which).
-        resolved["uv"] = cfg.get("uv") or ctx.which("uv", dry_fallback=True)
+        # bare name, not a resolved path -- existence is checked in setup()
+        # (see there), same as the docker provider's 'exe:' default.
+        resolved["exe"] = cfg.get("exe") or "uv"
         resolved["no-index"] = cls._resolved_no_index(cfg)
-        resolved["link-mode"] = cfg.get("link-mode", "copy")
-        resolved["append-mode"] = cfg.get("append-mode", False)
-
-        # resolved centrally (like every other path in this section) so
-        # --show-config shows the real script; whether it actually *exists*
-        # is checked at run time, right before we'd run it (_skip_if_satisfied).
-        resolved["skip-if-0"] = cls._resolved_skip_if(ctx, cfg, "skip-if-0")
-        resolved["skip-if-1"] = cls._resolved_skip_if(ctx, cfg, "skip-if-1")
-
-        cls._resolve_optional_sections(ctx, cfg, resolved)
+        resolved["reinstall"] = cfg.get("reinstall", False)
+        resolved["lockfile"] = cls._resolved_lock_path(ctx, "lockfile", cfg.get("lockfile"))
+        resolved["patches-apply"] = cls._resolved_patches_apply(ctx, cfg)
 
         return fill_unset(resolved, cls.KEYS)
 
     @staticmethod
     def _resolved_lock_path(ctx, key, value):
-        """One 'lock:' entry resolved to an absolute uv.lock path -- None when that key is unset."""
+        """'lockfile:' resolved to an absolute uv.lock path -- None when it's unset."""
         if not value:
             return None
         path = ctx.resolve_path(value)
@@ -166,37 +140,8 @@ class UvProvider(Provider):
         # naming anything else could never be the file uv acts on --
         # say so here rather than silently acting on a different one.
         if path.name != "uv.lock":
-            die(f"uv: 'lock: {key}:' must name a 'uv.lock' file, got: {path}")
+            die(f"uv: '{key}:' must name a 'uv.lock' file, got: {path}")
         return str(path)
-
-    @classmethod
-    def _resolve_lock_defaults(cls, ctx, cfg):
-        """Validate and resolve 'lock:'s paths, if set -- None otherwise (see doc/providers/uv.md)."""
-        if not cfg.get("lock"):
-            return None
-        lock_cfg = dict(cfg["lock"])
-        unknown = sorted(set(lock_cfg) - set(_LOCK_KEYS))
-        if unknown:
-            die(f"uv: unknown 'lock:' key(s) {', '.join(unknown)} -- known: {', '.join(_LOCK_KEYS)}")
-        for key in _LOCK_KEYS:
-            lock_cfg[key] = cls._resolved_lock_path(ctx, key, lock_cfg.get(key))
-        return lock_cfg
-
-    @classmethod
-    def _resolve_venv_patcher_defaults(cls, ctx, cfg):
-        """Validate and resolve 'venv-patcher:'s patches file/exe, if set -- None otherwise."""
-        if not cfg.get("venv-patcher"):
-            return None
-        vp_cfg = dict(cfg["venv-patcher"])
-        patches = vp_cfg.get("patches")
-        if not patches:
-            die("uv: 'venv-patcher:' needs an explicit 'patches:' file")
-        patches_path = ctx.resolve_path(patches)
-        if not patches_path.is_file():
-            die(f"uv: venv-patcher patches file not found: {patches_path}")
-        vp_cfg["patches"] = str(patches_path)
-        vp_cfg["exe"] = vp_cfg.get("exe") or ctx.which("venv-patcher")
-        return vp_cfg
 
     @staticmethod
     def _resolved_paths(ctx, cfg, key):
@@ -204,34 +149,34 @@ class UvProvider(Provider):
         return [ctx.resolve_path(p) for p in (cfg.get(key) or [])]
 
     def _install_inputs(self, ctx, cfg):
-        """Everything this stage installs from, as one dict: requirements/overrides/install-args/lock/checksums."""
+        """Everything this stage installs from, as one dict: requirements/overrides/install-args/lockfile/checksums."""
         requirements = self._resolved_paths(ctx, cfg, "requirements")
         overrides = self._resolved_paths(ctx, cfg, "overrides")
         install_args, command_outputs = self._resolve_install_args(ctx, cfg)
-        lock_cfg = cfg.get("lock") or {}
-        lock_sync = lock_cfg.get("sync")
+        lockfile = cfg.get("lockfile")
         return {
             "requirements": requirements,
             "overrides": overrides,
             "install_args": install_args,
             "command_outputs": command_outputs,
-            "lock_create": lock_cfg.get("create"),
-            "lock_sync": lock_sync,
-            # 'lock: sync:'s lockfile is an install *input*, like a
-            # requirements file, so drift in it recreates the venv the same
-            # way; 'lock: create:'s is an output this run writes itself (like
-            # 'freeze-to:'), and would otherwise invalidate its own checksum
-            # every time.
-            "checksum_files": requirements + overrides + ([Path(lock_sync)] if lock_sync else []),
+            "lockfile": lockfile,
+            # 'lockfile:' is an install *input*, like a requirements file, so
+            # drift in it recreates the venv the same way.
+            "checksum_files": requirements + overrides + ([Path(lockfile)] if lockfile else []),
         }
 
     @staticmethod
     def _installs_anything(inputs):
         """Whether this stage installs anything at all, or only creates the venv."""
-        return bool(inputs["requirements"] or inputs["install_args"] or inputs["lock_create"] or inputs["lock_sync"])
+        return bool(inputs["requirements"] or inputs["install_args"] or inputs["lockfile"])
 
     def setup(self, ctx):
-        """Create/activate the venv, install requirements (unless --fast), and apply venv patches."""
+        """Create/activate the venv, install requirements (unless --fast), and apply venv patches.
+
+        Whether this whole stage is a no-op this run (the generic
+        'skip-on-success:'/'skip-on-failure:' keys) is decided one layer up,
+        before setup() is ever called -- see denver.py's _stage_skip_reason.
+        """
         cfg = self.config_section(ctx)
         # each uv stage may target its own venv (config 'venv:'); default venv
         # otherwise. This is what lets an env have several uv stages.
@@ -239,9 +184,6 @@ class UvProvider(Provider):
 
         if ctx.fast:
             self._setup_fast(ctx, venv_dir)
-            return
-
-        if self._should_skip_before_venv(ctx, cfg, venv_dir):
             return
 
         banner(ctx, self.stage, "install")
@@ -252,16 +194,18 @@ class UvProvider(Provider):
         if not installs_anything:
             info(f"uv[{self.stage}]: no requirements configured; only creating the venv")
 
-        uv = cfg.get("uv")
-        if not uv:
-            die(f"uv[{self.stage}]: needs 'uv' on PATH (see https://docs.astral.sh/uv/)")
+        exe = cfg.get("exe")
+        # dry_fallback: under --dry-run an unavailable uv still renders every
+        # command below it, instead of aborting the preview (see Context.which).
+        if not ctx.which(exe, dry_fallback=True):
+            die(f"uv[{self.stage}]: needs 'exe' on PATH (see https://docs.astral.sh/uv/)")
 
-        self._ensure_python(ctx, uv, python_version)
-        self._ensure_venv(ctx, uv, venv_dir, python_version, inputs["checksum_files"], inputs["command_outputs"])
+        self._ensure_python(ctx, exe, python_version)
+        self._ensure_venv(ctx, exe, venv_dir, python_version, inputs["checksum_files"], inputs["command_outputs"])
         self._activate(ctx, venv_dir)
 
         if installs_anything:
-            self._install_and_patch(ctx, uv, cfg, venv_dir, inputs)
+            self._install_and_patch(ctx, exe, cfg, venv_dir, inputs)
 
     # ------------------------------------------------------------------ #
     def _setup_fast(self, ctx, venv_dir):
@@ -273,51 +217,14 @@ class UvProvider(Provider):
         self._activate(ctx, venv_dir)
 
     def _install_everything(self, ctx, uv, cfg, inputs):
-        """Run the lock/sync/`uv pip install` commands this stage's own inputs call for."""
-        self._lock(ctx, uv, cfg, inputs["lock_create"])
-        self._sync(ctx, uv, cfg, inputs["lock_sync"])
+        """Run the `uv sync`/`uv pip install` commands this stage's own inputs call for."""
+        self._sync(ctx, uv, cfg, inputs["lockfile"])
         if inputs["requirements"] or inputs["install_args"]:
             self._install(ctx, uv, cfg, inputs["requirements"], inputs["overrides"], inputs["install_args"])
 
-    def _should_skip_before_venv(self, ctx, cfg, venv_dir):
-        """True if there's no venv yet and skip-if says this stage is pointless right now.
-
-        (e.g. already inside the container a standalone system venv is for):
-        skip the stage outright, same as 'disabled: true', rather than
-        creating and *activating* an empty venv nobody will fill in. Once a
-        venv exists, skip-if instead only ever skips the install substep
-        below, in _install_and_patch -- an already-populated venv still gets
-        activated, since later stages depend on that.
-        """
-        return not venv_dir.is_dir() and not ctx.force and self._skip_if_stage(ctx, cfg)
-
-    def _skip_if_stage(self, ctx, cfg):
-        """True if skip-if-0/skip-if-1 says this stage (not just the install) should be a no-op.
-
-        Only consulted from setup() before a venv exists (see setup()) --
-        the same scripts/config as _install_and_patch's own check, just
-        asked one step earlier, before _ensure_venv/_activate ever run.
-        """
-        skip_if_0 = cfg["skip-if-0"]
-        skip_if_1 = cfg["skip-if-1"]
-        if skip_if_0 and self._skip_if_satisfied(ctx, "skip-if-0", skip_if_0, 0):
-            info(f"uv[{self.stage}]: no venv yet and skip-if-0 satisfied; skipping stage entirely")
-            return True
-        if skip_if_1 and self._skip_if_satisfied(ctx, "skip-if-1", skip_if_1, 1):
-            info(f"uv[{self.stage}]: no venv yet and skip-if-1 satisfied; skipping stage entirely")
-            return True
-        return False
-
     def _install_and_patch(self, ctx, uv, cfg, venv_dir, inputs):
-        """Install requirements/lockfile (unless skip-if-0/skip-if-1 says otherwise), apply venv patches, record checksums."""
-        skip_if_0 = cfg["skip-if-0"]
-        skip_if_1 = cfg["skip-if-1"]
-        if not ctx.force and skip_if_0 and self._skip_if_satisfied(ctx, "skip-if-0", skip_if_0, 0):
-            info("uv: skip-if-0 scripts all exited 0; skipping install")
-        elif not ctx.force and skip_if_1 and self._skip_if_satisfied(ctx, "skip-if-1", skip_if_1, 1):
-            info("uv: skip-if-1 scripts all exited 1; skipping install")
-        else:
-            self._install_everything(ctx, uv, cfg, inputs)
+        """Install requirements/lockfile, apply venv patches, record checksums."""
+        self._install_everything(ctx, uv, cfg, inputs)
         self._apply_patches(ctx, cfg)
         self._store_checksums(ctx, venv_dir, inputs["checksum_files"], inputs["command_outputs"])
         self._freeze(ctx, cfg, uv)
@@ -451,8 +358,8 @@ class UvProvider(Provider):
         """This stage's requirements checksum from its last completed install, or None if there is none.
 
         None (no file at all) rather than "": a stage whose install has no
-        checksummable *files* (e.g. only 'lock: create:', or only literal
-        'install-args:') legitimately stores an empty checksum, and must
+        checksummable *files* (e.g. only literal 'install-args:')
+        legitimately stores an empty checksum, and must
         still count as "seen before" instead of recreating its venv on
         every single run.
         """
@@ -534,15 +441,13 @@ class UvProvider(Provider):
         ctx.env.pop("PYTHONHOME", None)
 
     def _index_args(self, ctx, cfg):
-        """The --find-links/--no-index args every uv command that resolves packages gets.
+        """The --no-index arg every uv command that resolves packages gets.
 
-        Shared by `uv pip install`, `uv lock` and `uv sync` so all three see
-        the same wheel sources -- an offline (no-index) env must stay offline
+        Shared by `uv pip install` and `uv sync` so both see the same
+        offline/online policy -- an offline (no-index) env must stay offline
         whichever of them does the resolving.
         """
         args = []
-        for link in cfg.get("find-links") or []:
-            args += ["--find-links", str(ctx.resolve_path(link))]
         no_index = cfg["no-index"]
         if no_index == "auto":
             no_index = ctx.in_container
@@ -552,58 +457,50 @@ class UvProvider(Provider):
         return args
 
     def _project_dir(self, lockfile, key):
-        """The uv project a 'lock:' lockfile belongs to: the directory holding it (and its pyproject.toml).
+        """The uv project 'lockfile:' belongs to: the directory holding it (and its pyproject.toml).
 
         Checked here, right before the uv command that needs it runs, rather
-        than centrally in resolve_defaults: 'lock: create:'s own directory
-        may legitimately only be filled in by an earlier stage of this run.
+        than centrally in resolve_defaults: an earlier stage of this run may
+        legitimately be what fills this directory in.
         """
         project = Path(lockfile).parent
         if not (project / "pyproject.toml").is_file():
-            die(f"uv: no pyproject.toml beside 'lock: {key}:' ({lockfile}) -- a uv.lock belongs to its project")
+            die(f"uv: no pyproject.toml beside '{key}:' ({lockfile}) -- a uv.lock belongs to its project")
         return project
 
-    def _lock(self, ctx, uv, cfg, lock_create):
-        """Write/update 'lock: create:'s lockfile with `uv lock` (a no-op when unset)."""
-        if not lock_create:
+    def _sync(self, ctx, uv, cfg, lockfile):
+        """Install 'lockfile:''s lockfile into this stage's venv with `uv sync` (a no-op when unset)."""
+        if not lockfile:
             return
-        project = self._project_dir(lock_create, "create")
-        ctx.run([uv, "lock", "--project", str(project), *self._index_args(ctx, cfg)])
-
-    def _sync(self, ctx, uv, cfg, lock_sync):
-        """Install 'lock: sync:'s lockfile into this stage's venv with `uv sync` (a no-op when unset)."""
-        if not lock_sync:
-            return
-        project = self._project_dir(lock_sync, "sync")
-        if not Path(lock_sync).is_file():
-            # under --dry-run a 'lock: create:' above only printed its `uv
-            # lock`, so its output legitimately isn't there -- show the sync
-            # that would follow it rather than stopping the preview here.
+        project = self._project_dir(lockfile, "lockfile")
+        if not Path(lockfile).is_file():
             if not ctx.dry_run:
-                die(f"uv: 'lock: sync:' file not found: {lock_sync} -- set 'lock: create:' to generate it first")
-            info(f"uv: 'lock: sync:' file {lock_sync} does not exist (yet)")
+                die(
+                    f"uv: 'lockfile:' file not found: {lockfile} -- "
+                    f"create it first (e.g. a 'custom' stage running `uv lock`)"
+                )
+            info(f"uv: 'lockfile:' file {lockfile} does not exist (yet)")
         # --active:  sync into the venv this stage just activated, not the
         #            project's own .venv;
         # --frozen:  install the lockfile exactly as it is, never silently
-        #            re-resolving (and rewriting) it here -- that is what
-        #            'lock: create:' is for;
+        #            re-resolving (and rewriting) it here;
         # --inexact: leave whatever else lives in the venv (this stage's own
         #            'requirements:', or another stage sharing this venv)
         #            alone, instead of pruning everything the lockfile
         #            doesn't mention.
         args = ["--project", str(project), "--active", "--frozen", "--inexact"]
-        ctx.run([uv, "sync", *args, *self._index_args(ctx, cfg)], extra_env={"UV_LINK_MODE": cfg["link-mode"]})
+        ctx.run([uv, "sync", *args, *self._index_args(ctx, cfg)])
 
     def _install(self, ctx, uv, cfg, requirements, overrides, install_args):
-        """Run `uv pip install` with every -r/--override/--find-links/--no-index/install-args flag the config implies.
+        """Run `uv pip install` with every -r/--override/--no-index/install-args flag the config implies.
 
-        Under 'append-mode:' (default on), the args actually run are every
+        Under 'reinstall:' (default off), the args actually run are every
         arg any *previous* run of this stage ever resolved, with only this
         run's new ones appended -- see _merge_install_args.
         """
         # build this run's own uv pip install args, in the order uv expects:
-        # overrides, then find-links, then --no-index, then -r's, then every
-        # 'install-args:' entry last.
+        # overrides, then --no-index, then -r's, then every 'install-args:'
+        # entry last.
         args = []
         for override in overrides:
             args += ["--override", str(override)]
@@ -612,13 +509,12 @@ class UvProvider(Provider):
             args += ["-r", str(req)]
         args += install_args
 
-        args = self._merge_install_args(ctx, args, append_mode=cfg["append-mode"])
+        args = self._merge_install_args(ctx, args, reinstall=cfg["reinstall"])
 
-        # mute uv's hardlink warning across filesystems
-        ctx.run([uv, "pip", "install", *args], extra_env={"UV_LINK_MODE": cfg["link-mode"]})
+        ctx.run([uv, "pip", "install", *args])
 
     def _install_args_path(self, ctx):
-        """Where this stage's accumulated install args (see 'append-mode:') are stored.
+        """Where this stage's accumulated install args (see 'reinstall:') are stored.
 
         Inside ctx.logs_dir, not the venv itself, so it survives a
         checksum-triggered venv recreation (_ensure_venv) instead of being
@@ -645,21 +541,21 @@ class UvProvider(Provider):
                 i += 1
         return units
 
-    def _merge_install_args(self, ctx, args, *, append_mode):
-        """Union this run's args onto every arg a previous run of this stage ever resolved (if 'append-mode:').
+    def _merge_install_args(self, ctx, args, *, reinstall):
+        """Union this run's args onto every arg a previous run of this stage ever resolved (if 'reinstall:').
 
         Comparing/deduplicating whole (flag, value) units (see _group_args)
         -- not raw tokens -- so e.g. two different '--override' entries both
         survive instead of the second losing its '--override' prefix. Stored
         units come first (unchanged order), only genuinely new units are
-        appended; the merged (or, with append-mode off, just this run's own)
+        appended; the merged (or, with 'reinstall:' off, just this run's own)
         units are written back so the *next* run sees them too.
         """
         fresh_units = self._group_args(args)
         path = self._install_args_path(ctx)
 
         merged_units = fresh_units
-        if append_mode:
+        if reinstall:
             merged_units = self._appended(self._stored_install_units(path), fresh_units)
 
         ctx.mkdir(path.parent)
@@ -684,40 +580,12 @@ class UvProvider(Provider):
                 seen.add(unit)
         return merged
 
-    def _skip_if_satisfied(self, ctx, label, scripts, expected_code):
-        """True if every ``label`` script exits with ``expected_code`` (install is skipped).
-
-        Unlike the *value* of 'skip-if-0:'/'skip-if-1:' (resolved centrally),
-        actually running each script is a real side effect and must stay
-        here, at install time -- checking whether a script's missing (a
-        config error, not something the central resolver should silently
-        paper over) belongs right before we'd run it too.
-        """
-        for script in scripts:
-            path = ctx.resolve_path(script)
-            if not path.is_file():
-                die(f"uv: {label} script not found: {path}")
-            result = ctx.run([path], check=False, capture=False, query=True, echo=False)
-            if result.returncode != expected_code:
-                return False
-        return True
-
     def _apply_patches(self, ctx, cfg):
-        """Run venv-patcher against the resolved patches file, if both a patches file and the tool exist."""
-        vp_cfg = cfg.get("venv-patcher") or {}
-        patches = vp_cfg.get("patches")
-        if not patches:
+        """Run the literal 'patches-apply:' command, if one is configured (already resolved -- see resolve_defaults)."""
+        patches_apply = cfg.get("patches-apply")
+        if not patches_apply:
             return
-        # looked up again here, not just trusted from resolve_defaults' own
-        # attempt: that one runs before this stage's venv is even created, so
-        # it can't see a venv-patcher this same run just installed into it
-        # (e.g. as one of 'requirements:') -- only visible on PATH once
-        # _activate has prepended the venv's bin/ (see setup()).
-        patcher = vp_cfg.get("exe") or ctx.which("venv-patcher")
-        if not patcher:
-            info("uv: venv-patcher not installed; skipping venv patches")
-            return
-        ctx.run([patcher, "apply", "-f", patches])
+        ctx.run(patches_apply)
 
     def _store_checksums(self, ctx, venv_dir, checksum_files, command_outputs):
         """Record this stage's requirements checksum, so a later run can detect drift and reinstall.

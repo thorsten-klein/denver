@@ -32,7 +32,9 @@ def echo_env(tmp_path, exec_recorder):
         def _run(argv=()):
             env_dir = tmp_path / "e"
             env_dir.mkdir(exist_ok=True)
-            (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
+            (env_dir / "denver.toml").write_text(
+                'stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n'
+            )
             denver.main(["run", str(env_dir), *argv, "--", "echo", "hi"])
             return exec_recorder["env"]
 
@@ -82,7 +84,7 @@ def test_bare_name_unset_forwards_an_empty_string(echo_env, monkeypatch):
 
 def test_overrides_the_config_env_map(tmp_path, exec_recorder, monkeypatch):
     # -e is the more direct, explicit statement of intent -- it wins over
-    # denver.yml's own declarative 'env:' map for the same name.
+    # denver.toml's own declarative 'env:' map for the same name.
     class Fake(Provider):
         name = "fakesetup"
         kind = "setup"
@@ -94,8 +96,8 @@ def test_overrides_the_config_env_map(tmp_path, exec_recorder, monkeypatch):
     monkeypatch.delenv("MY_VAR", raising=False)
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\nenv:\n  MY_VAR: from-config\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n\n[env]\nMY_VAR = "from-config"\n'
     )
     denver.main(["run", str(env_dir), "-e", "MY_VAR=from-cli", "--", "echo", "hi"])
     assert exec_recorder["env"]["MY_VAR"] == "from-cli"
@@ -116,7 +118,7 @@ def test_applied_to_os_environ(echo_env, monkeypatch):
 # ---- carried across a wrapper reinvocation (docker et al.) ------------------ #
 def test_reinvoke_command_re_passes_the_flags(tmp_path):
     cmd = denver.reinvoke_command(
-        tmp_path / "denver.yml",
+        tmp_path / "denver.toml",
         ["echo", "hi"],
         ["docker"],
         options=denver.RunOptions(env_vars={"MY_VAR": "hello"}),
@@ -128,7 +130,7 @@ def test_reinvoke_command_re_passes_the_flags(tmp_path):
 
 def test_relocated_run_cmd_re_passes_the_flags(tmp_path):
     cmd = denver._relocated_run_cmd(
-        tmp_path / "denver.yml",
+        tmp_path / "denver.toml",
         ["setup"],
         quiet=0,
         until_stage=None,
@@ -162,8 +164,8 @@ def test_flags_are_carried_into_the_wrapper(tmp_path, monkeypatch, exec_recorder
 
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: [fakewrap, fakesetup]\nfakewrap:\n  provider: fakewrap\nfakesetup:\n  provider: fakesetup\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "fakewrap",\n  "fakesetup",\n]\n\n[fakewrap]\nprovider = "fakewrap"\n\n[fakesetup]\nprovider = "fakesetup"\n'
     )
     denver.main(["run", str(env_dir), "-e", "MY_VAR=hello", "--", "echo", "hi"])
 

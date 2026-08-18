@@ -24,5 +24,5 @@ export CTCACHE_EXCLUDE_USER_CONFIG=ON
 # codechecker
 export CODECHECKER_TRIM_PATH_PREFIX="$WEST_TOPDIR"
 
-# west (WEST_CONFIG_SYSTEM is west's own env var, not a denver.yml key)
+# west (WEST_CONFIG_SYSTEM is west's own env var, not a denver.toml key)
 export WEST_CONFIG_SYSTEM="$SCRIPT_DIR/../configs/west_base_config"

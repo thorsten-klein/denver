@@ -13,7 +13,6 @@ import types
 from pathlib import Path
 
 import pytest
-import yaml
 
 import denver
 import denver_providers as providers
@@ -215,10 +214,10 @@ def exec_recorder(monkeypatch):
 # Env / Context helpers
 # --------------------------------------------------------------------------- #
 def write_env(env_dir: Path, config: dict | None = None, files: dict | None = None):
-    """Create an env directory with a denver.yml and optional extra files."""
+    """Create an env directory with a denver.toml and optional extra files."""
     env_dir.mkdir(parents=True, exist_ok=True)
     if config is not None:
-        (env_dir / "denver.yml").write_text(yaml.safe_dump(config, sort_keys=False))
+        (env_dir / "denver.toml").write_text(denver.dump_toml(config))
     for rel, content in (files or {}).items():
         p = env_dir / rel
         p.parent.mkdir(parents=True, exist_ok=True)

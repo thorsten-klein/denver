@@ -1,0 +1,46 @@
+version = 1.0
+# minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
+denver-version = ">=1.1.0"
+
+stages = ["uv", "conan"]
+
+# top-level, applied once before any stage -- see doc/quickstart/creating-environments.md
+[env]
+# conan's home for this env is kept in denver's working area rather than at
+# conan's default ~/.conan2. This avoids conflicts with existing ~/.conan2
+# caches and does not pollute them.
+CONAN_HOME = "${DENVER_ENV_WORKDIR}/.conan2"
+
+[uv]
+provider = "uv"
+requirements = ["requirements.txt"]
+
+[conan]
+provider = "conan"
+base-classes = [
+  "../zephyr-devshell/conan/base_classes",  # reuse conan base classes
+]
+# let conan apt-install a recipe's system_tools_requires (pico-sdk needs
+# cmake to build picotool) instead of only checking that it's there.
+#
+# '-c:a' (both contexts), not a plain '-c': that is short for '-c:h' and
+# only reaches the host profile, while pico-sdk is a tool_requires and so
+# is built in the *build* context -- which would keep conan's default
+# 'check' mode and abort with "'cmake' are missing but can't install" on
+# any machine that doesn't happen to have the apt package already.
+install-args = [
+  "-c:a=tools.system.package_manager:mode=install",
+  "-c:a=tools.system.package_manager:sudo=True",
+]
+
+# the conanfile, and separately, the recipe dirs it installs from plus the
+# one catalog covering them all -- conanfile.py reads its pinned references
+# back out of exactly this file.
+conanfile = "conan/conanfile.py"
+
+[[conan.recipes]]
+dirs = [
+  "conan/recipes",
+  "../zephyr-devshell/conan/recipes/cmake",  # reuse some other conan recipes
+]
+catalog = "conan/catalog.yml"

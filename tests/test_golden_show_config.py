@@ -3,7 +3,7 @@ output must match a checked-in golden file.
 
 This is the gap the rest of the suite leaves open -- everything else mocks
 subprocess.run/shutil.which/os.execvpe and drives providers through small,
-synthetic configs. Nothing takes a real denver.yml from examples/, runs it
+synthetic configs. Nothing takes a real denver.toml from examples/, runs it
 through the whole resolver, and checks the result against a known-good
 snapshot -- so a resolver regression in a real env's config only shows up by
 manually diffing --show-config output. These tests catch that automatically.
@@ -13,8 +13,8 @@ workspace-root lookups (WEST_TOPDIR, and the outermost-``.git`` walk its
 'west-yml:' fallback uses independently of WEST_TOPDIR), whether this machine
 looks like a container, and the running denver's own version (which the envs'
 'denver-version:' pins are checked against) are faked, for determinism across
-machines/CI -- everything else (recipe-dirs,
-conanfiles, patches files, ...) is resolved against the real examples/ tree,
+machines/CI -- everything else (conan recipe dirs,
+the conanfile, patches files, ...) is resolved against the real examples/ tree,
 so a real "file not found" in an env's own config still fails here.
 """
 
@@ -37,9 +37,9 @@ FAKE_DENVER_VERSION = "999.0.0"
 
 
 def _tracked_env_names():
-    """Env dir names with a denver.yml tracked in git -- not e.g. a developer's local scratch env under examples/."""
+    """Env dir names with a denver.toml tracked in git -- not e.g. a developer's local scratch env under examples/."""
     result = subprocess.run(
-        ["git", "ls-files", "examples/*/denver.yml"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ["git", "ls-files", "examples/*/denver.toml"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
     )
     return sorted(Path(line).parent.name for line in result.stdout.splitlines() if line)
 
@@ -79,7 +79,7 @@ def test_show_config_matches_golden(env_name, capsys, monkeypatch, which, tmp_pa
     assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     actual = _normalize(capsys.readouterr().out)
 
-    golden_path = GOLDEN_DIR / f"{env_name}.yml"
+    golden_path = GOLDEN_DIR / f"{env_name}.toml"
     expected = golden_path.read_text()
     assert actual == expected, (
         f"--show-config for examples/{env_name} no longer matches {golden_path} -- if this change is "

@@ -80,9 +80,9 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
 
 | File | What it is |
 |---|---|
-| `denver.yml` | the whole env: five stages |
+| `denver.toml` | the whole env: five stages |
 | `docker-compose.yml`, `container/Dockerfile` | the container the pipeline is relocated into |
-| `create-env.sh` | `env-scripts:` — writes the compose `.env` (host UID/GID/HOME) |
+| `create-env.sh` | `hooks: pre-docker-base:` — writes the compose `.env` (host UID/GID/HOME) |
 | `setup/install_host_tools.sh` | `scripts: setup:` — one-time host bootstrap, run via `--scripts setup` |
 | `requirements.txt` | the venv's packages (`pytest`, plus `conan` for the next stage) |
 | `nvim/nvim.env` | the pin — version, url, sha256, install prefix — shared by the two scripts below |
@@ -108,7 +108,7 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
   container, and version-keyed so bumping `NVIM_VERSION` in `nvim/nvim.env`
   installs beside the old release rather than on top of it. `rm -rf .denver/`
   is the uninstall.
-- There is no `image:` key in `denver.yml`, so denver never builds anything
+- There is no `image:` key in `denver.toml`, so denver never builds anything
   itself — the compose file owns the tag and compose builds it when missing.
   After editing the `Dockerfile`, run `docker compose build` (or delete the
   image); see [`doc/providers/docker.md`](../../doc/providers/docker.md) for

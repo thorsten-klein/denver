@@ -8,7 +8,7 @@ $ denver run examples/zephyr-devshell
 ERROR: env 'zephyr-devshell' sets 'runnable: false' -- it's meant to be imported, not started directly.
 ```
 
-That is intentional. `runnable: false` marks a `denver.yml` as a base that
+That is intentional. `runnable: false` marks a `denver.toml` as a base that
 only exists to be `import:`ed. To actually start something, use
 [`../zephyr-devshell-4.3.1`](../zephyr-devshell-4.3.1).
 
@@ -17,13 +17,14 @@ only exists to be `import:`ed. To actually start something, use
 It defines the five-stage pipeline a Zephyr workspace needs, and fills in
 everything that does **not** depend on which Zephyr version you want:
 
-```yaml
-stages:
-- docker      # 1. get into the right operating system
-- conan       # 2. native tools: SDK, cmake, ninja, clang, ccache, J-Link
-- uv          # 3. a venv, with west in it
-- zephyr      # 4. west update: clone the workspace repositories
-- uv-zephyr   # 5. the Python deps those repositories declare
+```toml
+stages = [
+  "docker",      # 1. get into the right operating system
+  "conan",       # 2. native tools: SDK, cmake, ninja, clang, ccache, J-Link
+  "uv",          # 3. a venv, with west in it
+  "zephyr",      # 4. west update: clone the workspace repositories
+  "uv-zephyr",   # 5. the Python deps those repositories declare
+]
 ```
 
 Concretely it contributes: the stage list and its ordering, the `docker:`
@@ -66,10 +67,9 @@ several things denver refuses to guess.
 just at the top level — the whole `docker:` config is inherited from another
 env:
 
-```yaml
-docker:
-  import:
-  - ../zephyr-docker
+```toml
+[docker]
+import = ["../zephyr-docker"]
 ```
 
 **`runnable: false`, and why it is not inherited.** Marking a base
@@ -78,12 +78,11 @@ importing it would be non-startable too. So `runnable:` is deliberately
 excluded from inheritance — an importer is runnable unless it says otherwise.
 
 **Hooks are listed, never discovered.** A `hooks/env.sh` sitting next to
-`denver.yml` does nothing on its own; it runs because this file names it:
+`denver.toml` does nothing on its own; it runs because this file names it:
 
-```yaml
-hooks:
-  env:
-  - hooks/env.sh
+```toml
+[hooks]
+env = ["hooks/env.sh"]
 ```
 
 `hooks: <name>:` is a *list*, and every layer of the import chain contributes
@@ -96,12 +95,12 @@ stage, and can already use denver built-ins like `WEST_TOPDIR` and
 
 **Recipes without a conanfile.** This base ships a directory of shared Conan
 recipes (`cmake`, `ninja`, `clang`, `ccache`, `doxygen`, `protoc`, `jlink`,
-`systemview`, `zephyr-sdk`, `fish`) but declares no `conanfiles:` unit for them, and
-that is not an oversight: `recipe-dirs:` live *inside* a unit — a conanfile
-plus the recipes it installs from — and a base with no conanfile has no unit
-to put them in. Each version env lists
-`../zephyr-devshell/conan/recipes` in its own unit instead. `base-classes:`,
-by contrast, is env-wide and so is declared once here.
+`systemview`, `zephyr-sdk`, `fish`) but declares no `recipes:` entry for
+them, and that is not an oversight: `conanfile:` (what to install) and
+`recipes:` (what to export) are independent, and this base has no conanfile
+at all. Each version env lists `../zephyr-devshell/conan/recipes` in its own
+`recipes:` entry instead. `base-classes:`, by contrast, is env-wide and so is
+declared once here.
 
 **Two stages, one venv.** `uv-zephyr` has no `venv:` of its own, so it
 shares the `uv` stage's. That is required, not tidiness: `west`'s extension
@@ -112,7 +111,7 @@ installs has to be importable by the interpreter stage 3 set up.
 
 | Path | What it is |
 |---|---|
-| `denver.yml` | The pipeline, the shared config, `runnable: false` |
+| `denver.toml` | The pipeline, the shared config, `runnable: false` |
 | `hooks/env.sh` | Env-wide exports, sourced before any stage |
 | `conan/base_classes/` | Shared conanfile base classes (`base-classes:`) |
 | `conan/recipes/` | Shared tool recipes, claimed by importing envs |
@@ -124,5 +123,5 @@ installs has to be importable by the interpreter stage 3 set up.
 
 - [`../zephyr-devshell-4.3.1`](../zephyr-devshell-4.3.1) — what a version env
   built on this actually has to say
-- [`doc/configuration/denver-yml.md`](../../doc/configuration/denver-yml.md) — the `import:` chain,
+- [`doc/configuration/denver-toml.md`](../../doc/configuration/denver-toml.md) — the `import:` chain,
   merge rules, and conflicting-value resolution with `!`

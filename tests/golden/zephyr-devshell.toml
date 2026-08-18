@@ -1,0 +1,144 @@
+version = 1.0
+denver-version = ">=1.1.0"
+runnable = false
+stages = [
+  "docker",
+  "conan",
+  "uv",
+  "zephyr",
+  "uv-zephyr",
+]
+
+[hooks]
+env = [
+  "<REPO>/examples/zephyr-devshell/hooks/env.sh",
+]
+# post-conan = null
+# post-docker = null
+# post-uv = null
+# post-uv-zephyr = null
+# post-zephyr = null
+# pre-cmd = null
+# pre-conan = null
+pre-docker = [
+  "<REPO>/examples/zephyr-docker/create-env.sh",
+]
+# pre-uv = null
+# pre-uv-zephyr = null
+# pre-zephyr = null
+
+[docker]
+provider = "docker"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+exe = "docker"
+# registries = null
+
+[docker.scripts]
+setup = [
+  "setup/install_host_tools.sh",
+]
+
+[docker.compose]
+build = true
+default-cmd = "fish"
+file = "docker-compose.yml"
+# image = null
+run-args = [
+  "--rm",
+]
+service = "dev"
+
+[conan]
+provider = "conan"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+authentication = true
+base-classes = [
+  "<REPO>/examples/zephyr-devshell/conan/base_classes",
+]
+build = "missing"
+channel = "snapshot"
+conanfile = ""
+# config = null
+deployers = [
+  "<REPO>/src/denver_providers/conan_scripts/extensions/symlink.py",
+]
+exe = "conan"
+# install-args = null
+keep-remotes = false
+recipes = []
+remotes = {}
+user = "denver"
+
+[conan.profiles]
+build = []
+host = []
+
+[uv]
+provider = "uv"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+exe = "uv"
+# freeze-to = null
+# install-args = null
+# lockfile = null
+no-index = false
+# overrides = null
+# patches-apply = null
+# python = null
+reinstall = false
+# requirements = null
+# venv = null
+
+[zephyr]
+provider = "zephyr"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+base = "/fake-west-topdir/zephyr-rtos"
+# blobs-cache = null
+blobs-fetch-args = [
+  "--auto-accept",
+]
+exe = "west"
+patch-committer-date = "2000-01-01T00:00:00"
+patch-committer-email = "denver@denver"
+patch-committer-name = "denver"
+# update-args = null
+# west-config = null
+west-yml = "/fake-west-topdir/west.yml"
+
+[zephyr.scripts]
+setup = [
+  "setup/install_jlink_udev_rules.sh",
+]
+
+[uv-zephyr]
+provider = "uv"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+exe = "uv"
+# freeze-to = null
+# install-args = null
+# lockfile = null
+no-index = false
+# overrides = null
+# patches-apply = null
+# python = null
+reinstall = false
+# requirements = null
+# venv = null
+

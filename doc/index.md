@@ -13,7 +13,7 @@ mirroring this exact page tree — meant for AI tools/LLMs to ingest directly,
 without having to scrape rendered HTML. Start at
 <a href="markdown/index.md">markdown/index.md</a>; every page below has a
 twin under <code>markdown/</code> at the same path. See <code>doc/conf.py</code>
-and <code>examples/doc-env/denver.yml</code> for how it's built.
+and <code>examples/doc-env/denver.toml</code> for how it's built.
 ```
 
 ## New to denver? Read in this order
@@ -24,7 +24,7 @@ where the last left off, and they share a single worked example
 
 | # | Page | What you get out of it |
 |---|---|---|
-| 1 | [What problem denver solves](introduction/index.md) | Why a `denver.yml` beats a `setup.sh`, built up one step at a time |
+| 1 | [What problem denver solves](introduction/index.md) | Why a `denver.toml` beats a `setup.sh`, built up one step at a time |
 | 2 | [What is a denver environment?](introduction/index.md#what-is-a-denver-environment) | The model: environments, stages, providers |
 | 3 | [Install Denver](introduction/install.md) | Getting the `denver` command onto your machine |
 | 4 | [Denver in 5 minutes](quickstart/five-minutes.md) | Run a real environment end to end and watch it work |
@@ -32,12 +32,12 @@ where the last left off, and they share a single worked example
 
 After that, the rest is reference you dip into as needed: the
 [`denver` command](cli/arguments.md), the
-[`denver.yml` schema](configuration/denver-yml.md), and one page
+[`denver.toml` schema](configuration/denver-toml.md), and one page
 [per provider](providers/uv.md).
 
 ## Introduction
 
-Start here if you have never seen a `denver.yml`.
+Start here if you have never seen a `denver.toml`.
 
 ```{toctree}
 :maxdepth: 1
@@ -89,7 +89,7 @@ cli/environment-variables
 
 ## Configuration
 
-The complete `denver.yml` reference: every top-level key, every generic
+The complete `denver.toml` reference: every top-level key, every generic
 stage key, how `import:` chains merge, and the mechanisms behind layering,
 hooks, overrides and fingerprinting.
 
@@ -97,13 +97,13 @@ hooks, overrides and fingerprinting.
 :maxdepth: 1
 :caption: Configuration
 
-configuration/denver-yml
+configuration/denver-toml
 ```
 
 ## Providers
 
 One page per provider: a full key reference for that provider's
-`denver.yml` section (every key, what it does, its default) plus design
+`denver.toml` section (every key, what it does, its default) plus design
 notes on the patterns it supports and how it behaves under
 `--fast`/`--force`.
 
@@ -116,7 +116,7 @@ notes on the patterns it supports and how it behaves under
 | [`custom`](providers/custom.md) | Escape hatch: an arbitrary command, sourced script or launcher |
 
 A project can also register its own provider, without a denver fork — see
-"Extension providers" in [Configuration](configuration/denver-yml.md).
+"Extension providers" in [Configuration](configuration/denver-toml.md).
 
 ```{toctree}
 :maxdepth: 1

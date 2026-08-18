@@ -25,7 +25,8 @@ gets you tab completion for subcommands, env paths and flags — see
 
 ## Prebuilt Binary
 
-On a machine with no Python at all, take the standalone executable attached
+On a machine with no Python at all, or one stuck on Python < 3.11 (denver
+requires `>=3.11` for `tomllib`), take the standalone executable attached
 to every [release](https://github.com/thorsten-klein/denver/releases)
 instead — it bundles denver, its providers and a Python interpreter in one
 file:

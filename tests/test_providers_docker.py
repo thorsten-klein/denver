@@ -20,13 +20,27 @@ def run_docker(config, ctx, stage="docker"):
     return ctx, n
 
 
-def docker_cfg(compose=None, **rest):
-    """A minimal *explicit* docker section.
+_COMPOSE_KEYS = {"file", "service", "build", "default-cmd", "image", "run-args"}
 
-    every test that expects setup() to get as far as compose has to name it.
+
+def docker_cfg(compose=None, **rest):
+    """A minimal *explicit* docker section, nested the way denver.toml itself spells it.
+
+    every test that expects setup() to get as far as compose has to name it,
+    hence the 'file:' default below. Compose-level keys (file/service/build/
+    default-cmd/image/run-args) passed via **rest are routed
+    into the nested 'compose:' table automatically, same as passing them
+    through ``compose=`` directly -- top-level keys (exe/registries) pass
+    through onto the section itself.
     """
-    section = {"compose": {"file": "docker-compose.yml", **(compose or {})}}
-    section.update(rest)
+    section = {}
+    compose_section = {"file": "docker-compose.yml", **(compose or {})}
+    for key, value in rest.items():
+        if key in _COMPOSE_KEYS:
+            compose_section[key] = value
+        else:
+            section[key] = value
+    section["compose"] = compose_section
     return section
 
 
@@ -70,11 +84,18 @@ def test_compose_file_missing_dies(make_context, run_recorder, which):
 
 def test_compose_file_unconfigured_dies(make_context, which):
     # 'compose.file:' has no conventional default: even with a
-    # docker-compose.yml sitting right next to the denver.yml, an env that
+    # docker-compose.yml sitting right next to the denver.toml, an env that
     # doesn't name it is a config error rather than a lucky guess.
     config = {"docker": {}}
     ctx = make_context(config=config)
     write_compose(ctx)
+    with pytest.raises(SystemExit):
+        run_docker(config, ctx)
+
+
+def test_compose_unknown_key_dies(make_context, which):
+    config = {"docker": docker_cfg(compose={"file": "docker-compose.yml", "bogus": True})}
+    ctx = make_context(config=config)
     with pytest.raises(SystemExit):
         run_docker(config, ctx)
 
@@ -100,7 +121,7 @@ def test_build_default_true(make_context, run_recorder, which):
 
 
 def test_build_never_runs_without_image(make_context, run_recorder, which, capsys):
-    # 'compose.build: true' (the default) is a no-op without 'image:' set --
+    # 'compose.build: true' (the default) is a no-op without 'compose.image:' set --
     # there'd be nothing to check next run, so it would rebuild every time;
     # 'docker compose run' itself is left to build on demand instead.
     config = {"docker": docker_cfg()}
@@ -108,7 +129,7 @@ def test_build_never_runs_without_image(make_context, run_recorder, which, capsy
     write_compose(ctx)
     run_docker(config, ctx)
     assert not any("build dev" in c for c in run_recorder.commands())
-    assert "build (skipped: 'image:' is not set)" in capsys.readouterr().err
+    assert "build (skipped: 'compose.image:' is not set)" in capsys.readouterr().err
 
 
 def test_build_false_skips(make_context, run_recorder, which, capsys):
@@ -134,20 +155,24 @@ def test_fast_has_no_effect_on_build_decision(make_context, run_recorder, which)
     assert provider.wrap(ctx, ["echo", "hi"])[-2:] == ["echo", "hi"]
 
 
-def test_compose_args_and_service(make_context, run_recorder, which):
-    config = {"docker": docker_cfg(image="myapp:dev", compose={"service": "custom", "args": ["--project-name", "x"]})}
+def test_compose_service(make_context, run_recorder, which):
+    config = {"docker": docker_cfg(image="myapp:dev", compose={"service": "custom"})}
     ctx = make_context(config=config)
     write_compose(ctx)
     run_recorder.responses["image inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
     run_docker(config, ctx)
     build_argv = next(a for a in run_recorder.argvs() if "build" in a)
-    assert build_argv[build_argv.index("--project-name") + 1] == "x"
     assert build_argv[-2:] == ["build", "custom"]
 
 
 def test_compose_file_list_produces_multiple_dash_f(make_context, run_recorder, which):
     config = {
-        "docker": {"image": "myapp:dev", "compose": {"file": ["docker-compose.yml", "docker-compose.override.yml"]}}
+        "docker": {
+            "compose": {
+                "file": ["docker-compose.yml", "docker-compose.override.yml"],
+                "image": "myapp:dev",
+            }
+        }
     }
     ctx = make_context(config=config)
     write_compose(ctx)
@@ -173,63 +198,10 @@ def test_compose_file_list_missing_file_dies(make_context, run_recorder, which):
         run_docker(config, ctx)
 
 
-# ---- env-scripts -----------------------------------------------------------------------#
-def test_env_script_missing_dies(make_context, run_recorder, which):
-    config = {"docker": docker_cfg(**{"env-scripts": ["nope.sh"]})}
-    ctx = make_context(config=config)
-    write_compose(ctx)
-    with pytest.raises(SystemExit):
-        run_docker(config, ctx)
-
-
-@pytest.mark.parametrize("env_scripts", [["gen.sh"], "gen.sh"], ids=["list-form", "single-string"])
-def test_env_script_runs(make_context, run_recorder, which, env_scripts):
-    config = {"docker": docker_cfg(**{"env-scripts": env_scripts})}
-    ctx = make_context(config=config)
-    write_compose(ctx)
-    script = ctx.env_dir / "gen.sh"
-    script.write_text("#!/bin/bash\n")
-    script.chmod(0o755)
-
-    run_docker(config, ctx)
-    assert any(str(script.resolve()) in c for c in run_recorder.commands())
-
-
-def test_prepare_banner_shown_before_env_script_output(make_context, run_recorder, which, capsys):
-    # the 'prepare' banner must print before an env-script's own '+ cmd'
-    # echo/output, not after -- env-scripts used to run unbannered, so
-    # their output appeared ahead of the first banner (e.g. create-env.sh).
-    config = {"docker": docker_cfg(**{"env-scripts": ["gen.sh"]})}
-    ctx = make_context(config=config)
-    write_compose(ctx)
-    script = ctx.env_dir / "gen.sh"
-    script.write_text("#!/bin/bash\n")
-    script.chmod(0o755)
-
-    run_docker(config, ctx)
-
-    err = capsys.readouterr().err
-    banner_pos = err.index("prepare")
-    script_pos = err.index(str(script.resolve()))
-    assert banner_pos < script_pos
-
-
-def test_no_env_scripts_no_op(make_context, run_recorder, which):
-    config = {"docker": docker_cfg(image="myapp:dev")}
-    ctx = make_context(config=config)
-    write_compose(ctx)
-    run_recorder.responses["image inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
-    run_docker(config, ctx)  # must not raise despite no env-scripts configured
-    # only the compose-version check, the image-inspect probe and the build
-    # command ran -- nothing env-script-related
-    assert len(run_recorder.commands()) == 3
-    assert "build" in run_recorder.commands()[-1]
-
-
 # ---- image / registries ------------------------------------------------------------------#
 def test_registries_without_image_is_silently_ignored(make_context, run_recorder, which):
     # without 'image:', 'registries:' is ignored -- and so is the build,
-    # since 'compose.build: true' also needs 'image:' to mean anything here.
+    # since 'compose.build: true' also needs 'compose.image:' to mean anything here.
     config = {"docker": docker_cfg(**{"registries": [{"url": "registry1.example.com"}]})}
     ctx = make_context(config=config)
     write_compose(ctx)
@@ -563,20 +535,6 @@ def test_denver_docker_image_empty_when_unset(make_context, run_recorder, which)
     assert ctx.env["DENVER_DOCKER_IMAGE"] == ""
 
 
-def test_denver_docker_image_visible_to_env_scripts(make_context, run_recorder, which):
-    config = {"docker": docker_cfg(image="myapp:dev", **{"env-scripts": ["gen.sh"]})}
-    ctx = make_context(config=config)
-    write_compose(ctx)
-    script = ctx.env_dir / "gen.sh"
-    script.write_text("#!/bin/bash\n")
-    script.chmod(0o755)
-
-    run_docker(config, ctx)
-
-    script_call = next(c for c in run_recorder.calls if "gen.sh" in " ".join(str(p) for p in c.cmd))
-    assert script_call.kwargs["env"]["DENVER_DOCKER_IMAGE"] == "myapp:dev"
-
-
 # ---- wrap() -----------------------------------------------------------------------------#
 def test_wrap_before_setup_dies(make_context):
     n = DockerProvider({})
@@ -726,13 +684,11 @@ def test_wrap_mounts_the_frozen_executable_itself(make_context, run_recorder, wh
 
 # ---- UID/GID seeding ------------------------------------------------------------------------#
 def test_uid_gid_defaults_not_overridden(make_context, run_recorder, which):
-    config = {"docker": docker_cfg(**{"env-scripts": ["${UID}-gen.sh"]})}
+    config = {"docker": docker_cfg(**{"run-args": ["--label", "uid=${UID}"]})}
     ctx = make_context(config=config, env={"UID": "9999"})
     write_compose(ctx)
-    script = ctx.env_dir / "9999-gen.sh"
-    script.write_text("#!/bin/bash\n")
-    script.chmod(0o755)
-    run_docker(config, ctx)
+    ctx, n = run_docker(config, ctx)
+    cmd = n.wrap(ctx, ["fish"])
     # UID was already set in the environment, so setdefault must not clobber it
     # before the "docker:" section is interpolated
-    assert any(str(script.resolve()) in c for c in run_recorder.commands())
+    assert "uid=9999" in cmd

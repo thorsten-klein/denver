@@ -26,7 +26,7 @@ redone only when `requirements.txt` actually changes.
 form of the `system_venv.sh` / `system_venv_activate.sh` pattern most
 projects grow eventually: one script to create the venv and install into it,
 another to activate it, and a rule that everyone has to remember to re-run
-the first after a `git pull`. As a `denver.yml`, creating, updating and
+the first after a `git pull`. As a `denver.toml`, creating, updating and
 activating are the same single command, and "is it up to date?" is denver's
 problem rather than yours.
 
@@ -41,16 +41,14 @@ get one. It is the same job the `uv`-before-`conan` ordering does inside
 This is the reference for **"denver does not require Docker, or Conan, or a
 toolchain"**. One provider, four lines of configuration, no infrastructure:
 
-```yaml
-stages:
-- uv
+```toml
+stages = ["uv"]
 
-command: bash
+command = "bash"
 
-uv:
-  provider: uv
-  requirements:
-  - requirements.txt
+[uv]
+provider = "uv"
+requirements = ["requirements.txt"]
 ```
 
 It is also where to look for two easily-missed generic keys:
@@ -66,13 +64,13 @@ It is also where to look for two easily-missed generic keys:
 
 | File | What it is |
 |---|---|
-| `denver.yml` | The whole env: one `uv` stage |
+| `denver.toml` | The whole env: one `uv` stage |
 | `requirements.txt` | The pinned packages (`conan`, `uv`) |
 
 ## Next
 
 - [`doc/providers/uv.md`](../../doc/providers/uv.md) — every `uv:` key,
-  including `python:`, `overrides:`, `skip-if-0:`/`skip-if-1:` and
+  including `python:`, `overrides:`, `skip-on-success:`/`skip-on-failure:` and
   `freeze-to:`
 - [`../raspberry-pico`](../raspberry-pico) — the next step up: this same
   `uv` stage, plus a `conan` stage that uses what it installed

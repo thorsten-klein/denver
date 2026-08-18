@@ -10,7 +10,7 @@ from denver_providers.uv import UvProvider
 @pytest.fixture(autouse=True)
 def _venv_creates_dir(run_recorder):
     """'uv venv [-p <version>] <dir>' has the real side effect of creating <dir>;
-    subsequent steps (checksums, skip-if-0/skip-if-1) depend on it existing. Keyed on
+    subsequent steps (checksums) depend on it existing. Keyed on
     'uv venv' rather than 'venv -p', since '-p' is only passed when the stage
     actually configures a 'python:' (there is no default -- see
     UvProvider.resolve_defaults).
@@ -118,7 +118,7 @@ def test_setup_uv_missing_dies(make_context, which):
 
 def test_setup_uv_configured_explicitly(make_context, run_recorder, which):
     which["uv"] = None  # not on PATH, but explicitly configured below
-    config = {"uv": {"uv": "/opt/uv"}}
+    config = {"uv": {"exe": "/opt/uv"}}
     ctx = make_context(config=config)
     run_uv(config, ctx)
     assert any("/opt/uv venv" in c for c in run_recorder.commands())
@@ -385,156 +385,9 @@ def test_distinct_venv_names_each_decide_their_own_recreate(make_context, run_re
 
 
 # ---- _install branches -------------------------------------------------------#
-def test_install_skips_when_all_skip_if_0_scripts_pass(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["check.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
-    # checksums must already match, otherwise _ensure_venv recreates the venv
-    # before _install ever runs the skip-if-0 scripts
-    from denver_providers.context import sha256_of_files
-
-    ctx.venv_dir.mkdir(parents=True)
-    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
-    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
-
-    run_uv(config, ctx)
-    assert not any("uv pip install" in c for c in run_recorder.commands())
-
-
-def test_install_runs_when_a_skip_if_0_script_fails(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["check.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 1\n")
-    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 1})()
-
-    run_uv(config, ctx)
-    assert any("uv pip install" in c for c in run_recorder.commands())
-
-
-def test_install_dies_when_skip_if_0_script_missing(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["nope.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    with pytest.raises(SystemExit):
-        run_uv(config, ctx)
-
-
-def test_install_skips_via_configured_skip_if_0_script(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["uv/skip-if-0.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "uv").mkdir(parents=True)
-    (ctx.env_dir / "uv" / "skip-if-0.sh").write_text("#!/bin/sh\nexit 0\n")
-    run_recorder.responses["skip-if-0.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
-
-    run_uv(config, ctx)
-    assert not any("uv pip install" in c for c in run_recorder.commands())
-
-
-def test_install_ignores_unconfigured_skip_if_0_script(make_context, run_recorder, which):
-    # uv/skip-if-0.sh is there and would skip the install, but nothing names
-    # it, so it is never looked at: no path is guessed from the layout.
-    config = {"uv": {"requirements": ["r.txt"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "uv").mkdir(parents=True)
-    (ctx.env_dir / "uv" / "skip-if-0.sh").write_text("#!/bin/sh\nexit 0\n")
-    run_recorder.responses["skip-if-0.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
-
-    run_uv(config, ctx)
-    assert any("uv pip install" in c for c in run_recorder.commands())
-
-
-def test_install_force_ignores_skip_if_0(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["check.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
-    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
-    ctx.force = True
-
-    run_uv(config, ctx)
-    assert any("uv pip install" in c for c in run_recorder.commands())
-
-
-def test_setup_skips_stage_entirely_when_skip_if_1_satisfied_before_venv_exists(make_context, run_recorder, which):
-    # unlike test_install_skips_when_all_skip_if_1_scripts_exit_1 (venv
-    # already exists there), no venv exists yet here -- so this exercises
-    # setup()'s own skip-if check (_skip_if_stage), not _install_and_patch's.
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 1\n")
-    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 1})()
-
-    run_uv(config, ctx)
-    assert not ctx.venv_dir.is_dir()
-    assert not any("uv venv" in c for c in run_recorder.commands())
-
-
-def test_install_skips_when_all_skip_if_1_scripts_exit_1(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 1\n")
-    from denver_providers.context import sha256_of_files
-
-    ctx.venv_dir.mkdir(parents=True)
-    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
-    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 1})()
-
-    run_uv(config, ctx)
-    assert not any("uv pip install" in c for c in run_recorder.commands())
-
-
-def test_install_runs_when_a_skip_if_1_script_exits_0(make_context, run_recorder, which):
-    # skip-if-1's condition is exit 1, not exit 0 -- a passing (exit 0) script
-    # here means "not yet done", the opposite of what it means under skip-if-0.
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
-    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
-
-    run_uv(config, ctx)
-    assert any("uv pip install" in c for c in run_recorder.commands())
-
-
-def test_install_force_ignores_skip_if_1(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 1\n")
-    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 1})()
-    ctx.force = True
-
-    run_uv(config, ctx)
-    assert any("uv pip install" in c for c in run_recorder.commands())
-
-
-def test_install_skips_when_skip_if_0_group_satisfied_even_if_skip_if_1_is_not(make_context, run_recorder, which):
-    # the two groups are independent -- either one being fully satisfied is
-    # enough to skip the install, regardless of what the other one says.
-    config = {
-        "uv": {"requirements": ["r.txt"], "skip-if-0": ["zero.sh"], "skip-if-1": ["one.sh"]},
-    }
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "zero.sh").write_text("#!/bin/sh\nexit 0\n")
-    (ctx.env_dir / "one.sh").write_text("#!/bin/sh\nexit 0\n")
-    from denver_providers.context import sha256_of_files
-
-    ctx.venv_dir.mkdir(parents=True)
-    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
-    run_recorder.responses["zero.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
-    run_recorder.responses["one.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
-
-    run_uv(config, ctx)
-    assert not any("uv pip install" in c for c in run_recorder.commands())
-
-
+# skip-on-success/skip-on-failure are handled generically one layer up, before
+# setup() is ever called (see denver.py's _stage_skip_reason) -- coverage for
+# that mechanism lives in tests/test_denver_orchestration.py, not here.
 @pytest.mark.parametrize(
     "no_index, in_container, expect_present",
     [
@@ -566,12 +419,11 @@ def test_install_no_index(make_context, run_recorder, which, no_index, in_contai
     assert ("--no-index" in install_cmd) == expect_present
 
 
-def test_install_with_overrides_and_find_links(make_context, run_recorder, which):
+def test_install_with_overrides(make_context, run_recorder, which):
     config = {
         "uv": {
             "requirements": ["r.txt"],
             "overrides": ["overrides.txt"],
-            "find-links": ["."],
         }
     }
     ctx = make_context(config=config)
@@ -580,7 +432,6 @@ def test_install_with_overrides_and_find_links(make_context, run_recorder, which
     run_uv(config, ctx)
     argv = next(a for a in run_recorder.argvs() if "uv pip install" in " ".join(a))
     assert argv[argv.index("--override") + 1] == str((ctx.env_dir / "overrides.txt").resolve())
-    assert argv[argv.index("--find-links") + 1] == str((ctx.env_dir / ".").resolve())
 
 
 # ---- install-args: (including '$(...)' command entries) ----------------------#
@@ -647,8 +498,8 @@ def test_install_args_command_entry_output_change_recreates_venv(make_context, r
     assert not (ctx.venv_dir / "marker").exists()  # old venv was removed
 
 
-# ---- append-mode ---------------------------------------------------------------#
-def test_append_mode_default_uses_only_current_run_args(make_context, run_recorder, which):
+# ---- reinstall ---------------------------------------------------------------#
+def test_reinstall_default_uses_only_current_run_args(make_context, run_recorder, which):
     config = {"uv": {"requirements": ["r.txt"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
@@ -664,15 +515,15 @@ def test_append_mode_default_uses_only_current_run_args(make_context, run_record
     assert str((ctx.env_dir / "r2.txt").resolve()) in install_cmd
 
 
-def test_append_mode_true_keeps_prior_run_args(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "append-mode": True}}
+def test_reinstall_true_keeps_prior_run_args(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "reinstall": True}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
 
     # a later run with a *different* set of requirements (as if a dynamic
     # '$(...)' source dropped this one) must still install the old one too
-    config2 = {"uv": {"requirements": ["r2.txt"], "append-mode": True}}
+    config2 = {"uv": {"requirements": ["r2.txt"], "reinstall": True}}
     (ctx.env_dir / "r2.txt").write_text("packaging\n")
     run_recorder.calls.clear()
     run_uv(config2, ctx)
@@ -682,15 +533,15 @@ def test_append_mode_true_keeps_prior_run_args(make_context, run_recorder, which
     assert str((ctx.env_dir / "r2.txt").resolve()) in install_cmd
 
 
-def test_append_mode_persists_across_venv_recreation(make_context, run_recorder, which):
+def test_reinstall_persists_across_venv_recreation(make_context, run_recorder, which):
     # the accumulated arg history lives outside the venv dir, so it survives
     # a checksum-triggered recreate instead of being wiped along with it
-    config = {"uv": {"requirements": ["r.txt"], "append-mode": True}}
+    config = {"uv": {"requirements": ["r.txt"], "reinstall": True}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
 
-    config2 = {"uv": {"requirements": ["r2.txt"], "append-mode": True}}
+    config2 = {"uv": {"requirements": ["r2.txt"], "reinstall": True}}
     (ctx.env_dir / "r2.txt").write_text("changed\n")  # forces a checksum change -> recreate
     run_recorder.calls.clear()
     run_uv(config2, ctx)
@@ -700,8 +551,8 @@ def test_append_mode_persists_across_venv_recreation(make_context, run_recorder,
     assert str((ctx.env_dir / "r2.txt").resolve()) in install_cmd
 
 
-def test_append_mode_deduplicates_unchanged_requirement(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "append-mode": True}}
+def test_reinstall_deduplicates_unchanged_requirement(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "reinstall": True}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
@@ -713,7 +564,7 @@ def test_append_mode_deduplicates_unchanged_requirement(make_context, run_record
     assert install_cmd.count(str((ctx.env_dir / "r.txt").resolve())) == 1
 
 
-# ---- lock: create / sync ---------------------------------------------------------#
+# ---- lockfile ---------------------------------------------------------------#
 def make_project(ctx, rel="py", *, lockfile=True):
     """A minimal uv project dir (pyproject.toml, optionally its uv.lock) under the env dir."""
     project = ctx.env_dir / rel
@@ -736,18 +587,8 @@ def start_next_run(ctx, run_recorder):
     run_recorder.calls.clear()
 
 
-def test_lock_create_runs_uv_lock_for_the_project(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"create": "py/uv.lock"}}}
-    ctx = make_context(config=config)
-    project = make_project(ctx, lockfile=False)
-    run_uv(config, ctx)
-
-    argv = next(a for a in run_recorder.argvs() if "uv lock" in " ".join(a))
-    assert argv[argv.index("--project") + 1] == str(project)
-
-
-def test_lock_sync_installs_lockfile_into_the_activated_venv(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+def test_lockfile_syncs_into_the_activated_venv(make_context, run_recorder, which):
+    config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config)
     project = make_project(ctx)
     run_uv(config, ctx)
@@ -760,20 +601,8 @@ def test_lock_sync_installs_lockfile_into_the_activated_venv(make_context, run_r
     assert ctx.env["VIRTUAL_ENV"] == str(ctx.venv_dir)
 
 
-def test_lock_create_runs_before_sync(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"create": "py/uv.lock", "sync": "py/uv.lock"}}}
-    ctx = make_context(config=config)
-    make_project(ctx)
-    run_uv(config, ctx)
-
-    commands = run_recorder.commands()
-    assert next(i for i, c in enumerate(commands) if "uv lock" in c) < next(
-        i for i, c in enumerate(commands) if "uv sync" in c
-    )
-
-
-def test_lock_without_pyproject_dies(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+def test_lockfile_without_pyproject_dies(make_context, run_recorder, which):
+    config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config)
     (ctx.env_dir / "py").mkdir()
     (ctx.env_dir / "py" / "uv.lock").write_text("version = 1\n")
@@ -781,42 +610,34 @@ def test_lock_without_pyproject_dies(make_context, run_recorder, which):
         run_uv(config, ctx)
 
 
-def test_lock_sync_missing_lockfile_dies(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+def test_lockfile_missing_dies(make_context, run_recorder, which):
+    config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config)
     make_project(ctx, lockfile=False)
     with pytest.raises(SystemExit):
         run_uv(config, ctx)
 
 
-def test_lock_path_must_name_a_uv_lock_file(make_context, run_recorder, which):
+def test_lockfile_path_must_name_a_uv_lock_file(make_context, run_recorder, which):
     # uv only ever reads/writes '<project>/uv.lock' -- a path naming anything
     # else is a config error, caught centrally in resolve_defaults.
-    config = {"uv": {"lock": {"sync": "py/frozen.lock"}}}
+    config = {"uv": {"lockfile": "py/frozen.lock"}}
     ctx = make_context(config=config)
     make_project(ctx)
     with pytest.raises(SystemExit):
         run_uv(config, ctx)
 
 
-def test_lock_unknown_subkey_dies(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"syncc": "py/uv.lock"}}}
-    ctx = make_context(config=config)
-    make_project(ctx)
-    with pytest.raises(SystemExit):
-        run_uv(config, ctx)
-
-
-def test_lock_only_stage_never_pip_installs(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+def test_lockfile_only_stage_never_pip_installs(make_context, run_recorder, which):
+    config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config)
     make_project(ctx)
     run_uv(config, ctx)
     assert not any("uv pip install" in c for c in run_recorder.commands())
 
 
-def test_lock_alongside_requirements_both_run(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "lock": {"sync": "py/uv.lock"}}}
+def test_lockfile_alongside_requirements_both_run(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "lockfile": "py/uv.lock"}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     make_project(ctx)
@@ -830,10 +651,10 @@ def test_lock_alongside_requirements_both_run(make_context, run_recorder, which)
     )
 
 
-def test_lock_sync_lockfile_change_recreates_venv(make_context, run_recorder, which):
-    # 'lock: sync:'s lockfile is an install input, so drift in it recreates
-    # the venv just like a changed requirements file does
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+def test_lockfile_change_recreates_venv(make_context, run_recorder, which):
+    # 'lockfile:' is an install input, so drift in it recreates the venv
+    # just like a changed requirements file does
+    config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config)
     make_project(ctx)
     run_uv(config, ctx)
@@ -847,8 +668,8 @@ def test_lock_sync_lockfile_change_recreates_venv(make_context, run_recorder, wh
     assert not (ctx.venv_dir / "marker").exists()
 
 
-def test_lock_sync_unchanged_lockfile_keeps_venv(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+def test_lockfile_unchanged_keeps_venv(make_context, run_recorder, which):
+    config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config)
     make_project(ctx)
     run_uv(config, ctx)
@@ -860,57 +681,21 @@ def test_lock_sync_unchanged_lockfile_keeps_venv(make_context, run_recorder, whi
     assert any("uv sync" in c for c in run_recorder.commands())  # still re-synced
 
 
-def test_lock_create_output_does_not_invalidate_its_own_checksum(make_context, run_recorder, which):
-    # the created lockfile is an *output* (like 'freeze-to:'): writing it must
-    # not make the next run think its inputs drifted and recreate the venv
-    config = {"uv": {"lock": {"create": "py/uv.lock"}}}
+def test_lockfile_and_install_share_no_index(make_context, run_recorder, which):
+    # both uv commands that resolve packages must see the same offline policy
+    config = {"uv": {"requirements": ["r.txt"], "lockfile": "py/uv.lock", "no-index": True}}
     ctx = make_context(config=config)
-    make_project(ctx, lockfile=False)
-    run_uv(config, ctx)
-    (ctx.env_dir / "py" / "uv.lock").write_text("version = 1\n")  # what `uv lock` would have written
-
-    start_next_run(ctx, run_recorder)
-    run_uv(config, ctx)
-    assert not any("uv venv " in c for c in run_recorder.commands())
-
-
-def test_lock_gets_the_same_wheel_sources_as_pip_install(make_context, run_recorder, which):
-    config = {
-        "uv": {
-            "lock": {"create": "py/uv.lock", "sync": "py/uv.lock"},
-            "find-links": ["wheels"],
-            "no-index": True,
-        }
-    }
-    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
     make_project(ctx)
-    (ctx.env_dir / "wheels").mkdir()
     run_uv(config, ctx)
 
-    for command in ("uv lock", "uv sync"):
+    for command in ("uv sync", "uv pip install"):
         argv = next(a for a in run_recorder.argvs() if command in " ".join(a))
-        assert argv[argv.index("--find-links") + 1] == str((ctx.env_dir / "wheels").resolve())
         assert "--no-index" in argv
 
 
-def test_lock_skipped_by_skip_if_0(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}, "skip-if-0": ["check.sh"]}}
-    ctx = make_context(config=config)
-    make_project(ctx)
-    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
-    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
-    # checksums must already match, otherwise the venv is recreated first
-    ctx.venv_dir.mkdir(parents=True)
-    from denver_providers.context import sha256_of_files
-
-    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "py" / "uv.lock"], base=ctx.env_dir))
-
-    run_uv(config, ctx)
-    assert not any("uv sync" in c for c in run_recorder.commands())
-
-
-def test_lock_not_synced_under_fast(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}}}
+def test_lockfile_not_synced_under_fast(make_context, run_recorder, which):
+    config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config, fast=True)
     make_project(ctx)
     ctx.venv_dir.mkdir(parents=True)
@@ -953,93 +738,41 @@ def test_apply_patches_none_configured(make_context, run_recorder, which):
     assert not any("venv-patcher" in c for c in run_recorder.commands())
 
 
-def test_apply_patches_file_missing_dies(make_context, run_recorder, which):
-    # a configured patches file that isn't on disk is a config error, caught
-    # centrally in resolve_defaults before anything runs.
-    config = {"uv": {"requirements": ["r.txt"], "venv-patcher": {"patches": "nope.yml"}}}
+def test_apply_patches_runs_configured_command(make_context, run_recorder, which):
+    # 'patches.yml' isn't on disk anywhere -- passed through completely
+    # literally, exactly as configured (not e.g. rewritten to an
+    # env-dir-relative path that doesn't exist either).
+    config = {"uv": {"requirements": ["r.txt"], "patches-apply": ["venv-patcher", "apply", "-f", "patches.yml"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
-    with pytest.raises(SystemExit):
-        run_uv(config, ctx)
-
-
-def test_apply_patches_no_patcher_available(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "venv-patcher": {"patches": "patches.yml"}}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "patches.yml").write_text("x\n")
-    which["venv-patcher"] = None
     run_uv(config, ctx)
-    assert not any("apply -f" in c for c in run_recorder.commands())
+    assert any("venv-patcher apply -f patches.yml" in c for c in run_recorder.commands())
 
 
-def test_apply_patches_runs_patcher(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "venv-patcher": {"patches": "patches.yml"}}}
+def test_apply_patches_resolves_relative_path_under_env_dir(make_context, run_recorder, which):
+    # a token that does name a real file is rewritten to its absolute path
+    # -- 'apply'/'-f'/the bare 'venv-patcher' exe name are left alone since
+    # nothing on disk matches them.
+    config = {"uv": {"requirements": ["r.txt"], "patches-apply": ["venv-patcher", "apply", "-f", "patches.yml"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     (ctx.env_dir / "patches.yml").write_text("x\n")
     run_uv(config, ctx)
-    assert any("apply -f" in c for c in run_recorder.commands())
+    expected = f"venv-patcher apply -f {ctx.env_dir / 'patches.yml'}"
+    assert any(expected in c for c in run_recorder.commands())
 
 
-def test_apply_patches_not_guessed_from_directory_layout(make_context, run_recorder, which):
-    # uv/venv-patcher/patches.yml exists but no 'venv-patcher:' section
-    # names it, so no patching happens.
-    config = {"uv": {"requirements": ["r.txt"]}}
-    ctx = make_context(config=config)
+def test_apply_patches_resolves_relative_path_from_import(make_context, run_recorder, which, tmp_path):
+    # the same fallback resolve_path() itself uses: a 'patches-apply:' entry
+    # declared in an imported base config is relative to *that* base's own
+    # dir, not the leaf env's -- env_dir stays fixed to the leaf for the
+    # whole run, so this only resolves via ctx.import_dirs.
+    base_dir = tmp_path / "base-env"
+    base_dir.mkdir()
+    (base_dir / "patches.yml").write_text("x\n")
+    config = {"uv": {"requirements": ["r.txt"], "patches-apply": ["venv-patcher", "apply", "-f", "patches.yml"]}}
+    ctx = make_context(config=config, import_dirs=[base_dir])
     (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "uv" / "venv-patcher").mkdir(parents=True)
-    (ctx.env_dir / "uv" / "venv-patcher" / "patches.yml").write_text("x\n")
     run_uv(config, ctx)
-    assert not any("apply -f" in c for c in run_recorder.commands())
-
-
-def test_apply_patches_explicit_conventional_path(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "venv-patcher": {"patches": "uv/venv-patcher/patches.yml"}}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "uv" / "venv-patcher").mkdir(parents=True)
-    (ctx.env_dir / "uv" / "venv-patcher" / "patches.yml").write_text("x\n")
-    run_uv(config, ctx)
-    assert any("apply -f" in c for c in run_recorder.commands())
-
-
-def test_apply_patches_finds_patcher_installed_by_this_same_run(make_context, run_recorder, which):
-    # resolve_defaults' own 'exe:' lookup runs before this stage's venv
-    # exists, so it can't see a venv-patcher this very run is about to
-    # install into it (e.g. as one of 'requirements:') -- only visible on
-    # PATH once _activate has prepended the venv's bin/. _apply_patches
-    # must look again at that point rather than trusting the earlier miss.
-    config = {"uv": {"requirements": ["r.txt"], "venv-patcher": {"patches": "patches.yml"}}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "patches.yml").write_text("x\n")
-    which["venv-patcher"] = None  # not found while resolving defaults
-    provider = UvProvider(config)
-    cfg = UvProvider.resolve_defaults(ctx, config["uv"], config)
-    assert cfg["venv-patcher"]["exe"] is None
-
-    which["venv-patcher"] = "/venv/bin/venv-patcher"  # now on PATH, e.g. just installed
-    provider._apply_patches(ctx, cfg)
-    assert any("/venv/bin/venv-patcher apply -f" in c for c in run_recorder.commands())
-
-
-def test_apply_patches_explicit_patcher_path(make_context, run_recorder, which):
-    config = {
-        "uv": {"requirements": ["r.txt"], "venv-patcher": {"patches": "patches.yml", "exe": "/opt/vp"}},
-    }
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    (ctx.env_dir / "patches.yml").write_text("x\n")
-    run_uv(config, ctx)
-    assert any("/opt/vp apply -f" in c for c in run_recorder.commands())
-
-
-def test_venv_patcher_without_patches_dies(make_context, run_recorder, which):
-    # declaring 'venv-patcher:' but not saying what to apply is a config
-    # error -- there is no conventional patches file to fall back to.
-    config = {"uv": {"requirements": ["r.txt"], "venv-patcher": {"exe": "/opt/vp"}}}
-    ctx = make_context(config=config)
-    (ctx.env_dir / "r.txt").write_text("packaging\n")
-    with pytest.raises(SystemExit):
-        run_uv(config, ctx)
+    expected = f"venv-patcher apply -f {base_dir / 'patches.yml'}"
+    assert any(expected in c for c in run_recorder.commands())

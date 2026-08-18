@@ -242,7 +242,7 @@ def test_lock_warns_where_locking_is_unsupported(make_context, monkeypatch, capl
 def test_state_dir_lives_under_the_env_dir(tmp_path):
     env_dir = tmp_path / "myenv"
     env_dir.mkdir()
-    got = ctxmod.state_dir_for(env_dir, env_dir / "denver.yml", tmp_path / "fallback", env={})
+    got = ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", tmp_path / "fallback", env={})
     assert got == env_dir / ".denver" / "denver"
 
 
@@ -262,7 +262,7 @@ def test_state_dir_separates_two_checkouts_of_one_project(tmp_path):
     for checkout in ("coA", "coB"):
         env_dir = tmp_path / checkout / "myenv"
         env_dir.mkdir(parents=True)
-        dirs.append(ctxmod.state_dir_for(env_dir, env_dir / "denver.yml", tmp_path / "f", env={}))
+        dirs.append(ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", tmp_path / "f", env={}))
     assert dirs[0] != dirs[1]
 
 
@@ -270,7 +270,7 @@ def test_state_dir_honours_an_explicit_root(tmp_path):
     env_dir = tmp_path / "myenv"
     env_dir.mkdir()
     got = ctxmod.state_dir_for(
-        env_dir, env_dir / "denver.yml", tmp_path / "f", env={ctxmod.STATE_DIR_VAR: str(tmp_path / "elsewhere")}
+        env_dir, env_dir / "denver.toml", tmp_path / "f", env={ctxmod.STATE_DIR_VAR: str(tmp_path / "elsewhere")}
     )
     assert got.parent == (tmp_path / "elsewhere")
     assert got.name.startswith("myenv-")
@@ -281,7 +281,7 @@ def test_state_dir_falls_back_when_the_env_dir_is_read_only(tmp_path):
     env_dir.mkdir()
     env_dir.chmod(0o500)
     try:
-        got = ctxmod.state_dir_for(env_dir, env_dir / "denver.yml", tmp_path / "fallback", env={})
+        got = ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", tmp_path / "fallback", env={})
     finally:
         env_dir.chmod(0o700)
     assert got.parent == (tmp_path / "fallback")
@@ -321,28 +321,62 @@ def test_cache_dir_defaults_and_is_overridable(make_context):
 
 # ---- Context basics ------------------------------------------------------- #
 # ---- container detection / relocation bookkeeping ------------------------- #
-def test_in_container_via_explicit_variable(monkeypatch):
+def _isolate_container_markers(monkeypatch, tmp_path):
+    """Point every marker this host might actually have at a tmp_path that has none of them.
+
+    Keeps these tests independent of whatever machine happens to run them --
+    including one that is itself a real container (common in CI) or WSL,
+    either of which would otherwise leak into the "no signal" case.
+    """
+    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", ())
+    monkeypatch.setattr(ctxmod, "_SYSTEMD_CONTAINER_MARKER", str(tmp_path / "systemd-container"))
+
+
+def test_in_container_via_explicit_variable(monkeypatch, tmp_path):
     # what a wrapper hands across the boundary, so the process inside never
     # has to infer it from a runtime's marker file
-    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", ())
+    _isolate_container_markers(monkeypatch, tmp_path)
     assert ctxmod.in_container({ctxmod.IN_CONTAINER_VAR: "1"}) is True
 
 
-def test_in_container_via_runtime_variable(monkeypatch):
+def test_in_container_via_runtime_variable(monkeypatch, tmp_path):
     # podman/systemd-nspawn/lxc set this themselves
-    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", ())
+    _isolate_container_markers(monkeypatch, tmp_path)
     assert ctxmod.in_container({"container": "podman"}) is True
 
 
 def test_in_container_via_marker_file(monkeypatch, tmp_path):
     marker = tmp_path / ".containerenv"
     marker.write_text("")
+    _isolate_container_markers(monkeypatch, tmp_path)
     monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", (str(marker),))
     assert ctxmod.in_container({}) is True
 
 
-def test_in_container_false_without_any_signal(monkeypatch):
-    monkeypatch.setattr(ctxmod, "_CONTAINER_MARKERS", ())
+def test_in_container_via_systemd_marker_file(monkeypatch, tmp_path):
+    # systemd-nspawn (and friends) name themselves in here -- a real container
+    marker = tmp_path / "systemd-container"
+    marker.write_text("systemd-nspawn\n")
+    _isolate_container_markers(monkeypatch, tmp_path)
+    monkeypatch.setattr(ctxmod, "_SYSTEMD_CONTAINER_MARKER", str(marker))
+    assert ctxmod.in_container({}) is True
+
+
+def test_in_container_false_on_wsl(monkeypatch, tmp_path):
+    # systemd lumps WSL under the same "container" virtualization category
+    # (it has no reboot/power management of its own) even though it is
+    # really a separately-kernelled VM that runs its own dockerd natively --
+    # nesting a docker wrapper there is an ordinary docker run, not
+    # docker-in-docker, so it must not read as "in a container".
+    marker = tmp_path / "systemd-container"
+    marker.write_text("wsl\n")
+    _isolate_container_markers(monkeypatch, tmp_path)
+    monkeypatch.setattr(ctxmod, "_SYSTEMD_CONTAINER_MARKER", str(marker))
+    assert ctxmod.in_container({}) is False
+
+
+def test_in_container_false_without_any_signal(monkeypatch, tmp_path):
+    _isolate_container_markers(monkeypatch, tmp_path)
     assert ctxmod.in_container({}) is False
 
 
@@ -515,7 +549,7 @@ def test_resolve_path_non_path_value_dies(make_context, caplog):
     ctx = make_context()
     with pytest.raises(SystemExit):
         ctx.resolve_path(["conan/base_classes"])
-    assert "expected a path in denver.yml" in caplog.text
+    assert "expected a path in denver.toml" in caplog.text
 
 
 def test_resolve_path_absolute(make_context, tmp_path):
@@ -825,3 +859,20 @@ def test_sha256_of_files(tmp_path):
     block = sha256_of_files([f, tmp_path / "missing.txt"])
     assert str(f) in block
     assert "0" * 64 in block  # missing file placeholder
+
+
+def test_resolve_command_resolves_path_like_tokens_only(make_context):
+    ctx = make_context()
+    (ctx.env_dir / "apply.sh").write_text("")
+    assert ctx.resolve_command(["apply.sh", "--flag", "no-such-file"]) == [
+        str(ctx.env_dir / "apply.sh"),
+        "--flag",
+        "no-such-file",
+    ]
+
+
+def test_resolve_command_leaves_non_string_tokens_untouched(make_context):
+    # a TOML array can mix types (e.g. patches-apply's trailing int flag);
+    # resolve_command must pass those through rather than crash on Path().
+    ctx = make_context()
+    assert ctx.resolve_command(["apply.sh", 1]) == ["apply.sh", 1]

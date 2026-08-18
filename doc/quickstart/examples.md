@@ -4,7 +4,7 @@ Eight real, working environments live under
 [`examples/`](https://github.com/thorsten-klein/denver/tree/develop/examples/)
 in the repository, ordered smallest to largest. Each has its own README
 explaining what it does, why it exists and what it is meant to teach. They
-are not illustrative snippets — every `examples/*/denver.yml` has its
+are not illustrative snippets — every `examples/*/denver.toml` has its
 `--show-config` output pinned as a golden-file fixture under `tests/golden/`,
 so an example that drifted out of sync with the code fails the build.
 
@@ -15,7 +15,7 @@ so an example that drifted out of sync with the code fails the build.
 | [`simple-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env) | 3 × `custom` | The whole model at minimum size. Also the `cmd:` vs `source:` demo |
 | [`zephyr-uv`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-uv) | `uv` | A virtualenv and nothing else — proof that no container or toolchain is required |
 | [`raspberry-pico`](https://github.com/thorsten-klein/denver/tree/develop/examples/raspberry-pico) | `uv` → `conan` | A cross-compilation toolchain **without Docker**. Why stage order matters |
-| [`zephyr-docker`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-docker) | `docker` | The container layer on its own — a wrapper stage, and `env-scripts:` |
+| [`zephyr-docker`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-docker) | `docker` | The container layer on its own — a wrapper stage, and a `hooks: pre-docker:` script |
 | [`howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env) | `docker` → `uv` → `custom` → `conan` → `custom` | Four providers in one small env — run end to end in [Denver in 5 minutes](five-minutes.md) and built from scratch in [Creating environments](creating-environments.md). Also: a prebuilt binary installed by hand, right next to the same job done by conan |
 | [`zephyr-devshell`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell) | *(base — not runnable)* | The shared base: `import:`, layering, `runnable: false` |
 | [`zephyr-devshell-4.3.1`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell-4.3.1) | `docker` → `uv` → `conan` → `zephyr` → `custom` | A full Zephyr RTOS setup — the extreme case, and what `import:` layering looks like at full size |
@@ -37,7 +37,7 @@ env here — including `zephyr-devshell`, which cannot be started.
 ```{note}
 **Next:** the reference half of this documentation — the
 [`denver` command](../cli/arguments.md) for every flag, the full
-[`denver.yml` schema](../configuration/denver-yml.md) for every key, and one
+[`denver.toml` schema](../configuration/denver-toml.md) for every key, and one
 page [per provider](../providers/uv.md) for the keys a given stage type
 accepts.
 ```

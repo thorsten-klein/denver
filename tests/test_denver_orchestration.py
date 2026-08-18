@@ -16,19 +16,19 @@ from denver_providers.base import Provider
 def test_collect_import_dirs(tmp_path):
     base = tmp_path / "base"
     base.mkdir()
-    (base / "denver.yml").write_text("stages: [uv]\n")
+    (base / "denver.toml").write_text('stages = [\n  "uv",\n]\n')
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.yml"
-    cfg_path.write_text("import:\n- ../base\n")
+    cfg_path = env_dir / "denver.toml"
+    cfg_path.write_text('import = [\n  "../base",\n]\n')
     assert denver.collect_import_dirs(cfg_path) == [base]
 
 
 def test_collect_import_dirs_none(tmp_path):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.yml"
-    cfg_path.write_text("stages: [uv]\n")
+    cfg_path = env_dir / "denver.toml"
+    cfg_path.write_text('stages = [\n  "uv",\n]\n')
     assert denver.collect_import_dirs(cfg_path) == []
 
 
@@ -38,16 +38,16 @@ def test_collect_import_dirs_multi_level_nearest_first(tmp_path):
     found in 'mid' before falling through to 'base'."""
     base = tmp_path / "base"
     base.mkdir()
-    (base / "denver.yml").write_text("stages: [uv]\n")
+    (base / "denver.toml").write_text('stages = [\n  "uv",\n]\n')
 
     mid = tmp_path / "mid"
     mid.mkdir()
-    (mid / "denver.yml").write_text("import:\n- ../base\n")
+    (mid / "denver.toml").write_text('import = [\n  "../base",\n]\n')
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.yml"
-    cfg_path.write_text("import:\n- ../mid\n")
+    cfg_path = env_dir / "denver.toml"
+    cfg_path.write_text('import = [\n  "../mid",\n]\n')
 
     assert denver.collect_import_dirs(cfg_path) == [mid, base]
 
@@ -55,31 +55,31 @@ def test_collect_import_dirs_multi_level_nearest_first(tmp_path):
 def test_collect_import_dirs_circular_dies(tmp_path):
     a = tmp_path / "a"
     a.mkdir()
-    (a / "denver.yml").write_text("import:\n- ../b\n")
+    (a / "denver.toml").write_text('import = [\n  "../b",\n]\n')
     b = tmp_path / "b"
     b.mkdir()
-    (b / "denver.yml").write_text("import:\n- ../a\n")
+    (b / "denver.toml").write_text('import = [\n  "../a",\n]\n')
 
     with pytest.raises(SystemExit):
-        denver.collect_import_dirs(a / "denver.yml")
+        denver.collect_import_dirs(a / "denver.toml")
 
 
 # ---- run_hook / collect_hook_entries ----------------------------------------#
-def _write_denver_yml(env_dir, content):
-    (env_dir / "denver.yml").write_text(content)
-    return env_dir / "denver.yml"
+def _write_denver_toml(env_dir, content):
+    (env_dir / "denver.toml").write_text(content)
+    return env_dir / "denver.toml"
 
 
 def test_run_hook_missing_key_noop(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [uv]\n")
+    cfg_path = _write_denver_toml(ctx.env_dir, 'stages = ["uv"]\n')
     denver.run_hook(ctx, cfg_path, "pre-uv")  # no error
 
 
 def test_run_hook_single_script(make_context):
     ctx = make_context()
     (ctx.env_dir / "hook.sh").write_text("export HOOKED=1\n")
-    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  pre-uv: hook.sh\n")
+    cfg_path = _write_denver_toml(ctx.env_dir, '[hooks]\npre-uv = "hook.sh"\n')
     denver.run_hook(ctx, cfg_path, "pre-uv")
     assert ctx.env["HOOKED"] == "1"
 
@@ -88,7 +88,7 @@ def test_run_hook_list_of_scripts(make_context):
     ctx = make_context()
     (ctx.env_dir / "a.sh").write_text("export A=1\n")
     (ctx.env_dir / "b.sh").write_text("export B=1\n")
-    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  pre-cmd: [a.sh, b.sh]\n")
+    cfg_path = _write_denver_toml(ctx.env_dir, '[hooks]\npre-cmd = ["a.sh", "b.sh"]\n')
     denver.run_hook(ctx, cfg_path, "pre-cmd")
     assert ctx.env["A"] == "1"
     assert ctx.env["B"] == "1"
@@ -96,25 +96,25 @@ def test_run_hook_list_of_scripts(make_context):
 
 def test_run_hook_missing_script_dies(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  pre-uv: nope.sh\n")
+    cfg_path = _write_denver_toml(ctx.env_dir, '[hooks]\npre-uv = "nope.sh"\n')
     with pytest.raises(SystemExit):
         denver.run_hook(ctx, cfg_path, "pre-uv")
 
 
 def test_run_hook_unconfigured_script_is_never_discovered(make_context):
     # hooks/env.sh is the conventional name, and it is sitting right next to
-    # the denver.yml -- but nothing lists it, so it is not sourced.
+    # the denver.toml -- but nothing lists it, so it is not sourced.
     ctx = make_context()
     (ctx.env_dir / "hooks").mkdir()
     (ctx.env_dir / "hooks" / "env.sh").write_text("export CONVENTIONAL=1\n")
-    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [uv]\n")  # no hooks: at all
+    cfg_path = _write_denver_toml(ctx.env_dir, 'stages = ["uv"]\n')  # no hooks: at all
     denver.run_hook(ctx, cfg_path, "env")
     assert "CONVENTIONAL" not in ctx.env
 
 
 def test_run_hook_nothing_configured_is_a_no_op(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_yml(ctx.env_dir, "stages: [uv]\n")
+    cfg_path = _write_denver_toml(ctx.env_dir, 'stages = ["uv"]\n')
     denver.run_hook(ctx, cfg_path, "env")  # no error, nothing to source
     assert "CONVENTIONAL" not in ctx.env
 
@@ -126,9 +126,9 @@ def test_run_hook_list_is_sourced_in_order(make_context):
     (ctx.env_dir / "hooks").mkdir()
     (ctx.env_dir / "hooks" / "env.sh").write_text("export BASE=1\nexport SHARED=from-base\n")
     (ctx.env_dir / "hooks" / "env.user.sh").write_text("export USER_ONLY=1\nexport SHARED=from-user\n")
-    cfg_path = _write_denver_yml(
+    cfg_path = _write_denver_toml(
         ctx.env_dir,
-        "hooks:\n  env:\n  - hooks/env.sh\n  - hooks/env.user.sh\n",
+        '[hooks]\nenv = ["hooks/env.sh", "hooks/env.user.sh"]\n',
     )
     denver.run_hook(ctx, cfg_path, "env")
     assert ctx.env["BASE"] == "1"
@@ -141,7 +141,7 @@ def test_run_hook_only_configured_script_runs(make_context):
     (ctx.env_dir / "hooks").mkdir()
     (ctx.env_dir / "hooks" / "env.sh").write_text("export CONVENTIONAL=1\n")
     (ctx.env_dir / "explicit.sh").write_text("export EXPLICIT=1\n")
-    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  env: explicit.sh\n")
+    cfg_path = _write_denver_toml(ctx.env_dir, '[hooks]\nenv = "explicit.sh"\n')
     denver.run_hook(ctx, cfg_path, "env")
     assert ctx.env["EXPLICIT"] == "1"
     assert "CONVENTIONAL" not in ctx.env
@@ -150,14 +150,14 @@ def test_run_hook_only_configured_script_runs(make_context):
 def test_run_hook_stacked_base_runs_before_derived(tmp_path, make_context):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("hooks:\n  env: base.sh\n")
+    (base_dir / "denver.toml").write_text('[hooks]\nenv = "base.sh"\n')
     (base_dir / "base.sh").write_text("export ORDER=${ORDER}base\nexport FROM_BASE=1\n")
 
     env_dir = tmp_path / "derived"
     env_dir.mkdir()
     (env_dir / "derived.sh").write_text("export ORDER=${ORDER}derived\nexport FROM_DERIVED=1\n")
-    cfg_path = env_dir / "denver.yml"
-    cfg_path.write_text("import:\n- ../base\nhooks:\n  env: derived.sh\n")
+    cfg_path = env_dir / "denver.toml"
+    cfg_path.write_text('import = [\n  "../base",\n]\n\n[hooks]\nenv = "derived.sh"\n')
 
     ctx = make_context(env_dir=env_dir)
     denver.run_hook(ctx, cfg_path, "env")
@@ -171,14 +171,14 @@ def test_run_hook_stacked_lists_from_both_layers(tmp_path, make_context):
     # base-first, and each entry resolves against its own layer's dir.
     base_dir = tmp_path / "base"
     (base_dir / "hooks").mkdir(parents=True)
-    (base_dir / "denver.yml").write_text("stages: [uv]\nhooks:\n  env:\n  - hooks/env.sh\n")
+    (base_dir / "denver.toml").write_text('stages = [\n  "uv",\n]\n\n[hooks]\nenv = [\n  "hooks/env.sh",\n]\n')
     (base_dir / "hooks" / "env.sh").write_text("export FROM_BASE=1\n")
 
     env_dir = tmp_path / "derived"
     (env_dir / "hooks").mkdir(parents=True)
     (env_dir / "hooks" / "env.sh").write_text("export FROM_DERIVED=1\n")
-    cfg_path = env_dir / "denver.yml"
-    cfg_path.write_text("import:\n- ../base\nhooks:\n  env:\n  - hooks/env.sh\n")
+    cfg_path = env_dir / "denver.toml"
+    cfg_path.write_text('import = [\n  "../base",\n]\n\n[hooks]\nenv = [\n  "hooks/env.sh",\n]\n')
 
     ctx = make_context(env_dir=env_dir)
     denver.run_hook(ctx, cfg_path, "env")
@@ -191,17 +191,17 @@ def test_collect_hook_entries_circular_import_dies(tmp_path):
     b_dir = tmp_path / "b"
     a_dir.mkdir()
     b_dir.mkdir()
-    (a_dir / "denver.yml").write_text("import:\n- ../b\n")
-    (b_dir / "denver.yml").write_text("import:\n- ../a\n")
+    (a_dir / "denver.toml").write_text('import = [\n  "../b",\n]\n')
+    (b_dir / "denver.toml").write_text('import = [\n  "../a",\n]\n')
     with pytest.raises(SystemExit):
-        denver.collect_hook_entries(a_dir / "denver.yml", "env")
+        denver.collect_hook_entries(a_dir / "denver.toml", "env")
 
 
 # ---- expand_section_imports ------------------------------------------------#
 def test_expand_section_imports_stacks_and_overrides(tmp_path):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.yml").write_text("docker:\n  exe: docker\n  service: dev\n")
+    (src_env / "denver.toml").write_text('[docker]\nexe = "docker"\nservice = "dev"\n')
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
@@ -216,11 +216,11 @@ def test_expand_section_imports_stacks_and_overrides(tmp_path):
 def test_expand_section_imports_direct_file_ref(tmp_path):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.yml").write_text("docker:\n  exe: docker\n")
+    (src_env / "denver.toml").write_text('[docker]\nexe = "docker"\n')
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    config = {"docker": {"import": ["../src/denver.yml"]}}
+    config = {"docker": {"import": ["../src/denver.toml"]}}
     expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
     assert expanded["docker"] == {"exe": "docker"}
     assert extra_dirs == [src_env]
@@ -229,11 +229,11 @@ def test_expand_section_imports_direct_file_ref(tmp_path):
 def test_expand_section_imports_explicit_section_ref(tmp_path):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.yml").write_text("conan:\n  base-classes:\n  - conan/base_classes\n")
+    (src_env / "denver.toml").write_text('[conan]\nbase-classes = [\n  "conan/base_classes",\n]\n')
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    config = {"conan": {"import": ["../src/denver.yml:conan"]}}
+    config = {"conan": {"import": ["../src/denver.toml:conan"]}}
     expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
     assert expanded["conan"] == {"base-classes": ["conan/base_classes"]}
     assert extra_dirs == [src_env]
@@ -263,10 +263,13 @@ def test_default_command_non_tty_dies(monkeypatch):
         pytest.param({}, {"SHELL": "/usr/bin/zsh"}, lambda cmd: cmd == ["/usr/bin/zsh"], id="uses-shell-env-var"),
         pytest.param({}, {"SHELL": None}, lambda cmd: cmd == ["bash"], id="falls-back-to-bash-without-shell-env-var"),
         pytest.param(
-            {"docker": {"default-cmd": "bash"}}, {}, lambda cmd: cmd == ["bash"], id="uses-docker-default-cmd"
+            {"docker": {"compose": {"default-cmd": "bash"}}},
+            {},
+            lambda cmd: cmd == ["bash"],
+            id="uses-docker-default-cmd",
         ),
         pytest.param(
-            {"command": "zsh", "docker": {"default-cmd": "bash"}},
+            {"command": "zsh", "docker": {"compose": {"default-cmd": "bash"}}},
             {},
             lambda cmd: cmd == ["zsh"],
             id="top-level-wins-over-docker-default-cmd",
@@ -352,7 +355,7 @@ def test_completion_wrapped_shell_uses_the_shell_basename_of_a_path(monkeypatch)
 
 # ---- reinvoke_command -------------------------------------------------------#
 def test_reinvoke_command(tmp_path):
-    config_path = tmp_path / "e" / "denver.yml"
+    config_path = tmp_path / "e" / "denver.toml"
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"])
     assert cmd[0] == "python3"
     # this file's own path, independent of DENVER_DIR -- correct whether
@@ -377,7 +380,7 @@ def test_reinvoke_command_frozen_reinvokes_the_executable_itself(tmp_path, monke
     exe = tmp_path / "bin" / "denver"
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(exe))
-    config_path = tmp_path / "e" / "denver.yml"
+    config_path = tmp_path / "e" / "denver.toml"
 
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"])
 
@@ -395,20 +398,20 @@ def test_reinvoke_command_no_forwarded_command_omits_separator(tmp_path):
     # with nothing to forward, no '--' is added either -- there's nothing for
     # it to separate, and the re-invoked denver would otherwise see a
     # trailing '--' as (the start of) an empty command instead of none at all
-    config_path = tmp_path / "e" / "denver.yml"
+    config_path = tmp_path / "e" / "denver.toml"
     cmd = denver.reinvoke_command(config_path, [], ["docker"])
     assert "--" not in cmd
 
 
 def test_reinvoke_command_skips_every_wrapper_stage(tmp_path):
-    config_path = tmp_path / "e" / "denver.yml"
+    config_path = tmp_path / "e" / "denver.toml"
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker", "docker2"])
     skip_positions = [i for i, tok in enumerate(cmd) if tok == "--skip"]
     assert [cmd[i + 1] for i in skip_positions] == ["docker", "docker2"]
 
 
 def test_reinvoke_command_forwards_quiet(tmp_path):
-    config_path = tmp_path / "e" / "denver.yml"
+    config_path = tmp_path / "e" / "denver.toml"
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], options=denver.RunOptions(quiet=True))
     # -q must reach the re-invoked (in-container) denver -- it was already
     # stripped out of the forwarded args by the outer main()'s own parsing.
@@ -421,7 +424,7 @@ def test_reinvoke_command_forwards_original_until_and_skip(tmp_path):
     # wrapper's own forced --skip) must reach the inner denver too, or a
     # stage the user asked to skip runs anyway once relocated into the
     # wrapper -- the inner denver has no other way to know about them.
-    config_path = tmp_path / "e" / "denver.yml"
+    config_path = tmp_path / "e" / "denver.toml"
     cmd = denver.reinvoke_command(
         config_path,
         ["echo", "hi"],
@@ -434,7 +437,7 @@ def test_reinvoke_command_forwards_original_until_and_skip(tmp_path):
 
 
 def test_reinvoke_command_forwards_fast(tmp_path):
-    config_path = tmp_path / "e" / "denver.yml"
+    config_path = tmp_path / "e" / "denver.toml"
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], options=denver.RunOptions(fast=True))
     # --fast must reach the re-invoked (in-container) denver too, for the
     # same reason as -q above -- it's what actually skips uv/conan/zephyr's
@@ -446,7 +449,7 @@ def test_reinvoke_command_forwards_fast(tmp_path):
 def test_reinvoke_command_preserves_custom_config_filename(tmp_path):
     # a folder may hold several denver.xxx.yml variants; the wrapper
     # re-invocation must point the inner denver at the exact same file, not
-    # just the directory (which would silently fall back to denver.yml).
+    # just the directory (which would silently fall back to denver.toml).
     config_path = tmp_path / "e" / "denver.debug.yml"
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"])
     assert cmd[2] == "run"
@@ -496,17 +499,15 @@ def fake_providers(monkeypatch):
 
 
 def _env(tmp_path, config):
-    """Create an env dir with a denver.yml written from ``config``.
+    """Create an env dir with a denver.toml written from ``config``.
 
     collect_import_dirs() re-reads the file from disk (to find 'import:'), so
     the on-disk file must reflect the config passed to run_stages().
     """
-    import yaml
-
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.yml"
-    cfg_path.write_text(yaml.safe_dump(config, sort_keys=False))
+    cfg_path = env_dir / "denver.toml"
+    cfg_path.write_text(denver.dump_toml(config))
     return env_dir, cfg_path
 
 
@@ -845,6 +846,119 @@ def test_run_stages_disabled_and_skipped_together_shows_skip_reason(tmp_path, fa
     assert "[2/2] stage 'fakesetup2' skipped by --skip" in err
 
 
+def _executable_script(path, body):
+    """Write a real, executable shell script at ``path`` -- 'skip-on-*:' scripts are exec'd, not sourced."""
+    path.write_text(body)
+    path.chmod(0o755)
+
+
+def test_run_stages_skip_on_success_skips_stage_when_script_exits_0(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "check.sh", "#!/bin/sh\nexit 0\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "skip-on-success": ["check.sh"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "RAN_FAKESETUP" not in exec_recorder["env"]
+
+
+def test_run_stages_skip_on_success_runs_stage_when_script_exits_nonzero(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "check.sh", "#!/bin/sh\nexit 1\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "skip-on-success": ["check.sh"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert exec_recorder["env"]["RAN_FAKESETUP"] == "1"
+
+
+def test_run_stages_skip_on_failure_skips_stage_when_script_exits_1(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "check.sh", "#!/bin/sh\nexit 1\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "skip-on-failure": ["check.sh"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "RAN_FAKESETUP" not in exec_recorder["env"]
+
+
+def test_run_stages_skip_on_failure_runs_stage_when_script_exits_0(tmp_path, fake_providers, exec_recorder):
+    # skip-on-failure's condition is exit 1, not exit 0 -- a passing (exit 0)
+    # script here means "not yet failed", the opposite of skip-on-success.
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "check.sh", "#!/bin/sh\nexit 0\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "skip-on-failure": ["check.sh"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert exec_recorder["env"]["RAN_FAKESETUP"] == "1"
+
+
+def test_run_stages_skip_on_success_and_skip_on_failure_are_independent(tmp_path, fake_providers, exec_recorder):
+    # either group being fully satisfied is enough to skip, regardless of
+    # what the other group's scripts say.
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "zero.sh", "#!/bin/sh\nexit 0\n")
+    _executable_script(env_dir / "one.sh", "#!/bin/sh\nexit 0\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {
+            "provider": "fakesetup",
+            "skip-on-success": ["zero.sh"],
+            "skip-on-failure": ["one.sh"],
+        },
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "RAN_FAKESETUP" not in exec_recorder["env"]
+
+
+def test_run_stages_force_bypasses_skip_on_success(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "check.sh", "#!/bin/sh\nexit 0\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "skip-on-success": ["check.sh"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(force=True))
+    assert exec_recorder["env"]["RAN_FAKESETUP"] == "1"
+
+
+def test_run_stages_skip_on_success_missing_script_dies(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "skip-on-success": ["nope.sh"]},
+    }
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+
+def test_run_stages_skip_on_success_not_a_list_of_strings_dies(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "skip-on-success": "not-a-list"},
+    }
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+
+def test_run_stages_shows_skip_on_success_reason_banner(tmp_path, fake_providers, exec_recorder, caplog):
+    caplog.set_level("INFO")
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "check.sh", "#!/bin/sh\nexit 0\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "skip-on-success": ["check.sh"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "skip-on-success scripts all exited 0" in caplog.text
+
+
 def test_run_stages_wrapper_shows_skipped_wrapper_banner_on_host(tmp_path, fake_providers, exec_recorder, capsys):
     # a wrapper stage the user --skip'd (e.g. `--skip docker`, run directly
     # on the host) still gets counted in the total and its own skip banner,
@@ -1105,10 +1219,50 @@ def test_run_stages_logo_shown_even_when_already_in_container(
     assert denver.LOGO_PATH.read_text().splitlines()[0] in err
 
 
-def test_run_stages_reresolves_stage_defaults_before_setup(tmp_path, run_recorder, exec_recorder, monkeypatch):
-    """A PATH-lookup default (uv.uv) resolved once, upfront, before any
-    stage's setup() runs, can be stale by the time that stage's setup()
-    actually executes (e.g. an earlier stage installs/activates the tool in
+# A synthetic PATH-lookup-default provider: every built-in provider's 'exe:'
+# now defaults to a bare tool name (see docker/uv/conan's resolve_defaults),
+# so none of them exercise a PATH lookup at resolve time any more. This
+# stand-in keeps the *orchestration* mechanism -- run_stages() re-resolving
+# each stage's raw section right before its setup(), not just trusting the
+# upfront resolve_full_config() snapshot -- covered independently of any one
+# provider's own default-resolution choices.
+class PathLookupSetup(Provider):
+    name = "pathlookup"
+    kind = "setup"
+    KEYS = ("exe",)
+
+    @classmethod
+    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
+        resolved = dict(cfg)
+        resolved["exe"] = cfg.get("exe") or ctx.which("tool", dry_fallback=True)
+        return resolved
+
+    def setup(self, ctx):
+        from denver_providers.context import die
+
+        cfg = self.config_section(ctx)
+        exe = cfg.get("exe")
+        if not exe:
+            die(f"pathlookup[{self.stage}]: needs 'exe' on PATH")
+        ctx.run([exe, "action"])
+        # simulates a uv-style stage that creates+activates its venv as the
+        # last step of its own setup() -- so *this* stage's own invocation
+        # above still used the pre-activation resolution, and only a later
+        # stage's refresh sees the update.
+        ctx.env["PATH"] = "/synthetic-venv-marker/bin:" + ctx.env["PATH"]
+
+
+@pytest.fixture
+def fake_pathlookup_provider(monkeypatch):
+    monkeypatch.setitem(providers.PROVIDERS, "pathlookup", PathLookupSetup)
+
+
+def test_run_stages_reresolves_stage_defaults_before_setup(
+    tmp_path, run_recorder, exec_recorder, monkeypatch, fake_pathlookup_provider
+):
+    """A PATH-lookup default resolved once, upfront, before any stage's
+    setup() runs, can be stale by the time that stage's setup() actually
+    executes (e.g. an earlier stage installs/activates the tool in
     between). run_stages() must re-resolve each stage's defaults right
     before running it, not just rely on the upfront resolve_full_config()
     snapshot -- otherwise a tool an earlier stage just installed would still
@@ -1118,30 +1272,19 @@ def test_run_stages_reresolves_stage_defaults_before_setup(tmp_path, run_recorde
     which_calls = {"n": 0}
 
     def fake_which(name, path=None):
-        if name != "uv":
+        if name != "tool":
             return f"/usr/bin/{name}"
         which_calls["n"] += 1
         # not found the first time (resolve_full_config's upfront pass);
         # found from the second call on (run_setup's pre-setup() refresh).
-        return None if which_calls["n"] == 1 else "/usr/bin/uv"
+        return None if which_calls["n"] == 1 else "/usr/bin/tool"
 
     monkeypatch.setattr(ctxmod.shutil, "which", fake_which)
 
-    def create_venv_dir(cmd):
-        from pathlib import Path
-
-        Path(cmd[-1]).mkdir(parents=True, exist_ok=True)
-        return run_recorder.default
-
-    run_recorder.responses["uv venv"] = create_venv_dir
-    run_recorder.responses["python3 --version"] = lambda cmd: type(
-        "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
-    )()
-
-    config = {"stages": ["uv"], "uv": {"provider": "uv"}}
+    config = {"stages": ["pathlookup"], "pathlookup": {"provider": "pathlookup"}}
     env_dir, cfg_path = _env(tmp_path, config)
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
-    # setup() didn't die on "uv not found" -- it saw the re-resolved value
+    # setup() didn't die on "tool not found" -- it saw the re-resolved value
     assert which_calls["n"] >= 2
     assert exec_recorder["args"] == ["echo", "hi"]
 
@@ -1161,18 +1304,17 @@ def _python_version_response(version="3.12.3"):
     return lambda cmd: type("R", (), {"stdout": f"Python {version}\n", "returncode": 0})()
 
 
-def _uv_from_venv_or_host(name, path=None):
-    """shutil.which stub: the venv's uv once it is on the lookup PATH, the host's before that.
-
-    venv_dir_for(None) outside docker is '.venv.host', so its presence in
-    ``path`` is what distinguishes an activated venv from the bare host.
-    """
-    if name != "uv":
+def _tool_from_venv_or_host(name, path=None):
+    """shutil.which stub: '/venv/bin/tool' once the synthetic venv marker is on the lookup PATH,
+    '/usr/bin/tool' before that."""
+    if name != "tool":
         return f"/usr/bin/{name}"
-    return "/venv/bin/uv" if ".venv.host" in (path or "") else "/usr/bin/uv"
+    return "/venv/bin/tool" if "synthetic-venv-marker" in (path or "") else "/usr/bin/tool"
 
 
-def test_run_stages_reresolves_over_a_default_it_already_found(tmp_path, run_recorder, exec_recorder, monkeypatch):
+def test_run_stages_reresolves_over_a_default_it_already_found(
+    tmp_path, run_recorder, exec_recorder, monkeypatch, fake_pathlookup_provider
+):
     """The upfront pass finding *something* must not freeze that answer.
 
     The failure this guards against: the host has its own copy of a tool
@@ -1185,26 +1327,22 @@ def test_run_stages_reresolves_over_a_default_it_already_found(tmp_path, run_rec
     """
     import denver_providers.context as ctxmod
 
-    monkeypatch.setattr(ctxmod.shutil, "which", _uv_from_venv_or_host)
-    run_recorder.responses["venv -p"] = _venv_creating_response(run_recorder)
-    run_recorder.responses["python3 --version"] = _python_version_response()
+    monkeypatch.setattr(ctxmod.shutil, "which", _tool_from_venv_or_host)
 
-    # two uv stages: the first activates the venv (putting it on PATH), so
-    # the second's own refresh must resolve to the venv's uv, not the host's
+    # two pathlookup stages: the first activates its venv as the last step of
+    # its own setup() (putting it on PATH), so the second's own refresh must
+    # resolve to the venv's tool, not the host's.
     config = {
-        "stages": ["uv-first", "uv-second"],
-        # 'python:' set only so `uv python install` runs and carries the
-        # resolved uv path this test is actually about (it is a no-op with
-        # no version configured -- see UvProvider._ensure_python).
-        "uv-first": {"provider": "uv", "python": "3.12.3"},
-        "uv-second": {"provider": "uv", "python": "3.12.3"},
+        "stages": ["pathlookup-first", "pathlookup-second"],
+        "pathlookup-first": {"provider": "pathlookup"},
+        "pathlookup-second": {"provider": "pathlookup"},
     }
     env_dir, cfg_path = _env(tmp_path, config)
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
     commands = run_recorder.commands()
-    assert any(c.startswith("/usr/bin/uv python install") for c in commands)  # stage 1: no venv yet
-    assert any(c.startswith("/venv/bin/uv python install") for c in commands)  # stage 2: refreshed
+    assert any(c.startswith("/usr/bin/tool action") for c in commands)  # stage 1: no venv yet
+    assert any(c.startswith("/venv/bin/tool action") for c in commands)  # stage 2: refreshed
     assert exec_recorder["args"] == ["echo", "hi"]
 
 
@@ -1226,7 +1364,7 @@ def test_run_stages_refresh_keeps_an_explicit_value(tmp_path, run_recorder, exec
         "R", (), {"stdout": "Python 3.12.3\n", "returncode": 0}
     )()
 
-    config = {"stages": ["uv"], "uv": {"provider": "uv", "uv": "/opt/pinned/uv"}}
+    config = {"stages": ["uv"], "uv": {"provider": "uv", "exe": "/opt/pinned/uv"}}
     env_dir, cfg_path = _env(tmp_path, config)
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
@@ -1238,7 +1376,7 @@ def test_run_stages_refresh_keeps_an_explicit_value(tmp_path, run_recorder, exec
 def test_run_stages_stacking_used_by_stage(tmp_path, fake_providers, exec_recorder):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.yml").write_text("fakewrap:\n  marker: from-src\n")
+    (src_env / "denver.toml").write_text('[fakewrap]\nmarker = "from-src"\n')
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakewrap"], "fakewrap": {"import": ["../src"], "provider": "fakewrap"}}
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])

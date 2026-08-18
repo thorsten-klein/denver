@@ -1,0 +1,78 @@
+version = 1.0
+denver-version = ">=1.1.0"
+stages = [
+  "uv",
+  "conan",
+]
+
+[env]
+CONAN_HOME = "${DENVER_ENV_WORKDIR}/.conan2"
+
+[hooks]
+# env = null
+# post-conan = null
+# post-uv = null
+# pre-cmd = null
+# pre-conan = null
+# pre-uv = null
+
+[uv]
+provider = "uv"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+exe = "uv"
+# freeze-to = null
+# install-args = null
+# lockfile = null
+no-index = false
+# overrides = null
+# patches-apply = null
+# python = null
+reinstall = false
+requirements = [
+  "requirements.txt",
+]
+# venv = null
+
+[conan]
+provider = "conan"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+authentication = true
+base-classes = [
+  "<REPO>/examples/zephyr-devshell/conan/base_classes",
+]
+build = "missing"
+channel = "snapshot"
+conanfile = "<REPO>/examples/raspberry-pico/conan/conanfile.py"
+# config = null
+deployers = [
+  "<REPO>/src/denver_providers/conan_scripts/extensions/symlink.py",
+]
+exe = "conan"
+install-args = [
+  "-c:a=tools.system.package_manager:mode=install",
+  "-c:a=tools.system.package_manager:sudo=True",
+]
+keep-remotes = false
+remotes = {}
+user = "denver"
+
+[conan.profiles]
+build = []
+host = []
+
+[[conan.recipes]]
+catalog = "<REPO>/examples/raspberry-pico/conan/catalog.yml"
+dirs = [
+  "<REPO>/examples/raspberry-pico/conan/recipes",
+  "<REPO>/examples/zephyr-devshell/conan/recipes/cmake",
+]
+export-tool = "<REPO>/src/denver_providers/conan_scripts/recipes.py"
+

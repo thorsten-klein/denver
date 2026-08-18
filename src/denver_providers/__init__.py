@@ -1,6 +1,6 @@
-"""denver providers: generic, denver.yml-driven environment providers.
+"""denver providers: generic, denver.toml-driven environment providers.
 
-Each stage listed under ``stages:`` in an env's denver.yml is instantiated and
+Each stage listed under ``stages:`` in an env's denver.toml is instantiated and
 run in order. Providers are generic -- all project specifics come from config.
 """
 
@@ -17,7 +17,7 @@ from .docker import DockerProvider
 from .uv import UvProvider
 from .zephyr import ZephyrProvider
 
-# Registry of available providers, keyed by the name used in denver.yml.
+# Registry of available providers, keyed by the name used in denver.toml.
 # 'extensions.providers.dirs:' (see load_extension_providers) adds to this
 # dict at runtime -- own, project-local providers alongside the built-ins,
 # with no denver fork required.
@@ -49,20 +49,20 @@ def load_extension_providers(ctx, extensions_cfg):
 
     This is how a project adds its own provider (a build system, an
     internal deploy tool, whatever 'custom' can't express as a single
-    command) without maintaining a fork of denver: point denver.yml at a
+    command) without maintaining a fork of denver: point denver.toml at a
     directory of plain Python files, each defining::
 
         # my_providers/acme.py
         from denver_providers import Provider
 
         class AcmeProvider(Provider):
-            name = "acme"          # the 'provider: acme' name in denver.yml
+            name = "acme"          # the 'provider: acme' name in denver.toml
             KEYS = (...)
             def setup(self, ctx): ...
 
         PROVIDER = AcmeProvider    # the module's registration point
 
-    and, in denver.yml::
+    and, in denver.toml::
 
         extensions:
           providers:
@@ -158,7 +158,7 @@ def _register_extension_provider(py_file):
         # signature (backward-compat hasattr checks -- see its own docstring)
         # even though spec_from_file_location's loader always has it.
         spec.loader.exec_module(module)  # pyright: ignore[reportAttributeAccessIssue]
-    except Exception as exc:  # surfaced as a denver.yml config error, not a crash
+    except Exception as exc:  # surfaced as a denver.toml config error, not a crash
         del sys.modules[mod_name]
         die(f"'extensions.providers:' failed to load {py_file}: {exc}")
     _loaded_extension_files.add(str(py_file))

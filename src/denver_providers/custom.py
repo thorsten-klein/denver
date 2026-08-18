@@ -1,6 +1,6 @@
 """custom provider: run an arbitrary shell command as a pipeline stage, or wrap the final command through scripts of its own.
 
-Configured from denver.yml -> a stage declaring ``provider: custom``, via
+Configured from denver.toml -> a stage declaring ``provider: custom``, via
 ``cmd:``/``source:``/``launcher:`` (at least one required).
 
 Full key reference, worked examples and design notes: ``doc/providers/custom.md``.

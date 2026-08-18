@@ -1,0 +1,65 @@
+version = "1.0"
+denver-version = ">=1.1.0"
+stages = [
+  "print-vars-before",
+  "set-vars",
+  "print-vars-after",
+]
+
+[[args]]
+default = "hello"
+flags = [
+  "--greeting",
+  "-g",
+]
+help = "what the last stage greets with"
+
+[hooks]
+# env = null
+# post-print-vars-after = null
+# post-print-vars-before = null
+# post-set-vars = null
+# pre-cmd = null
+# pre-print-vars-after = null
+# pre-print-vars-before = null
+# pre-set-vars = null
+
+[print-vars-before]
+provider = "custom"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+cmd = '''
+echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
+'''
+# launcher = null
+# source = null
+
+[set-vars]
+provider = "custom"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+cmd = '''
+echo "[set-vars] sourcing custom.sh..."
+'''
+# launcher = null
+source = "custom.sh"
+
+[print-vars-after]
+provider = "custom"
+# description = null
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+cmd = '''
+echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR greeting=${DENVER_ARG_GREETING}"
+'''
+# launcher = null
+# source = null
+

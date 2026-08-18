@@ -216,9 +216,9 @@ def index_recipe_dirs(recipes_dirs) -> dict[tuple[str, str], Path]:
 
     Recipes are discovered the same way build_catalog does -- by their
     conandata.yml, wherever it sits -- rather than by assuming
-    ``<recipes-dir>/<name>/<version>/``. So a ``recipe-dirs:`` entry may be a
-    whole recipe tree *or* a single recipe (`.../recipes/cmake`), and a
-    unit's dirs can be laid out differently from one another. The
+    ``<recipes-dir>/<name>/<version>/``. So a ``recipes:`` entry's ``dirs:``
+    may be a whole recipe tree *or* a single recipe (`.../recipes/cmake`),
+    and one entry's dirs can be laid out differently from another's. The
     ``<name>/<version>/`` directory layout itself is still enforced, by
     build_catalog's Recipe.check().
     """
@@ -665,7 +665,7 @@ def _login_remote(remote_name, remote, *, force):
 def conan_login(remotes, *, force=False):
     """Authenticate to each enabled remote named in ``remotes``, unless already authenticated.
 
-    ``force`` (denver.yml's ``conan.cleanup-remotes:`` sibling, ``--force``
+    ``force`` (denver.toml's ``conan.keep-remotes:`` sibling, ``--force``
     on this script's own CLI -- see main()) re-authenticates even if a
     remote already looks authenticated; never read from a real environment
     variable.
@@ -678,14 +678,14 @@ def conan_login(remotes, *, force=False):
 
 
 def prepare(remotes: dict[str, dict[str, str | bool]], *, cleanup: bool = False, force: bool = False):
-    """Reconcile the conan remotes configured via ``conan.remotes:`` in denver.yml.
+    """Reconcile the conan remotes configured via ``conan.remotes:`` in denver.toml.
 
     A no-op when ``remotes`` is empty and ``cleanup`` is false: without an
     explicit, project-owned list of remotes, this must never touch the
     user's existing conan configuration by default -- in particular
     ``conan_enable_remotes`` disables every remote not named in ``remotes``,
     so calling it with an empty dict would silently disable all of them.
-    ``cleanup`` (denver.yml's ``conan.cleanup-remotes:``, default on) opts
+    ``cleanup`` (denver.toml's ``not conan.keep-remotes:``, default on) opts
     into exactly that: treating ``remotes`` as the *exhaustive* list even
     when it's empty, disabling every remote already present. ``force``
     (denver's own ``--force``) re-authenticates every remote regardless of
@@ -763,14 +763,14 @@ def _build_arg_parser():
         '--remotes-json',
         type=Path,
         default=None,
-        help="path to a JSON file of {remote_name: {url, verify_ssl, enabled}} -- denver.yml's conan.remotes:, "
+        help="path to a JSON file of {remote_name: {url, verify_ssl, enabled}} -- denver.toml's conan.remotes:, "
         'written by the conan provider. Without it, remotes are left untouched.',
     )
     parser.add_argument(
         '--cleanup-remotes',
         action='store_true',
         help="treat --remotes-json's content as the exhaustive remote list even when empty, disabling every "
-        'other remote already present -- denver.yml\'s conan.cleanup-remotes: (default on)',
+        'other remote already present -- denver.toml\'s conan.keep-remotes: (default off)',
     )
     parser.add_argument(
         '--force',
@@ -790,7 +790,7 @@ def _build_arg_parser():
     parser.add_argument(
         '--channel',
         default='snapshot',
-        help='conan channel for each generated reference -- denver.yml\'s conan.channel: (default "snapshot")',
+        help='conan channel for each generated reference -- denver.toml\'s conan.channel: (default "snapshot")',
     )
     parser.add_argument(
         '-d',
@@ -799,7 +799,7 @@ def _build_arg_parser():
         action='append',
         default=[],
         help='Directory searched for conan recipes (repeatable -- every dir given forms one catalog, '
-        "denver.yml's per-unit conan.conanfiles[].recipe-dirs:)",
+        "denver.toml's conan.recipes[].dirs:)",
     )
     parser.add_argument(
         '-b',
@@ -820,7 +820,7 @@ def _build_arg_parser():
         '--export-catalog',
         type=Path,
         default=None,
-        help="Write the generated catalog to this path -- denver.yml's conan.export-catalog:. "
+        help="Write the generated catalog to this path -- denver.toml's conan.recipes[].catalog:. "
         'Without it, the catalog is built in memory only and no catalog.yml is written.',
     )
     parser.add_argument('recipes', nargs='*', help='Recipe folder names (one or more)')
