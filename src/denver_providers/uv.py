@@ -243,6 +243,9 @@ class UvProvider(Provider):
             self._setup_fast(ctx, venv_dir)
             return
 
+        if self._should_skip_before_venv(ctx, cfg, venv_dir):
+            return
+
         banner(ctx, self.stage, "install")
 
         python_version = cfg["python"]
@@ -277,6 +280,35 @@ class UvProvider(Provider):
         self._sync(ctx, uv, cfg, inputs["lock_sync"])
         if inputs["requirements"] or inputs["install_args"]:
             self._install(ctx, uv, cfg, inputs["requirements"], inputs["overrides"], inputs["install_args"])
+
+    def _should_skip_before_venv(self, ctx, cfg, venv_dir):
+        """True if there's no venv yet and skip-if says this stage is pointless right now.
+
+        (e.g. already inside the container a standalone system venv is for):
+        skip the stage outright, same as 'disabled: true', rather than
+        creating and *activating* an empty venv nobody will fill in. Once a
+        venv exists, skip-if instead only ever skips the install substep
+        below, in _install_and_patch -- an already-populated venv still gets
+        activated, since later stages depend on that.
+        """
+        return not venv_dir.is_dir() and not ctx.force and self._skip_if_stage(ctx, cfg)
+
+    def _skip_if_stage(self, ctx, cfg):
+        """True if skip-if-0/skip-if-1 says this stage (not just the install) should be a no-op.
+
+        Only consulted from setup() before a venv exists (see setup()) --
+        the same scripts/config as _install_and_patch's own check, just
+        asked one step earlier, before _ensure_venv/_activate ever run.
+        """
+        skip_if_0 = cfg["skip-if-0"]
+        skip_if_1 = cfg["skip-if-1"]
+        if skip_if_0 and self._skip_if_satisfied(ctx, "skip-if-0", skip_if_0, 0):
+            info(f"uv[{self.stage}]: no venv yet and skip-if-0 satisfied; skipping stage entirely")
+            return True
+        if skip_if_1 and self._skip_if_satisfied(ctx, "skip-if-1", skip_if_1, 1):
+            info(f"uv[{self.stage}]: no venv yet and skip-if-1 satisfied; skipping stage entirely")
+            return True
+        return False
 
     def _install_and_patch(self, ctx, uv, cfg, venv_dir, inputs):
         """Install requirements/lockfile (unless skip-if-0/skip-if-1 says otherwise), apply venv patches, record checksums."""
