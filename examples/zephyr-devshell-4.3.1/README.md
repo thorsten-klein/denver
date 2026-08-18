@@ -20,7 +20,7 @@ Five stages, in order:
 | # | Stage | What happens |
 |---|-------|--------------|
 | 1 | `docker` | Builds the image and drops you **inside a container** — same Linux, same system libraries, whether your laptop runs Ubuntu, Fedora or WSL |
-| 2 | `conan` | Fetches **native, non-Python tools**: the Zephyr SDK cross-compilers, `cmake`, `ninja`, `ccache`, `clang`, the J-Link tools. Prebuilt binaries, so nothing compiles locally |
+| 2 | `conan` | Fetches **native, non-Python tools**: the Zephyr SDK cross-compilers, `cmake`, `ninja`, `ccache`, `clang`, the J-Link tools, and `fish` itself (the shell step 5 hands control to). Prebuilt binaries, so nothing compiles locally |
 | 3 | `uv` | Creates a **virtualenv** with the pinned Python packages — above all `west`, Zephyr's repo-management tool |
 | 4 | `zephyr` | `west update`: **clones the many repositories** of a Zephyr workspace at the revisions pinned for 4.3.1, applies this env's patches, fetches binary blobs |
 | 5 | `uv-zephyr` | The modules from step 4 declare Python dependencies of their own (`west packages pip`). Installs **those**, into the venv from step 3 — it has to run after step 4, because until then nobody knew what they were |

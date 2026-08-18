@@ -96,7 +96,7 @@ stage, and can already use denver built-ins like `WEST_TOPDIR` and
 
 **Recipes without a conanfile.** This base ships a directory of shared Conan
 recipes (`cmake`, `ninja`, `clang`, `ccache`, `doxygen`, `protoc`, `jlink`,
-`systemview`, `zephyr-sdk`) but declares no `conanfiles:` unit for them, and
+`systemview`, `zephyr-sdk`, `fish`) but declares no `conanfiles:` unit for them, and
 that is not an oversight: `recipe-dirs:` live *inside* a unit — a conanfile
 plus the recipes it installs from — and a base with no conanfile has no unit
 to put them in. Each version env lists
