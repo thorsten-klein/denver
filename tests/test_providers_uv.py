@@ -1004,6 +1004,26 @@ def test_apply_patches_explicit_conventional_path(make_context, run_recorder, wh
     assert any("apply -f" in c for c in run_recorder.commands())
 
 
+def test_apply_patches_finds_patcher_installed_by_this_same_run(make_context, run_recorder, which):
+    # resolve_defaults' own 'exe:' lookup runs before this stage's venv
+    # exists, so it can't see a venv-patcher this very run is about to
+    # install into it (e.g. as one of 'requirements:') -- only visible on
+    # PATH once _activate has prepended the venv's bin/. _apply_patches
+    # must look again at that point rather than trusting the earlier miss.
+    config = {"uv": {"requirements": ["r.txt"], "venv-patcher": {"patches": "patches.yml"}}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
+    (ctx.env_dir / "patches.yml").write_text("x\n")
+    which["venv-patcher"] = None  # not found while resolving defaults
+    provider = UvProvider(config)
+    cfg = UvProvider.resolve_defaults(ctx, config["uv"], config)
+    assert cfg["venv-patcher"]["exe"] is None
+
+    which["venv-patcher"] = "/venv/bin/venv-patcher"  # now on PATH, e.g. just installed
+    provider._apply_patches(ctx, cfg)
+    assert any("/venv/bin/venv-patcher apply -f" in c for c in run_recorder.commands())
+
+
 def test_apply_patches_explicit_patcher_path(make_context, run_recorder, which):
     config = {
         "uv": {"requirements": ["r.txt"], "venv-patcher": {"patches": "patches.yml", "exe": "/opt/vp"}},

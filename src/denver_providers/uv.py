@@ -708,7 +708,12 @@ class UvProvider(Provider):
         patches = vp_cfg.get("patches")
         if not patches:
             return
-        patcher = vp_cfg.get("exe")
+        # looked up again here, not just trusted from resolve_defaults' own
+        # attempt: that one runs before this stage's venv is even created, so
+        # it can't see a venv-patcher this same run just installed into it
+        # (e.g. as one of 'requirements:') -- only visible on PATH once
+        # _activate has prepended the venv's bin/ (see setup()).
+        patcher = vp_cfg.get("exe") or ctx.which("venv-patcher")
         if not patcher:
             info("uv: venv-patcher not installed; skipping venv patches")
             return
