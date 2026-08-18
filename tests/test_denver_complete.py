@@ -347,7 +347,7 @@ def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tm
     (env_dir / "denver.yml").write_text("stages: []\n")  # no 'args:' key at all
 
     assert denver.main(["__complete", "run", str(env_dir), "--sh"]) == 0
-    assert capsys.readouterr().out.splitlines() == ["--show-config"]
+    assert capsys.readouterr().out.splitlines() == ["--show-config", "--show-config-min"]
 
 
 # ---- 'denver __complete run <env> ' -- flags offered before typing '-' ----- #

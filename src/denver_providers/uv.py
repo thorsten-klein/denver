@@ -109,12 +109,10 @@ class UvProvider(Provider):
     )
 
     @staticmethod
-    def _resolved_no_index(ctx, cfg):
-        """'no-index:' as a bool -- 'auto' means "offline inside a container, online on the host"."""
+    def _resolved_no_index(cfg):
+        """'no-index:' as configured (bool, or the literal 'auto') -- resolved lazily in '_index_args'."""
         no_index = cfg.get("no-index", False)
-        if no_index == "auto":
-            return ctx.in_container
-        return bool(no_index)
+        return no_index if no_index == "auto" else bool(no_index)
 
     @staticmethod
     def _resolved_skip_if(ctx, cfg, key):
@@ -144,7 +142,7 @@ class UvProvider(Provider):
         # dry_fallback: under --dry-run an unavailable uv still renders every
         # command below it, instead of aborting the preview (see Context.which).
         resolved["uv"] = cfg.get("uv") or ctx.which("uv", dry_fallback=True)
-        resolved["no-index"] = cls._resolved_no_index(ctx, cfg)
+        resolved["no-index"] = cls._resolved_no_index(cfg)
         resolved["link-mode"] = cfg.get("link-mode", "copy")
         resolved["append-mode"] = cfg.get("append-mode", False)
 
@@ -545,7 +543,10 @@ class UvProvider(Provider):
         args = []
         for link in cfg.get("find-links") or []:
             args += ["--find-links", str(ctx.resolve_path(link))]
-        if cfg["no-index"]:
+        no_index = cfg["no-index"]
+        if no_index == "auto":
+            no_index = ctx.in_container
+        if no_index:
             info("uv: using --no-index (offline install)")
             args += ["--no-index"]
         return args

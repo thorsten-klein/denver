@@ -19,7 +19,9 @@ hi`) is forwarded as-is instead. ``--scripts <name>`` runs one of the env's
 own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
 ``login``; with no name, lists the names this env defines).
 ``--show-config`` prints the fully resolved, deep-merged denver.yml and
-exits.
+exits. ``--show-config-min`` does the same but drops every key left unset
+(shown as ``null`` by ``--show-config``), so only keys with an actual value
+remain.
 
 ``complete`` prints a script wiring up completion for the installed
 ``denver`` command, for the given shell (bash/fish/zsh) or, if omitted,
@@ -2335,7 +2337,9 @@ def _provider_keys(section):
     return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
-def show_config(env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None, env_vars=None):
+def show_config(
+    env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None, env_vars=None, minimal=False
+):
     """Print the fully resolved config as YAML -- exactly what the real run would use.
 
     Whole-file 'import:' stacking, section-level 'import:' stacking, and
@@ -2358,6 +2362,14 @@ def show_config(env_dir, config, config_path, until_stage=None, skip_stages=(), 
     order (see GENERIC_STAGE_KEYS), then the provider-specific keys
     alphabetically. Everything *below* that (a section's own nested keys, a
     hook name's own sub-keys, ...) stays alphabetical (see _sorted_nested).
+
+    ``minimal`` (--show-config-min) additionally drops every stage-section
+    key the env didn't actually configure -- i.e. whatever a provider's
+    resolve_defaults() filled in itself, static or computed, fill_unset()'s
+    ``None`` included (see _drop_defaulted_stage_keys) -- and then,
+    recursively, every remaining key whose value is ``None`` or an empty
+    dict/list (see _drop_null_values), so only keys that actually carry an
+    explicit value remain. Other falsy scalars (``0``/``""``) are kept as-is.
     """
     resolved, ctx = resolve_full_config(env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
@@ -2365,7 +2377,65 @@ def show_config(env_dir, config, config_path, until_stage=None, skip_stages=(), 
     resolved["stages"] = stage_ids
     resolved["hooks"] = resolve_hooks(ctx, config_path, stage_ids)
 
-    print(yaml.safe_dump(_ordered_config(resolved, stage_ids), sort_keys=False, default_flow_style=False))
+    ordered = _ordered_config(resolved, stage_ids)
+    if minimal:
+        for stage_id in stage_ids:
+            ordered[stage_id] = _drop_defaulted_stage_keys(ordered[stage_id], ctx.raw_sections.get(stage_id, {}))
+        ordered = _drop_null_values(ordered)
+
+    print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
+
+
+def _drop_defaulted_stage_keys(section, raw_section):
+    """Keep only ``section``'s keys the env actually wrote, for --show-config-min.
+
+    Every key resolve_stage_section() added on its own -- a provider's
+    static/filesystem/PATH-derived default, or fill_unset()'s ``None`` for a
+    documented-but-unset one -- is a default, not something the env
+    configured, so it's left out here. ``raw_section``
+    (ctx.raw_sections[stage_id], see resolve_provider_defaults) is this same
+    section exactly as the env's denver.yml (after import stacking) wrote
+    it, before any default was baked in, so a key's presence there -- not
+    its value -- is what "explicitly configured" means; a nested default
+    (e.g. one 'lock:' sub-key left unset while another is given) is still
+    caught afterward by _drop_null_values.
+    """
+    return {key: value for key, value in section.items() if key in raw_section}
+
+
+def _drop_null_values(value):
+    """Recursively drop dict keys with no real value, for --show-config-min.
+
+    Dropped: ``None`` (fill_unset()'s placeholder for a documented-but-unset
+    key), and any dict/list that is empty -- either to start with, or because
+    filtering emptied it (e.g. a stage section that was entirely unset, or a
+    hook name whose only entries got dropped). Other falsy scalars (``0``,
+    ``""``) came from an actual resolved default or config value and are
+    kept untouched.
+    """
+    if isinstance(value, dict):
+        return _drop_null_values_dict(value)
+    if isinstance(value, list):
+        return [_drop_null_values(v) for v in value]
+    return value
+
+
+def _drop_null_values_dict(section):
+    """The dict branch of ``_drop_null_values``, split out to keep both functions simple."""
+    kept = {}
+    for key, sub in section.items():
+        if sub is None:
+            continue
+        sub = _drop_null_values(sub)
+        if _is_empty_container(sub):
+            continue
+        kept[key] = sub
+    return kept
+
+
+def _is_empty_container(value):
+    """Whether ``value`` is a dict/list ``_drop_null_values`` emptied out, for --show-config-min."""
+    return isinstance(value, (dict, list)) and not value
 
 
 def _drop_filtered_sections(resolved, stage_ids):
@@ -2675,6 +2745,11 @@ def _add_run_parser(subparsers, config_args):
         "--show-config", action="store_true", help="print the fully resolved (deep-merged) denver.yml and exit"
     )
     run_p.add_argument(
+        "--show-config-min",
+        action="store_true",
+        help="like --show-config, but drop every key left unset (shown as null) so only keys with a value remain",
+    )
+    run_p.add_argument(
         "-q",
         "--quiet",
         action="count",
@@ -2902,6 +2977,7 @@ _TOP_LEVEL_COMPLETIONS = ["run", "complete", "--help", "--version", "--license"]
 _RUN_FLAGS = [
     "--scripts",
     "--show-config",
+    "--show-config-min",
     "--fast",
     "--force",
     "--ci",
@@ -3523,8 +3599,8 @@ def _load_cli_config(args, config_path) -> dict:
 
 
 def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=None, env_vars=None):
-    """Handle 'run --show-config', or 'run --scripts', if that's what this is. Returns True if one ran (nothing is launched then)."""
-    if args.show_config:
+    """Handle 'run --show-config'/'run --show-config-min', or 'run --scripts', if that's what this is. Returns True if one ran (nothing is launched then)."""
+    if args.show_config or args.show_config_min:
         show_config(
             env_dir,
             config,
@@ -3533,6 +3609,7 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
             skip_stages=args.skip,
             cli_args=cli_args,
             env_vars=env_vars,
+            minimal=args.show_config_min,
         )
         return True
 

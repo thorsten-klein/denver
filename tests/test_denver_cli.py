@@ -659,6 +659,28 @@ def test_main_show_config_flag(tmp_path, capsys, which):
     assert printed["uv"]["link-mode"] == "copy"
 
 
+def test_main_show_config_min_drops_defaults_and_null_values(tmp_path, capsys, which):
+    """--show-config-min keeps only what the env explicitly configured, and only if it's non-empty."""
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        "stages: [uv]\nuv:\n  provider: uv\n  python: '3.12.3'\n  requirements: [r.txt]\n  find-links: []\n"
+    )
+
+    assert denver.main(["run", str(env_dir), "--show-config-min"]) == 0
+    printed = denver.yaml.safe_load(capsys.readouterr().out)
+    assert printed["uv"]["python"] == "3.12.3"
+    assert printed["uv"]["requirements"] == ["r.txt"]
+    # provider defaults the env never wrote (PATH lookup, static fallbacks, ...) are dropped
+    assert "uv" not in printed["uv"]
+    assert "link-mode" not in printed["uv"]
+    assert "skip-if-0" not in printed["uv"]
+    # explicitly configured but empty carries no real value either
+    assert "find-links" not in printed["uv"]
+    # nothing left configured at the top level -- 'hooks:' (every name null) is dropped entirely
+    assert "hooks" not in printed
+
+
 def test_main_show_config_extension_provider(tmp_path, capsys, which):
     """A stage using an 'extensions.providers.dirs:'-registered provider resolves end to end."""
     env_dir = tmp_path / "e"

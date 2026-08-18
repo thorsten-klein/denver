@@ -65,13 +65,14 @@ def test_show_config_matches_golden(env_name, capsys, monkeypatch, which, tmp_pa
     # and the release it anticipates. Neither says anything about whether
     # --show-config still resolves the env correctly, so it's faked.
     monkeypatch.setattr(denver, "package_version", lambda: FAKE_DENVER_VERSION)
-    # 'no-index: auto' resolves to true inside a container and false on a host,
-    # so an unfaked answer here makes the expected output depend on the machine
-    # running the test rather than on the env's config. It is a real container
-    # check against the real filesystem -- and it says "yes" on more than just
-    # docker: WSL2 with systemd, for instance, has /run/systemd/container, one
-    # of the markers it looks for. Pinned to the host answer, which is what the
-    # golden files record.
+    # 'no-index: auto' is shown as the literal 'auto' in --show-config (it resolves to a
+    # bool lazily, per uv command, not here) -- but other resolved fields still depend on
+    # whether this looks like a container (e.g. the uv provider's per-venv host suffix), so
+    # an unfaked answer here would still make those depend on the machine running the test
+    # rather than on the env's config. It is a real container check against the real
+    # filesystem -- and it says "yes" on more than just docker: WSL2 with systemd, for
+    # instance, has /run/systemd/container, one of the markers it looks for. Pinned to the
+    # host answer, which is what the golden files record.
     monkeypatch.setattr(context_provider, "in_container", lambda env=None: False)
 
     env_dir = REPO_ROOT / "examples" / env_name
