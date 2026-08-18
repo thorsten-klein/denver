@@ -252,7 +252,6 @@ class ZephyrProvider(Provider):
                     [west, "-v", "patch", "--src-module", project, "apply"],
                     cwd=top,
                     extra_env=committer,
-                    check=False,
                 )
 
     def _update_blobs_cache(self, ctx, cfg, west, top):
