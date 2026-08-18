@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 from .base import Provider, fill_unset
-from .context import banner, die, warn
+from .context import banner, die, info, warn
 
 # ships alongside this module, so it's found regardless of whether denver
 # runs from a checkout or an installed package (see providers/conan_scripts).
@@ -369,7 +369,10 @@ class ConanProvider(Provider):
         """Run `conan config install <dir>` for each configured dir, in order."""
         # dirs are already resolved + existence-checked centrally
         # (ConanProvider.resolve_defaults); conan itself does the rest.
-        for config_dir in cfg.get("config") or []:
+        config_dirs = cfg.get("config") or []
+        if not config_dirs:
+            info("conan: no 'config:' key set -- skipping `conan config install`")
+        for config_dir in config_dirs:
             ctx.run([conan, "config", "install", config_dir])
 
     def _warn_if_shadowing_venv(self, ctx, conan):
