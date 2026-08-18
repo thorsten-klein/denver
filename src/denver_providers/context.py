@@ -679,8 +679,13 @@ class Context:
         return self.env
 
     def venv_dir_for(self, name):
-        """Path of a (named) venv; host and in-docker venvs are kept apart."""
-        leaf = ".venv" if not name else f".venv-{name}"
+        """Path of a (named) venv; host and in-docker venvs are kept apart.
+
+        ``name`` (a stage's ``venv:``) is the *whole* leaf dirname, not a
+        suffix tacked onto a fixed ``.venv-`` prefix -- so 'venv: shared'
+        gives ``<env_workdir>/shared``, not ``<env_workdir>/.venv-shared``.
+        """
+        leaf = name if name else ".venv"
         venv = self.env_workdir / leaf
         return venv if self.in_container else Path(str(venv) + ".host")
 

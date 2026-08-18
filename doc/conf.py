@@ -62,7 +62,10 @@ source_suffix = {
 }
 
 # the toctree hub is index.md, not README.md -- see this file's docstring.
-exclude_patterns = ["README.md", "_build", "Thumbs.db", ".DS_Store"]
+# 'bak' is the pre-restructure doc tree (see this file's docstring on the
+# Sphinx restructure): gitignored, kept locally for reference, never a
+# source the built site should read.
+exclude_patterns = ["README.md", "bak", "_build", "Thumbs.db", ".DS_Store"]
 
 root_doc = "index"
 
