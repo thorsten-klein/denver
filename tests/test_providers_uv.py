@@ -459,6 +459,21 @@ def test_install_force_ignores_skip_if_0(make_context, run_recorder, which):
     assert any("uv pip install" in c for c in run_recorder.commands())
 
 
+def test_setup_skips_stage_entirely_when_skip_if_1_satisfied_before_venv_exists(make_context, run_recorder, which):
+    # unlike test_install_skips_when_all_skip_if_1_scripts_exit_1 (venv
+    # already exists there), no venv exists yet here -- so this exercises
+    # setup()'s own skip-if check (_skip_if_stage), not _install_and_patch's.
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
+    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 1\n")
+    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 1})()
+
+    run_uv(config, ctx)
+    assert not ctx.venv_dir.is_dir()
+    assert not any("uv venv" in c for c in run_recorder.commands())
+
+
 def test_install_skips_when_all_skip_if_1_scripts_exit_1(make_context, run_recorder, which):
     config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
     ctx = make_context(config=config)
