@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 500" width="1500" height="500" role="img" aria-labelledby="denver-logo-title">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1540 500" width="1540" height="500" role="img" aria-labelledby="denver-logo-title">
   <title id="denver-logo-title">denver</title>
   <g fill="#000000" transform="translate(75 165.68) scale(0.84)">
     <g transform="translate(0 0)"><path d="M0 200L0 133.33L60 133.33L60 66.67L120 66.67L120 0L180 0L180 200Z"/></g>
-    <g transform="translate(180 0)"><path d="M0 0L96 0A100 100 0 0 1 96 200L0 200L0 166L96 166A66 66 0 0 0 96 34L0 34Z"/></g>
-    <g transform="translate(435 0)"><path d="M0 0L167 0L167 34L0 34ZM0 83L167 83L167 117L0 117ZM0 166L167 166L167 200L0 200Z"/></g>
-    <g transform="translate(661 0)"><path d="M0 0L0 200L34 200L34 42.24L161 200L195 200L195 0L161 0L161 157.76L34 0Z"/></g>
-    <g transform="translate(915 0)"><path d="M0 0L111 200L222 0L167.56 0L111 200L54.44 0Z"/></g>
-    <g transform="translate(1196 0)"><path d="M0 0L167 0L167 34L0 34ZM0 83L167 83L167 117L0 117ZM0 166L167 166L167 200L0 200Z"/></g>
-    <g transform="translate(1422 0)"><path d="M0 0L120 0A59 59 0 0 1 120 118L179 200L145 200L86 118L0 118L0 84L120 84A25 25 0 0 0 120 34L0 34Z"/></g>
+    <g transform="translate(220 0)"><path d="M0 0L96 0A100 100 0 0 1 96 200L0 200L0 166L96 166A66 66 0 0 0 96 34L0 34Z"/></g>
+    <g transform="translate(475 0)"><path d="M0 0L167 0L167 34L0 34ZM0 83L167 83L167 117L0 117ZM0 166L167 166L167 200L0 200Z"/></g>
+    <g transform="translate(701 0)"><path d="M0 0L0 200L34 200L34 42.24L161 200L195 200L195 0L161 0L161 157.76L34 0Z"/></g>
+    <g transform="translate(955 0)"><path d="M0 0L111 200L222 0L167.56 0L111 200L54.44 0Z"/></g>
+    <g transform="translate(1236 0)"><path d="M0 0L167 0L167 34L0 34ZM0 83L167 83L167 117L0 117ZM0 166L167 166L167 200L0 200Z"/></g>
+    <g transform="translate(1462 0)"><path d="M0 0L120 0A59 59 0 0 1 120 118L179 200L145 200L86 118L0 118L0 84L120 84A25 25 0 0 0 120 34L0 34Z"/></g>
   </g>
 </svg>
