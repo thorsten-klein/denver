@@ -286,7 +286,8 @@ just work off that project’s own config? If a provider ever needs an <code cla
 conventional place. There’s no “if there’s a <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code> next to
 the <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, use it,” no “if there’s a <code class="docutils literal notranslate"><span class="pre">conan/recipes</span></code> directory,
 scan it.” Every path an env needs — a compose file, a recipe dir, a
-skip-if script, a venv-patcher’s patches file — is named explicitly.</p>
+skip-if-0/skip-if-1 script, a venv-patcher’s patches file — is named
+explicitly.</p>
 <p>What this buys: an env’s <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> is a complete, honest description of
 what it does. Reading it (or running <code class="docutils literal notranslate"><span class="pre">--show-config</span></code>) tells you everything;
 nothing is hidden in directory layout that you’d only discover by tripping

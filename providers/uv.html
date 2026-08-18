@@ -345,11 +345,18 @@ one.</p></li>
 and <code class="docutils literal notranslate"><span class="pre">patches</span></code> (<strong>required</strong> if <code class="docutils literal notranslate"><span class="pre">venv-patcher:</span></code> is given at all — a path
 to a patches file). Applies patches to the venv’s installed packages
 after install.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-if</span></code></strong> — a list of scripts; if every one exits <code class="docutils literal notranslate"><span class="pre">0</span></code>, the install
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-if-0</span></code></strong> — a list of scripts; if every one exits <code class="docutils literal notranslate"><span class="pre">0</span></code>, the install
 step is skipped entirely — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">pip</span> <span class="pre">install</span></code> as well as <code class="docutils literal notranslate"><span class="pre">lock:</span></code>’s <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">lock</span></code>/<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> (the venv is still created/activated).</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">venv</span></code></strong> — names this stage’s venv, so several <code class="docutils literal notranslate"><span class="pre">uv</span></code> stages can target
-distinct venvs (or share one by using the same name, or both leaving it
-unset).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-if-1</span></code></strong> — same, but for tools with the inverted convention: the
+install step is skipped when every script instead exits <code class="docutils literal notranslate"><span class="pre">1</span></code>. Mutually
+independent from <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code> — an env can give either, both (each
+checked on its own group; either group being fully satisfied skips the
+install), or neither.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">venv</span></code></strong> — the full dirname of this stage’s venv (default <code class="docutils literal notranslate"><span class="pre">.venv</span></code>), so
+several <code class="docutils literal notranslate"><span class="pre">uv</span></code> stages can target distinct venvs (or share one by using the
+same name, or both leaving it unset). A value here replaces the whole
+leaf name, not just a suffix on it – <code class="docutils literal notranslate"><span class="pre">venv:</span> <span class="pre">shared</span></code> creates
+<code class="docutils literal notranslate"><span class="pre">shared[.host]</span></code>, not <code class="docutils literal notranslate"><span class="pre">.venv-shared[.host]</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">freeze-to</span></code></strong> — a path; after a real install, <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">pip</span> <span class="pre">freeze</span></code>’s full
 output is written there. Useful as a lockfile a later run (or a different
 <code class="docutils literal notranslate"><span class="pre">uv</span></code> stage) can read back via <code class="docutils literal notranslate"><span class="pre">requirements:</span></code>.</p></li>
@@ -365,10 +372,11 @@ survives a checksum-triggered venv recreation; delete that file to reset
 it. Off by default because it makes the resulting venv depend on this
 machine’s run history, not just the current <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>.</p></li>
 </ul>
-<p><code class="docutils literal notranslate"><span class="pre">skip-if</span></code> and <code class="docutils literal notranslate"><span class="pre">venv-patcher</span></code> are never guessed from the env’s directory
-layout (see “Explicit over implicit” in <a class="reference internal" href="../concepts/philosophy.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">../concepts/philosophy.md</span></code></span></a>) — with no
-<code class="docutils literal notranslate"><span class="pre">skip-if:</span></code> there is simply no skip check, and the venv patcher runs only
-when <code class="docutils literal notranslate"><span class="pre">venv-patcher:</span></code> names its <code class="docutils literal notranslate"><span class="pre">patches:</span></code> file explicitly.</p>
+<p><code class="docutils literal notranslate"><span class="pre">skip-if-0</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1</span></code> and <code class="docutils literal notranslate"><span class="pre">venv-patcher</span></code> are never guessed from the env’s
+directory layout (see “Explicit over implicit” in <a class="reference internal" href="../concepts/philosophy.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">../concepts/philosophy.md</span></code></span></a>) — with
+neither <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code> nor <code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code> given there is simply no skip check,
+and the venv patcher runs only when <code class="docutils literal notranslate"><span class="pre">venv-patcher:</span></code> names its <code class="docutils literal notranslate"><span class="pre">patches:</span></code>
+file explicitly.</p>
 </section>
 <section id="one-venv-one-interpreter">
 <h2>One venv, one interpreter<a class="headerlink" href="#one-venv-one-interpreter" title="Link to this heading"></a></h2>
@@ -418,13 +426,14 @@ checksum); later stages sharing it only ever install on top.</p></li>
 dies with a clear message if the venv doesn’t exist yet — run once
 without <code class="docutils literal notranslate"><span class="pre">--fast</span></code> first.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--force</span></code></strong> recreates the venv from scratch unconditionally and
-bypasses every <code class="docutils literal notranslate"><span class="pre">skip-if:</span></code> script.</p></li>
+bypasses every <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code> script.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> prints the <code class="docutils literal notranslate"><span class="pre">uv</span></code> commands (and the checksum/<code class="docutils literal notranslate"><span class="pre">freeze-to:</span></code>
 writes) instead of performing them; an existing venv is never removed. Two
 things still really happen, because the preview depends on them: each
-<code class="docutils literal notranslate"><span class="pre">skip-if:</span></code> script runs (its exit code is what decides whether an install
-would be shown at all), and each <code class="docutils literal notranslate"><span class="pre">$(...)</span></code> entry in <code class="docutils literal notranslate"><span class="pre">install-args:</span></code> runs
-(its output <em>is</em> part of the <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">pip</span> <span class="pre">install</span></code> line being shown).</p></li>
+<code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code> script runs (its exit code is what decides
+whether an install would be shown at all), and each <code class="docutils literal notranslate"><span class="pre">$(...)</span></code> entry in
+<code class="docutils literal notranslate"><span class="pre">install-args:</span></code> runs (its output <em>is</em> part of the <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">pip</span> <span class="pre">install</span></code> line
+being shown).</p></li>
 </ul>
 </section>
 </section>

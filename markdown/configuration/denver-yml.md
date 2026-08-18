@@ -532,7 +532,8 @@ Two categories deliberately still execute, because the preview is derived
 from them:
 
 - **read-only queries** — a `Context.run(..., capture=True)` call exists for
-  its *output*, which the provider immediately branches on (`docker image inspect`, `conan config home`, `west list`, a `skip-if:` script). Skipping
+  its *output*, which the provider immediately branches on (`docker image inspect`, `conan config home`, `west list`, a `skip-if-0:`/`skip-if-1:`
+  script). Skipping
   those would leave a dry run with nothing to decide with, and it would stop
   reflecting what a real run does. They are reported with a `?` marker, and a
   missing executable degrades to a failed query instead of aborting.

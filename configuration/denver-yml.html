@@ -786,7 +786,8 @@ helpers is a review-visible mistake, not a silent hole in <code class="docutils 
 from them:</p>
 <ul class="simple">
 <li><p><strong>read-only queries</strong> — a <code class="docutils literal notranslate"><span class="pre">Context.run(...,</span> <span class="pre">capture=True)</span></code> call exists for
-its <em>output</em>, which the provider immediately branches on (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">inspect</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">config</span> <span class="pre">home</span></code>, <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">list</span></code>, a <code class="docutils literal notranslate"><span class="pre">skip-if:</span></code> script). Skipping
+its <em>output</em>, which the provider immediately branches on (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">inspect</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">config</span> <span class="pre">home</span></code>, <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">list</span></code>, a <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code>
+script). Skipping
 those would leave a dry run with nothing to decide with, and it would stop
 reflecting what a real run does. They are reported with a <code class="docutils literal notranslate"><span class="pre">?</span></code> marker, and a
 missing executable degrades to a failed query instead of aborting.</p></li>
