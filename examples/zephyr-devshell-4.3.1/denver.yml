@@ -29,10 +29,10 @@ uv:
   - conan/recipes/python-cache/denver/requirements.final.txt
   overrides:
   - conan/recipes/python-cache/denver/overrides.txt
-  # both declared explicitly: denver never picks a skip-if script or a
+  # both declared explicitly: denver never picks a skip-if-0 script or a
   # venv-patcher patches file up off the directory layout on its own.
-  skip-if:
-  - uv/skip-if.sh
+  skip-if-0:
+  - uv/skip-if-0.sh
   venv-patcher:
     patches: uv/venv-patcher/patches.yml
 
@@ -74,8 +74,8 @@ uv-zephyr:
   # frozen, fully-resolved python requirements are written back here
   freeze-to: conan/recipes/python-cache/denver/requirements.final.txt
   # this stage shares the 'uv' stage's venv, so it applies the same
-  # skip-if/patches -- but it has to say so itself, exactly like 'uv' above.
-  skip-if:
-  - uv/skip-if.sh
+  # skip-if-0/patches -- but it has to say so itself, exactly like 'uv' above.
+  skip-if-0:
+  - uv/skip-if-0.sh
   venv-patcher:
     patches: uv/venv-patcher/patches.yml

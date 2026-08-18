@@ -24,7 +24,8 @@ denver never guesses that a file exists because it happens to sit in a
 conventional place. There's no "if there's a `docker-compose.yml` next to
 the `denver.yml`, use it," no "if there's a `conan/recipes` directory,
 scan it." Every path an env needs — a compose file, a recipe dir, a
-skip-if script, a venv-patcher's patches file — is named explicitly.
+skip-if-0/skip-if-1 script, a venv-patcher's patches file — is named
+explicitly.
 
 What this buys: an env's `denver.yml` is a complete, honest description of
 what it does. Reading it (or running `--show-config`) tells you everything;

@@ -679,8 +679,13 @@ class Context:
         return self.env
 
     def venv_dir_for(self, name):
-        """Path of a (named) venv; host and in-docker venvs are kept apart."""
-        leaf = ".venv" if not name else f".venv-{name}"
+        """Path of a (named) venv; host and in-docker venvs are kept apart.
+
+        ``name`` (a stage's ``venv:``) is the *whole* leaf dirname, not a
+        suffix tacked onto a fixed ``.venv-`` prefix -- so 'venv: shared'
+        gives ``<env_workdir>/shared``, not ``<env_workdir>/.venv-shared``.
+        """
+        leaf = name if name else ".venv"
         venv = self.env_workdir / leaf
         return venv if self.in_container else Path(str(venv) + ".host")
 
@@ -824,7 +829,9 @@ class Context:
         print(f"{DRY_PREFIX} {marker} {message}", file=sys.stderr)
 
     # ---- process helpers ------------------------------------------------ #
-    def run(self, cmd, *, cwd=None, check=True, echo=True, capture=False, extra_env=None, input=None, step=None):
+    def run(
+        self, cmd, *, cwd=None, check=True, echo=True, capture=False, query=None, extra_env=None, input=None, step=None
+    ):
         """Run a subprocess using the context environment.
 
         Under --quiet, the '+ cmd' echo is skipped and -- unless the caller
@@ -836,16 +843,24 @@ class Context:
         Under --dry-run (``ctx.dry_run``) a command that exists for its
         *effect* is printed as ``[dry-run] + cmd`` and not run at all,
         standing in as an immediately-successful, output-less call. A
-        ``capture=True`` call is different: it exists for its *output*, which
-        some provider is about to branch on (is the image cached? which conan
-        home? what does `west list` say?), so a dry run would have nothing to
-        decide with and would stop reflecting what a real run does. Those are
-        genuinely executed -- they are the reads, not the writes -- and
+        ``query=True`` call is different: some provider is about to branch on
+        it (is the image cached? which conan home? what does `west list`
+        say? did a skip-if-0/skip-if-1 script exit as configured?), so a dry run would have nothing
+        to decide with and would stop reflecting what a real run does. Those
+        are genuinely executed -- they are the reads, not the writes -- and
         reported as ``[dry-run] ? cmd`` so the preview still says so.
         A missing executable is not fatal in that case either: half the point
         of a dry run is previewing an env whose tools an earlier (skipped)
         stage would have installed, so it degrades to the same empty,
         non-zero result rather than raising.
+
+        ``query`` defaults to ``capture``: a caller reading ``.stdout`` back
+        (the common case) needs both -- the real output, and the dry-run
+        guarantee that it was genuinely produced. The two are independent,
+        though: a caller that only branches on ``.returncode`` (e.g.
+        ``skip-if-0``/``skip-if-1``) wants ``query=True`` without ``capture=True``, so the
+        script's own stdout/stderr stay live on the terminal on a real run,
+        while --dry-run still executes it for a real answer.
 
         ``input``, if given, is fed to the subprocess's stdin (e.g. a secret
         piped into ``docker login --password-stdin`` without it ever
@@ -862,10 +877,12 @@ class Context:
         """
         if step is not None:
             banner(self, self.stage_id, step)
+        if query is None:
+            query = capture
         env = self._child_env(extra_env)
         printable = _printable(cmd)
         if self.dry_run:
-            return self._dry_run_command(cmd, printable, cwd=cwd, env=env, capture=capture, input=input)
+            return self._dry_run_command(cmd, printable, cwd=cwd, env=env, query=query, input=input)
         self._echo_command(printable, echo)
         try:
             return self._spawn(cmd, cwd=cwd, env=env, check=check, capture=capture, input=input)
@@ -932,9 +949,9 @@ class Context:
             input=input,
         )
 
-    def _dry_run_command(self, cmd, printable, *, cwd, env, capture, input):
+    def _dry_run_command(self, cmd, printable, *, cwd, env, query, input):
         """Report ``cmd`` under --dry-run: print-and-skip it, or really run it if it's a query (see Context.run)."""
-        if not capture:
+        if not query:
             self.dry_note("+", printable)
             return subprocess.CompletedProcess(_argv(cmd), 0, "", "")
         self.dry_note("?", printable)

@@ -10,7 +10,7 @@ from denver_providers.uv import UvProvider
 @pytest.fixture(autouse=True)
 def _venv_creates_dir(run_recorder):
     """'uv venv [-p <version>] <dir>' has the real side effect of creating <dir>;
-    subsequent steps (checksums, skip-if) depend on it existing. Keyed on
+    subsequent steps (checksums, skip-if-0/skip-if-1) depend on it existing. Keyed on
     'uv venv' rather than 'venv -p', since '-p' is only passed when the stage
     actually configures a 'python:' (there is no default -- see
     UvProvider.resolve_defaults).
@@ -385,13 +385,13 @@ def test_distinct_venv_names_each_decide_their_own_recreate(make_context, run_re
 
 
 # ---- _install branches -------------------------------------------------------#
-def test_install_skips_when_all_skip_if_scripts_pass(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if": ["check.sh"]}}
+def test_install_skips_when_all_skip_if_0_scripts_pass(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["check.sh"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
     # checksums must already match, otherwise _ensure_venv recreates the venv
-    # before _install ever runs the skip-if scripts
+    # before _install ever runs the skip-if-0 scripts
     from denver_providers.context import sha256_of_files
 
     ctx.venv_dir.mkdir(parents=True)
@@ -402,8 +402,8 @@ def test_install_skips_when_all_skip_if_scripts_pass(make_context, run_recorder,
     assert not any("uv pip install" in c for c in run_recorder.commands())
 
 
-def test_install_runs_when_a_skip_if_script_fails(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if": ["check.sh"]}}
+def test_install_runs_when_a_skip_if_0_script_fails(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["check.sh"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 1\n")
@@ -413,42 +413,42 @@ def test_install_runs_when_a_skip_if_script_fails(make_context, run_recorder, wh
     assert any("uv pip install" in c for c in run_recorder.commands())
 
 
-def test_install_dies_when_skip_if_script_missing(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if": ["nope.sh"]}}
+def test_install_dies_when_skip_if_0_script_missing(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["nope.sh"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     with pytest.raises(SystemExit):
         run_uv(config, ctx)
 
 
-def test_install_skips_via_configured_skip_if_script(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if": ["uv/skip-if.sh"]}}
+def test_install_skips_via_configured_skip_if_0_script(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["uv/skip-if-0.sh"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     (ctx.env_dir / "uv").mkdir(parents=True)
-    (ctx.env_dir / "uv" / "skip-if.sh").write_text("#!/bin/sh\nexit 0\n")
-    run_recorder.responses["skip-if.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
+    (ctx.env_dir / "uv" / "skip-if-0.sh").write_text("#!/bin/sh\nexit 0\n")
+    run_recorder.responses["skip-if-0.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
 
     run_uv(config, ctx)
     assert not any("uv pip install" in c for c in run_recorder.commands())
 
 
-def test_install_ignores_unconfigured_skip_if_script(make_context, run_recorder, which):
-    # uv/skip-if.sh is there and would skip the install, but nothing names
+def test_install_ignores_unconfigured_skip_if_0_script(make_context, run_recorder, which):
+    # uv/skip-if-0.sh is there and would skip the install, but nothing names
     # it, so it is never looked at: no path is guessed from the layout.
     config = {"uv": {"requirements": ["r.txt"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     (ctx.env_dir / "uv").mkdir(parents=True)
-    (ctx.env_dir / "uv" / "skip-if.sh").write_text("#!/bin/sh\nexit 0\n")
-    run_recorder.responses["skip-if.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
+    (ctx.env_dir / "uv" / "skip-if-0.sh").write_text("#!/bin/sh\nexit 0\n")
+    run_recorder.responses["skip-if-0.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
 
     run_uv(config, ctx)
     assert any("uv pip install" in c for c in run_recorder.commands())
 
 
-def test_install_force_ignores_skip_if(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "skip-if": ["check.sh"]}}
+def test_install_force_ignores_skip_if_0(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-0": ["check.sh"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
@@ -457,6 +457,67 @@ def test_install_force_ignores_skip_if(make_context, run_recorder, which):
 
     run_uv(config, ctx)
     assert any("uv pip install" in c for c in run_recorder.commands())
+
+
+def test_install_skips_when_all_skip_if_1_scripts_exit_1(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
+    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 1\n")
+    from denver_providers.context import sha256_of_files
+
+    ctx.venv_dir.mkdir(parents=True)
+    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
+    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 1})()
+
+    run_uv(config, ctx)
+    assert not any("uv pip install" in c for c in run_recorder.commands())
+
+
+def test_install_runs_when_a_skip_if_1_script_exits_0(make_context, run_recorder, which):
+    # skip-if-1's condition is exit 1, not exit 0 -- a passing (exit 0) script
+    # here means "not yet done", the opposite of what it means under skip-if-0.
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
+    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")
+    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
+
+    run_uv(config, ctx)
+    assert any("uv pip install" in c for c in run_recorder.commands())
+
+
+def test_install_force_ignores_skip_if_1(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "skip-if-1": ["check.sh"]}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
+    (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 1\n")
+    run_recorder.responses["check.sh"] = lambda cmd: type("R", (), {"returncode": 1})()
+    ctx.force = True
+
+    run_uv(config, ctx)
+    assert any("uv pip install" in c for c in run_recorder.commands())
+
+
+def test_install_skips_when_skip_if_0_group_satisfied_even_if_skip_if_1_is_not(make_context, run_recorder, which):
+    # the two groups are independent -- either one being fully satisfied is
+    # enough to skip the install, regardless of what the other one says.
+    config = {
+        "uv": {"requirements": ["r.txt"], "skip-if-0": ["zero.sh"], "skip-if-1": ["one.sh"]},
+    }
+    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
+    (ctx.env_dir / "zero.sh").write_text("#!/bin/sh\nexit 0\n")
+    (ctx.env_dir / "one.sh").write_text("#!/bin/sh\nexit 0\n")
+    from denver_providers.context import sha256_of_files
+
+    ctx.venv_dir.mkdir(parents=True)
+    (ctx.venv_dir / "uv-checksums.txt").write_text(sha256_of_files([ctx.env_dir / "r.txt"], base=ctx.env_dir))
+    run_recorder.responses["zero.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
+    run_recorder.responses["one.sh"] = lambda cmd: type("R", (), {"returncode": 0})()
+
+    run_uv(config, ctx)
+    assert not any("uv pip install" in c for c in run_recorder.commands())
 
 
 @pytest.mark.parametrize(
@@ -817,8 +878,8 @@ def test_lock_gets_the_same_wheel_sources_as_pip_install(make_context, run_recor
         assert "--no-index" in argv
 
 
-def test_lock_skipped_by_skip_if(make_context, run_recorder, which):
-    config = {"uv": {"lock": {"sync": "py/uv.lock"}, "skip-if": ["check.sh"]}}
+def test_lock_skipped_by_skip_if_0(make_context, run_recorder, which):
+    config = {"uv": {"lock": {"sync": "py/uv.lock"}, "skip-if-0": ["check.sh"]}}
     ctx = make_context(config=config)
     make_project(ctx)
     (ctx.env_dir / "check.sh").write_text("#!/bin/sh\nexit 0\n")

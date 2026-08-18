@@ -141,7 +141,7 @@ def test_show_config_sees_the_passed_value(tmp_path, capsys, which):
         "  default: world\n"
         "u:\n"
         "  provider: uv\n"
-        "  skip-if:\n"
+        "  skip-if-0:\n"
         "  - ${DENVER_ARG_WHO}.sh\n"
     )
     assert denver.main(["run", str(env_dir), "--show-config", "--who", "denver"]) == 0

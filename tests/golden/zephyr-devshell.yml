@@ -78,7 +78,8 @@ uv:
   overrides: null
   python: null
   requirements: null
-  skip-if: []
+  skip-if-0: []
+  skip-if-1: []
   uv: /usr/bin/uv
   venv: null
   venv-patcher: null
@@ -115,7 +116,8 @@ uv-zephyr:
   overrides: null
   python: null
   requirements: null
-  skip-if: []
+  skip-if-0: []
+  skip-if-1: []
   uv: /usr/bin/uv
   venv: null
   venv-patcher: null

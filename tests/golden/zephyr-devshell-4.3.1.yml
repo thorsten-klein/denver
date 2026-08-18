@@ -86,8 +86,9 @@ uv:
   requirements:
   - conan/recipes/python-cache/denver/requirements.txt
   - conan/recipes/python-cache/denver/requirements.final.txt
-  skip-if:
-  - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-if.sh
+  skip-if-0:
+  - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-if-0.sh
+  skip-if-1: []
   uv: /usr/bin/uv
   venv: null
   venv-patcher:
@@ -128,8 +129,9 @@ uv-zephyr:
   - conan/recipes/python-cache/denver/overrides.txt
   python: null
   requirements: null
-  skip-if:
-  - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-if.sh
+  skip-if-0:
+  - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-if-0.sh
+  skip-if-1: []
   uv: /usr/bin/uv
   venv: null
   venv-patcher:

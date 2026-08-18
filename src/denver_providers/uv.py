@@ -95,7 +95,8 @@ class UvProvider(Provider):
         "uv",
         "no-index",
         "link-mode",
-        "skip-if",
+        "skip-if-0",
+        "skip-if-1",
         "venv-patcher",
         "requirements",
         "lock",
@@ -115,6 +116,11 @@ class UvProvider(Provider):
             return ctx.in_container
         return bool(no_index)
 
+    @staticmethod
+    def _resolved_skip_if(ctx, cfg, key):
+        """One 'skip-if-N:' list of scripts, resolved to absolute paths (empty when unset)."""
+        return [str(ctx.resolve_path(s)) for s in cfg.get(key) or []]
+
     @classmethod
     def _resolve_optional_sections(cls, ctx, cfg, resolved):
         """Fill 'lock:'/'venv-patcher:' into ``resolved`` only when the env configured them at all."""
@@ -128,7 +134,7 @@ class UvProvider(Provider):
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve python/uv/no-index/skip-if/venv-patcher defaults -- see doc/providers/uv.md."""
+        """Resolve python/uv/no-index/skip-if-0/skip-if-1/venv-patcher defaults -- see doc/providers/uv.md."""
         resolved = dict(cfg)
         # No default: denver does not pick an interpreter nobody wrote down.
         # Unset means uv's own discovery decides (see _ensure_venv), and
@@ -145,7 +151,8 @@ class UvProvider(Provider):
         # resolved centrally (like every other path in this section) so
         # --show-config shows the real script; whether it actually *exists*
         # is checked at run time, right before we'd run it (_skip_if_satisfied).
-        resolved["skip-if"] = [str(ctx.resolve_path(s)) for s in cfg.get("skip-if") or []]
+        resolved["skip-if-0"] = cls._resolved_skip_if(ctx, cfg, "skip-if-0")
+        resolved["skip-if-1"] = cls._resolved_skip_if(ctx, cfg, "skip-if-1")
 
         cls._resolve_optional_sections(ctx, cfg, resolved)
 
@@ -272,10 +279,13 @@ class UvProvider(Provider):
             self._install(ctx, uv, cfg, inputs["requirements"], inputs["overrides"], inputs["install_args"])
 
     def _install_and_patch(self, ctx, uv, cfg, venv_dir, inputs):
-        """Install requirements/lockfile (unless skip-if says otherwise), apply venv patches, record checksums."""
-        skip_if = cfg["skip-if"]
-        if not ctx.force and skip_if and self._skip_if_satisfied(ctx, skip_if):
-            info("uv: skip-if scripts all exited 0; skipping install")
+        """Install requirements/lockfile (unless skip-if-0/skip-if-1 says otherwise), apply venv patches, record checksums."""
+        skip_if_0 = cfg["skip-if-0"]
+        skip_if_1 = cfg["skip-if-1"]
+        if not ctx.force and skip_if_0 and self._skip_if_satisfied(ctx, "skip-if-0", skip_if_0, 0):
+            info("uv: skip-if-0 scripts all exited 0; skipping install")
+        elif not ctx.force and skip_if_1 and self._skip_if_satisfied(ctx, "skip-if-1", skip_if_1, 1):
+            info("uv: skip-if-1 scripts all exited 1; skipping install")
         else:
             self._install_everything(ctx, uv, cfg, inputs)
         self._apply_patches(ctx, cfg)
@@ -641,21 +651,21 @@ class UvProvider(Provider):
                 seen.add(unit)
         return merged
 
-    def _skip_if_satisfied(self, ctx, scripts):
-        """True if every 'skip-if' script exits 0 (install is skipped).
+    def _skip_if_satisfied(self, ctx, label, scripts, expected_code):
+        """True if every ``label`` script exits with ``expected_code`` (install is skipped).
 
-        Unlike the *value* of 'skip-if' (resolved centrally), actually
-        running each script is a real side effect and must stay here, at
-        install time -- checking whether a script's missing (a config
-        error, not something the central resolver should silently paper
-        over) belongs right before we'd run it too.
+        Unlike the *value* of 'skip-if-0:'/'skip-if-1:' (resolved centrally),
+        actually running each script is a real side effect and must stay
+        here, at install time -- checking whether a script's missing (a
+        config error, not something the central resolver should silently
+        paper over) belongs right before we'd run it too.
         """
         for script in scripts:
             path = ctx.resolve_path(script)
             if not path.is_file():
-                die(f"uv: skip-if script not found: {path}")
-            result = ctx.run([path], check=False, capture=True, echo=False)
-            if result.returncode != 0:
+                die(f"uv: {label} script not found: {path}")
+            result = ctx.run([path], check=False, capture=False, query=True, echo=False)
+            if result.returncode != expected_code:
                 return False
         return True
 
