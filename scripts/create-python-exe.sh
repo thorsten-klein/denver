@@ -144,7 +144,7 @@ VERSION_OUTPUT="$("$BUILD_DIR/dist/denver" --version)"
 echo "$VERSION_OUTPUT"
 "$BUILD_DIR/dist/denver" --license >/dev/null
 "$BUILD_DIR/dist/denver" --help >/dev/null
-"$BUILD_DIR/dist/denver" "$REPO_ROOT/examples/simple-env" --show-config -c denver-version=null >/dev/null
+"$BUILD_DIR/dist/denver" run "$REPO_ROOT/examples/simple-env" --show-config -c denver-version=null >/dev/null
 
 # 'denver X.Y.Z' -> X.Y.Z; see denver.py's package_version for what it prints.
 VERSION="${VERSION_OUTPUT#denver }"
