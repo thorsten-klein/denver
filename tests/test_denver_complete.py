@@ -16,7 +16,10 @@ whatever process actually happens to be running the tests.
 from __future__ import annotations
 
 import os
+import shlex
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -89,23 +92,80 @@ def test_completion_bind_names_dedupes_argv0_against_the_absolute_path(monkeypat
 def test_completion_script_bash_registers_every_name_and_reinvokes_via_comp_words_0():
     out = denver._completion_script("bash", ["denver", "./src/denver.py"])
     assert "complete -F _denver_complete -o default -o bashdefault denver ./src/denver.py" in out
-    assert '"${COMP_WORDS[0]}" __complete' in out
+    assert "local cmd=${COMP_WORDS[0]}" in out
+    assert '"${resolved[@]}" __complete' in out
     assert "denver __complete" not in out  # never hardcoded -- see COMP_WORDS[0] above
+
+
+def test_completion_script_bash_resolves_the_typed_word_through_bash_aliases():
+    out = denver._completion_script("bash", ["denver"])
+    assert "BASH_ALIASES[$cmd]" in out  # e.g. `alias denver=/path/to/denver.py`
 
 
 def test_completion_script_zsh_registers_every_name_and_reinvokes_via_words_1():
     out = denver._completion_script("zsh", ["denver", "./src/denver.py"])
     assert "compdef _denver_complete denver ./src/denver.py" in out
-    assert '"${words[1]}" __complete' in out
+    assert "local cmd=${words[1]}" in out
+    assert '"${resolved[@]}" __complete' in out
     assert "denver __complete" not in out
 
 
-def test_completion_script_fish_registers_one_complete_c_line_per_name():
+def test_completion_script_zsh_resolves_the_typed_word_through_zsh_aliases():
+    out = denver._completion_script("zsh", ["denver"])
+    assert "aliases[$cmd]" in out  # e.g. `alias denver=/path/to/denver.py`
+
+
+# ---- unquoted `eval $(denver complete)` -- see _completion_script's docstring ---- #
+# Command substitution word-splits on IFS when it's not inside double quotes,
+# collapsing every newline in the printed script down to a plain space before eval
+# ever runs it -- so the script must still be one valid (';'-separated) line even
+# after that happens. `eval "$(...)"` (quoted) never hits this; these drive the
+# unquoted form specifically, through a real shell, to catch a regression no amount
+# of string-matching on _completion_script's output would.
+def _run_unquoted_eval(shell, extra_setup=""):
+    if not shutil.which(shell):
+        pytest.skip(f"{shell} not installed")
+    cmd = f"{shlex.quote(sys.executable)} {shlex.quote(denver.__file__)} complete {shell}"
+    script = f"{extra_setup}eval $({cmd})\n"
+    return subprocess.run([shell, "-c", script + "type _denver_complete"], capture_output=True, text=True)
+
+
+def test_bash_completion_function_defines_via_unquoted_eval():
+    result = _run_unquoted_eval("bash")
+    assert "is a function" in result.stdout, result.stderr
+
+
+def test_zsh_completion_function_defines_via_unquoted_eval():
+    result = _run_unquoted_eval("zsh", extra_setup="autoload -Uz compinit; compinit -u\n")
+    assert result.returncode == 0, result.stderr
+
+
+def test_completion_script_fish_registers_one_complete_c_line_per_bare_name():
     out = denver._completion_script("fish", ["denver", "./src/denver.py"])
-    assert "complete -c denver -a '(__denver_complete)'" in out
-    assert "complete -c ./src/denver.py -a '(__denver_complete)'" in out
+    assert "complete -c denver -f -a '(__denver_complete)'" in out
     assert "$tokens[1] __complete" in out
     assert "denver __complete" not in out
+
+
+def test_completion_script_fish_registers_path_names_with_dash_p_not_dash_c():
+    # '-c' only ever matches a bare command name -- a path needs '-p', or fish
+    # never matches it against anything typed at the prompt (checkout invocations,
+    # e.g. './src/denver.py', are always a path).
+    out = denver._completion_script("fish", ["denver", "./src/denver.py"])
+    assert "complete -p ./src/denver.py -f -a '(__denver_complete)'" in out
+    assert "complete -c ./src/denver.py" not in out
+
+
+def test_completion_script_fish_suppresses_filenames_except_for_path_flags():
+    # '-f' keeps denver's own candidates from being drowned out by every file in the
+    # cwd; a second, '-n'-gated entry forces filenames back on ('-F') only right
+    # after a flag that takes an arbitrary path (-c/--config/-cf/--config-file),
+    # since __complete has no sensible dynamic completion for those (see
+    # _pending_flag_value_candidates).
+    out = denver._completion_script("fish", ["denver"])
+    assert "function __denver_expects_path" in out
+    assert "contains -- $prev -c --config -cf --config-file" in out
+    assert "complete -c denver -n __denver_expects_path -F -a '(__denver_complete)'" in out
 
 
 def test_detect_shell_reads_the_parent_processs_name(monkeypatch):
@@ -288,6 +348,17 @@ def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tm
 
     assert denver.main(["__complete", "run", str(env_dir), "--sh"]) == 0
     assert capsys.readouterr().out.splitlines() == ["--show-config"]
+
+
+# ---- 'denver __complete run <env> ' -- flags offered before typing '-' ----- #
+def test_dunder_complete_offers_flags_right_after_env_even_before_a_dash(tmp_path, capsys):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text("stages: []\n")
+
+    assert denver.main(["__complete", "run", str(env_dir), ""]) == 0
+    out = set(capsys.readouterr().out.splitlines())
+    assert {"--scripts", "--show-config", "-c", "--config"} <= out
 
 
 # ---- 'denver __complete run <env> <extra positional>' -- nothing to offer -- #

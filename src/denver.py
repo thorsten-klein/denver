@@ -2921,6 +2921,7 @@ _RUN_FLAGS = [
     "--help",
 ]
 _VALUE_FLAGS = {"-c", "--config", "-cf", "--config-file", "-e", "--env", "--until", "--skip", "--scripts"}
+_PATH_VALUE_FLAGS = ("-c", "--config", "-cf", "--config-file")  # see _pending_flag_value_candidates
 
 
 def _matching(candidates, cur):
@@ -2964,12 +2965,15 @@ def _complete_run_candidates(rest, cur):
 
 
 def _complete_env_or_flag(env_value, cur):
-    """<env> path completions, or denver's own (and this env's declared) run flags, depending on ``cur``."""
-    if cur.startswith("-"):
-        return _matching(_RUN_FLAGS + _completion_declared_flags(env_value), cur)
-    if env_value is None:
+    """<env> path completions, or denver's own (and this env's declared) run flags, depending on ``cur``.
+
+    Once <env> is resolved, a flag is the only thing that can come next -- so flags
+    are offered there even before ``cur`` starts with '-' (an empty ``cur`` then
+    matches all of them), rather than only once the user's typed the dash themselves.
+    """
+    if env_value is None and not cur.startswith("-"):
         return _completion_path_candidates(cur)
-    return []
+    return _matching(_RUN_FLAGS + _completion_declared_flags(env_value), cur)
 
 
 def _run_completion_state(rest):
@@ -3013,7 +3017,7 @@ def _pending_flag_value_candidates(pending_flag, env_value, cur):
     if pending_flag in ("-e", "--env"):
         return _matching(list(os.environ), cur)
     if pending_flag is not None:
-        return []  # -c/-cf/...: no sensible dynamic completion; -o default falls back to filenames
+        return []  # _PATH_VALUE_FLAGS: no sensible dynamic completion; shell filename fallback takes over
     return None
 
 
@@ -3160,42 +3164,103 @@ def _completion_script(shell, names):
     """
     quoted = [shlex.quote(name) for name in names]
     if shell == "bash":
-        return (
-            '# denver bash completion -- wire up with: eval "$(denver complete)"\n'
-            "_denver_complete() {\n"
-            "    local IFS=$'\\n'\n"
-            '    COMPREPLY=($("${COMP_WORDS[0]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null))\n'
-            "}\n"
-            f"complete -F _denver_complete -o default -o bashdefault {' '.join(quoted)}\n"
-        )
+        return _completion_script_bash(quoted)
     if shell == "zsh":
-        # zsh's own completion system (compsys), not bash's -F/COMPREPLY -- $words is
-        # the full command line (1-indexed), $CURRENT the index of the word being
-        # completed, so $words[2,CURRENT] is the same slice bash's script passes to
-        # __complete. compadd, not COMPREPLY, is how compsys widgets report candidates.
-        return (
-            '# denver zsh completion -- wire up with: eval "$(denver complete)"\n'
-            "_denver_complete() {\n"
-            "    local -a completions\n"
-            '    completions=("${(@f)$("${words[1]}" __complete "${words[2,CURRENT]}" 2>/dev/null)}")\n'
-            '    compadd -- "${completions[@]}"\n'
-            "}\n"
-            f"compdef _denver_complete {' '.join(quoted)}\n"
-        )
+        return _completion_script_zsh(quoted)
+    return _completion_script_fish(names, quoted)
+
+
+def _completion_script_bash(quoted):
+    """The bash branch of _completion_script -- see there for what ``quoted`` is."""
+    # COMP_WORDS[0] is the literal word typed at the prompt -- if that word is a
+    # bash alias (as with `alias denver=/path/to/denver.py`), it's not something
+    # `"$cmd" __complete ...` can exec directly: alias expansion happens at parse
+    # time, on the literal token, never on a variable's value. BASH_ALIASES maps
+    # alias names to their (possibly multi-word, possibly quoted) expansion, so
+    # look it up and split it -- via eval, to honour any quoting in it -- before
+    # invoking; unaliased words fall through unchanged.
+    #
+    # Every statement below ends in ';', and the closing '}' is followed by one
+    # too, so the whole thing still parses if run as `eval $(denver complete)`
+    # (unquoted): unquoted command substitution word-splits on IFS, which turns
+    # every newline into a plain space before eval ever sees it. Without explicit
+    # ';'s that collapse would run separate statements together with nothing to
+    # separate them; the closing comment line is last for the same reason -- a
+    # '#' earlier in the (now single-line) script would silently comment out
+    # everything after it, since there'd be no real newline left to end it on.
+    return (
+        "_denver_complete() {"
+        " local cmd=${COMP_WORDS[0]};"
+        ' local -a resolved=("$cmd");'
+        ' [[ -n ${BASH_ALIASES[$cmd]+x} ]] && eval "resolved=(${BASH_ALIASES[$cmd]})";'
+        " local IFS=$'\\n';"
+        ' COMPREPLY=($("${resolved[@]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null));'
+        " };\n"
+        f"complete -F _denver_complete -o default -o bashdefault {' '.join(quoted)};\n"
+        '# denver bash completion -- wire up with: eval "$(denver complete)"\n'
+    )
+
+
+def _completion_script_zsh(quoted):
+    """The zsh branch of _completion_script -- see there for what ``quoted`` is."""
+    # zsh's own completion system (compsys), not bash's -F/COMPREPLY -- $words is
+    # the full command line (1-indexed), $CURRENT the index of the word being
+    # completed, so $words[2,CURRENT] is the same slice bash's script passes to
+    # __complete. compadd, not COMPREPLY, is how compsys widgets report candidates.
+    # Same alias problem as bash (see above) -- zsh's own $aliases associative
+    # array is the equivalent of BASH_ALIASES; the (z) flag splits its value the
+    # way the shell itself would, quoting included. Same unquoted-eval hazard as
+    # bash too (zsh word-splits unquoted command substitutions on IFS just like
+    # bash does) -- same ';'-everywhere, comment-last fix applies.
+    return (
+        "_denver_complete() {"
+        " local cmd=${words[1]};"
+        ' local -a resolved=("$cmd");'
+        " (( ${+aliases[$cmd]} )) && resolved=(${(z)aliases[$cmd]});"
+        " local -a completions;"
+        ' completions=("${(@f)$("${resolved[@]}" __complete "${words[2,CURRENT]}" 2>/dev/null)}");'
+        ' compadd -- "${completions[@]}";'
+        " };\n"
+        f"compdef _denver_complete {' '.join(quoted)};\n"
+        '# denver zsh completion -- wire up with: eval "$(denver complete)"\n'
+    )
+
+
+def _completion_script_fish(names, quoted):
+    """The fish branch of _completion_script -- see there for what ``names``/``quoted`` are."""
     # fish's own completion system: 'commandline -opc' is the current command's tokens
     # before the cursor (command name included, current partial word excluded),
     # 'commandline -ct' is that partial word -- together the same words __complete
-    # expects. No '-f': like bash's '-o default', filenames still complete alongside
-    # denver's own candidates. One 'complete -c' per name -- fish takes only one
-    # command per invocation, unlike bash/zsh's space-separated list.
+    # expects. One 'complete' line per name -- fish takes only one command per
+    # invocation, unlike bash/zsh's space-separated list. '-c NAME' only ever matches
+    # a bare command name -- a path (any name with a '/' in it, e.g. a checkout's
+    # './src/denver.py' or the absolute path) needs '-p PATH' instead, or it silently
+    # never matches anything typed at the prompt.
+    #
+    # '-f' (no-files) on the main entry keeps denver's own candidates from being
+    # drowned out by every file in the cwd -- unlike bash's '-o default', fish shows
+    # filenames alongside custom candidates by default. That's exactly right for most
+    # positions (denver's own __complete already returns the relevant directories/
+    # denver.yml files for the <env> positional itself, see _completion_path_candidate),
+    # but _PATH_VALUE_FLAGS (-c/--config/-cf/--config-file) take an arbitrary path
+    # __complete can't enumerate -- so a second entry, gated by '-n __denver_expects_path'
+    # and forcing files back on with '-F', covers just that one case.
+    path_value_flags = " ".join(shlex.quote(flag) for flag in _PATH_VALUE_FLAGS)
     lines = [
         "# denver fish completion -- wire up with: denver complete | source",
         "function __denver_complete",
         "    set -l tokens (commandline -opc) (commandline -ct)",
         "    $tokens[1] __complete $tokens[2..-1] 2>/dev/null",
         "end",
+        "function __denver_expects_path",
+        "    set -l prev (commandline -opc)[-1]",
+        f"    contains -- $prev {path_value_flags}",
+        "end",
     ]
-    lines += [f"complete -c {name} -a '(__denver_complete)'" for name in quoted]
+    for name, quoted_name in zip(names, quoted):
+        flag = "-p" if "/" in name else "-c"
+        lines.append(f"complete {flag} {quoted_name} -f -a '(__denver_complete)'")
+        lines.append(f"complete {flag} {quoted_name} -n __denver_expects_path -F -a '(__denver_complete)'")
     return "\n".join(lines) + "\n"
 
 
