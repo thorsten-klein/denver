@@ -292,7 +292,12 @@ file in place and <em>then</em> exit non-zero, so the first run after a violatio
 aborts <code class="docutils literal notranslate"><span class="pre">poe</span> <span class="pre">all</span></code> with the fix already applied — on next re-run it will pass.</p>
 <p><code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">poe</span> <span class="pre">clean</span></code> removes build artifacts (<code class="docutils literal notranslate"><span class="pre">dist/</span></code>, <code class="docutils literal notranslate"><span class="pre">build/</span></code>, <code class="docutils literal notranslate"><span class="pre">*.egg-info</span></code>,
 <code class="docutils literal notranslate"><span class="pre">htmlcov/</span></code>, <code class="docutils literal notranslate"><span class="pre">.coverage</span></code>, <code class="docutils literal notranslate"><span class="pre">coverage.xml</span></code>); <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">poe</span> <span class="pre">build</span></code> cleans then
-builds the wheel/sdist (<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">build</span></code>).</p>
+builds the wheel/sdist (<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">build</span></code>). <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">poe</span> <span class="pre">pyinstaller</span></code> is separate:
+it freezes the standalone executable (<code class="docutils literal notranslate"><span class="pre">scripts/create-python-exe.sh</span> <span class="pre">--output</span> <span class="pre">dist</span></code>) – see “Prebuilt Binary” in <a class="reference internal" href="../introduction/install.html"><span class="std std-doc">Install</span></a>
+for what that executable is. Kept out of <code class="docutils literal notranslate"><span class="pre">build</span></code> on purpose: <code class="docutils literal notranslate"><span class="pre">publish.yml</span></code>
+runs <code class="docutils literal notranslate"><span class="pre">poe</span> <span class="pre">build</span></code> and uploads everything under <code class="docutils literal notranslate"><span class="pre">dist/</span></code> to PyPI as-is, and
+the executable is a GitHub release asset (built by <code class="docutils literal notranslate"><span class="pre">release-binary.yml</span></code>),
+not a PyPI artifact.</p>
 </section>
 <section id="test-suite">
 <h2>Test suite<a class="headerlink" href="#test-suite" title="Link to this heading"></a></h2>

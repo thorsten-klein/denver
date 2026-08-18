@@ -43,7 +43,8 @@ curl -sSL "$ASSET" | tar -xJf -
 
 x86_64 Linux with glibc 2.28 or newer (Ubuntu 20.04+, Debian 10+, Fedora 29+,
 RHEL/Alma/Rocky 8+, Arch, Mint 20+); musl-based distros such as Alpine are not
-covered. Build it yourself with `scripts/create-python-exe.sh`. Note this
+covered. Build it yourself with `scripts/create-python-exe.sh` (or, from a
+dev checkout, `uv run poe pyinstaller`). Note this
 only replaces *denver’s* own installation — the tools its providers drive
 (see [Pre-conditions](../quickstart/five-minutes.md#pre-conditions)) still
 have to be there.

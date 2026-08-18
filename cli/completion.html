@@ -303,6 +303,10 @@ correctly after sourcing the exact same script <code class="docutils literal not
 only helps when the script itself is the word typed at the prompt (its
 shebang makes <code class="docutils literal notranslate"><span class="pre">./src/denver.py</span></code> directly executable) — <code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">src/denver.py</span> <span class="pre">&lt;TAB&gt;</span></code> still can’t be completed this way, since bash keys
 completion off the first word (<code class="docutils literal notranslate"><span class="pre">python3</span></code>), not the script path after it.</p>
+<p>A bash/zsh <code class="docutils literal notranslate"><span class="pre">alias</span> <span class="pre">denver=/path/to/denver.py</span></code> also works: the printed
+script resolves the typed word through <code class="docutils literal notranslate"><span class="pre">BASH_ALIASES</span></code>/<code class="docutils literal notranslate"><span class="pre">$aliases</span></code> before
+re-invoking it, since alias expansion itself happens at parse time, on the
+literal token, never on a variable holding it.</p>
 </section>
 <section id="what-gets-completed">
 <h2>What gets completed<a class="headerlink" href="#what-gets-completed" title="Link to this heading"></a></h2>

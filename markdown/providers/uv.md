@@ -81,12 +81,15 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   to a patches file). Applies patches to the venv’s installed packages
   after install.
 - **`skip-if-0`** — a list of scripts; if every one exits `0`, the install
-  step is skipped entirely — `uv pip install` as well as `lock:`’s `uv lock`/`uv sync` (the venv is still created/activated).
-- **`skip-if-1`** — same, but for tools with the inverted convention: the
-  install step is skipped when every script instead exits `1`. Mutually
-  independent from `skip-if-0:` — an env can give either, both (each
-  checked on its own group; either group being fully satisfied skips the
-  install), or neither.
+  step is skipped entirely — `uv pip install` as well as `lock:`’s `uv lock`/`uv sync`. If the venv already exists it’s still created/activated
+  (later stages depend on it); if it doesn’t exist yet, the whole stage is
+  skipped instead, same as `disabled: true` — nothing creates/activates an
+  empty venv nobody would fill in.
+- **`skip-if-1`** — same, but for tools with the inverted convention: skips
+  when every script instead exits `1`. Mutually independent from
+  `skip-if-0:` — an env can give either, both (each checked on its own
+  group; either group being fully satisfied skips the install/stage), or
+  neither.
 - **`venv`** — the full dirname of this stage’s venv (default `.venv`), so
   several `uv` stages can target distinct venvs (or share one by using the
   same name, or both leaving it unset). A value here replaces the whole

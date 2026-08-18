@@ -302,7 +302,8 @@ curl<span class="w"> </span>-sSL<span class="w"> </span><span class="s2">"</span
 </div>
 <p>x86_64 Linux with glibc 2.28 or newer (Ubuntu 20.04+, Debian 10+, Fedora 29+,
 RHEL/Alma/Rocky 8+, Arch, Mint 20+); musl-based distros such as Alpine are not
-covered. Build it yourself with <code class="docutils literal notranslate"><span class="pre">scripts/create-python-exe.sh</span></code>. Note this
+covered. Build it yourself with <code class="docutils literal notranslate"><span class="pre">scripts/create-python-exe.sh</span></code> (or, from a
+dev checkout, <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">poe</span> <span class="pre">pyinstaller</span></code>). Note this
 only replaces <em>denver’s</em> own installation — the tools its providers drive
 (see <a class="reference internal" href="../quickstart/five-minutes.html#pre-conditions"><span class="std std-ref">Pre-conditions</span></a>) still
 have to be there.</p>

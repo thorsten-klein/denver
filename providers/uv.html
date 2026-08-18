@@ -346,12 +346,15 @@ and <code class="docutils literal notranslate"><span class="pre">patches</span><
 to a patches file). Applies patches to the venv’s installed packages
 after install.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-if-0</span></code></strong> — a list of scripts; if every one exits <code class="docutils literal notranslate"><span class="pre">0</span></code>, the install
-step is skipped entirely — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">pip</span> <span class="pre">install</span></code> as well as <code class="docutils literal notranslate"><span class="pre">lock:</span></code>’s <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">lock</span></code>/<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code> (the venv is still created/activated).</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-if-1</span></code></strong> — same, but for tools with the inverted convention: the
-install step is skipped when every script instead exits <code class="docutils literal notranslate"><span class="pre">1</span></code>. Mutually
-independent from <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code> — an env can give either, both (each
-checked on its own group; either group being fully satisfied skips the
-install), or neither.</p></li>
+step is skipped entirely — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">pip</span> <span class="pre">install</span></code> as well as <code class="docutils literal notranslate"><span class="pre">lock:</span></code>’s <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">lock</span></code>/<code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">sync</span></code>. If the venv already exists it’s still created/activated
+(later stages depend on it); if it doesn’t exist yet, the whole stage is
+skipped instead, same as <code class="docutils literal notranslate"><span class="pre">disabled:</span> <span class="pre">true</span></code> — nothing creates/activates an
+empty venv nobody would fill in.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-if-1</span></code></strong> — same, but for tools with the inverted convention: skips
+when every script instead exits <code class="docutils literal notranslate"><span class="pre">1</span></code>. Mutually independent from
+<code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code> — an env can give either, both (each checked on its own
+group; either group being fully satisfied skips the install/stage), or
+neither.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">venv</span></code></strong> — the full dirname of this stage’s venv (default <code class="docutils literal notranslate"><span class="pre">.venv</span></code>), so
 several <code class="docutils literal notranslate"><span class="pre">uv</span></code> stages can target distinct venvs (or share one by using the
 same name, or both leaving it unset). A value here replaces the whole

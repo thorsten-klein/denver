@@ -785,12 +785,16 @@ helpers is a review-visible mistake, not a silent hole in <code class="docutils 
 <p>Two categories deliberately still execute, because the preview is derived
 from them:</p>
 <ul class="simple">
-<li><p><strong>read-only queries</strong> — a <code class="docutils literal notranslate"><span class="pre">Context.run(...,</span> <span class="pre">capture=True)</span></code> call exists for
-its <em>output</em>, which the provider immediately branches on (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">inspect</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">config</span> <span class="pre">home</span></code>, <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">list</span></code>, a <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code>
-script). Skipping
-those would leave a dry run with nothing to decide with, and it would stop
-reflecting what a real run does. They are reported with a <code class="docutils literal notranslate"><span class="pre">?</span></code> marker, and a
-missing executable degrades to a failed query instead of aborting.</p></li>
+<li><p><strong>read-only queries</strong> — a <code class="docutils literal notranslate"><span class="pre">Context.run(...,</span> <span class="pre">query=True)</span></code> call exists so the
+provider can immediately branch on it (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">inspect</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">config</span> <span class="pre">home</span></code>, <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">list</span></code>, a <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code> script’s exit
+code). Skipping those would leave a dry run with nothing to decide with,
+and it would stop reflecting what a real run does. They are reported with
+a <code class="docutils literal notranslate"><span class="pre">?</span></code> marker, and a missing executable degrades to a failed query instead
+of aborting. <code class="docutils literal notranslate"><span class="pre">query</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">capture</span></code> — a caller that also needs the
+real <em>output</em> back (not just the guarantee it ran) passes <code class="docutils literal notranslate"><span class="pre">capture=True</span></code>
+too; a caller like <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code> that only branches on the
+exit code passes <code class="docutils literal notranslate"><span class="pre">query=True</span></code> alone, so the script’s own stdout/stderr
+stay live on the terminal on a real run.</p></li>
 <li><p><strong>sourced scripts</strong> — <code class="docutils literal notranslate"><span class="pre">Context.source()</span></code> is how denver <em>computes</em> the
 environment. Without it, every rendered command would show empty <code class="docutils literal notranslate"><span class="pre">${...}</span></code>
 values and a PATH missing whatever an earlier stage put there.</p></li>

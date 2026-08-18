@@ -33,7 +33,13 @@ aborts `poe all` with the fix already applied — on next re-run it will pass.
 
 `uv run poe clean` removes build artifacts (`dist/`, `build/`, `*.egg-info`,
 `htmlcov/`, `.coverage`, `coverage.xml`); `uv run poe build` cleans then
-builds the wheel/sdist (`uv build`).
+builds the wheel/sdist (`uv build`). `uv run poe pyinstaller` is separate:
+it freezes the standalone executable (`scripts/create-python-exe.sh
+--output dist`) -- see "Prebuilt Binary" in [Install](../introduction/install.md)
+for what that executable is. Kept out of `build` on purpose: `publish.yml`
+runs `poe build` and uploads everything under `dist/` to PyPI as-is, and
+the executable is a GitHub release asset (built by `release-binary.yml`),
+not a PyPI artifact.
 
 ## Test suite
 
