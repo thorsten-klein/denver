@@ -293,6 +293,22 @@ def test_apply_project_patches_runs_for_patched_projects(make_context, run_recor
     assert not any(a[a.index("--src-module") + 1] == str(unpatched) for a in patch_argvs)
 
 
+def test_apply_project_patches_failure_is_not_suppressed(make_context, run_recorder, which, tmp_path):
+    # unlike the 'west list' query just above it, 'west patch apply' is not
+    # given check=False -- a patch that fails to apply must abort the run
+    # rather than leaving a silently half-patched workspace behind.
+    config = {"zephyr": {"west-yml": "west.yml"}}
+    ctx = make_ctx(make_context, config)
+    proj = tmp_path / "proj"
+    (proj / "zephyr").mkdir(parents=True)
+    (proj / "zephyr" / "patches.yml").write_text("x\n")
+    run_recorder.responses["list -f {abspath}"] = resp(stdout=f"{proj}\n")
+
+    run_zephyr(config, ctx)
+    patch_call = next(c for c in run_recorder.calls if "--src-module" in " ".join(str(x) for x in c.cmd))
+    assert patch_call.kwargs.get("check", True) is not False
+
+
 def test_apply_project_patches_committer_override(make_context, run_recorder, which, tmp_path):
     config = {
         "zephyr": {
