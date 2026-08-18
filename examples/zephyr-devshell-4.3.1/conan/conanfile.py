@@ -30,6 +30,7 @@ class ConanRecipe(ConanFile):
         self.tool_requires_from_catalog("clang/21.1.4")
         self.tool_requires_from_catalog("cmake/3.31.9")
         self.tool_requires_from_catalog("doxygen/1.15.0")
+        self.tool_requires_from_catalog("fish/4.8.1")
         self.tool_requires_from_catalog("jlink/8.82")
         self.tool_requires_from_catalog("ninja/1.13.2")
         self.tool_requires_from_catalog("protoc/33.2")
