@@ -905,7 +905,7 @@ def collect_import_dirs(config_path, _seen=None):
     Breadth-first: the env's own direct imports, then their imports, etc.
     This is the search order ``Context.resolve_path`` uses to fall back to a
     base env's file when the leaf doesn't have one -- e.g. a conventional
-    default like ``uv/skip-if.sh`` or ``conan/base_classes``. Walking the
+    default like ``uv/skip-if-0.sh`` or ``conan/base_classes``. Walking the
     whole chain (not just the direct imports) is what makes those
     conventions work through multiple levels of ``import:`` stacking: each
     layer, closest to the leaf first, is checked in turn, so a more-derived
@@ -2695,7 +2695,7 @@ def _add_run_parser(subparsers, config_args):
         "--force",
         action="store_true",
         help="force expensive recomputation (recreate venv, rerun west update, ...), bypassing every "
-        "checksum/skip-if-based skip",
+        "checksum/skip-if-0/skip-if-1-based skip",
     )
     run_p.add_argument(
         "--ci", action="store_true", help="CI mode: swap in narrower/faster args (e.g. a shallow `west update`)"

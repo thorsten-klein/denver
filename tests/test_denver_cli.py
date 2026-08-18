@@ -654,7 +654,8 @@ def test_main_show_config_flag(tmp_path, capsys, which):
     # provider defaults (PATH lookups, filesystem conventions, static
     # fallbacks) are baked in too -- not just what denver.yml itself sets.
     assert printed["uv"]["uv"] == "/usr/bin/uv"
-    assert printed["uv"]["skip-if"] == []
+    assert printed["uv"]["skip-if-0"] == []
+    assert printed["uv"]["skip-if-1"] == []
     assert printed["uv"]["link-mode"] == "copy"
 
 

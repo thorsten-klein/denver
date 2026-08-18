@@ -80,9 +80,14 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   and `patches` (**required** if `venv-patcher:` is given at all — a path
   to a patches file). Applies patches to the venv's installed packages
   after install.
-- **`skip-if`** — a list of scripts; if every one exits `0`, the install
+- **`skip-if-0`** — a list of scripts; if every one exits `0`, the install
   step is skipped entirely — `uv pip install` as well as `lock:`'s `uv
   lock`/`uv sync` (the venv is still created/activated).
+- **`skip-if-1`** — same, but for tools with the inverted convention: the
+  install step is skipped when every script instead exits `1`. Mutually
+  independent from `skip-if-0:` — an env can give either, both (each
+  checked on its own group; either group being fully satisfied skips the
+  install), or neither.
 - **`venv`** — names this stage's venv, so several `uv` stages can target
   distinct venvs (or share one by using the same name, or both leaving it
   unset).
@@ -102,10 +107,11 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   it. Off by default because it makes the resulting venv depend on this
   machine's run history, not just the current `denver.yml`.
 
-`skip-if` and `venv-patcher` are never guessed from the env's directory
-layout (see "Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) — with no
-`skip-if:` there is simply no skip check, and the venv patcher runs only
-when `venv-patcher:` names its `patches:` file explicitly.
+`skip-if-0`/`skip-if-1` and `venv-patcher` are never guessed from the env's
+directory layout (see "Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) — with
+neither `skip-if-0:` nor `skip-if-1:` given there is simply no skip check,
+and the venv patcher runs only when `venv-patcher:` names its `patches:`
+file explicitly.
 
 ## One venv, one interpreter
 
@@ -153,10 +159,11 @@ A venv holds exactly one interpreter, and the one it already has wins:
   dies with a clear message if the venv doesn't exist yet — run once
   without `--fast` first.
 - **`--force`** recreates the venv from scratch unconditionally and
-  bypasses every `skip-if:` script.
+  bypasses every `skip-if-0:`/`skip-if-1:` script.
 - **`--dry-run`** prints the `uv` commands (and the checksum/`freeze-to:`
   writes) instead of performing them; an existing venv is never removed. Two
   things still really happen, because the preview depends on them: each
-  `skip-if:` script runs (its exit code is what decides whether an install
-  would be shown at all), and each `$(...)` entry in `install-args:` runs
-  (its output *is* part of the `uv pip install` line being shown).
+  `skip-if-0:`/`skip-if-1:` script runs (its exit code is what decides
+  whether an install would be shown at all), and each `$(...)` entry in
+  `install-args:` runs (its output *is* part of the `uv pip install` line
+  being shown).

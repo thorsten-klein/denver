@@ -72,6 +72,7 @@ It is also where to look for two easily-missed generic keys:
 ## Next
 
 - [`doc/providers/uv.md`](../../doc/providers/uv.md) — every `uv:` key,
-  including `python:`, `overrides:`, `skip-if:` and `freeze-to:`
+  including `python:`, `overrides:`, `skip-if-0:`/`skip-if-1:` and
+  `freeze-to:`
 - [`../raspberry-pico`](../raspberry-pico) — the next step up: this same
   `uv` stage, plus a `conan` stage that uses what it installed
