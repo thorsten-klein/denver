@@ -88,9 +88,11 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   independent from `skip-if-0:` — an env can give either, both (each
   checked on its own group; either group being fully satisfied skips the
   install), or neither.
-- **`venv`** — names this stage's venv, so several `uv` stages can target
-  distinct venvs (or share one by using the same name, or both leaving it
-  unset).
+- **`venv`** — the full dirname of this stage's venv (default `.venv`), so
+  several `uv` stages can target distinct venvs (or share one by using the
+  same name, or both leaving it unset). A value here replaces the whole
+  leaf name, not just a suffix on it -- `venv: shared` creates
+  `shared[.host]`, not `.venv-shared[.host]`.
 - **`freeze-to`** — a path; after a real install, `uv pip freeze`'s full
   output is written there. Useful as a lockfile a later run (or a different
   `uv` stage) can read back via `requirements:`.
