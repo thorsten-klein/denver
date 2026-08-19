@@ -709,13 +709,13 @@ venv on the host exactly as it does in the container. Note also that
 `create-env.sh` never runs on this path, so `CONAN_HOME` is unset and conan
 falls back to `~/.conan2` rather than the env's own cache.
 
-```{note}
-**Next:** [Examples](examples.md) — the other bundled environments, from a
-three-line one up to a full Zephyr RTOS setup, so you can find the one
-closest to your own project and start from it.
-
-From here on the documentation is reference rather than narrative: the
-[`denver` command](../cli/arguments.md), the full
-[`denver.toml` schema](../configuration/denver-toml.md), and one page
-[per provider](../providers/uv.md).
-```
+> **Note**
+>
+> **Next:** [Examples](examples.md) — the other bundled environments, from a
+> three-line one up to a full Zephyr RTOS setup, so you can find the one
+> closest to your own project and start from it.
+>
+> From here on the documentation is reference rather than narrative: the
+> [`denver` command](../cli/arguments.md), the full
+> [`denver.toml` schema](../configuration/denver-toml.md), and one page
+> [per provider](../providers/uv.md).

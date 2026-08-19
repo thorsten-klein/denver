@@ -60,8 +60,8 @@ denver falls back to `~/.denver/<env>-<hash>` when it cannot write to the
 env directory (a read-only mount, a vendored base env, an env shipped inside
 an image), and `DENVER_STATE_DIR` overrides both.
 
-```{note}
-**Next:** [Configuration](../configuration/denver-toml.md) — the complete
-`denver.toml` schema: every key, how imports merge, and the mechanisms behind
-everything you have used so far.
-```
+> **Note**
+>
+> **Next:** [Configuration](../configuration/denver-toml.md) — the complete
+> `denver.toml` schema: every key, how imports merge, and the mechanisms behind
+> everything you have used so far.

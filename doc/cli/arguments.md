@@ -125,9 +125,9 @@ Each stage's runtime is also appended to
 Event Format events — concatenate them into a `{"traceEvents": [...]}`
 document to load at chrome://tracing or https://ui.perfetto.dev.
 
-```{note}
-**Next:** [Shell completion](completion.md) — tab-complete subcommands, env
-paths and flags with `denver complete`. Then
-[Environment variables](environment-variables.md) — the two variables
-denver itself reads, and where an environment's state lives on disk.
-```
+> **Note**
+>
+> **Next:** [Shell completion](completion.md) — tab-complete subcommands, env
+> paths and flags with `denver complete`. Then
+> [Environment variables](environment-variables.md) — the two variables
+> denver itself reads, and where an environment's state lives on disk.

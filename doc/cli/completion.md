@@ -87,8 +87,8 @@ somewhere you already have completion configured — so denver configures it
 for that one shell, every time. See "`default-cmd`" in
 [docker](../providers/docker.md) for the exact conditions.
 
-```{note}
-**Next:** [Environment variables](environment-variables.md) — the two
-variables denver itself reads, and where an environment's state lives on
-disk.
-```
+> **Note**
+>
+> **Next:** [Environment variables](environment-variables.md) — the two
+> variables denver itself reads, and where an environment's state lives on
+> disk.

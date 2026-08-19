@@ -138,9 +138,9 @@ the shared cache root denver exports for an env to point a tool's own
 download cache at. Full explanation in
 [Environment variables](../cli/environment-variables.md).
 
-```{note}
-**Next:** [Philosophy](philosophy.md) — the principles these terms were
-chosen to serve. Or go straight to
-[Creating environments](../quickstart/creating-environments.md) and put them
-to use.
-```
+> **Note**
+>
+> **Next:** [Philosophy](philosophy.md) — the principles these terms were
+> chosen to serve. Or go straight to
+> [Creating environments](../quickstart/creating-environments.md) and put them
+> to use.

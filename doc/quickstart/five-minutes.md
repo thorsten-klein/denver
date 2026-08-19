@@ -201,16 +201,16 @@ of projects (Step 5 of the [Introduction](../introduction/index.md)), see
 whose `denver.toml` is under 60 lines because it imports its entire pipeline
 from a shared base and restates only what's project-specific.
 
-```{note}
-**Next:** [Creating environments](creating-environments.md) —
-build the environment you just ran, from an empty folder, one stage at a
-time. Having seen what it does, you now get to see *why* every key in it is
-there.
-
-Two shortcuts, if you'd rather not build one yet: `examples/zephyr-uv/` is a
-Python venv and nothing else, `examples/simple-env/` just runs a shell
-script — both are a screenful. Or jump straight to the reference: the
-[`denver` command](../cli/arguments.md), the
-[`denver.toml` schema](../configuration/denver-toml.md), and one page
-[per provider](../providers/uv.md).
-```
+> **Note**
+>
+> **Next:** [Creating environments](creating-environments.md) —
+> build the environment you just ran, from an empty folder, one stage at a
+> time. Having seen what it does, you now get to see *why* every key in it is
+> there.
+>
+> Two shortcuts, if you'd rather not build one yet: `examples/zephyr-uv/` is a
+> Python venv and nothing else, `examples/simple-env/` just runs a shell
+> script — both are a screenful. Or jump straight to the reference: the
+> [`denver` command](../cli/arguments.md), the
+> [`denver.toml` schema](../configuration/denver-toml.md), and one page
+> [per provider](../providers/uv.md).

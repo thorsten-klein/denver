@@ -1,9 +1,6 @@
 # About denver
 
-```{image} ../../src/denver_assets/logo.svg
-:alt: denver logo
-:width: 50%
-```
+![denver logo](../../src/denver_assets/logo.svg)
 
 **D**evelopment **Env**ironment Launch**er** — describe your environments as
 Code in a `denver.toml`: reproducible and layerable to fit your project's needs.
@@ -85,10 +82,10 @@ That is the whole model: an environment is stages, in order, each run by a
 provider. Everything else in this documentation is a detail of those three
 words.
 
-```{note}
-Precise definitions of these and every other term denver uses live in the
-[Glossary](../concepts/glossary.md).
-```
+> **Note**
+>
+> Precise definitions of these and every other term denver uses live in the
+> [Glossary](../concepts/glossary.md).
 
 ## Is denver flexible?
 
@@ -120,8 +117,8 @@ lifecycle behavior rather than a script — you can register one out-of-tree,
 without forking denver. See "Extension providers" in
 [Configuration](../configuration/denver-toml.md).
 
-```{note}
-**Next:** [Install Denver](install.md), then
-[Denver in 5 minutes](../quickstart/five-minutes.md) to watch all of this
-run in a real environment.
-```
+> **Note**
+>
+> **Next:** [Install Denver](install.md), then
+> [Denver in 5 minutes](../quickstart/five-minutes.md) to watch all of this
+> run in a real environment.

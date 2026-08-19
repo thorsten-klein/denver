@@ -75,8 +75,8 @@ With that approach nothing needs installing — just call `src/denver.py` (or
 the vendored copy's equivalent path) directly, exactly as `denver run <env>
 ...` is used throughout the rest of this documentation.
 
-```{note}
-**Next:** [Denver in 5 minutes](../quickstart/five-minutes.md) — run a real
-environment end to end. It starts with the handful of host tools you need
-first, which depends on which providers the environment uses.
-```
+> **Note**
+>
+> **Next:** [Denver in 5 minutes](../quickstart/five-minutes.md) — run a real
+> environment end to end. It starts with the handful of host tools you need
+> first, which depends on which providers the environment uses.

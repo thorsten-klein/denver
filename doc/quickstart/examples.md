@@ -34,10 +34,10 @@ resolves the whole `import:` chain and prints what denver actually ended up
 with. It needs no toolchain, no network and no Docker, so it works for every
 env here — including `zephyr-devshell`, which cannot be started.
 
-```{note}
-**Next:** the reference half of this documentation — the
-[`denver` command](../cli/arguments.md) for every flag, the full
-[`denver.toml` schema](../configuration/denver-toml.md) for every key, and one
-page [per provider](../providers/uv.md) for the keys a given stage type
-accepts.
-```
+> **Note**
+>
+> **Next:** the reference half of this documentation — the
+> [`denver` command](../cli/arguments.md) for every flag, the full
+> [`denver.toml` schema](../configuration/denver-toml.md) for every key, and one
+> page [per provider](../providers/uv.md) for the keys a given stage type
+> accepts.
