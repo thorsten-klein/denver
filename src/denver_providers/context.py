@@ -1265,7 +1265,7 @@ class Context:
                 yield _export_env_line(key, value, self._initial_env.get(key), key in cli_env_vars)
 
     def _should_export(self, key, value, cli_env_vars):
-        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+        if not re.match(r"^[A-Za-z_]\w*$", key):
             return False
         return key in cli_env_vars or self._initial_env.get(key) != value
 

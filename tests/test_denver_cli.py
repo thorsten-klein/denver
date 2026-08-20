@@ -965,6 +965,54 @@ def test_main_config_flag_missing_argument_dies(tmp_path):
         denver.main(["run", str(env_dir), "-c"])
 
 
+def test_main_show_config_no_denver_toml_dies_cleanly(tmp_path, caplog):
+    # <env> resolves to a real directory (e.g. a typo'd project path) that just
+    # doesn't hold a denver.toml -- must die with a clear message naming the
+    # missing file (regression: this used to crash with an unhandled
+    # FileNotFoundError out of collect_import_dirs, since --show-config
+    # reaches config_path before _require_config_source did).
+    env_dir = tmp_path / "not-an-env"
+    env_dir.mkdir()
+    with pytest.raises(SystemExit):
+        denver.main(["run", str(env_dir), "--show-config"])
+    assert f"no denver.toml in '{env_dir}'" in caplog.text
+
+
+def test_main_no_denver_toml_dies_cleanly_without_show_config(tmp_path, caplog):
+    # same missing-file case, but the plain 'run' path (no --show-config) --
+    # must give the same specific message, not the generic "declares no
+    # 'stages:'" that a real-but-empty denver.toml would get.
+    env_dir = tmp_path / "not-an-env"
+    env_dir.mkdir()
+    with pytest.raises(SystemExit):
+        denver.main(["run", str(env_dir)])
+    assert f"no denver.toml in '{env_dir}'" in caplog.text
+
+
+def test_main_help_still_works_for_a_dir_with_no_denver_toml(tmp_path, capsys):
+    # --help must not trip the "no denver.toml" die -- it needs no config at
+    # all, denver's own flags being the whole vocabulary with no env-specific
+    # 'args:' to add to it (see test_help_for_a_directory_without_a_denver_yml_still_works
+    # in test_denver_args.py for the pre-existing version of this guarantee).
+    env_dir = tmp_path / "not-an-env"
+    env_dir.mkdir()
+    assert denver.main(["run", str(env_dir), "--help"]) == 0
+    assert "usage:" in capsys.readouterr().out
+
+
+def test_main_config_file_flag_alone_still_works_without_denver_toml(tmp_path, capsys, which):
+    # an env dir with no denver.toml of its own is still fine as long as
+    # --config-file supplies the whole config -- this must NOT die.
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    only_config = tmp_path / "only.toml"
+    only_config.write_text('stages = [\n  "uv",\n]\n\n[uv]\nprovider = "uv"\n')
+
+    denver.main(["run", str(env_dir), "--show-config", "-cf", str(only_config)])
+    printed = tomllib.loads(capsys.readouterr().out)
+    assert printed["stages"] == ["uv"]
+
+
 def test_main_until_flag_truncates_stages(tmp_path, monkeypatch, exec_recorder):
     import denver_providers as providers
     from denver_providers.base import Provider
