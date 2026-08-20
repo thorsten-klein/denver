@@ -323,7 +323,9 @@ def test_main_dispatches_to_providers(tmp_path, monkeypatch, exec_recorder, caps
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.toml").write_text('stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n')
-    denver.main(["run", str(env_dir), "--", "echo", "hi"])
+    # -v, so exec()'s own '+' echo (checked below) actually shows -- it's
+    # hidden by default, same as banner()'s and Context.run's own.
+    denver.main(["run", str(env_dir), "-v", "--", "echo", "hi"])
     # logo prints last, right before the command is invoked -- after the
     # stage-finished summary, not before it (see run_stages); the only thing
     # after it is exec()'s own '+' echo of the resolved command, immediately
@@ -423,10 +425,11 @@ def test_main_quiet_flag_consumed(tmp_path, monkeypatch, capsys, exec_recorder):
     # the command still runs normally...
     assert exec_recorder["args"] == ["echo", "hi"]
     err = capsys.readouterr().err
-    # ...the logo is suppressed, but the "stage finished" summary stays
-    # visible under a single -q (only -qq silences that too)
-    assert "finished in" in err
-    assert "▄" not in err  # the block-art wordmark logo itself is still gone
+    # -q means "no denver output at all": banners, the "finished in"/"env
+    # started" lines, the logo, none of it shows -- only a stage's own real
+    # command output would survive -q, and this fake stage prints nothing of
+    # its own, so there is nothing left at all.
+    assert err == ""
     # a later non-quiet run resets the shared logger/flag for other tests
     import denver_providers.context as ctxmod
 
@@ -537,7 +540,12 @@ def test_main_real_ci_env_var_does_not_leak_into_ctx_ci(tmp_path, monkeypatch, e
     assert exec_recorder["env"]["SAW_CI"] == "0"
 
 
-def test_main_single_q_keeps_banner_visible(tmp_path, monkeypatch, capsys, exec_recorder):
+def test_main_single_q_hides_banner_too(tmp_path, monkeypatch, capsys, exec_recorder):
+    # -q now means "no denver output at all" -- banner() is silenced the
+    # same as everything else denver prints, not just collapsed to a
+    # one-line form the way it used to be (see set_quiet). Only a stage's
+    # own real command output would survive a single -q; -qq additionally
+    # discards that too (test_main_double_q_hides_banner_too).
     import denver_providers as providers
     from denver_providers.base import Provider
     from denver_providers.context import banner
@@ -547,7 +555,7 @@ def test_main_single_q_keeps_banner_visible(tmp_path, monkeypatch, capsys, exec_
         kind = "setup"
 
         def setup(self, ctx):
-            banner(ctx, self.stage, "visible")
+            banner(ctx, self.stage, "hidden")
 
     monkeypatch.setitem(providers.PROVIDERS, "fakesetup", Fake)
 
@@ -555,7 +563,7 @@ def test_main_single_q_keeps_banner_visible(tmp_path, monkeypatch, capsys, exec_
     env_dir.mkdir()
     (env_dir / "denver.toml").write_text('stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n')
     denver.main(["run", str(env_dir), "-q", "--", "echo", "hi"])
-    assert "visible" in capsys.readouterr().err
+    assert capsys.readouterr().err == ""
     # a later non-quiet run resets the shared logger/flag for other tests
     import denver_providers.context as ctxmod
 

@@ -125,7 +125,7 @@ def test_build_never_runs_without_image(make_context, run_recorder, which, capsy
     # there'd be nothing to check next run, so it would rebuild every time;
     # 'docker compose run' itself is left to build on demand instead.
     config = {"docker": docker_cfg()}
-    ctx = make_context(config=config, quiet=1)
+    ctx = make_context(config=config, verbose=True)
     write_compose(ctx)
     run_docker(config, ctx)
     assert not any("build dev" in c for c in run_recorder.commands())
@@ -134,7 +134,7 @@ def test_build_never_runs_without_image(make_context, run_recorder, which, capsy
 
 def test_build_false_skips(make_context, run_recorder, which, capsys):
     config = {"docker": docker_cfg(compose={"build": False})}
-    ctx = make_context(config=config, quiet=1)
+    ctx = make_context(config=config, verbose=True)
     write_compose(ctx)
     run_docker(config, ctx)
     assert not any("build dev" in c for c in run_recorder.commands())
@@ -231,7 +231,7 @@ def test_registries_entry_incomplete_credentials_dies(make_context, run_recorder
 
 def test_image_found_locally_skips_build(make_context, run_recorder, which, capsys):
     config = {"docker": docker_cfg(image="myapp:dev", **{"registries": [{"url": "registry1.example.com"}]})}
-    ctx = make_context(config=config)
+    ctx = make_context(config=config, verbose=True)
     write_compose(ctx)
     run_recorder.responses["image inspect"] = lambda cmd: type("R", (), {"returncode": 0})()
 
@@ -608,7 +608,7 @@ def test_wrap_forwards_no_cli_env_vars_by_default(make_context, run_recorder, wh
 
 def test_wrap_shows_run_banner(make_context, run_recorder, which, capsys):
     config = {"docker": docker_cfg()}
-    ctx = make_context(config=config, quiet=1)
+    ctx = make_context(config=config, verbose=True)
     write_compose(ctx)
     ctx, n = run_docker(config, ctx)
     capsys.readouterr()  # discard setup()'s own banner

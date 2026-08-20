@@ -85,30 +85,45 @@ def warn(message):
     logger.warning(message)
 
 
-# 0 = normal, 1 = quiet (-q: banners still shown), 2+ = silent (-qq: nothing
-# denver-emitted shown at all). See set_quiet()/banner().
+# 0 = normal, 1 = quiet (-q: denver's own output silenced, a stage's own
+# command output still inherited), 2+ = silent (-qq: nothing at all, not
+# even a stage's own command output -- only the final launched command
+# speaks). See set_quiet()/banner().
 _quiet_level = 0
 
+# --verbose/-v: off by default. Turns on the *extra* diagnostic detail
+# (banner()'s per-sub-step boxes, the per-stage/env performance timings, and
+# Context.run's/exec()'s '+ cmd' echo) -- none of which show otherwise, even
+# at quiet level 0. -q/-qq always win over it: "no denver output" is
+# absolute, so there is nothing left for -v to add once either is given. See
+# set_quiet()/banner().
+_verbose = False
 
-def set_quiet(level):
+
+def set_quiet(level, verbose=False):
     """Silence denver-emitted messages across every provider module (by level), or restore normal logging.
 
-    Level 1 (-q) covers info/'+ cmd' echoes and the stdout/stderr of
-    subprocesses run via Context.run -- they all funnel through this one
-    "denver" logger and Context.run, so a single threshold here is enough --
-    but leaves banner() (which stage/sub-step is currently running) visible,
-    so it's still possible to tell where denver is without full output.
-    Level 2+ (-qq) additionally silences banner() itself, matching every
-    prior version of --quiet (full silence). logger.error (die) is never
-    silenced at any level: a failure must still be reported.
+    Level 1 (-q) covers info/warn/banner()/stage_banner()/skip_banner() and
+    the '+ cmd' echo -- they all funnel through this one "denver" logger or
+    the shared quiet/verbose globals here, so a single threshold is enough --
+    but leaves a stage's own command output (Context.run's subprocess)
+    inherited, so there is still something to watch. Level 2+ (-qq)
+    additionally discards that subprocess output too, matching every prior
+    version of --quiet (full silence, only the final launched command
+    speaks). logger.error (die) is never silenced at any level: a failure
+    must still be reported.
+
+    ``verbose`` (-v/--verbose) is independent of the level -- see the
+    ``_verbose`` global's own docstring for how the two combine.
     """
-    global _quiet_level
+    global _quiet_level, _verbose
     _quiet_level = level
+    _verbose = verbose
     logger.setLevel(logging.ERROR if level >= 1 else logging.INFO)
 
 
 def banner(ctx, stage, message):
-    """Print a colored progress marker to stderr (e.g. '[1/7] conan - install'), unless -qq.
+    """Print a colored progress marker to stderr (e.g. '[1/7] conan - install'), only under --verbose.
 
     ``[ctx.stage_index/ctx.stage_count]`` is the stage's position in the
     overall pipeline (set by denver.py as it runs each stage in order).
@@ -118,25 +133,27 @@ def banner(ctx, stage, message):
     always can. There's no sub-step numbering: each call is just the next
     line in that stage's own progress trail, in whatever order the provider
     actually does the work -- nothing to precompute or keep in sync between
-    a real run and its --fast/--force variants. Normally (no -q) a boxed
-    3-line frame; under -q it collapses to a single '-- TEXT' line (still
-    visible, just less vertical space -- see set_quiet). -qq silences it
-    entirely.
+    a real run and its --fast/--force variants.
+
+    These are the "banners for the substages" --verbose specifically turns
+    on -- stage_banner()'s single "[i/n] stage 'id' (provider)" line (which
+    every stage gets regardless) is the coarser, always-on signal of which
+    *stage* is running; these boxes are the finer detail of what it is
+    actually doing right now, and stay hidden without -v even at the default
+    quiet level. -q/-qq hide them regardless of -v, same as everything else
+    denver prints.
     """
     # printed directly (not via logger.info) so it isn't prefixed with
     # "INFO: " -- it's a visual progress marker, not a log line.
-    if _quiet_level >= 2:
+    if _quiet_level >= 1 or not _verbose:
         return
     text = f"[{ctx.stage_index}/{ctx.stage_count}] {stage} - {message}"
-    if _quiet_level == 1:
-        print(f"\033[93m-- {text}\033[39m", file=sys.stderr)
-    else:
-        line = "-" * (len(text) + 4)
-        print(f"\033[93m{line}\n| {text} |\n{line}\033[39m", file=sys.stderr)
+    line = "-" * (len(text) + 4)
+    print(f"\033[93m{line}\n| {text} |\n{line}\033[39m", file=sys.stderr)
 
 
 def stage_banner(ctx, stage, provider_name):
-    """Print a single colored '[i/n] stage '<id>' (<provider>)' line to stderr, unless -qq.
+    """Print a single colored '[i/n] stage '<id>' (<provider>)' line to stderr, unless -q/-qq.
 
     Emitted centrally by denver.py right before a stage's setup() runs, so a
     stage always announces itself even when its provider dies before
@@ -146,26 +163,30 @@ def stage_banner(ctx, stage, provider_name):
     and the stage id is exactly what the user needs to pass to --skip next.
 
     One line rather than banner()'s boxed frame: this marks *entering* a
-    stage, while the boxes below it are the sub-steps that stage actually
-    performs. Naming the provider too, because a stage id is only a label --
-    an env may run the same provider twice under different ids.
+    stage, while the boxes below it (--verbose only) are the sub-steps that
+    stage actually performs. Naming the provider too, because a stage id is
+    only a label -- an env may run the same provider twice under different
+    ids. Unlike banner(), this one shows at the default quiet level with no
+    -v needed -- it is the minimal "which stage is running" signal, not the
+    finer "substage" detail -v adds; -q/-qq still hide it, same as
+    everything else denver prints.
     """
-    if _quiet_level >= 2:
+    if _quiet_level >= 1:
         return
     text = f"[{ctx.stage_index}/{ctx.stage_count}] stage '{stage}' ({provider_name})"
     print(f"\033[93m-- {text}\033[39m", file=sys.stderr)
 
 
 def skip_banner(ctx, stage, reason):
-    """Print a single colored '[i/n] stage '<id>' <reason>' line to stderr, unless -qq.
+    """Print a single colored '[i/n] stage '<id>' <reason>' line to stderr, unless -q/-qq.
 
     For a stage skipped entirely (--until/--skip), not one that ran but had a
-    sub-step skipped (that's still banner(), e.g. 'install (skipped by
-    --fast)'). Always one line, never banner()'s boxed frame at -q's default
-    level -- a whole-stage skip did no work, so a full box would overstate
-    it. Hidden at -qq, same as banner().
+    sub-step skipped (that's still banner(), --verbose only, e.g. 'install
+    (skipped by --fast)'). Always one line, never banner()'s boxed frame --
+    a whole-stage skip did no work, so a full box would overstate it. Same
+    default-quiet-level visibility as stage_banner(), hidden at -q/-qq.
     """
-    if _quiet_level >= 2:
+    if _quiet_level >= 1:
         return
     text = f"[{ctx.stage_index}/{ctx.stage_count}] stage '{stage}' {reason}"
     print(f"\033[93m-- {text}\033[39m", file=sys.stderr)
@@ -495,6 +516,7 @@ class Context:
         config,
         import_dirs=None,
         quiet=0,
+        verbose=False,
         fast=False,
         force=False,
         ci=False,
@@ -506,12 +528,13 @@ class Context:
         ``quiet`` is a level (0 normal, 1 = -q, 2+ = -qq -- see
         set_quiet()/banner()), not a bool, though a bare ``True``/``False``
         still works (``bool`` is an ``int`` subclass: ``True`` behaves as
-        level 1, ``False`` as level 0). ``force``/``ci``/``dry_run`` are
-        plain flags (denver's own ``--force``/``--ci``/``--dry-run``, see
-        denver.py) -- unlike every other provider-facing toggle, these are
-        never read back out of a real environment variable;
-        ``ctx.force``/``ctx.ci``/``ctx.dry_run`` reflect exactly what was
-        passed in here, nothing else.
+        level 1, ``False`` as level 0). ``verbose`` (-v/--verbose) is
+        independent of it -- see set_quiet()'s own docstring for how the two
+        combine. ``force``/``ci``/``dry_run`` are plain flags (denver's own
+        ``--force``/``--ci``/``--dry-run``, see denver.py) -- unlike every
+        other provider-facing toggle, these are never read back out of a
+        real environment variable; ``ctx.force``/``ctx.ci``/``ctx.dry_run``
+        reflect exactly what was passed in here, nothing else.
         """
         self.denver_dir = Path(denver_dir).resolve()
         # where denver's own code lives (this file's directory, containing
@@ -524,6 +547,7 @@ class Context:
         self.config = config or {}
         self.import_dirs = [Path(d).resolve() for d in (import_dirs or [])]
         self.quiet = quiet
+        self.verbose = verbose
         self.fast = fast
         self.force = force
         self.ci = ci
@@ -559,7 +583,7 @@ class Context:
         # would survive an earlier stage installing the real one. Empty
         # (never populated) when a provider is driven directly, e.g. in tests.
         self.raw_sections = {}
-        set_quiet(quiet)
+        set_quiet(quiet, verbose)
 
         self.env_name = self.env_dir.name
         self.in_container = in_container()
@@ -985,16 +1009,21 @@ class Context:
         return env
 
     def _echo_command(self, printable, echo):
-        """Print the '+ cmd' echo, unless the caller or --quiet asked for silence."""
-        if echo and not self.quiet:
+        """Print the '+ cmd' echo -- only under --verbose (and never under --quiet/-qq), unless the caller silenced it."""
+        if echo and not self.quiet and self.verbose:
             print(f"+ {printable}", file=sys.stderr)
 
     def _run_kwargs(self, *, capture, input):
-        """The subprocess.run kwargs implied by ``capture``, --quiet, and an ``input`` payload."""
+        """The subprocess.run kwargs implied by ``capture``, -qq, and an ``input`` payload.
+
+        A single -q leaves a stage's own command output inherited (visible)
+        -- only -qq (level 2+) discards it, matching --quiet's new meaning:
+        -q silences denver's *own* output, -qq silences everything.
+        """
         run_kwargs = {}
         if capture:
             run_kwargs["capture_output"] = True
-        elif self.quiet:
+        elif self.quiet >= 2:
             run_kwargs["stdout"] = subprocess.DEVNULL
             run_kwargs["stderr"] = subprocess.DEVNULL
         if input is not None:
@@ -1217,8 +1246,8 @@ class Context:
         # the --dry-run preview below (not info(), which would print
         # "INFO: exec: ..." -- a different, inconsistent prefix for what is
         # otherwise the exact same "here is the command about to run" line),
-        # gated on quiet the same way _echo_command is.
-        if not self.quiet:
+        # gated on quiet/verbose the same way _echo_command is.
+        if not self.quiet and self.verbose:
             print(f"+ exec: {_printable(cmd)}", file=sys.stderr)
         sys.stderr.flush()
         # Resolve the program to a concrete file *before* handing it to the

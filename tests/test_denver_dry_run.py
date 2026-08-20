@@ -92,7 +92,10 @@ def test_run_query_with_missing_executable_is_reported_not_fatal(make_context, m
 
 
 def test_run_dry_note_reaches_query_before_step_banner(make_context, run_recorder, capsys):
-    ctx = make_context(dry_run=True)
+    # banner()'s own step marker is --verbose only (see set_quiet/banner);
+    # the --dry-run preview lines below it are unconditional -- this checks
+    # the two never print out of order when both are on.
+    ctx = make_context(dry_run=True, verbose=True)
     ctx.stage_id = "mystage"
     ctx.run(["make", "all"], step="build")
     err = capsys.readouterr().err
