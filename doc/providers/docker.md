@@ -60,7 +60,8 @@ docker. The daemon has to be reachable for the invoking user, too. Point
 - **`compose.default-cmd`** — the fallback interactive command once relocated into
   the container, read by denver's own command resolution (`command:` at
   the top level still wins over this if set) — not read by this provider
-  itself, but still a real `docker.compose:` key, shown in `--show-config`. When
+  itself, but still a real `docker.compose:` key, shown in `--show-config-full`
+  even when unset. When
   it (or the top-level `command:`, or the plain `$SHELL`/`bash` fallback)
   names a bare `bash`/`zsh`/`fish`, denver wires up `denver complete` for
   it automatically before landing there — the container's own image,

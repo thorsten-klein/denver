@@ -161,7 +161,7 @@ def test_zsh_completion_passes_each_word_as_its_own_positional_arg():
     )
     result = subprocess.run(["zsh", "-c", script], capture_output=True, text=True)
     assert "--show-config" in result.stdout, result.stderr
-    assert "--show-config-min" in result.stdout, result.stderr
+    assert "--show-config-full" in result.stdout, result.stderr
 
 
 def test_completion_script_fish_registers_one_complete_c_line_per_bare_name():
@@ -366,7 +366,7 @@ def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tm
     (env_dir / "denver.toml").write_text('stages = []\n')  # no 'args:' key at all
 
     assert denver.main(["__complete", "run", str(env_dir), "--sh"]) == 0
-    assert capsys.readouterr().out.splitlines() == ["--show-config", "--show-config-min"]
+    assert capsys.readouterr().out.splitlines() == ["--show-config", "--show-config-full"]
 
 
 # ---- 'denver __complete run <env> ' -- flags offered before typing '-' ----- #

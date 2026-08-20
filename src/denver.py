@@ -20,9 +20,10 @@ own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
 ``login``; with no name, lists the names this env defines). ``--setup`` and
 ``--login`` are shorthand for ``--scripts setup`` and ``--scripts login``.
 ``--show-config`` prints the fully resolved, deep-merged denver.toml and
-exits. ``--show-config-min`` does the same but drops every key left unset
-(shown as a commented-out ``# key = null`` line by ``--show-config`` -- TOML
-has no ``null``), so only keys with an actual value remain.
+exits, dropping every key left unset so only keys with an actual value
+remain. ``--show-config-full`` does the same but keeps every key left unset
+too, each shown as a commented-out ``# key = null`` line (TOML has no
+``null``).
 
 ``complete`` prints a script wiring up completion for the installed
 ``denver`` command, for the given shell (bash/fish/zsh) or, if omitted,
@@ -2483,7 +2484,9 @@ def dump_toml(data):
 
     TOML has no ``null`` -- a ``None`` value (fill_unset()'s placeholder for a documented-but-unset
     key, see show_config) is rendered as a commented-out ``# key = null`` line instead of dropping it
-    silently, so --show-config's "every possible key, unset ones included" contract still holds.
+    silently, so --show-config-full's "every possible key, unset ones included" contract still holds
+    (the default --show-config drops ``None`` values before they ever reach here -- see show_config's
+    own ``minimal`` handling).
     """
     lines = []
     _dump_toml_table(data, (), lines)
@@ -2680,13 +2683,14 @@ def show_config(
     alphabetically. Everything *below* that (a section's own nested keys, a
     hook name's own sub-keys, ...) stays alphabetical (see _sorted_nested).
 
-    ``minimal`` (--show-config-min) additionally drops every stage-section
-    key the env didn't actually configure -- i.e. whatever a provider's
-    resolve_defaults() filled in itself, static or computed, fill_unset()'s
-    ``None`` included (see _drop_defaulted_stage_keys) -- and then,
-    recursively, every remaining key whose value is ``None`` or an empty
-    dict/list (see _drop_null_values), so only keys that actually carry an
-    explicit value remain. Other falsy scalars (``0``/``""``) are kept as-is.
+    ``minimal`` (plain --show-config; --show-config-full turns it off)
+    additionally drops every stage-section key the env didn't actually
+    configure -- i.e. whatever a provider's resolve_defaults() filled in
+    itself, static or computed, fill_unset()'s ``None`` included (see
+    _drop_defaulted_stage_keys) -- and then, recursively, every remaining
+    key whose value is ``None`` or an empty dict/list (see
+    _drop_null_values), so only keys that actually carry an explicit value
+    remain. Other falsy scalars (``0``/``""``) are kept as-is.
     """
     resolved, ctx = resolve_full_config(env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
@@ -2704,7 +2708,7 @@ def show_config(
 
 
 def _drop_defaulted_stage_keys(section, raw_section):
-    """Keep only ``section``'s keys the env actually wrote, for --show-config-min.
+    """Keep only ``section``'s keys the env actually wrote, for the default --show-config (minimal).
 
     Every key resolve_stage_section() added on its own -- a provider's
     static/filesystem/PATH-derived default, or fill_unset()'s ``None`` for a
@@ -2715,7 +2719,7 @@ def _drop_defaulted_stage_keys(section, raw_section):
 
 
 def _drop_null_values(value):
-    """Recursively drop dict keys with no real value, for --show-config-min.
+    """Recursively drop dict keys with no real value, for the default --show-config (minimal).
 
     Dropped: ``None`` (fill_unset()'s placeholder for a documented-but-unset
     key), and any dict/list that is empty -- either to start with, or because
@@ -2745,7 +2749,7 @@ def _drop_null_values_dict(section):
 
 
 def _is_empty_container(value):
-    """Whether ``value`` is a dict/list ``_drop_null_values`` emptied out, for --show-config-min."""
+    """Whether ``value`` is a dict/list ``_drop_null_values`` emptied out, for the default --show-config (minimal)."""
     return isinstance(value, (dict, list)) and not value
 
 
@@ -3067,12 +3071,15 @@ def _add_run_parser(subparsers, config_args):
         help="shorthand for --scripts login",
     )
     run_p.add_argument(
-        "--show-config", action="store_true", help="print the fully resolved (deep-merged) denver.toml and exit"
+        "--show-config",
+        action="store_true",
+        help="print the fully resolved (deep-merged) denver.toml and exit, dropping every key left unset "
+        "so only keys with a value remain -- see --show-config-full for every key, unset ones included",
     )
     run_p.add_argument(
-        "--show-config-min",
+        "--show-config-full",
         action="store_true",
-        help="like --show-config, but drop every key left unset (shown as null) so only keys with a value remain",
+        help="like --show-config, but keeps every key left unset too (shown as a commented-out '# key = null' line)",
     )
     run_p.add_argument(
         "-q",
@@ -3326,7 +3333,7 @@ _RUN_FLAGS = [
     "--setup",
     "--login",
     "--show-config",
-    "--show-config-min",
+    "--show-config-full",
     "--fast",
     "--force",
     "--ci",
@@ -4060,8 +4067,8 @@ def _require_config_source(config_path, config_files):
 
 
 def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=None, env_vars=None):
-    """Handle 'run --show-config'/'run --show-config-min', or 'run --scripts', if that's what this is. Returns True if one ran (nothing is launched then)."""
-    if args.show_config or args.show_config_min:
+    """Handle 'run --show-config'/'run --show-config-full', or 'run --scripts', if that's what this is. Returns True if one ran (nothing is launched then)."""
+    if args.show_config or args.show_config_full:
         show_config(
             env_dir,
             config,
@@ -4070,7 +4077,9 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
             skip_stages=args.skip,
             cli_args=cli_args,
             env_vars=env_vars,
-            minimal=args.show_config_min,
+            # --show-config-full wins if both are given -- more keys is the
+            # more inclusive ask, so it's the natural tiebreaker.
+            minimal=not args.show_config_full,
         )
         return True
 
