@@ -17,7 +17,8 @@ denver's own CLI is subcommand-based:
 interactive shell; a command after '--' (e.g. `denver run <env> -- echo
 hi`) is forwarded as-is instead. ``--scripts <name>`` runs one of the env's
 own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
-``login``; with no name, lists the names this env defines).
+``login``; with no name, lists the names this env defines). ``--setup`` and
+``--login`` are shorthand for ``--scripts setup`` and ``--scripts login``.
 ``--show-config`` prints the fully resolved, deep-merged denver.toml and
 exits. ``--show-config-min`` does the same but drops every key left unset
 (shown as a commented-out ``# key = null`` line by ``--show-config`` -- TOML
@@ -2991,6 +2992,20 @@ def _add_run_parser(subparsers, config_args):
         "this env defines instead",
     )
     run_p.add_argument(
+        "--setup",
+        dest="scripts",
+        action="append_const",
+        const="setup",
+        help="shorthand for --scripts setup",
+    )
+    run_p.add_argument(
+        "--login",
+        dest="scripts",
+        action="append_const",
+        const="login",
+        help="shorthand for --scripts login",
+    )
+    run_p.add_argument(
         "--show-config", action="store_true", help="print the fully resolved (deep-merged) denver.toml and exit"
     )
     run_p.add_argument(
@@ -3233,6 +3248,8 @@ def _complete_candidates(words):
 _TOP_LEVEL_COMPLETIONS = ["run", "complete", "--help", "--version", "--license"]
 _RUN_FLAGS = [
     "--scripts",
+    "--setup",
+    "--login",
     "--show-config",
     "--show-config-min",
     "--fast",
