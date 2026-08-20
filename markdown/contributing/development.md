@@ -63,15 +63,18 @@ fakes, requested as fixtures:
 
 **Golden-file tests** (`tests/test_golden_show_config.py`) are the one place
 that *is* end-to-end: for every env under `examples/` tracked in git, it runs
-the real `--show-config` resolution against the real `denver.toml` and
+the real `--show-config-full` resolution against the real `denver.toml` and
 compares the output to a checked-in snapshot in `tests/golden/`, with this
 checkout’s own absolute path normalized to `<REPO>` and the zephyr
 provider’s workspace-root lookups faked (both documented in that test
-module). If you change something that legitimately changes a real env’s
-resolved config (a provider default, a merge rule, …), regenerate the
-affected golden file(s) rather than hand-editing them — run `--show-config`
-for the env, apply the same `<REPO>` substitution, and diff the result
-against what changed.
+module). `--show-config-full`, not the (now minimal-by-default) plain
+`--show-config`: the golden files exist to catch a resolver dropping or
+changing a default, which a minimal render would just hide by omitting the
+key entirely. If you change something that legitimately changes a real
+env’s resolved config (a provider default, a merge rule, …), regenerate
+the affected golden file(s) rather than hand-editing them — run
+`--show-config-full` for the env, apply the same `<REPO>` substitution, and
+diff the result against what changed.
 
 ## Coverage
 

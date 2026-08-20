@@ -322,15 +322,18 @@ actually replacing the process.</p></li>
 </ul>
 <p><strong>Golden-file tests</strong> (<code class="docutils literal notranslate"><span class="pre">tests/test_golden_show_config.py</span></code>) are the one place
 that <em>is</em> end-to-end: for every env under <code class="docutils literal notranslate"><span class="pre">examples/</span></code> tracked in git, it runs
-the real <code class="docutils literal notranslate"><span class="pre">--show-config</span></code> resolution against the real <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> and
+the real <code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code> resolution against the real <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> and
 compares the output to a checked-in snapshot in <code class="docutils literal notranslate"><span class="pre">tests/golden/</span></code>, with this
 checkout’s own absolute path normalized to <code class="docutils literal notranslate"><span class="pre">&lt;REPO&gt;</span></code> and the zephyr
 provider’s workspace-root lookups faked (both documented in that test
-module). If you change something that legitimately changes a real env’s
-resolved config (a provider default, a merge rule, …), regenerate the
-affected golden file(s) rather than hand-editing them — run <code class="docutils literal notranslate"><span class="pre">--show-config</span></code>
-for the env, apply the same <code class="docutils literal notranslate"><span class="pre">&lt;REPO&gt;</span></code> substitution, and diff the result
-against what changed.</p>
+module). <code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code>, not the (now minimal-by-default) plain
+<code class="docutils literal notranslate"><span class="pre">--show-config</span></code>: the golden files exist to catch a resolver dropping or
+changing a default, which a minimal render would just hide by omitting the
+key entirely. If you change something that legitimately changes a real
+env’s resolved config (a provider default, a merge rule, …), regenerate
+the affected golden file(s) rather than hand-editing them — run
+<code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code> for the env, apply the same <code class="docutils literal notranslate"><span class="pre">&lt;REPO&gt;</span></code> substitution, and
+diff the result against what changed.</p>
 </section>
 <section id="coverage">
 <h2>Coverage<a class="headerlink" href="#coverage" title="Link to this heading"></a></h2>

@@ -5,7 +5,7 @@ Eight real, working environments live under
 in the repository, ordered smallest to largest. Each has its own README
 explaining what it does, why it exists and what it is meant to teach. They
 are not illustrative snippets — every `examples/*/denver.toml` has its
-`--show-config` output pinned as a golden-file fixture under `tests/golden/`,
+`--show-config-full` output pinned as a golden-file fixture under `tests/golden/`,
 so an example that drifted out of sync with the code fails the build.
 
 ## Overview

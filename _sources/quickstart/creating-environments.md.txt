@@ -89,8 +89,10 @@ denver run envs/howto-env --show-config
 ```
 
 `--show-config` resolves the whole config — imports, merges, defaults — and
-fully prints it, without running anything. It needs no toolchain, no network and no Docker.
-Tip: **You may use it after every step below as it might support understanding.**
+prints it, without running anything. It needs no toolchain, no network and no
+Docker. Tip: **You may use it after every step below as it might support
+understanding.** (Add `--show-config-full` for every key, including ones
+nothing set.)
 
 ## Step 1 — declare the stages
 

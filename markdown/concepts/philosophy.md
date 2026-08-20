@@ -27,9 +27,11 @@ skip-on-success/skip-on-failure script — is named explicitly, and a venv patch
 run only if `patches-apply:` names the exact command for it.
 
 What this buys: an env’s `denver.toml` is a complete, honest description of
-what it does. Reading it (or running `--show-config`) tells you everything;
-nothing is hidden in directory layout that you’d only discover by tripping
-over it. The cost is a few extra lines in the config for anything that
+what it does. Reading it (or running `--show-config-full`, which — unlike
+the minimal-by-default `--show-config` — shows every key a stage’s own
+provider understands, unset ones included) tells you everything; nothing is
+hidden in directory layout that you’d only discover by tripping over it.
+The cost is a few extra lines in the config for anything that
 *does* follow a convention — a trade denver makes deliberately, on the
 theory that a wrong guess is far more expensive than an explicit line.
 
