@@ -46,12 +46,20 @@ class CustomProvider(Provider):
             die(f"custom[{self.stage}]: at least one of 'cmd'/'source'/'launcher' must be given")
 
     def _run_cmd(self, ctx, cmd):
-        """Run 'cmd:' via bash -c -- or, under --fast, report it as skipped instead."""
+        """Run 'cmd:' via bash -c -- or, under --fast, report it as skipped instead.
+
+        Banners with the key's own name ('cmd'), not a generic 'run' -- a
+        stage combining 'cmd:'/'source:'/'launcher:' would otherwise show
+        the same label for every one of them, hiding which is actually
+        happening (see _source_script and wrap() for the other two).
+        """
         if not cmd:
             return
         if ctx.fast:
+            banner(ctx, self.stage, "cmd (skipped by --fast)")
             info(f"custom[{self.stage}]: --fast skips '{cmd}'")
             return
+        banner(ctx, self.stage, "cmd")
         ctx.run(["bash", "-c", cmd])
 
     def _source_script(self, ctx, source):
@@ -61,6 +69,7 @@ class CustomProvider(Provider):
         path = ctx.resolve_path(source)
         if not path.is_file():
             die(f"custom[{self.stage}]: 'source' script not found: {path}")
+        banner(ctx, self.stage, "source")
         info(f"custom[{self.stage}]: source {path}")
         ctx.source(path)
 
@@ -72,7 +81,6 @@ class CustomProvider(Provider):
         launcher = cfg.get("launcher")
         self._validate_cfg(cmd, source, launcher)
 
-        banner(ctx, self.stage, "run")
         self._run_cmd(ctx, cmd)
         self._source_script(ctx, source)
 
