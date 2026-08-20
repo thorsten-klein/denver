@@ -18,10 +18,24 @@ class CustomProvider(Provider):
     name = "custom"
     KEYS = ("cmd", "source", "launcher")
 
-    def __init__(self, config):
-        """Set 'kind' to 'wrapper' if this stage's own section sets a (non-empty) 'launcher:', else 'setup'."""
-        super().__init__(config)
-        self.kind = "wrapper" if (self.config.get(self.stage) or {}).get("launcher") else "setup"
+    @property
+    def kind(self):  # pyright: ignore[reportIncompatibleVariableOverride] -- read-only override of Provider's plain str attribute, see below
+        """'wrapper' if this stage's own section sets a (non-empty) 'launcher:', else 'setup'.
+
+        A property, not set once in __init__: make_stage() (see
+        denver_providers/__init__.py) only overwrites self.stage with the
+        real stage id *after* construction -- self.stage is still 'custom'
+        (Provider.__init__'s default, from self.name) while __init__ itself
+        runs. Caching the answer there would silently misclassify every
+        custom stage not literally named 'custom' as 'setup' even with
+        'launcher:' configured, since self.config.get('custom') is empty for
+        any other stage id. Computed fresh here instead, once self.stage is
+        whatever make_stage() actually set it to. Nothing assigns
+        ``.kind`` externally (grep confirms), so the narrower read-only
+        surface a property has, versus Provider's plain attribute, costs
+        nothing in practice.
+        """
+        return "wrapper" if (self.config.get(self.stage) or {}).get("launcher") else "setup"
 
     def _validate_str(self, value, key):
         """Die unless ``key``'s value is unset or a non-empty string."""
@@ -60,6 +74,7 @@ class CustomProvider(Provider):
             info(f"custom[{self.stage}]: --fast skips '{cmd}'")
             return
         banner(ctx, self.stage, "cmd")
+        info(f"custom[{self.stage}]: run cmd: {cmd}")
         ctx.run(["bash", "-c", cmd])
 
     def _source_script(self, ctx, source):
@@ -87,4 +102,6 @@ class CustomProvider(Provider):
     def wrap(self, ctx, cmd):
         """Prepend every 'launcher:' entry's shell-split tokens, in order, to cmd."""
         prefix = [token for entry in self.config_section(ctx).get("launcher") or [] for token in shlex.split(entry)]
+        if prefix:
+            info(f"custom[{self.stage}]: run launcher: {shlex.join(prefix)}")
         return [*prefix, *cmd]
