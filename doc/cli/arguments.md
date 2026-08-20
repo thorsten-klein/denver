@@ -79,9 +79,16 @@ Both follow the same merge rules as `import:`, explained in
 ## Inspect an environment
 
 - **`--show-config`** prints the fully merged configuration — `import:`
-  chain resolved, overrides applied, every default filled in — then exits.
-  The fastest way to understand an env you didn't write, and it needs no
-  toolchain, no network and no Docker.
+  chain resolved, overrides applied, every default filled in — then exits,
+  showing only the keys that actually carry a value (whatever the env itself
+  configured, or a provider default computed from it); a key nothing ever
+  set is left out rather than shown as unset. The fastest way to understand
+  an env you didn't write, and it needs no toolchain, no network and no
+  Docker.
+- **`--show-config-full`** is `--show-config` plus every key left unset,
+  each shown as a commented-out `# key = null` line (TOML has no `null`) —
+  the complete key reference for a stage's own section, not just what this
+  particular env happens to set.
 - **`--dry-run`** shows what each stage *would* do instead of doing it: no
   command is executed for its effect, no file is written, and the final
   command is printed rather than launched. Useful for answering "what does

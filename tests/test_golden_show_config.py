@@ -1,4 +1,4 @@
-"""End-to-end golden-file tests: for each real env under examples/, --show-config's
+"""End-to-end golden-file tests: for each real env under examples/, --show-config-full's
 output must match a checked-in golden file.
 
 This is the gap the rest of the suite leaves open -- everything else mocks
@@ -76,12 +76,15 @@ def test_show_config_matches_golden(env_name, capsys, monkeypatch, which, tmp_pa
     monkeypatch.setattr(context_provider, "in_container", lambda env=None: False)
 
     env_dir = REPO_ROOT / "examples" / env_name
-    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    # --show-config-full, not the (now minimal-by-default) plain --show-config:
+    # this test exists to catch a resolver dropping/changing a default, which
+    # a minimal render would just hide by omitting the key entirely.
+    assert denver.main(["run", str(env_dir), "--show-config-full"]) == 0
     actual = _normalize(capsys.readouterr().out)
 
     golden_path = GOLDEN_DIR / f"{env_name}.toml"
     expected = golden_path.read_text()
     assert actual == expected, (
-        f"--show-config for examples/{env_name} no longer matches {golden_path} -- if this change is "
+        f"--show-config-full for examples/{env_name} no longer matches {golden_path} -- if this change is "
         f"intentional, regenerate it (see this test module's docstring)."
     )
