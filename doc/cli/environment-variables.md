@@ -6,6 +6,11 @@ these are read from your shell rather than passed per run.
 
 ## What denver reads
 
+- **`DENVER_ENV_DIR`** — the fallback for the `<env>` argument itself, when
+  you omit it: `denver run` (with no path at all) uses this instead. Handy
+  in a shell/CI that always works against the same env — export it once
+  (e.g. in `.envrc`) and drop `<env>` from every `denver run ...` after
+  that. An `<env>` actually given on the command line always wins over it.
 - **`DENVER_STATE_DIR`** — an explicit root for denver's per-env state
   (venv, install trees, fingerprints, logs, `performance.jsonl`), overriding
   the default location described in [Where an environment's state lives](#where-an-environments-state-lives)
@@ -17,7 +22,7 @@ these are read from your shell rather than passed per run.
   content-addressed, safe to share between envs and checkouts, and expensive
   to duplicate.
 
-**Those two are the whole list.** Every flag from the previous page
+**Those three are the whole list.** Every flag from the previous page
 (`--force`, `--ci`, `--fast`, ...) is set purely by the flag itself, never
 inherited from a same-named real environment variable — so nothing about a
 run silently changes because of what happens to be exported in the calling

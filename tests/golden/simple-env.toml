@@ -6,14 +6,6 @@ stages = [
   "print-vars-after",
 ]
 
-[[denver-custom-args]]
-default = "hello"
-flags = [
-  "--greeting",
-  "-g",
-]
-help = "what the last stage greets with"
-
 [hooks]
 # env = null
 # post-print-vars-after = null
@@ -58,7 +50,7 @@ skip-on-success = []
 skip-on-failure = []
 # scripts = null
 cmd = '''
-echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR greeting=${DENVER_ARG_GREETING}"
+echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
 '''
 # launcher = null
 # source = null

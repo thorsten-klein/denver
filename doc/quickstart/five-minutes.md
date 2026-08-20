@@ -1,217 +1,214 @@
-# Denver in 5 minutes
+# denver in 5 minutes
 
-## Pre-conditions
+This page runs a real environment end to end: `examples/simple-env`, three
+small steps and nothing else. No Docker, no compiler, no package manager —
+just Python, which you already need to run denver at all. That makes it the
+fastest way to see the model working before you look at a bigger, more
+realistic example.
 
-denver itself only needs Python — it never installs the tools its providers
-drive. This table is a lookup, not a checklist: **only the rows for the
-providers your own `denver.toml` actually lists apply to you.** Each of those
-expects its tool to already be available wherever that stage runs (on the
-host, or inside the container once a `docker` stage relocated into it):
+## Have a look first
 
-| Provider | Needs |
-|---|---|
-| `docker` | `docker` with the Compose plugin (v2, `docker compose ...`), daemon reachable for your user |
-| `uv` | [`uv`](https://docs.astral.sh/uv/getting-started/installation/) |
-| `conan` | `conan` — usually installed by an earlier `uv` stage |
-| `zephyr` | `west` — usually installed by an earlier `uv` stage |
-| `custom` | whatever your own script calls |
+Open [`examples/simple-env/denver.toml`](https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env/denver.toml).
+It is short — three stages, each one a `provider: custom` section running a
+shell command. Read it before running anything; the rest of this page just
+explains what you are looking at.
 
-A stage whose tool is missing fails up front with a clear message. Each
-provider's own page under [Providers](../providers/uv.md) has the details,
-including how to point at a specific binary via `exe:`. Anything that must be
-installed on the *host* (docker itself, `udev` rules, ...) typically lives in
-an env's `scripts: setup:`, so an env can bring its own host tools along —
-run those once with:
+Then ask denver what it actually resolved to:
 
 ```bash
-denver run <env> --scripts setup
+denver run examples/simple-env --show-config
 ```
-
-See [One-time host setup](#one-time-host-setup) below.
-
-## Running `examples/howto-env`
-
-The [Introduction](../introduction/index.md) built an environment up from one
-stage. This page goes the other way and walks through a complete, ordinary
-bundled example end to end — `examples/howto-env`, five stages over four
-providers, written to be read rather than grown organically like a real
-project's env. It turns this onboarding note:
-
-> Use Ubuntu 24.04, as our CI does. `apt install jq net-tools curl`. Grab the
-> prebuilt `neovim` 0.12.4 tarball from GitHub and put it on `PATH`. Download
-> `cmake` 3.31.9 and the ARM toolchain 15.3 — exactly those versions. Install
-> `uv`, create a python 3.12 virtualenv, install `pytest==9.1.1`. Export
-> `PYTEST_ADDOPTS="-v -s"`, our team convention. Then you can run `pytest`.
-
-into one command.
-
-If you would rather start from the small end, read
-`examples/simple-env/denver.toml` (a couple of shell snippets) instead.
-For the *biggest* bundled example — a full
-[Zephyr RTOS](https://zephyrproject.org) toolchain across five stages — see
-[`examples/zephyr-devshell-4.3.1`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell-4.3.1)
-instead.
-
-Note that every command below works as `denver run <env> ...` or
-`src/denver.py run <env> ...`.
-
-### The one command you need
-
-You can run pytest in the final example environment like this:
-
-```bash
-denver run examples/howto-env -- pytest examples/howto-env/tests
-```
-
-That's it. A minute or two later (much less on repeat runs) that onboarding
-note's every claim has been turned into a passing test:
 
 ```console
-$ denver run examples/howto-env -- pytest examples/howto-env/tests
-test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED
-test_environment.py::test_docker_stage_installed_the_apt_packages PASSED
-test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED
-test_environment.py::test_custom_stage_put_the_hand_installed_nvim_on_path PASSED
-test_environment.py::test_conan_stage_gave_us_the_pinned_tool_versions PASSED
-test_environment.py::test_custom_stage_exported_the_team_convention PASSED
+$ denver run examples/simple-env --show-config
+version = "1.0"
+denver-version = ">=1.1.0"
+stages = [
+  "print-vars-before",
+  "set-vars",
+  "print-vars-after",
+]
+
+[print-vars-before]
+provider = "custom"
+cmd = '''
+echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
+'''
+
+[set-vars]
+provider = "custom"
+cmd = '''
+echo "[set-vars] sourcing custom.sh..."
+'''
+source = "custom.sh"
+
+[print-vars-after]
+provider = "custom"
+cmd = '''
+echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
+'''
 ```
 
-You did not install a compiler. You did not create a virtualenv. You did not
-write a bootstrap script. denver did all of it, and it will do exactly the
-same on your colleague's machine.
+`--show-config` never runs anything — it only resolves the file (imports,
+defaults, everything) and prints the result. For this env the output looks
+almost the same as the file on disk, because there is nothing to resolve:
+no imports, no provider defaults to fill in. That will not stay true once
+you look at a bigger example, which is exactly why this flag is worth
+knowing early: it is always safe to run, and it always shows *exactly* what
+a real run would use.
 
-Info: Run `denver run examples/howto-env` with no trailing command and you get a shell instead.
+## Preview it: `--dry-run`
 
-### What just happened
+```bash
+denver run examples/simple-env --dry-run
+```
+
+Read this output carefully, because it can look like nothing happened:
+
+```console
+$ denver run examples/simple-env --dry-run
+[dry-run] no command below is executed for its effect. Legend:
+[dry-run +]  command that would run
+[dry-run ?]  read-only query, really run (its output decides what follows)
+[dry-run ~]  file/directory write that would happen
+[dry-run .]  script sourced into the environment, really done
+[dry-run !]  note about what this preview cannot show
+-- [1/3] stage 'print-vars-before' (custom)
+[dry-run +] bash -c 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
+-- [2/3] stage 'set-vars' (custom)
+[dry-run +] bash -c 'echo "[set-vars] sourcing custom.sh..."'
+[dry-run .] .../examples/simple-env/custom.sh
+-- [3/3] stage 'print-vars-after' (custom)
+[dry-run +] bash -c 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
+| INFO: env simple-env NOT started (--dry-run) |
+```
+
+**Nothing is missing.** `--dry-run` really does not run any `cmd:` — that is
+the entire point of the flag, so you can preview a build without doing it.
+Every `[dry-run +] ...` line is a command that *would* run for real; none of
+them actually ran, so you never see `[print-vars-before] MYVAR=...` the way
+a real run prints it. Only `[dry-run .]` (`source:`) really executes, because
+denver needs its exports to render the commands after it correctly — see
+[Previewing a run](../configuration/denver-toml.md#previewing-a-run---dry-run)
+for exactly which two things a dry run really does, and why.
+
+## Run it for real
+
+```bash
+denver run examples/simple-env -- true
+```
+
+```console
+$ denver run examples/simple-env -- true
+-- [1/3] stage 'print-vars-before' (custom)
+[print-vars-before] MYVAR= FOO= BAR=
+-- [2/3] stage 'set-vars' (custom)
+[set-vars] sourcing custom.sh...
+-- [3/3] stage 'print-vars-after' (custom)
+[print-vars-after] MYVAR=1 FOO=2 BAR=3
+--------------------------------
+| INFO: env simple-env started |
+--------------------------------
+```
+
+Two different things printed those lines, and it is worth being able to
+tell them apart on sight:
+
+- **denver's own lines**: `-- [i/n] stage ... (custom)` (which stage is
+  running) and the boxed `INFO: env ... started` at the end. These are
+  denver telling you what it is doing.
+- **the stage's own lines**: `[print-vars-before] MYVAR=...`,
+  `[set-vars] sourcing custom.sh...`, `[print-vars-after] MYVAR=1 FOO=2
+  BAR=3`. These come from the `echo` each stage's `cmd:` actually ran — the
+  same text you would get typing that `echo` yourself. denver did not write
+  a word of it.
+
+That distinction matters for any real env: a stage's own build tool
+(`pip`, `cmake`, `docker build`, ...) prints its *own* output the same way,
+mixed in with denver's progress lines around it.
+
+Read the three lines and you can see stage-to-stage handoff happening:
+`print-vars-before` sees nothing (`MYVAR=` is empty), `set-vars` sources
+`custom.sh` (three `export`s), and `print-vars-after` sees all three. The
+`true` after `--` was the command denver ran once the env was built — the
+same way you would tell it to run a real program instead.
+
+## What just happened
 
 Three words from
 [What is a denver environment?](../introduction/index.md#what-is-a-denver-environment),
 now with something concrete attached to them:
 
-- The **environment** is the folder `examples/howto-env`, because that is
+- The **environment** is the folder `examples/simple-env`, because that is
   where its `denver.toml` lives.
-- Each **stage** is one step of that setup, and they ran in the order the
-  file lists them — the container first, because everything after it had to
-  happen *inside* that container.
-- Each **provider** is the code that knew how to run one kind of stage.
-  You configured them; you did not write any of them.
+- Each **stage** is one step, and they ran in the order the file lists
+  them — `print-vars-before`, then `set-vars`, then `print-vars-after`.
+- The **provider** behind all three is `custom`: run a command, and/or
+  source a script. You configured what to run; denver ran it.
 
-One detail worth pinning down here, because the stage list below depends on
-it: **a stage id is only a label.** Every stage names its provider
-explicitly (`provider: docker`, `provider: uv`, ...), so ids are free to
-describe the *problem* rather than the tool — which is what lets this one
-environment run two different `custom` stages, `nvim-setup` and
-`best-practices`, without them colliding.
+`cmd:` and `source:` look interchangeable and are not — that difference is
+the whole reason this env exists. `cmd:` runs in its own subprocess, so an
+`export` inside it never leaves that subprocess. `source:` folds its
+exports into the environment every later stage (and the final command) can
+see. See the [`custom` provider](../providers/custom.md) for the full
+picture, or
+[`examples/simple-env/README.md`](https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env)
+for this exact env explained a second way.
 
-`<env>` also accepts a path straight to a config file instead of a folder —
-handy when a folder holds several variants side by side (e.g.
-`denver.debug.toml`, `denver.release.toml`):
+## Pre-conditions for a real project
 
-```bash
-denver run examples/howto-env/denver.toml -- pytest examples/howto-env/tests
-```
+`simple-env` needed nothing but Python, because a `custom` stage just runs
+whatever shell command you give it. A real environment usually names one of
+denver's other providers, and each of those expects its own tool to already
+be on the machine:
 
-### The 5 stages of this example
+| Provider | Needs |
+|---|---|
+| `uv` | [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — see [Install denver](../introduction/install.md#installing-uv) if you don't have it yet |
+| `conan` | `conan` — usually installed by an earlier `uv` stage |
+| `zephyr` | `west` — usually installed by an earlier `uv` stage |
+| `docker` | `docker` with the Compose plugin (v2, `docker compose ...`), daemon reachable for your user — see [Setting up Docker](../providers/docker.md#setting-up-docker) |
+| `custom` | whatever your own command calls |
 
-```toml
-stages = [
-  "docker-base",     # 1. Ubuntu 24.04 + the apt packages + uv
-  "uv-packages",     # 2. the python 3.12 venv
-  "nvim-setup",      # 3. one prebuilt release, fetched by hand
-  "conan-packages",  # 4. cmake 3.31.9 and the ARM toolchain 15.3, exactly
-  "best-practices",  # 5. the team's PYTEST_ADDOPTS convention
-]
-```
+denver itself never installs any of these — only the tools its providers
+drive. A stage whose tool is missing fails up front with a clear message,
+naming what it looked for.
 
-| # | Stage | Provider | What it does |
-|---|-------|----------|----------------|
-| 1 | `docker-base` | `docker` | Relocates everything below into an **Ubuntu 24.04 container** with the `apt` packages the use case asked for — so the OS and system libraries are the same for everyone. |
-| 2 | `uv-packages` | `uv` | Creates a **Python 3.12 virtualenv** (with [uv](https://docs.astral.sh/uv/)) and installs `pytest` — plus `conan`, since the stage below needs it on `PATH`. |
-| 3 | `nvim-setup` | `custom` | Downloads, checksums and unpacks **one prebuilt release** (neovim 0.12.4) by hand — the manual way to bring a tool onto `PATH`, so the stage below can be read as what a package manager saves you. |
-| 4 | `conan-packages` | `conan` | Uses [Conan](https://conan.io) to fetch `cmake` 3.31.9 and the `arm-none-eabi` 15.3 toolchain, exactly — the same job as the stage above, minus the shell script. |
-| 5 | `best-practices` | `custom` | Exports `PYTEST_ADDOPTS="-v -s"`, the team's pytest convention — sourced, not run, so the export survives into the final command. |
-
-At the end, denver hands control over to your shell — plain `bash` in this
-environment — with everything from steps 1–5 active. When you type `exit`,
-you are back on your host machine and nothing was installed on it.
-
-### One-time host setup
-
-A few things cannot be done from inside a container — e.g. installing Docker
-itself, or the `udev` rules that let you flash a board over USB without
-`sudo`. Such things may live in `scripts: setup:` and are **not** run on every start.
-They must be run explicitly (but necessary only once):
+Something that must be installed on the *host* before anything else works
+(Docker itself, a `udev` rule, ...) usually belongs in an env's own
+`scripts: setup:` — run once, by hand, not on every start:
 
 ```bash
-denver run examples/howto-env --scripts setup
+denver run <env> --scripts setup
 ```
 
-### First run vs. every run after
+See [`scripts:`](../configuration/denver-toml.md#hooks-and-scripts) in
+Configuration for how that mechanism works.
 
-The first run is slow: the docker image is built, huge packages (neovim,
-cmake + the ARM compiler) are downloaded. **Later runs are fast**, because
-in many cases caches are used. Additionally each provider checks whether
-its inputs changed and skip its expensive work if they didn't — for this
-example's conan stage specifically, the difference between roughly three
-minutes and about two seconds.
-
-Two useful flags around this:
+## The handful of flags you'll use daily
 
 ```bash
-# don't build anything, only activate what already exists (fastest)
-denver run examples/howto-env --fast
+# run one command instead of opening a shell -- everything after
+# '--' is passed through untouched
+denver run examples/simple-env -- echo inside
 
-# ignore all "nothing changed" shortcuts and redo the expensive work
-denver run examples/howto-env --force
-```
+# preview what would run, without running it
+denver run examples/simple-env --dry-run
 
-### The handful of options you'll actually use
+# print the resolved config and exit
+denver run examples/simple-env --show-config
 
-```bash
-# run ONE command inside the environment instead of opening a shell.
-# everything after '--' is passed through untouched.
-denver run examples/howto-env -- echo inside
-
-# show what the stages would run, without running any of it
-denver run examples/howto-env --dry-run
-
-# stop after a given stage: that stage and every stage before it runs.
-# (there is no "run just this one stage" -- a stage practically always
-# needs its predecessors: nvim-setup needs uv-packages' venv on PATH)
-denver run examples/howto-env --until uv-packages
-
-# print the final, fully merged configuration and exit -- the best way to
-# understand what an environment really does, imports included
-denver run examples/howto-env --show-config
-
-# quieter output (-q silences denver's own output but keeps each stage's
-# build tool output; -qq additionally silences that too)
-denver run examples/howto-env -qq -- nvim --version
+# quieter output (-q keeps each stage's own command output but
+# silences denver's own; -qq silences that too)
+denver run examples/simple-env -q -- echo inside
 ```
 
 See [CLI Arguments](../cli/arguments.md) for the full flag reference, or
 [Shell completion](../cli/completion.md) to tab-complete all of it instead
 of memorizing it.
 
-### Sharing one setup across repositories
-
-`howto-env` is deliberately self-contained — nothing here is inherited via
-`import:`. For the pattern that shares one base setup across a whole fleet
-of projects (Step 5 of the [Introduction](../introduction/index.md)), see
-[`examples/zephyr-devshell-4.3.1`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell-4.3.1),
-whose `denver.toml` is under 60 lines because it imports its entire pipeline
-from a shared base and restates only what's project-specific.
-
 > **Note**
 >
-> **Next:** [Creating environments](creating-environments.md) —
-> build the environment you just ran, from an empty folder, one stage at a
-> time. Having seen what it does, you now get to see *why* every key in it is
-> there.
->
-> Two shortcuts, if you'd rather not build one yet: `examples/zephyr-uv/` is a
-> Python venv and nothing else, `examples/simple-env/` just runs a shell
-> script — both are a screenful. Or jump straight to the reference: the
-> [`denver` command](../cli/arguments.md), the
-> [`denver.toml` schema](../configuration/denver-toml.md), and one page
-> [per provider](../providers/uv.md).
+> **Next:** [denver in 15 minutes](creating-environments.md) — a bigger,
+> more realistic example: four providers, a container, a real toolchain,
+> and you build it yourself from an empty folder instead of just reading it.

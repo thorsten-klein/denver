@@ -151,5 +151,5 @@ download cache at. Full explanation in
 >
 > **Next:** [Philosophy](philosophy.md) — the principles these terms were
 > chosen to serve. Or go straight to
-> [Creating environments](../quickstart/creating-environments.md) and put them
+> [denver in 15 minutes](../quickstart/creating-environments.md) and put them
 > to use.

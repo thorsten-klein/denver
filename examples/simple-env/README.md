@@ -9,37 +9,33 @@ Running it prints three lines and drops you into a shell:
 
 ```console
 $ denver run examples/simple-env -- true
+-- [1/3] stage 'print-vars-before' (custom)
 [print-vars-before] MYVAR= FOO= BAR=
+-- [2/3] stage 'set-vars' (custom)
 [set-vars] sourcing custom.sh...
-[print-vars-after] MYVAR=1 FOO=2 BAR=3 greeting=hello
+-- [3/3] stage 'print-vars-after' (custom)
+[print-vars-after] MYVAR=1 FOO=2 BAR=3
+--------------------------------
+| INFO: env simple-env started |
+--------------------------------
 ```
+
+Two kinds of line are mixed together there, and it matters which is which:
+
+- The `-- [i/n] stage ...` lines and the boxed `INFO: env ... started` line
+  are **denver's own** progress messages.
+- The plain `[print-vars-before] ...` / `[set-vars] ...` /
+  `[print-vars-after] ...` lines are **not from denver at all** — they are
+  each stage's own `echo`, running as an ordinary shell command and printing
+  to its own stdout exactly as it would outside denver.
 
 Three stages run in the order `stages:` lists them. The middle one sources
 `custom.sh`, which exports `MYVAR`/`FOO`/`BAR`. The stage before it sees
 nothing; the stage after it sees all three — and so does the final command.
 
-That last `greeting=hello` comes from this env's own command-line flag,
-declared under `denver-custom-args:` — so it is also `--greeting`'s default:
-
-```console
-$ denver run examples/simple-env --greeting "hi there" -- true
-...
-[print-vars-after] MYVAR=1 FOO=2 BAR=3 greeting=hi there
-```
-
 ## Why it exists
 
-Two reasons, and the second is the important one.
-
-**As a first environment to read.** It is the entire denver model at minimum
-size: a folder with a `denver.toml`, an ordered `stages:` list, and each stage
-handing something forward to the next. Nothing here needs a container, a
-toolchain or a package manager, so it is the example to start with if the
-Zephyr ones look intimidating. If your project's setup today is a `setup.sh`
-that people are told to run by hand, this is the shape your `denver.toml`
-would take.
-
-**As the demonstration of `cmd:` vs `source:`.** These two keys look
+As the demonstration of `cmd:` vs `source:`. These two keys look
 interchangeable and are not, and getting it wrong fails in a way that is
 genuinely confusing — so this env exists to make the difference visible:
 
@@ -51,16 +47,12 @@ genuinely confusing — so this env exists to make the difference visible:
   the final command.
 
 The `print-vars-before` / `print-vars-after` pair is there purely so you can
-see that boundary being crossed.
-
-**And, in passing, as the smallest `denver-custom-args:` demo.** `--greeting` is one
-`denver-custom-args:` entry — an `argparse.add_argument` call written in YAML — and
-`denver run examples/simple-env --help` lists it next to denver's own flags. Its
-value arrives in the config as `${DENVER_ARG_GREETING}`, which is expanded
-by *denver*, before `print-vars-after`'s `cmd:` reaches a shell at all —
-unlike `$MYVAR` in that same line, which the shell expands from what
-`set-vars` exported. See "Environment-specific CLI arguments" in
-[`doc/configuration/denver-toml.md`](../../doc/configuration/denver-toml.md).
+see that boundary being crossed. It is also the entire denver model at
+minimum size: a folder with a `denver.toml`, an ordered `stages:` list, and
+each stage handing something forward to the next — the shape your own
+`denver.toml` would take if today's setup is a `setup.sh` people run by
+hand. See [Denver in 5 minutes](../../doc/quickstart/five-minutes.md) for a
+full guided walkthrough of this env.
 
 Note this is stage-scoped: `source:` belongs to the `set-vars` stage's own
 section, which is different from the global `hooks:` mechanism that applies
@@ -79,7 +71,7 @@ the `Examples` workflow.
 
 | File | What it is |
 |---|---|
-| `denver.toml` | Three `custom` stages; the middle one wires up `source:`, plus one `denver-custom-args:` flag |
+| `denver.toml` | Three `custom` stages; the middle one wires up `source:` |
 | `custom.sh` | The sourced script — just three `export`s |
 
 ## Next
