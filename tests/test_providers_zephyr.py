@@ -68,10 +68,10 @@ def test_fast_noop_when_workspace_already_configured(make_context, run_recorder,
 
 
 def test_fast_still_shows_progress_banner(make_context, run_recorder, which, capsys):
-    # --fast activates instead of building, but the '[i/n]' progress line
-    # must still show under -q, not silently vanish.
+    # --fast activates instead of building, but under --verbose the '[i/n]'
+    # progress banners for that must still show, not silently vanish.
     config = {"zephyr": {}}
-    ctx = make_ctx(make_context, config, fast=True, quiet=1)
+    ctx = make_ctx(make_context, config, fast=True, verbose=True)
     west_config = west_topdir(ctx.env_dir) / ".west" / "config"
     west_config.parent.mkdir(parents=True)
     west_config.touch()

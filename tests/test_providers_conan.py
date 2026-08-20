@@ -70,10 +70,10 @@ def test_fast_sources_existing_buildenv_without_building(make_context, run_recor
 
 
 def test_fast_still_shows_progress_banner(make_context, run_recorder, which, capsys):
-    # --fast activates instead of exporting/installing, but the '[i/n]'
-    # progress line must still show under -q, not silently vanish.
+    # --fast activates instead of exporting/installing, but under --verbose
+    # the '[i/n]' progress banners for that must still show, not silently vanish.
     config = {"conan": {}}
-    ctx = make_context(config=config, fast=True, quiet=1)
+    ctx = make_context(config=config, fast=True, verbose=True)
     _ensure_default_conanfile(ctx, config)
     buildenv = ctx.env_workdir / ".conan" / "conanbuildenv.sh"
     buildenv.parent.mkdir(parents=True)
@@ -593,7 +593,7 @@ def test_no_conanfile_skips_conan_install(make_context, run_recorder, which, cap
     # without installing anything", no separate 'install:' flag to check.
     default_profile_ok(run_recorder)
     config = {"conan": {}}
-    ctx = make_context(config=config)
+    ctx = make_context(config=config, verbose=True)
     run_conan(config, ctx)
     assert not any("conan install" in c for c in run_recorder.commands())
     assert "install (skipped: no conanfile configured)" in capsys.readouterr().err
@@ -706,7 +706,7 @@ def test_config_banner_shown_before_config_install_output(make_context, run_reco
     # to run unbannered, so its output appeared ahead of the first banner.
     default_profile_ok(run_recorder)
     config = {"conan": {"config": ["conan-config"]}}
-    ctx = make_context(config=config)
+    ctx = make_context(config=config, verbose=True)
     (ctx.env_dir / "conan-config").mkdir(parents=True)
     _ensure_default_conanfile(ctx, config)
 

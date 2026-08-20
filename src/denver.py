@@ -1276,7 +1276,7 @@ def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None)
       the wrapper too, instead of the inner denver re-computing 'stages:'
       from scratch with no memory of them and running it anyway;
     * --quiet (repeated ``options.quiet`` times, so e.g. -qq's level 2
-      survives, not just a single -q), --fast/--force/--ci/--no-wait;
+      survives, not just a single -q), --verbose, --fast/--force/--ci/--no-wait;
     * -e/--env (``options.env_vars``): re-passed as its own ``--env
       NAME=VALUE`` flags, one per entry, for the same reason -- the inner
       denver's own os.environ starts empty of them (a wrapper reinvocation
@@ -1332,6 +1332,7 @@ def _reinvoke_flags(options):
     """The denver-own flags re-passed to the inner denver: -q once per level, then each flag that is set."""
     flags = ["-q"] * options.quiet
     toggles = (
+        ("--verbose", options.verbose),
         ("--fast", options.fast),
         ("--force", options.force),
         ("--ci", options.ci),
@@ -1353,6 +1354,7 @@ def resolve_full_config(
     config_path,
     *,
     quiet=0,
+    verbose=False,
     fast=False,
     force=False,
     ci=False,
@@ -1389,6 +1391,7 @@ def resolve_full_config(
         config_path=config_path,
         import_dirs=import_dirs,
         quiet=quiet,
+        verbose=verbose,
         fast=fast,
         force=force,
         ci=ci,
@@ -1486,6 +1489,7 @@ def run_named_scripts(
     until_stage=None,
     skip_stages=(),
     quiet=False,
+    verbose=False,
     dry_run=False,
     no_wait=False,
     cli_args=None,
@@ -1526,6 +1530,7 @@ def run_named_scripts(
         config_path,
         no_wait=no_wait,
         quiet=quiet,
+        verbose=verbose,
         dry_run=dry_run,
         cli_args=cli_args,
         env_vars=env_vars,
@@ -1619,6 +1624,7 @@ def _relocate_named_scripts(
         config_path,
         setup_names,
         quiet=quiet,
+        verbose=ctx.verbose,
         until_stage=until_stage,
         skip_stages=(*skip_stages, *_stage_ids_of(active_wrappers)),
         cli_argv=_cli_args(cli_args).argv,
@@ -1661,7 +1667,9 @@ def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stag
         )
 
 
-def _relocated_run_cmd(config_path, names, *, quiet, until_stage, skip_stages, cli_argv=(), env_vars=None):
+def _relocated_run_cmd(
+    config_path, names, *, quiet, verbose=False, until_stage, skip_stages, cli_argv=(), env_vars=None
+):
     """The ``denver run <config> --scripts <name>`` argv (one pair per name) the wrapper re-invokes.
 
     This run's own filters are re-passed. ``cli_argv`` -- the tokens this
@@ -1673,8 +1681,7 @@ def _relocated_run_cmd(config_path, names, *, quiet, until_stage, skip_stages, c
     cmd = ["python3", str(Path(__file__).resolve()), "run", str(config_path)]
     for name in names:
         cmd += ["--scripts", name]
-    if quiet:
-        cmd.append("-q")
+    cmd += _relocated_run_quiet_verbose_flags(quiet, verbose)
     if until_stage:
         cmd += ["--until", until_stage]
     for stage_id in skip_stages:
@@ -1682,6 +1689,16 @@ def _relocated_run_cmd(config_path, names, *, quiet, until_stage, skip_stages, c
     for var_name, value in (env_vars or {}).items():
         cmd += ["--env", f"{var_name}={value}"]
     return [*cmd, *cli_argv]
+
+
+def _relocated_run_quiet_verbose_flags(quiet, verbose):
+    """The '-q'/'-v' flags _relocated_run_cmd's reinvocation needs, if either was given."""
+    flags = []
+    if quiet:
+        flags.append("-q")
+    if verbose:
+        flags.append("-v")
+    return flags
 
 
 def _wrap_cmd(ctx, cmd, active_wrappers, stage_index, stage_count):
@@ -1833,7 +1850,10 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     provider.setup(ctx)
     duration = time.time() - start
     ctx.stage_timings.append((provider.stage, f"{duration:.1f}s"))
-    if quiet < 2:
+    # "performance infos in blue" -- --verbose only (and never under -q/-qq,
+    # denver's own output); the trace file below is written regardless, this
+    # is just the printed line.
+    if quiet == 0 and ctx.verbose:
         print(
             f"\033[94mINFO: stage '{provider.stage}' ({provider.name}) finished in {duration:.2f}s\033[39m",
             file=sys.stderr,
@@ -1843,7 +1863,7 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
 
 
 def _print_stage_summary(ctx):
-    """Print what each stage cost, in pipeline order, right above the 'env started' line.
+    """Print what each stage cost, in pipeline order, right above the 'env started' line -- --verbose only.
 
     The per-stage 'finished in Ns' lines are scattered through a run's output
     -- often thousands of lines of build noise apart -- so the question they
@@ -1854,7 +1874,7 @@ def _print_stage_summary(ctx):
     duration, so the summary matches the '[i/n]' trail above rather than
     silently shrinking.
     """
-    if not ctx.stage_timings:
+    if not ctx.verbose or not ctx.stage_timings:
         return
     width = max(len(stage) for stage, _ in ctx.stage_timings)
     for stage, outcome in ctx.stage_timings:
@@ -1862,17 +1882,21 @@ def _print_stage_summary(ctx):
 
 
 def _print_env_started(ctx, start_time):
-    """Print a boxed, blue 'INFO: env <name> started in Ns' line to stderr, right before the resolved command launches.
+    """Print a boxed 'INFO: env <name> started' line to stderr, right before the resolved command launches.
 
-    Under --dry-run the env was never started and the elapsed time is the
-    cost of printing commands, not of running them -- so it says what
-    actually happened instead of quoting a meaningless duration.
+    The elapsed duration -- "performance output" -- is only added under
+    --verbose (see _print_stage_summary for the same rule on the per-stage
+    breakdown above it); without it, this box is just the plain completion
+    marker. Under --dry-run the env was never started at all, elapsed time
+    or not, so it says that instead regardless of --verbose.
     """
     _print_stage_summary(ctx)
     if ctx.dry_run:
         text = f"INFO: env {ctx.env_name} NOT started (--dry-run)"
-    else:
+    elif ctx.verbose:
         text = f"INFO: env {ctx.env_name} started in {time.time() - start_time:.2f}s"
+    else:
+        text = f"INFO: env {ctx.env_name} started"
     line = "-" * (len(text) + 4)
     print(f"\033[94m{line}\n| {text} |\n{line}\033[39m", file=sys.stderr)
 
@@ -1918,6 +1942,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
         config_path,
         no_wait=options.no_wait,
         quiet=options.quiet,
+        verbose=options.verbose,
         fast=options.fast,
         force=options.force,
         ci=options.ci,
@@ -2137,6 +2162,7 @@ class RunOptions:
         until_stage=None,
         skip_stages=(),
         quiet=0,
+        verbose=False,
         fast=False,
         force=False,
         ci=False,
@@ -2151,6 +2177,7 @@ class RunOptions:
         self.until_stage = until_stage
         self.skip_stages = skip_stages
         self.quiet = quiet
+        self.verbose = verbose
         self.fast = fast
         self.force = force
         self.ci = ci
@@ -2300,7 +2327,7 @@ def _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, *, has_se
     """Wrap ``cmd`` through the active wrapper(s) and exec it, announcing a ready env if nothing re-invokes."""
     cmd = _wrap_cmd(ctx, cmd, active_wrappers, skip_state.stage_index, skip_state.total)
     # with no setup stages nothing re-invokes, so this is where the env is ready
-    if not has_setups and options.quiet < 2:
+    if not has_setups and options.quiet == 0:
         _print_env_started(ctx, options.start_time)
     ctx.exec(cmd)
 
@@ -2348,9 +2375,8 @@ def _run_stages_directly(
             skip_state=skip_state,
             quiet=quiet,
         )
-    if quiet < 2:
-        _print_env_started(ctx, start_time)
     if not quiet:
+        _print_env_started(ctx, start_time)
         print_logo()
     # ctx.in_container covers both ways this path is reached already inside
     # one: the reinvoked-denver-in-docker case, and a container someone else
@@ -3053,8 +3079,16 @@ def _add_run_parser(subparsers, config_args):
         "--quiet",
         action="count",
         default=0,
-        help="suppress denver's own output (repeatable: -q keeps the stage banner visible, -qq silences "
-        "everything, only the launched command speaks)",
+        help="suppress denver's own output (repeatable: -q keeps each stage's own command output, -qq "
+        "additionally discards that too, so only the final launched command speaks)",
+    )
+    run_p.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="show denver's own diagnostic detail, hidden by default: each stage's sub-step banners, "
+        "performance timings (in blue), and the '+ cmd' echo of every command run; silenced by -q/-qq "
+        "the same as everything else denver prints",
     )
     # --fast and --force ask for opposite things ("don't build anything" vs
     # "rebuild everything"), and --fast wins by construction: every provider
@@ -3300,6 +3334,8 @@ _RUN_FLAGS = [
     "--dry-run",
     "-q",
     "--quiet",
+    "-v",
+    "--verbose",
     "-c",
     "--config",
     "-cf",
@@ -3932,6 +3968,7 @@ def _run_options(args, cli_args, env_vars):
         until_stage=args.until,
         skip_stages=args.skip,
         quiet=args.quiet,
+        verbose=args.verbose,
         fast=args.fast,
         force=args.force,
         ci=args.ci,
@@ -4050,6 +4087,7 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
             until_stage=args.until,
             skip_stages=args.skip,
             quiet=args.quiet,
+            verbose=args.verbose,
             dry_run=args.dry_run,
             no_wait=args.no_wait,
             cli_args=cli_args,

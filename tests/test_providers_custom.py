@@ -64,10 +64,12 @@ def test_source_missing_file_dies(make_context):
         run_custom(config, ctx)
 
 
-# ---- banner text -- key names, not a generic 'run' -------------------------#
+# ---- banner text -- key names, not a generic 'run' -- --verbose only -------#
+# banner() (the boxed per-sub-step marker) only prints under --verbose (see
+# context.py's set_quiet/banner) -- these all opt in via make_context(verbose=True).
 def test_cmd_banners_as_cmd_not_run(make_context, capsys):
     config = {"custom": {"cmd": "true"}}
-    ctx = make_context(config=config)
+    ctx = make_context(config=config, verbose=True)
     run_custom(config, ctx)
     err = capsys.readouterr().err
     assert "- cmd" in err
@@ -76,7 +78,7 @@ def test_cmd_banners_as_cmd_not_run(make_context, capsys):
 
 def test_source_banners_as_source(make_context, capsys):
     config = {"custom": {"source": "vars.sh"}}
-    ctx = make_context(config=config)
+    ctx = make_context(config=config, verbose=True)
     (ctx.env_dir / "vars.sh").write_text("export MYVAR=1\n")
     run_custom(config, ctx)
     err = capsys.readouterr().err
@@ -86,7 +88,7 @@ def test_source_banners_as_source(make_context, capsys):
 
 def test_cmd_and_source_each_get_their_own_banner_in_order(make_context, capsys):
     config = {"custom": {"cmd": "true", "source": "vars.sh"}}
-    ctx = make_context(config=config)
+    ctx = make_context(config=config, verbose=True)
     (ctx.env_dir / "vars.sh").write_text("export MYVAR=1\n")
     run_custom(config, ctx)
     err = capsys.readouterr().err
@@ -104,7 +106,7 @@ def test_fast_skips_running_cmd(make_context, tmp_path):
 
 def test_fast_banners_cmd_as_skipped(make_context, capsys):
     config = {"custom": {"cmd": "true"}}
-    ctx = make_context(config=config, fast=True)
+    ctx = make_context(config=config, fast=True, verbose=True)
     run_custom(config, ctx)
     err = capsys.readouterr().err
     assert "- cmd (skipped by --fast)" in err

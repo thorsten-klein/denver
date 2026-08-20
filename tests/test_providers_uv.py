@@ -63,10 +63,10 @@ def test_fast_activates_existing_venv_without_building(make_context, run_recorde
 
 
 def test_fast_still_shows_progress_banner(make_context, run_recorder, which, capsys):
-    # --fast activates instead of installing, but the '[i/n]' progress line
-    # must still show under -q, not silently vanish.
+    # --fast activates instead of installing, but under --verbose the '[i/n]'
+    # progress banners for that must still show, not silently vanish.
     config = {"uv": {"requirements": ["requirements.txt"]}}
-    ctx = make_context(config=config, fast=True, quiet=1)
+    ctx = make_context(config=config, fast=True, verbose=True)
     (ctx.env_dir / "requirements.txt").write_text("packaging\n")
     ctx.venv_dir.mkdir(parents=True)
     run_uv(config, ctx)
