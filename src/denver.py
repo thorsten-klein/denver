@@ -3784,22 +3784,34 @@ def _completion_script_fish(names, quoted):
     # but _PATH_VALUE_FLAGS (-c/--config/-cf/--config-file) take an arbitrary path
     # __complete can't enumerate -- so a second entry, gated by '-n __denver_expects_path'
     # and forcing files back on with '-F', covers just that one case.
+    #
+    # The documented wiring is `denver complete | source`, not eval -- but users
+    # coming from bash/zsh naturally try `eval "$(denver complete)"` for fish
+    # too (fish 3.4+ even accepts that `$(...)` syntax), and unlike bash/zsh
+    # this used to silently define nothing at all: unquoted command
+    # substitution word-splits on newlines, `eval` rejoins with plain spaces,
+    # and fish (unlike bash) never treats a bare space as a statement
+    # separator -- so without explicit ';'s the entire script collapsed onto
+    # one line, and a leading '#' comment then ate that whole line, comment
+    # included. Every statement below ends in ';' for exactly the same
+    # reason the bash/zsh branches do, and the closing comment line is last
+    # so a real '#' can never swallow anything after it once newlines are gone.
     path_value_flags = " ".join(shlex.quote(flag) for flag in _PATH_VALUE_FLAGS)
     lines = [
-        "# denver fish completion -- wire up with: denver complete | source",
-        "function __denver_complete",
-        "    set -l tokens (commandline -opc) (commandline -ct)",
-        "    $tokens[1] __complete $tokens[2..-1] 2>/dev/null",
-        "end",
-        "function __denver_expects_path",
-        "    set -l prev (commandline -opc)[-1]",
-        f"    contains -- $prev {path_value_flags}",
-        "end",
+        "function __denver_complete;",
+        "    set -l tokens (commandline -opc) (commandline -ct);",
+        "    $tokens[1] __complete $tokens[2..-1] 2>/dev/null;",
+        "end;",
+        "function __denver_expects_path;",
+        "    set -l prev (commandline -opc)[-1];",
+        f"    contains -- $prev {path_value_flags};",
+        "end;",
     ]
     for name, quoted_name in zip(names, quoted, strict=True):
         flag = "-p" if "/" in name else "-c"
-        lines.append(f"complete {flag} {quoted_name} -f -a '(__denver_complete)'")
-        lines.append(f"complete {flag} {quoted_name} -n __denver_expects_path -F -a '(__denver_complete)'")
+        lines.append(f"complete {flag} {quoted_name} -f -a '(__denver_complete)';")
+        lines.append(f"complete {flag} {quoted_name} -n __denver_expects_path -F -a '(__denver_complete)';")
+    lines.append("# denver fish completion -- wire up with: denver complete | source")
     return "\n".join(lines) + "\n"
 
 
