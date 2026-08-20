@@ -92,6 +92,14 @@ html_logo = "../src/denver_assets/logo.svg"
 # _static/ the same way it does html_logo above.
 html_favicon = "../src/denver_assets/favicon.svg"
 
+# doc/_static/custom.css overrides two of sphinx_rtd_theme's own defaults
+# that don't suit a docs-only site: a fixed 800px content column (leaving
+# most of a normal monitor empty) and `white-space: nowrap` on every inline
+# code span, which stops a table cell containing one from wrapping at all --
+# see that file's own comments for both.
+html_static_path = ["_static"]
+html_css_files = ["custom.css"]
+
 html_theme_options = {
     "collapse_navigation": False,
     # sphinx_rtd_theme's sidebar ignores each {toctree}'s own :maxdepth: and
