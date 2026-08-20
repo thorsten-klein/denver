@@ -2506,7 +2506,7 @@ def supports_color(stream=None):
 # to stay distinct from those existing yellow/blue banners even though the
 # two are never on screen at once (--show-config never runs a stage).
 _TOML_HEADER_COLOR = "\033[95m"  # [section] / [[section]]
-_TOML_KEY_COLOR = "\033[96m"  # key = ...
+_TOML_KEY_COLOR = "\033[96m"  # # a 'key = ...' line
 _TOML_STRING_COLOR = "\033[92m"  # "..." / '''...'''
 _TOML_SCALAR_COLOR = "\033[93m"  # true/false, numbers
 _TOML_COMMENT_COLOR = "\033[90m"  # a '# key = null' line -- unset, de-emphasized
