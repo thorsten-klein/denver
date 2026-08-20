@@ -131,11 +131,25 @@ Both follow the same merge rules as `import:`, explained in
 
 ## Output and version
 
-- **`-q`/`-qq`** are two quiet levels. `-q` silences info lines, `+ cmd`
-  echoes, and build-tool subprocess output, but leaves each stage’s own
-  banner and “stage finished” summary visible. `-qq` additionally silences
-  those too, so only the launched command’s own output reaches the
-  terminal. Errors are always reported.
+By default denver prints only the coarse progress trail — one line per
+stage (`-- [i/n] stage 'id' (provider)` or its “skipped by …” reason) —
+plus whatever each stage’s own build tool prints on its own. Denver’s own
+finer detail (sub-step banners, performance timings, the `+ cmd` echo of
+every command it runs) is off unless asked for with `-v`/`--verbose`.
+
+- **`-q`/`-qq`** are two quiet levels. `-q` silences denver’s own output
+  entirely (the progress trail included), but leaves each stage’s own build
+  tool output showing — that’s usually still what you want to watch. `-qq`
+  additionally discards that too, so only the launched command’s own output
+  reaches the terminal. `-q`/`-qq` always win over `-v`: there is nothing
+  left for `-v` to add once either is given. Errors are always reported.
+- **`-v`/`--verbose`** turns on denver’s own diagnostic detail, hidden by
+  default: each stage’s finer sub-step banners (e.g. a `custom` stage’s
+  `cmd`/`source`, a `uv` stage’s `install`/`activate`), the per-stage
+  “finished in Ns” line and the closing stage-timing summary (both in blue),
+  the env’s own “started in Ns” duration, and the `+ cmd` echo ahead of
+  every command denver runs (including the final launched command’s own `+ exec: cmd` line). Silenced by `-q`/`-qq` like everything else denver
+  prints.
 - **`--version`** (top-level: `denver --version`, before any subcommand)
   prints the running denver’s version and exits — derived
   from the checkout’s git tags when denver runs from a checkout (script or

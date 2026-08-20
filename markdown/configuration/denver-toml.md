@@ -644,14 +644,19 @@ asks.
 does not implement `flock` at all (some NFS and overlay mounts), denver warns
 and continues rather than pretending the run is serialised.
 
-## Quiet levels
+## Quiet levels and –verbose
 
-- **`-q`** silences info lines, echoed commands, and the output of
-  internally-run build tools — but each stage’s own progress banner and
-  “finished in Ns” summary still show, so a long-running invocation stays
-  legible.
-- **`-qq`** additionally silences the banners and summaries too, so only
-  the final launched command’s own output reaches the terminal.
+By default denver prints only the coarse `-- [i/n] stage 'id' (provider)`
+progress trail plus whatever each stage’s own build tool prints — its finer
+detail (sub-step banners, performance timings, echoed commands) is off
+unless asked for with `-v`/`--verbose`.
+
+- **`-q`** silences denver’s own output entirely (the progress trail
+  included), but a stage’s own build tool output still shows, so a
+  long-running invocation stays legible.
+- **`-qq`** additionally silences that too, so only the final launched
+  command’s own output reaches the terminal. `-q`/`-qq` always win over
+  `-v` – there is nothing left for it to add once either is given.
 - Errors are always reported, at any level.
 
 ## Performance tracing

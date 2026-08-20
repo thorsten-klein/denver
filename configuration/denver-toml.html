@@ -182,7 +182,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#one-run-per-environment-at-a-time">One run per environment at a time</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#quiet-levels">Quiet levels</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#quiet-levels-and-verbose">Quiet levels and –verbose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#performance-tracing">Performance tracing</a></li>
 </ul>
 </li>
@@ -899,15 +899,19 @@ asks.</p>
 does not implement <code class="docutils literal notranslate"><span class="pre">flock</span></code> at all (some NFS and overlay mounts), denver warns
 and continues rather than pretending the run is serialised.</p>
 </section>
-<section id="quiet-levels">
-<h2>Quiet levels<a class="headerlink" href="#quiet-levels" title="Link to this heading"></a></h2>
+<section id="quiet-levels-and-verbose">
+<h2>Quiet levels and –verbose<a class="headerlink" href="#quiet-levels-and-verbose" title="Link to this heading"></a></h2>
+<p>By default denver prints only the coarse <code class="docutils literal notranslate"><span class="pre">--</span> <span class="pre">[i/n]</span> <span class="pre">stage</span> <span class="pre">'id'</span> <span class="pre">(provider)</span></code>
+progress trail plus whatever each stage’s own build tool prints — its finer
+detail (sub-step banners, performance timings, echoed commands) is off
+unless asked for with <code class="docutils literal notranslate"><span class="pre">-v</span></code>/<code class="docutils literal notranslate"><span class="pre">--verbose</span></code>.</p>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">-q</span></code></strong> silences info lines, echoed commands, and the output of
-internally-run build tools — but each stage’s own progress banner and
-“finished in Ns” summary still show, so a long-running invocation stays
-legible.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">-qq</span></code></strong> additionally silences the banners and summaries too, so only
-the final launched command’s own output reaches the terminal.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-q</span></code></strong> silences denver’s own output entirely (the progress trail
+included), but a stage’s own build tool output still shows, so a
+long-running invocation stays legible.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-qq</span></code></strong> additionally silences that too, so only the final launched
+command’s own output reaches the terminal. <code class="docutils literal notranslate"><span class="pre">-q</span></code>/<code class="docutils literal notranslate"><span class="pre">-qq</span></code> always win over
+<code class="docutils literal notranslate"><span class="pre">-v</span></code> – there is nothing left for it to add once either is given.</p></li>
 <li><p>Errors are always reported, at any level.</p></li>
 </ul>
 </section>

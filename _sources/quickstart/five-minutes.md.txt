@@ -184,7 +184,8 @@ denver run examples/howto-env --until uv-packages
 # understand what an environment really does, imports included
 denver run examples/howto-env --show-config
 
-# quieter output (-q keeps stage banners, -qq silences denver completely)
+# quieter output (-q silences denver's own output but keeps each stage's
+# build tool output; -qq additionally silences that too)
 denver run examples/howto-env -qq -- nvim --version
 ```
 

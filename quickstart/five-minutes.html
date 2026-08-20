@@ -182,7 +182,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#one-run-per-environment-at-a-time">One run per environment at a time</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#quiet-levels">Quiet levels</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#quiet-levels-and-verbose">Quiet levels and –verbose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#performance-tracing">Performance tracing</a></li>
 </ul>
 </li>
@@ -476,7 +476,8 @@ denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span
 <span class="c1"># understand what an environment really does, imports included</span>
 denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>--show-config
 
-<span class="c1"># quieter output (-q keeps stage banners, -qq silences denver completely)</span>
+<span class="c1"># quieter output (-q silences denver's own output but keeps each stage's</span>
+<span class="c1"># build tool output; -qq additionally silences that too)</span>
 denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>-qq<span class="w"> </span>--<span class="w"> </span>nvim<span class="w"> </span>--version
 </pre></div>
 </div>

@@ -182,7 +182,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#one-run-per-environment-at-a-time">One run per environment at a time</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#quiet-levels">Quiet levels</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#quiet-levels-and-verbose">Quiet levels and –verbose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#performance-tracing">Performance tracing</a></li>
 </ul>
 </li>
@@ -365,10 +365,11 @@ into whatever image is already there — e.g. one pulled as part of a
 <li><p><strong>Host vs. container.</strong> <code class="docutils literal notranslate"><span class="pre">setup()</span></code> (build the image)
 always runs on the host — that’s the only place the <code class="docutils literal notranslate"><span class="pre">docker</span></code> CLI
 operates. <code class="docutils literal notranslate"><span class="pre">wrap()</span></code> (turn the resolved command into <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">run</span> <span class="pre">...</span></code>) is what actually relocates execution. Each prints its own progress
-banner — <code class="docutils literal notranslate"><span class="pre">setup()</span></code>’s <code class="docutils literal notranslate"><span class="pre">prepare</span></code> and then whichever of “build”/”found
+banner (<code class="docutils literal notranslate"><span class="pre">--verbose</span></code> only, see <a class="reference internal" href="../cli/arguments.html"><span class="std std-doc">CLI Arguments</span></a>) —
+<code class="docutils literal notranslate"><span class="pre">setup()</span></code>’s <code class="docutils literal notranslate"><span class="pre">prepare</span></code> and then whichever of “build”/”found
 locally”/”found on a registry”/skipped applies, <code class="docutils literal notranslate"><span class="pre">wrap()</span></code>’s <code class="docutils literal notranslate"><span class="pre">run</span></code> last —
-so the relocation itself is visible, not silent between the last
-<code class="docutils literal notranslate"><span class="pre">setup()</span></code> line and the container’s own output.</p></li>
+so the relocation itself is visible under <code class="docutils literal notranslate"><span class="pre">-v</span></code>, not silent between the
+last <code class="docutils literal notranslate"><span class="pre">setup()</span></code> line and the container’s own output.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code> has no effect here.</strong> Unlike uv/conan/zephyr, this provider
 doesn’t thread <code class="docutils literal notranslate"><span class="pre">--fast</span></code> through <code class="docutils literal notranslate"><span class="pre">setup()</span></code> at all — <code class="docutils literal notranslate"><span class="pre">compose.build:</span></code> is
 read exactly as configured, so a real <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">build</span></code> still runs

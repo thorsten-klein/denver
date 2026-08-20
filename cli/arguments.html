@@ -182,7 +182,7 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#one-run-per-environment-at-a-time">One run per environment at a time</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#quiet-levels">Quiet levels</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#quiet-levels-and-verbose">Quiet levels and –verbose</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#performance-tracing">Performance tracing</a></li>
 </ul>
 </li>
@@ -419,12 +419,25 @@ happens to match what the process already had.</p>
 </section>
 <section id="output-and-version">
 <h2>Output and version<a class="headerlink" href="#output-and-version" title="Link to this heading"></a></h2>
+<p>By default denver prints only the coarse progress trail — one line per
+stage (<code class="docutils literal notranslate"><span class="pre">--</span> <span class="pre">[i/n]</span> <span class="pre">stage</span> <span class="pre">'id'</span> <span class="pre">(provider)</span></code> or its “skipped by …” reason) —
+plus whatever each stage’s own build tool prints on its own. Denver’s own
+finer detail (sub-step banners, performance timings, the <code class="docutils literal notranslate"><span class="pre">+</span> <span class="pre">cmd</span></code> echo of
+every command it runs) is off unless asked for with <code class="docutils literal notranslate"><span class="pre">-v</span></code>/<code class="docutils literal notranslate"><span class="pre">--verbose</span></code>.</p>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">-q</span></code>/<code class="docutils literal notranslate"><span class="pre">-qq</span></code></strong> are two quiet levels. <code class="docutils literal notranslate"><span class="pre">-q</span></code> silences info lines, <code class="docutils literal notranslate"><span class="pre">+</span> <span class="pre">cmd</span></code>
-echoes, and build-tool subprocess output, but leaves each stage’s own
-banner and “stage finished” summary visible. <code class="docutils literal notranslate"><span class="pre">-qq</span></code> additionally silences
-those too, so only the launched command’s own output reaches the
-terminal. Errors are always reported.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-q</span></code>/<code class="docutils literal notranslate"><span class="pre">-qq</span></code></strong> are two quiet levels. <code class="docutils literal notranslate"><span class="pre">-q</span></code> silences denver’s own output
+entirely (the progress trail included), but leaves each stage’s own build
+tool output showing — that’s usually still what you want to watch. <code class="docutils literal notranslate"><span class="pre">-qq</span></code>
+additionally discards that too, so only the launched command’s own output
+reaches the terminal. <code class="docutils literal notranslate"><span class="pre">-q</span></code>/<code class="docutils literal notranslate"><span class="pre">-qq</span></code> always win over <code class="docutils literal notranslate"><span class="pre">-v</span></code>: there is nothing
+left for <code class="docutils literal notranslate"><span class="pre">-v</span></code> to add once either is given. Errors are always reported.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-v</span></code>/<code class="docutils literal notranslate"><span class="pre">--verbose</span></code></strong> turns on denver’s own diagnostic detail, hidden by
+default: each stage’s finer sub-step banners (e.g. a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage’s
+<code class="docutils literal notranslate"><span class="pre">cmd</span></code>/<code class="docutils literal notranslate"><span class="pre">source</span></code>, a <code class="docutils literal notranslate"><span class="pre">uv</span></code> stage’s <code class="docutils literal notranslate"><span class="pre">install</span></code>/<code class="docutils literal notranslate"><span class="pre">activate</span></code>), the per-stage
+“finished in Ns” line and the closing stage-timing summary (both in blue),
+the env’s own “started in Ns” duration, and the <code class="docutils literal notranslate"><span class="pre">+</span> <span class="pre">cmd</span></code> echo ahead of
+every command denver runs (including the final launched command’s own <code class="docutils literal notranslate"><span class="pre">+</span> <span class="pre">exec:</span> <span class="pre">cmd</span></code> line). Silenced by <code class="docutils literal notranslate"><span class="pre">-q</span></code>/<code class="docutils literal notranslate"><span class="pre">-qq</span></code> like everything else denver
+prints.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--version</span></code></strong> (top-level: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">--version</span></code>, before any subcommand)
 prints the running denver’s version and exits — derived
 from the checkout’s git tags when denver runs from a checkout (script or

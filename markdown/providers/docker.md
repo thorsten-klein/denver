@@ -100,10 +100,11 @@ needing a per-provider mechanism for it.
 - **Host vs. container.** `setup()` (build the image)
   always runs on the host — that’s the only place the `docker` CLI
   operates. `wrap()` (turn the resolved command into `docker compose run ...`) is what actually relocates execution. Each prints its own progress
-  banner — `setup()`’s `prepare` and then whichever of “build”/”found
+  banner (`--verbose` only, see [CLI Arguments](../cli/arguments.md)) —
+  `setup()`’s `prepare` and then whichever of “build”/”found
   locally”/”found on a registry”/skipped applies, `wrap()`’s `run` last —
-  so the relocation itself is visible, not silent between the last
-  `setup()` line and the container’s own output.
+  so the relocation itself is visible under `-v`, not silent between the
+  last `setup()` line and the container’s own output.
 - **`--fast` has no effect here.** Unlike uv/conan/zephyr, this provider
   doesn’t thread `--fast` through `setup()` at all — `compose.build:` is
   read exactly as configured, so a real `docker compose build` still runs
