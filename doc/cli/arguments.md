@@ -86,15 +86,16 @@ Both follow the same merge rules as `import:`, explained in
   command is executed for its effect, no file is written, and the final
   command is printed rather than launched. Useful for answering "what does
   this env actually run?" without waiting for (or committing to) a real
-  build. Every line is prefixed `[dry-run]`:
+  build. Every line is tagged `[dry-run <marker>]`, each marker in its own
+  color (a legend stating the same key prints once, up front):
 
-  | marker | meaning |
-  | --- | --- |
-  | `+` | a command that would run (skipped) |
-  | `?` | a read-only query, **really run** — its output is what decides the commands below it |
-  | `~` | a file or directory write that would happen (skipped) |
-  | `.` | a script sourced into the environment, **really done** |
-  | `!` | a note about what this preview cannot show |
+  | marker | color | meaning |
+  | --- | --- | --- |
+  | `+` | green | a command that would run (skipped) |
+  | `?` | cyan | a read-only query, **really run** — its output is what decides the commands below it |
+  | `~` | yellow | a file or directory write that would happen (skipped) |
+  | `.` | blue | a script sourced into the environment, **really done** |
+  | `!` | red | a note about what this preview cannot show |
 
   The two "really" rows are the deliberate limit. A dry run has to answer
   questions like *is the image already cached?*, *which conan home?*, *what
