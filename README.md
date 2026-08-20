@@ -85,9 +85,10 @@ toolchain, applied a team convention, and run tests proving all five actually
 work — from a single `denver.toml`, identically on your machine or your
 colleague's.
 
-**[Denver in 5 minutes →](https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/five-minutes.md)**
+**[denver in 15 minutes →](https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/creating-environments.md)**
 walks through each stage and explains it, including all the flags and config options you'll
-actually use. For every flag, see
+actually use. Prefer something smaller first? **[denver in 5 minutes →](https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/five-minutes.md)**
+runs a three-line environment end to end instead. For every flag, see
 **[CLI arguments →](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/arguments.md)**
 or run `denver --help`.
 

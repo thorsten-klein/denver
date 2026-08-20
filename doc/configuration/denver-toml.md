@@ -11,7 +11,7 @@ a `denver.toml`, and `denver` will run it.
 This page is the complete reference for that file and for the machinery
 behind it — every top-level key, every generic stage key, and how a config
 is resolved. If you worked through
-[Creating environments](../quickstart/creating-environments.md), you have
+[denver in 15 minutes](../quickstart/creating-environments.md), you have
 already met most of it in context; this is where the remaining keys and the
 exact rules live.
 
@@ -323,77 +323,12 @@ neither: its child simply inherits `ctx.env` like any other exec.
 
 ## Environment-specific CLI arguments
 
-`-c` can set *anything*, which is exactly why it makes a poor interface for
-the one or two knobs an environment actually wants to offer ("which board?",
-"debug or release?"): its users have to know the dotted path, nothing
-appears in `--help`, and a typo is a new config key rather than an error.
-
-`denver-custom-args:` declares those knobs as real flags instead. Each entry is one
-`parser.add_argument()` call: `flags:` names the flag (a string, or a list
-to give it aliases), and **every other key is forwarded verbatim as a
-keyword argument** — so an env has argparse's whole vocabulary (`help:`,
-`default:`, `action:`, `nargs:`, `choices:`, `required:`, `metavar:`,
-`dest:`, …) without denver re-inventing, or gating, any of it:
-
-```toml
-[[denver-custom-args]]
-flags = ["--board", "-b"]
-default = "nrf52840dk"
-help = "which board to build for"
-
-[[denver-custom-args]]
-flags = ["--release"]
-action = "store_true"
-help = "build with optimisations"
-```
-
-```bash
-denver run my-project --board nrf5340dk --release -- west build
-```
-
-What the user passed is exported as **`DENVER_ARG_<DEST>`**, where `<DEST>`
-is argparse's own destination name uppercased (`--board` → `DENVER_ARG_BOARD`,
-`--build-type` → `DENVER_ARG_BUILD_TYPE`, or whatever an explicit `dest:`
-says). That is one variable in the environment denver is building, so it
-reaches everything through the mechanisms already documented above —
-`${...}` interpolation in the same `denver.toml`, hooks, `scripts:`, and the
-final command:
-
-```toml
-[zephyr-build]
-provider = "custom"
-cmd = "west build -b ${DENVER_ARG_BOARD}"
-```
-
-The value is always a string, since an environment variable is:
-
-- `action: store_true`/`store_false` → `"1"` / `"0"`.
-- a multi-value flag (`nargs:`, `action: append`) → its items, space-joined.
-- a flag with no `default:` that wasn't given → **not exported at all**,
-  rather than exported empty — so `${DENVER_ARG_BOARD:-nrf52840dk}` still
-  falls back the way it reads.
-
-For the same reason, `type:` is rejected: argparse's `type=` is a callable,
-which TOML cannot express, and every value ends up a string anyway. Use
-`choices:` (argparse validates it, and lists it in `--help`) or an
-`action:`.
-
-A few more properties worth knowing:
-
-- The flags are ordinary argparse flags, so `denver run <env> --help` lists
-  them alongside denver's own, and a mistyped one is argparse's usual
-  `usage:`/`error:` on stderr — never a silently ignored token.
-- Write them **after** `<env>` (`denver run my-project --board x`): the flags
-  an env declares live in the very file `<env>` names, so denver has to
-  resolve `<env>` before it can know them.
-- A flag that would collide with one of denver's own (`--force`, or a `dest:`
-  of `ci`) is a hard error, not a silent override.
-- `denver-custom-args:` is a list, so it follows the normal list-merge rule: an env
-  inherits every flag its `import:` chain declares and adds its own (see
-  "Layering").
-- They survive a wrapper relocation: the tokens are re-passed to the denver
-  re-invoked inside the container, which would otherwise only see each
-  flag's `default:` (see "Wrapper / relocation").
+`denver-custom-args:` lets an env declare its own command-line flags (e.g.
+`--board`, `--release`), each becoming a real argparse flag and a
+`DENVER_ARG_<NAME>` variable — see
+["An env's own flags: `denver-custom-args:`"](../cli/arguments.md#an-envs-own-flags-denver-custom-args)
+in CLI Arguments for the full reference (key syntax, how the value reaches
+`${...}` interpolation, how it survives a wrapper relocation).
 
 ## Hooks and scripts
 

@@ -28,6 +28,38 @@ under `--dry-run`, so an env can still be previewed on a machine without
 docker. The daemon has to be reachable for the invoking user, too. Point
 `exe:` at a specific docker binary if `docker` isn't the right exe.
 
+## Setting up Docker
+
+Three things have to be true before a `docker` stage can run, none of which
+denver does for you:
+
+1. **Docker itself is installed**, with the Compose plugin (`docker compose
+   ...`, not the old standalone `docker-compose`). On Linux, follow
+   [Docker's own install guide](https://docs.docker.com/engine/install/)
+   for your distribution — the Compose plugin is included by default on a
+   current install. On macOS or Windows, [Docker
+   Desktop](https://www.docker.com/products/docker-desktop/) bundles both.
+2. **The daemon is running**, and **your user can reach it** without
+   `sudo`. On Linux that usually means being in the `docker` group
+   (`sudo usermod -aG docker $USER`, then log out and back in) — running
+   every `docker` command as root instead works too, but nothing in denver
+   assumes it. Docker Desktop handles this for you.
+3. **Check it actually works**, the same way this stage checks it:
+
+   ```bash
+   docker compose version
+   ```
+
+   If that prints a version instead of an error, this stage is ready to run.
+
+Anything beyond that — a private registry login, an `udev` rule for a USB
+device the container needs — is project-specific, not part of getting
+Docker itself working. That kind of one-time setup usually belongs in an
+env's own `scripts: setup:` (see
+[`scripts:`](../configuration/denver-toml.md#hooks-and-scripts) in
+Configuration) rather than something a reader has to remember to do by hand
+before their first run.
+
 ## Key reference
 
 - **`exe`** (default: `docker` on `PATH`) — the docker executable.
@@ -91,7 +123,7 @@ needing a per-provider mechanism for it.
 ## Design notes
 
 - **`compose.build: true` (the default) does nothing without `compose.image:`.**
-  Denver never calls `docker compose build` unless `compose.image:` is set — with
+  denver never calls `docker compose build` unless `compose.image:` is set — with
   no tag to check next time, it would just rebuild on every single run,
   defeating the point. Set `compose.image:` to get denver's own build-once
   behavior: it builds the first time, then a local (or `registries:`) hit

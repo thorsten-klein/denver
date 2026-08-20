@@ -19,10 +19,11 @@ for AI tools/LLMs to fetch directly rather than scrape rendered HTML.
    solves, what an environment is, and how flexible it is
 2. [`introduction/install.md`](introduction/install.md) — get the `denver`
    command onto your machine
-3. [`quickstart/five-minutes.md`](quickstart/five-minutes.md) — run a real
-   environment end to end
+3. [`quickstart/five-minutes.md`](quickstart/five-minutes.md) — run the
+   smallest possible environment end to end, in a few minutes
 4. [`quickstart/creating-environments.md`](quickstart/creating-environments.md)
-   — build that same environment yourself, from an empty folder
+   — a bigger, more realistic environment, and you build it yourself, from
+   an empty folder
 
 Everything after that is reference you dip into as needed.
 
@@ -39,15 +40,17 @@ Everything after that is reference you dip into as needed.
 ## Quickstart
 
 - **[`quickstart/five-minutes.md`](quickstart/five-minutes.md)** — a
-  hands-on, end-to-end walkthrough of `examples/howto-env`: one command to a
-  shell with a container, a venv, two hand/conan-installed tools and a team
-  convention all active.
+  hands-on, end-to-end walkthrough of `examples/simple-env`: three shell
+  commands and nothing else, run for real and then previewed with
+  `--dry-run`, with the difference between denver's own output and a
+  stage's own output made explicit.
 - **[`quickstart/creating-environments.md`](quickstart/creating-environments.md)**
-  — build that same environment from an empty folder, one stage at a time:
-  the `stages:` list, then each stage in turn with its own provider and the
-  supporting files it needs (compose file, requirements, conanfile, ...).
-  Read this if you'd rather learn the schema by writing one than by reading
-  the reference.
+  — a bigger, more realistic environment (`examples/howto-env`: a
+  container, a venv, two hand/conan-installed tools, a team convention),
+  built from an empty folder, one stage at a time: the `stages:` list, then
+  each stage in turn with its own provider and the supporting files it
+  needs (compose file, requirements, conanfile, ...). Read this if you'd
+  rather learn the schema by writing one than by reading the reference.
 - **[`quickstart/examples.md`](quickstart/examples.md)** — the eight
   bundled, real (not illustrative) environments under `examples/`, smallest
   to largest, with what each one is meant to teach.
