@@ -369,27 +369,34 @@ off, and <code class="docutils literal notranslate"><span class="pre">FORCE_COLO
 command is executed for its effect, no file is written, and the final
 command is printed rather than launched. Useful for answering “what does
 this env actually run?” without waiting for (or committing to) a real
-build. Every line is prefixed <code class="docutils literal notranslate"><span class="pre">[dry-run]</span></code>:</p>
+build. Every line is tagged <code class="docutils literal notranslate"><span class="pre">[dry-run</span> <span class="pre">&lt;marker&gt;]</span></code>, each marker in its own
+color (a legend stating the same key prints once, up front):</p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>marker</p></th>
+<th class="head"><p>color</p></th>
 <th class="head"><p>meaning</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">+</span></code></p></td>
+<td><p>green</p></td>
 <td><p>a command that would run (skipped)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">?</span></code></p></td>
+<td><p>cyan</p></td>
 <td><p>a read-only query, <strong>really run</strong> — its output is what decides the commands below it</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">~</span></code></p></td>
+<td><p>yellow</p></td>
 <td><p>a file or directory write that would happen (skipped)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">.</span></code></p></td>
+<td><p>blue</p></td>
 <td><p>a script sourced into the environment, <strong>really done</strong></p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">!</span></code></p></td>
+<td><p>red</p></td>
 <td><p>a note about what this preview cannot show</p></td>
 </tr>
 </tbody>
