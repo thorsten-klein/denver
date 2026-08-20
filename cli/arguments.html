@@ -297,6 +297,9 @@ declare <code class="docutils literal notranslate"><span class="pre">scripts:</s
 without denver itself changing. Repeatable — each name’s entries run in
 the order given. With no <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> (on any occurrence), it lists the names
 this env defines instead of running anything.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--setup</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">--login</span></code></strong> are shorthand for <code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">setup</span></code>/<code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">login</span></code> — the two conventional names most envs use. They share <code class="docutils literal notranslate"><span class="pre">--scripts</span></code>’
+ordering and repeat rules, so <code class="docutils literal notranslate"><span class="pre">--login</span> <span class="pre">--setup</span></code> runs <code class="docutils literal notranslate"><span class="pre">login</span></code> then <code class="docutils literal notranslate"><span class="pre">setup</span></code>,
+and either can still be combined with a plain <code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code>.</p></li>
 </ul>
 </section>
 <section id="control-the-config-change-values-for-one-run">

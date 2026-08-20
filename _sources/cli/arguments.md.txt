@@ -34,6 +34,10 @@ one-line description.
   without denver itself changing. Repeatable — each name's entries run in
   the order given. With no `<name>` (on any occurrence), it lists the names
   this env defines instead of running anything.
+- **`--setup`**/**`--login`** are shorthand for `--scripts setup`/`--scripts
+  login` — the two conventional names most envs use. They share `--scripts`'
+  ordering and repeat rules, so `--login --setup` runs `login` then `setup`,
+  and either can still be combined with a plain `--scripts <name>`.
 
 ## Control the config: Change values for one run
 
