@@ -407,7 +407,9 @@ def test_run_stages_dry_run_prints_legend_and_never_execs(tmp_path, exec_recorde
 
     err = capsys.readouterr().err
     assert "no command below is executed for its effect" in err
-    assert f"{DRY_PREFIX} + bash -c echo hello" in err
+    # shlex-quoted -- 'echo hello' is one single argv element ('bash -c'
+    # <script>), not two bare words, so the printed line has to show that
+    assert f"{DRY_PREFIX} + bash -c 'echo hello'" in err
     assert f"{DRY_PREFIX} + exec: echo hi" in err
     assert "NOT started (--dry-run)" in err
     assert exec_recorder == {}
