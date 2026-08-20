@@ -3620,10 +3620,10 @@ def _flags_value_as_list(raw):
     return []
 
 
-# ---- descriptions ('name\thelp text') for fish, which shows them in its completion pager --- #
-# bash/zsh have no equivalent convention (COMPREPLY/compadd take bare candidate strings -- a
-# literal tab would land in the command line, not a pager), so this is fish-only: see
-# _complete_candidates_described and _completion_script_fish's '__complete --describe'.
+# ---- descriptions ('name\thelp text') for fish/zsh, which both show them in their own pager --- #
+# bash's plain COMPREPLY has no equivalent convention (a literal tab would land in the command
+# line itself, not a pager), so this is fish/zsh-only: see _complete_candidates_described and
+# _completion_script_fish/_completion_script_zsh's own '__complete --describe' invocations.
 
 _SHELL_HELP = {
     "bash": "the Bourne Again Shell",
@@ -3708,8 +3708,8 @@ def _completion_description_lookup(words):
     Covers only the fixed, self-describing vocabularies (denver's own subcommands/flags, 'complete's
     shell names, an env's declared flags). {} wherever the context has no such vocabulary (an <env> path,
     a flag's own pending value, a stage id, ...), so _describe leaves those candidates undecorated rather
-    than guessing. Mirrors _complete_candidates_unsafe's own branching, but isn't called from there: bash/zsh
-    use plain _complete_candidates, unaffected by any of this.
+    than guessing. Mirrors _complete_candidates_unsafe's own branching, but isn't called from there: bash
+    uses plain _complete_candidates, unaffected by any of this.
     """
     if not words:
         return _top_level_help()
@@ -3837,7 +3837,7 @@ def _completion_script(shell, names):
     if shell == "bash":
         return _completion_script_bash(quoted)
     if shell == "zsh":
-        return _completion_script_zsh(quoted)
+        return _completion_script_zsh(names)
     return _completion_script_fish(names, quoted)
 
 
@@ -3872,8 +3872,8 @@ def _completion_script_bash(quoted):
     )
 
 
-def _completion_script_zsh(quoted):
-    """The zsh branch of _completion_script -- see there for what ``quoted`` is."""
+def _completion_script_zsh(names):
+    """The zsh branch of _completion_script -- see there for what ``names`` is."""
     # zsh's own completion system (compsys), not bash's -F/COMPREPLY -- $words is
     # the full command line (1-indexed), $CURRENT the index of the word being
     # completed, so $words[2,CURRENT] is the same slice bash's script passes to
@@ -3889,18 +3889,92 @@ def _completion_script_zsh(quoted):
     # way the shell itself would, quoting included. Same unquoted-eval hazard as
     # bash too (zsh word-splits unquoted command substitutions on IFS just like
     # bash does) -- same ';'-everywhere, comment-last fix applies.
-    return (
-        "_denver_complete() {"
-        " local cmd=${words[1]};"
-        ' local -a resolved=("$cmd");'
-        " (( ${+aliases[$cmd]} )) && resolved=(${(z)aliases[$cmd]});"
-        " local -a completions;"
-        ' completions=("${(@f)$("${resolved[@]}" __complete "${(@)words[2,CURRENT]}" 2>/dev/null)}");'
-        ' compadd -- "${completions[@]}";'
-        " };\n"
-        f"compdef _denver_complete {' '.join(quoted)};\n"
-        '# denver zsh completion -- wire up with: eval "$(denver complete)"\n'
-    )
+    #
+    # 'compdef'-ing only ``names`` themselves (as bash/fish both correctly do)
+    # isn't enough for zsh: its own dispatcher (_set_command, in zsh's own
+    # Completion/Base/Core function library) never looks a slash-containing
+    # command word up by its own literal spelling. For ANY such word -- even
+    # an absolute path -- it tries the word's *basename* first ('denver.py'),
+    # falling back to the literal word only if that basename lookup misses.
+    # Worse, for a word starting with one or more '.'s ('./denver.py',
+    # '../checkout/denver.py', the normal way to run a checkout) that
+    # fallback isn't the literal word either -- it's '$PWD/' plus the word,
+    # '.'s and all, which is never a real path and so never matches
+    # anything either. Net effect without this: every leading-dot-relative
+    # invocation silently falls through to zsh's own default (file) completion,
+    # with no error to explain why. Registering each path-like name's own
+    # basename too fixes every such spelling at once, since that's the string
+    # zsh's dispatch always tries before anything else, regardless of how the
+    # command was actually typed -- see
+    # https://github.com/zsh-users/zsh/blob/master/Completion/Base/Core/_set_command
+    #
+    # '__complete --describe' (rather than plain '__complete') asks for
+    # 'candidate\tdescription' lines (see _complete_candidates_described) --
+    # zsh's own compadd, unlike bash's plain COMPREPLY, understands a
+    # description column natively via its '-d' flag (a same-length array of
+    # per-candidate display strings). But 'display strings', per compadd(1),
+    # REPLACE what's shown for each candidate rather than annotating it --
+    # "the completion code will then display [array element N] instead of
+    # [candidate N]" -- so a descriptions[] entry set to the raw help text
+    # alone would show only that text, the candidate itself never appearing.
+    # zsh's own '_describe' utility (Completion/Base/Utility/_describe) hits
+    # this exact same API and works around it by building each display
+    # string as "value -- description" itself; this does the same (using
+    # the same '--' separator '_describe' defaults to), so what's shown is
+    # both, and only an empty description[] entry (nothing to add) falls
+    # back to compadd's own default of showing the candidate alone.
+    # A line with no tab at all (nothing known to describe it) keeps its
+    # description empty for exactly that reason.
+    # 'tab=$'"'"'\t'"'"'' -- not a literal tab byte in the script text itself --
+    # is the same trick '_completion_script_bash' uses for its own IFS=$'\n':
+    # written as the literal 4 characters $ ' \ t ', it's immune to the
+    # unquoted-eval word-splitting problem discussed above (a literal tab
+    # byte there would itself be an IFS character, and get split on same as
+    # a space would), and only becomes a real tab when zsh itself evaluates
+    # it, long after that word-splitting has already happened.
+    # Column-aligned ('value␣␣␣␣-- description', every '--' lined up), the
+    # way zsh's own completions (and '_describe', its own utility for
+    # exactly this) normally look -- needs each value's own width known
+    # before any description string can be built, hence the two passes:
+    # first split every line into parallel values[]/helps[] arrays, then
+    # (knowing every value's length) build descriptions[] padding each
+    # value out to the widest one with '${(r:$width:)...}' (pads on the
+    # right with spaces -- zsh's own left-justify-to-width flag).
+    basenames = [Path(name).name for name in names if "/" in name]
+    quoted = [shlex.quote(name) for name in dict.fromkeys(names + basenames)]
+    lines = [
+        "_denver_complete() {",
+        "  local cmd=${words[1]};",
+        '  local -a resolved=("$cmd");',
+        "  (( ${+aliases[$cmd]} )) && resolved=(${(z)aliases[$cmd]});",
+        "  local -a raw values helps descriptions;",
+        '  raw=("${(@f)$("${resolved[@]}" __complete --describe "${(@)words[2,CURRENT]}" 2>/dev/null)}");',
+        "  local line tab=$'\\t';",
+        '  for line in "${raw[@]}"; do',
+        "    if [[ $line == *${tab}* ]]; then",
+        "      values+=(\"${line%%${tab}*}\");",
+        '      helps+=("${line#*${tab}}");',
+        "    else",
+        '      values+=("$line");',
+        '      helps+=("");',
+        "    fi;",
+        "  done;",
+        "  local width=0 v;",
+        '  for v in "${values[@]}"; do (( ${#v} > width )) && width=${#v}; done;',
+        "  local i;",
+        "  for (( i = 1; i <= $#values; i++ )); do",
+        '    if [[ -n ${helps[i]} ]]; then',
+        '      descriptions+=("${(r:$width:)values[i]} -- ${helps[i]}");',
+        "    else",
+        '      descriptions+=("");',
+        "    fi;",
+        "  done;",
+        '  compadd -d descriptions -- "${values[@]}";',
+        "};",
+        f"compdef _denver_complete {' '.join(quoted)};",
+        '# denver zsh completion -- wire up with: eval "$(denver complete)"',
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def _completion_script_fish(names, quoted):
@@ -3935,12 +4009,13 @@ def _completion_script_fish(names, quoted):
     # reason the bash/zsh branches do, and the closing comment line is last
     # so a real '#' can never swallow anything after it once newlines are gone.
     #
-    # '__complete --describe' (rather than plain '__complete') is fish-only:
+    # '__complete --describe' (rather than plain '__complete') is fish/zsh-only:
     # it switches _handle_dunder_complete over to _complete_candidates_described,
-    # whose 'candidate\tdescription' lines fish's own completion pager already
-    # knows how to split and show -- bash/zsh's COMPREPLY/compadd have no such
-    # convention (a literal tab would land in the command line itself), so
-    # they keep calling plain '__complete', undecorated.
+    # whose 'candidate\tdescription' lines fish's own completion pager (and
+    # zsh's own compadd -d, see _completion_script_zsh) already know how to
+    # split and show -- bash's plain COMPREPLY has no such convention (a
+    # literal tab would land in the command line itself), so it keeps
+    # calling plain '__complete', undecorated.
     path_value_flags = " ".join(shlex.quote(flag) for flag in _PATH_VALUE_FLAGS)
     lines = [
         "function __denver_complete;",
@@ -4127,11 +4202,11 @@ def _handle_dunder_complete(argv):
     (see _run_resolved_cli), so a completion request can never itself
     trigger a usage error or a die() while the user is mid-keystroke.
 
-    An optional leading '--describe' (only fish's own wiring ever sends
-    one -- see _completion_script_fish) switches to
-    _complete_candidates_described, whose 'candidate\tdescription' lines
-    fish's own completion pager knows how to show; bash/zsh never pass it,
-    so they're unaffected.
+    An optional leading '--describe' (only fish's and zsh's own wiring ever
+    send one -- see _completion_script_fish/_completion_script_zsh) switches
+    to _complete_candidates_described, whose 'candidate\tdescription' lines
+    their own completion pagers know how to show; bash never passes it, so
+    it's unaffected.
     """
     if not argv or argv[0] != "__complete":
         return False
