@@ -3217,9 +3217,15 @@ def _command_failure_message(exc):
 
 
 def _failed_command_text(cmd):
-    """The failing command as one string, whether subprocess held it as a list or as a string."""
+    """The failing command as one string, whether subprocess held it as a list or as a string.
+
+    shlex.join, not a bare ' '.join -- an argument with its own spaces/quotes
+    (e.g. ["bash", "-c", 'echo "a $b"'], the shape every custom 'cmd:' takes)
+    would otherwise print as if it were several separate words, same
+    reasoning as context.py's _printable.
+    """
     if isinstance(cmd, (list, tuple)):
-        return " ".join(str(c) for c in cmd)
+        return shlex.join(str(c) for c in cmd)
     return str(cmd)
 
 

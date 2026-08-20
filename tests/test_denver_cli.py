@@ -325,12 +325,15 @@ def test_main_dispatches_to_providers(tmp_path, monkeypatch, exec_recorder, caps
     (env_dir / "denver.toml").write_text('stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n')
     denver.main(["run", str(env_dir), "--", "echo", "hi"])
     # logo prints last, right before the command is invoked -- after the
-    # stage-finished summary, not before it (see run_stages). Both are
-    # denver's own noise, on stderr -- stdout stays reserved for the
-    # launched command's real output.
+    # stage-finished summary, not before it (see run_stages); the only thing
+    # after it is exec()'s own '+' echo of the resolved command, immediately
+    # ahead of the (mocked) process replacement itself. Both are denver's
+    # own noise, on stderr -- stdout stays reserved for the launched
+    # command's real output.
     err = capsys.readouterr().err
-    assert err.rstrip("\n").endswith(denver.LOGO_PATH.read_text().rstrip("\n"))
-    assert err.index("stage 'fakesetup'") < err.index(denver.LOGO_PATH.read_text().splitlines()[0])
+    logo = denver.LOGO_PATH.read_text().rstrip("\n")
+    assert err.rstrip("\n").endswith(f"{logo}\n\n+ exec: echo hi")
+    assert err.index("stage 'fakesetup'") < err.index(logo.splitlines()[0])
     assert exec_recorder["env"]["RAN"] == "1"
     assert exec_recorder["args"] == ["echo", "hi"]
 
