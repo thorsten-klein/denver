@@ -650,6 +650,27 @@ def test_main_no_config_direction_dies(tmp_path):
 
 
 def test_main_show_config_flag(tmp_path, capsys, which):
+    """--show-config (the default, now minimal) keeps only what the env explicitly configured, and only if it's non-empty."""
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "uv",\n]\n\n[uv]\nprovider = "uv"\npython = "3.12.3"\nrequirements = [\n  "r.txt",\n]\noverrides = []\n'
+    )
+
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    printed = tomllib.loads(capsys.readouterr().out)
+    assert printed["uv"]["python"] == "3.12.3"
+    assert printed["uv"]["requirements"] == ["r.txt"]
+    # provider defaults the env never wrote (PATH lookup, static fallbacks, ...) are dropped
+    assert "exe" not in printed["uv"]
+    assert "skip-on-success" not in printed["uv"]
+    # explicitly configured but empty carries no real value either
+    assert "overrides" not in printed["uv"]
+    # nothing left configured at the top level -- 'hooks:' (every name null) is dropped entirely
+    assert "hooks" not in printed
+
+
+def test_main_show_config_full_flag(tmp_path, capsys, which):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
     (base_dir / "denver.toml").write_text('stages = [\n  "uv",\n]\n\n[uv]\nprovider = "uv"\npython = "3.12.3"\n')
@@ -658,7 +679,7 @@ def test_main_show_config_flag(tmp_path, capsys, which):
     env_dir.mkdir()
     (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\n\n[uv]\nrequirements = [\n  "r.txt",\n]\n')
 
-    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config-full"]) == 0
     out = capsys.readouterr().out
     assert "import" not in out  # the directive itself is dropped, not the data
     printed = tomllib.loads(out)
@@ -672,27 +693,6 @@ def test_main_show_config_flag(tmp_path, capsys, which):
     assert printed["uv"]["exe"] == "uv"
     assert printed["uv"]["skip-on-success"] == []
     assert printed["uv"]["skip-on-failure"] == []
-
-
-def test_main_show_config_min_drops_defaults_and_null_values(tmp_path, capsys, which):
-    """--show-config-min keeps only what the env explicitly configured, and only if it's non-empty."""
-    env_dir = tmp_path / "e"
-    env_dir.mkdir()
-    (env_dir / "denver.toml").write_text(
-        'stages = [\n  "uv",\n]\n\n[uv]\nprovider = "uv"\npython = "3.12.3"\nrequirements = [\n  "r.txt",\n]\noverrides = []\n'
-    )
-
-    assert denver.main(["run", str(env_dir), "--show-config-min"]) == 0
-    printed = tomllib.loads(capsys.readouterr().out)
-    assert printed["uv"]["python"] == "3.12.3"
-    assert printed["uv"]["requirements"] == ["r.txt"]
-    # provider defaults the env never wrote (PATH lookup, static fallbacks, ...) are dropped
-    assert "exe" not in printed["uv"]
-    assert "skip-on-success" not in printed["uv"]
-    # explicitly configured but empty carries no real value either
-    assert "overrides" not in printed["uv"]
-    # nothing left configured at the top level -- 'hooks:' (every name null) is dropped entirely
-    assert "hooks" not in printed
 
 
 def test_main_show_config_extension_provider(tmp_path, capsys, which):
@@ -730,13 +730,13 @@ def test_main_show_config_key_order(tmp_path, capsys, which):
         'version = 1.0\nstages = [\n  "zephyr",\n  "uv",\n]\ncommand = "fish"\n\n[zephyr]\nprovider = "custom"\ncmd = "echo z"\n\n[uv]\nprovider = "custom"\ncmd = "echo p"\n'
     )
 
-    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config-full"]) == 0
     printed = tomllib.loads(capsys.readouterr().out)
     assert list(printed.keys()) == ["version", "command", "stages", "hooks", "zephyr", "uv"]
 
 
 def test_main_show_config_lists_scripts_for_every_stage(tmp_path, capsys, which):
-    """'scripts:' is generic (denver.py-level), not provider-specific -- it
+    """--show-config-full: 'scripts:' is generic (denver.py-level), not provider-specific -- it
     must show up (as null when unset) for every stage, including a provider
     type (custom) with no PROVIDER_DEFAULT_RESOLVERS entry."""
     env_dir = tmp_path / "e"
@@ -745,7 +745,7 @@ def test_main_show_config_lists_scripts_for_every_stage(tmp_path, capsys, which)
         'stages = [\n  "uv",\n  "my-stage",\n]\n\n[uv]\nprovider = "uv"\n\n[uv.scripts]\nsetup = [\n  "prep.sh",\n]\n\n[my-stage]\nprovider = "custom"\ncmd = "echo hi"\n'
     )
 
-    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config-full"]) == 0
     out = capsys.readouterr().out
     printed = tomllib.loads(out)
     assert printed["uv"]["scripts"] == {"setup": ["prep.sh"]}
@@ -755,14 +755,14 @@ def test_main_show_config_lists_scripts_for_every_stage(tmp_path, capsys, which)
 
 
 def test_main_show_config_lists_disabled_for_every_stage(tmp_path, capsys, which):
-    """'disabled:' is generic too -- defaults to false, shown for every stage."""
+    """--show-config-full: 'disabled:' is generic too -- defaults to false, shown for every stage."""
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.toml").write_text(
         'stages = [\n  "uv",\n  "my-stage",\n]\n\n[uv]\nprovider = "uv"\ndisabled = true\n\n[my-stage]\nprovider = "custom"\ncmd = "echo hi"\n'
     )
 
-    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config-full"]) == 0
     printed = tomllib.loads(capsys.readouterr().out)
     assert printed["uv"]["disabled"] is True
     assert printed["my-stage"]["disabled"] is False
@@ -777,14 +777,14 @@ def test_main_show_config_disabled_not_a_bool_dies(tmp_path, which):
 
 
 def test_main_show_config_lists_description_for_every_stage(tmp_path, capsys, which):
-    """'description:' is generic too -- a list of strings, null when unset, shown for every stage."""
+    """--show-config-full: 'description:' is generic too -- a list of strings, null when unset, shown for every stage."""
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.toml").write_text(
         'stages = [\n  "uv",\n  "my-stage",\n]\n\n[uv]\nprovider = "uv"\ndescription = [\n  "installs the venv",\n]\n\n[my-stage]\nprovider = "custom"\ncmd = "echo hi"\n'
     )
 
-    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config-full"]) == 0
     out = capsys.readouterr().out
     printed = tomllib.loads(out)
     assert printed["uv"]["description"] == ["installs the venv"]
@@ -803,7 +803,7 @@ def test_main_show_config_description_not_a_list_of_strings_dies(tmp_path, which
 
 
 def test_main_show_config_resolves_hooks(tmp_path, capsys, which):
-    """--show-config must reflect the effective hooks: a list-valued entry, a
+    """--show-config-full must reflect the effective hooks: a list-valued entry, a
     single-string entry, and a name with nothing configured (shown as null).
 
     An unconfigured hooks/post-uv.sh is written to disk too, to pin down
@@ -818,7 +818,7 @@ def test_main_show_config_resolves_hooks(tmp_path, capsys, which):
         'stages = [\n  "uv",\n]\n\n[uv]\nprovider = "uv"\n\n[hooks]\nenv = [\n  "hooks/env.sh",\n]\npre-uv = "pre-uv.sh"\n'
     )
 
-    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config-full"]) == 0
     out = capsys.readouterr().out
     printed = tomllib.loads(out)
     hooks = printed["hooks"]
@@ -866,7 +866,7 @@ def test_main_show_config_skip_drops_stage_and_section(tmp_path, capsys, which):
     )
     (env_dir / "docker-compose.yml").write_text("services: {}\n")
 
-    assert denver.main(["run", str(env_dir), "--show-config", "--skip", "docker"]) == 0
+    assert denver.main(["run", str(env_dir), "--show-config-full", "--skip", "docker"]) == 0
     printed = tomllib.loads(capsys.readouterr().out)
     assert printed["stages"] == ["uv"]
     assert "docker" not in printed
