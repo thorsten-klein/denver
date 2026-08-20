@@ -259,8 +259,16 @@ def _argv(cmd):
 
 
 def _printable(cmd):
-    """A command as the single string denver echoes and reports it as."""
-    return " ".join(str(c) for c in cmd)
+    """A command as the single string denver echoes and reports it as.
+
+    shlex.join, not a bare ' '.join -- an argument containing its own
+    spaces/quotes (e.g. ``["bash", "-c", 'echo "a $b"']``, the shape every
+    custom 'cmd:' takes) would otherwise print as if it were several
+    separate words, an echo indistinguishable from -- and wrong about --
+    what actually ran; shlex.join quotes exactly the arguments that need it,
+    so the printed line is both accurate and a valid command on its own.
+    """
+    return shlex.join(str(c) for c in cmd)
 
 
 def _existing_scripts(scripts):
@@ -1193,20 +1201,25 @@ class Context:
         _validate_exec_cmd(cmd)
         if self.dry_run:
             sys.stdout.flush()
-            self.dry_note("+", f"exec: {' '.join(cmd)}")
+            self.dry_note("+", f"exec: {_printable(cmd)}")
             return
-        # Flush stdout *before* logging "exec:" (and again right before the
-        # actual os.execvpe() below): print() output (e.g. the startup logo,
-        # a stage's "finished in Xs" line) isn't always line-buffered --
-        # piped output block-buffers -- while logging's stderr handler
-        # flushes on every write, so without this the "exec:" line (and the
-        # replaced command's own output right after it) could appear
-        # on-screen *before* stdout content that was actually printed
+        # Flush stdout *before* printing "+ exec:" (and again right before
+        # the actual os.execvpe() below): print() output (e.g. the startup
+        # logo, a stage's "finished in Xs" line) isn't always line-buffered
+        # -- piped output block-buffers -- so without this the "+ exec:"
+        # line (and the replaced command's own output right after it) could
+        # appear on-screen *before* stdout content that was actually printed
         # earlier, and os.execvpe() never runs Python's normal
         # flush-on-exit, so unflushed content would otherwise be lost
         # outright, not just reordered.
         sys.stdout.flush()
-        info(f"exec: {' '.join(cmd)}")
+        # Plain print with the same '+' marker as Context.run's own echo and
+        # the --dry-run preview below (not info(), which would print
+        # "INFO: exec: ..." -- a different, inconsistent prefix for what is
+        # otherwise the exact same "here is the command about to run" line),
+        # gated on quiet the same way _echo_command is.
+        if not self.quiet:
+            print(f"+ exec: {_printable(cmd)}", file=sys.stderr)
         sys.stderr.flush()
         # Resolve the program to a concrete file *before* handing it to the
         # kernel, rather than leaving the PATH search to execvpe: the lookup
