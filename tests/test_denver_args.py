@@ -71,9 +71,9 @@ def test_flag_without_a_default_exports_nothing(echo_env):
 
 
 def test_store_true_is_exported_as_1_or_0(echo_env):
-    entry = [{"flags": ["--verbose"], "action": "store_true"}]
-    assert echo_env(entry, ["--verbose"])["DENVER_ARG_VERBOSE"] == "1"
-    assert echo_env(entry)["DENVER_ARG_VERBOSE"] == "0"
+    entry = [{"flags": ["--debug"], "action": "store_true"}]
+    assert echo_env(entry, ["--debug"])["DENVER_ARG_DEBUG"] == "1"
+    assert echo_env(entry)["DENVER_ARG_DEBUG"] == "0"
 
 
 def test_multi_value_flags_are_space_joined(echo_env):

@@ -626,7 +626,11 @@ def test_run_stages_numbers_by_full_declared_stage_list(tmp_path, exec_recorder,
             "fakesetup3": {"provider": "fakesetup"},
         }
         denver.run_stages(
-            env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["fakesetup2"])
+            env_dir,
+            config,
+            cfg_path,
+            ["echo", "hi"],
+            options=denver.RunOptions(skip_stages=["fakesetup2"], verbose=True),
         )
     finally:
         del providers_module.PROVIDERS["fakesetup"]
@@ -639,14 +643,15 @@ def test_run_stages_numbers_by_full_declared_stage_list(tmp_path, exec_recorder,
 def test_run_stages_prints_a_stage_summary(tmp_path, fake_providers, exec_recorder, capsys):
     # the per-stage "finished in Ns" lines are scattered through a run's
     # output, often thousands of lines of build noise apart -- restated as one
-    # block right before the command launches.
+    # block right before the command launches. --verbose only, see
+    # _print_stage_summary.
     env_dir, cfg_path = _env(tmp_path, {})
     config = {
         "stages": ["one", "two"],
         "one": {"provider": "fakesetup"},
         "two": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(verbose=True))
     err = capsys.readouterr().err
     assert re.search(r"one\s+\d+\.\d+s", err)
     assert re.search(r"two\s+\d+\.\d+s", err)
@@ -661,7 +666,9 @@ def test_run_stages_summary_keeps_a_row_for_a_skipped_stage(tmp_path, fake_provi
         "one": {"provider": "fakesetup"},
         "two": {"provider": "fakesetup"},
     }
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["two"]))
+    denver.run_stages(
+        env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["two"], verbose=True)
+    )
     assert re.search(r"two\s+skipped by --skip", capsys.readouterr().err)
 
 
@@ -704,7 +711,11 @@ def test_run_stages_shows_skipped_stages_in_pipeline_order(tmp_path, exec_record
             "four": {"provider": "fakesetup"},
         }
         denver.run_stages(
-            env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["two", "three"])
+            env_dir,
+            config,
+            cfg_path,
+            ["echo", "hi"],
+            options=denver.RunOptions(skip_stages=["two", "three"], verbose=True),
         )
     finally:
         del providers_module.PROVIDERS["fakesetup"]
@@ -1105,7 +1116,9 @@ def test_run_stages_records_performance_trace(tmp_path, fake_providers, exec_rec
     monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup"}}
-    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    # the trace file is written regardless of --verbose (see below); the
+    # printed "finished in" line is --verbose only (performance output).
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(verbose=True))
 
     err = capsys.readouterr().err
     assert "fakesetup" in err
@@ -1531,6 +1544,20 @@ def test_run_named_scripts_relocates_setup_entries_into_active_wrapper(
     args = exec_recorder["args"]
     assert args[args.index("--skip") + 1] == "fakewrap"
     assert args[args.index("--scripts") + 1] == name
+
+
+def test_run_named_scripts_relocation_forwards_verbose(tmp_path, fake_providers, run_recorder, exec_recorder):
+    # --verbose (like --quiet) has to survive the reinvocation into the
+    # wrapper, or the inner denver would silently fall back to its default.
+    env_dir, cfg_path = _env(tmp_path, {})
+    (env_dir / "setup-script.sh").write_text("#!/bin/bash\n")
+    config = {
+        "stages": ["fakewrap", "fakesetup"],
+        "fakewrap": {"provider": "fakewrap"},
+        "fakesetup": {"provider": "fakesetup", "scripts": {"setup": ["setup-script.sh"]}},
+    }
+    denver.run_named_scripts(env_dir, config, cfg_path, ["setup"], verbose=True)
+    assert "-v" in exec_recorder["args"]
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])

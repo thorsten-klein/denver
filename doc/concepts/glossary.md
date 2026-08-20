@@ -35,12 +35,13 @@ exactly like a built-in provider everywhere else once registered — see
 
 **Step** — a stage's own internal sub-phase, e.g. conan's
 prepare/export/install or uv's ensure-python/ensure-venv/install/activate.
-Each step prints its own banner line, in whatever order the provider actually
-does the work; there is deliberately no "step 3 of 7" numbering to keep in
-sync with the code.
+Each step prints its own banner line (`--verbose` only — see **Verbose**), in
+whatever order the provider actually does the work; there is deliberately no
+"step 3 of 7" numbering to keep in sync with the code.
 
 Every stage is announced by a single `-- [i/n] stage '<id>' (<provider>)`
-line before its first step, emitted by denver itself rather than by the
+line before its first step — shown at the default verbosity, unlike the
+finer step banners below it — emitted by denver itself rather than by the
 provider — so a stage that fails before doing anything (a missing tool, a
 bad path) has still said which stage it is, and `<id>` is exactly what
 `--skip` takes. Stages report in `stages:` order whether they run or are
@@ -121,9 +122,15 @@ be previewed past its own boundary; see
 truncates the pipeline after the named stage, `--skip <stage>` removes
 individual stages, and a stage's own `disabled: true` opts it out by default.
 
-**Quiet level** — `-q` silences info lines, echoed commands and build-tool
-output while keeping each stage's banner and summary; `-qq` silences those
-too, leaving only the launched command's own output. Errors always print.
+**Quiet level** — `-q` silences denver's own output (progress trail, info
+lines, everything `-v`/`--verbose` would add) while keeping each stage's own
+build-tool output; `-qq` silences that too, leaving only the launched
+command's own output. Errors always print. See also **Verbose**.
+
+**Verbose** — `-v`/`--verbose` turns on denver's own diagnostic detail,
+hidden by default: each stage's finer sub-step banners, the per-stage/env
+performance timings (in blue), and the `+ cmd` echo ahead of every command
+denver runs. `-q`/`-qq` always win over it.
 
 **State directory** — where denver keeps everything it builds for one
 environment (venv, install trees, fingerprints, logs, `performance.jsonl`):

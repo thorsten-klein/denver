@@ -47,7 +47,7 @@ def test_warn_hidden_at_quiet_level_1(caplog):
 
 
 def test_banner_has_no_level_prefix(make_context, capsys):
-    banner(make_context(), "mystage", "message")
+    banner(make_context(verbose=True), "mystage", "message")
     err = capsys.readouterr().err
     assert "mystage" in err
     assert "message" in err
@@ -57,14 +57,14 @@ def test_banner_has_no_level_prefix(make_context, capsys):
 def test_banner_includes_stage_id(make_context, capsys):
     # so two same-provider-type stages (e.g. two 'uv' stages) are
     # distinguishable by which one's banner is currently showing
-    banner(make_context(), "uv-zephyr", "install")
+    banner(make_context(verbose=True), "uv-zephyr", "install")
     err = capsys.readouterr().err
     assert "uv-zephyr" in err
     assert "install" in err
 
 
 def test_banner_includes_stage_progress(make_context, capsys):
-    ctx = make_context()
+    ctx = make_context(verbose=True)
     ctx.stage_index, ctx.stage_count = 1, 7
     banner(ctx, "conan", "install")
     err = capsys.readouterr().err
@@ -647,13 +647,20 @@ def test_run_forwards_args(make_context, run_recorder):
 
 
 def test_run_echo(make_context, run_recorder, capsys):
-    ctx = make_context()
+    # the '+cmd' echo is --verbose only (see _echo_command)
+    ctx = make_context(verbose=True)
     ctx.run(["true"], echo=True)
     assert "+ true" in capsys.readouterr().err
 
 
-def test_run_step_prints_banner_before_echo(make_context, run_recorder, capsys):
+def test_run_echo_hidden_without_verbose(make_context, run_recorder, capsys):
     ctx = make_context()
+    ctx.run(["true"], echo=True)
+    assert capsys.readouterr().err == ""
+
+
+def test_run_step_prints_banner_before_echo(make_context, run_recorder, capsys):
+    ctx = make_context(verbose=True)
     ctx.stage_id = "mystage"
     ctx.run(["true"], step="do the thing")
     err = capsys.readouterr().err
@@ -669,12 +676,22 @@ def test_run_without_step_prints_no_banner(make_context, run_recorder, capsys):
     assert "mystage" not in err
 
 
-def test_run_quiet_suppresses_echo_and_output(make_context, run_recorder, capsys):
-    ctx = make_context(quiet=True)
+def test_run_quiet_level_1_keeps_stage_output(make_context, run_recorder, capsys):
+    # -q silences denver's own '+cmd' echo, but a stage's own command output
+    # is still inherited (visible) -- only -qq (level 2+) discards that too.
+    ctx = make_context(quiet=1)
     ctx.run(["true"], echo=True)
     out, err = capsys.readouterr()
     assert out == ""
-    assert err == ""
+    assert err == ""  # denver's own echo, silenced -- not the subprocess's own output
+    call = run_recorder.calls[-1]
+    assert "stdout" not in call.kwargs
+    assert "stderr" not in call.kwargs
+
+
+def test_run_quiet_level_2_discards_stage_output_too(make_context, run_recorder):
+    ctx = make_context(quiet=2)
+    ctx.run(["true"], echo=True)
     call = run_recorder.calls[-1]
     assert call.kwargs["stdout"] == subprocess.DEVNULL
     assert call.kwargs["stderr"] == subprocess.DEVNULL
@@ -689,15 +706,16 @@ def test_run_quiet_does_not_override_explicit_capture(make_context, run_recorder
     assert "stderr" not in call.kwargs
 
 
-def test_quiet_level_1_hides_info_but_collapses_banner_to_one_line(make_context, capsys, caplog):
+def test_quiet_level_1_hides_info_and_banner(make_context, capsys, caplog):
+    # -q means "no denver output" outright -- banner() is hidden the same as
+    # info(), not collapsed to a one-line form the way it used to be; only a
+    # stage's own command output survives -q (see test_run_quiet_level_1_keeps_stage_output).
     caplog.set_level("INFO")
     ctx = make_context(quiet=1)
     info("hidden-info")
-    banner(ctx, "mystage", "still-shown")
+    banner(ctx, "mystage", "hidden-banner")
     assert "hidden-info" not in caplog.text
-    err = capsys.readouterr().err
-    assert "-- [1/1] mystage - still-shown" in err
-    assert err.count("\n") == 1  # single line, no box
+    assert capsys.readouterr().err == ""
     # a later non-quiet Context resets the shared logger/flag for other tests
     make_context(quiet=0)
 
@@ -713,12 +731,30 @@ def test_quiet_level_2_hides_info_and_banner(make_context, capsys, caplog):
     make_context(quiet=0)
 
 
-def test_banner_normal_mode_shows_a_boxed_frame(make_context, capsys):
+def test_banner_hidden_without_verbose(make_context, capsys):
+    # banner()'s boxed frame is --verbose only -- hidden at the plain
+    # default level, unlike stage_banner()/skip_banner() (see set_quiet).
     ctx = make_context()
+    banner(ctx, "mystage", "message")
+    assert capsys.readouterr().err == ""
+
+
+def test_banner_normal_mode_shows_a_boxed_frame(make_context, capsys):
+    ctx = make_context(verbose=True)
     banner(ctx, "mystage", "message")
     err = capsys.readouterr().err
     assert err.count("\n") == 3  # top border, text line, bottom border
     assert "| [1/1] mystage - message |" in err
+
+
+def test_banner_quiet_wins_over_verbose(make_context, capsys):
+    # -q silences denver's own output outright -- --verbose adds detail only
+    # at the plain (quiet level 0) level, it never overrides -q/-qq.
+    ctx = make_context(quiet=1, verbose=True)
+    banner(ctx, "mystage", "message")
+    assert capsys.readouterr().err == ""
+    # a later non-quiet Context resets the shared logger/flag for other tests
+    make_context(quiet=0)
 
 
 def test_which(make_context, which):
