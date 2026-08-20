@@ -140,6 +140,30 @@ def test_zsh_completion_function_defines_via_unquoted_eval():
     assert result.returncode == 0, result.stderr
 
 
+def test_zsh_completion_passes_each_word_as_its_own_positional_arg():
+    # Regression test: "${words[2,CURRENT]}" (no '(@)' flag) quotes an array
+    # slice the same way zsh quotes a scalar -- it collapses into one
+    # IFS-joined string, so __complete would see a single mangled argument
+    # like "run --show" instead of two ("run", "--show") and match nothing.
+    # Driven through a real zsh (not string-matching on the script text),
+    # the same way the unquoted-eval tests above are, because that's the
+    # only thing that actually exercises zsh's own quoting rules.
+    if not shutil.which("zsh"):
+        pytest.skip("zsh not installed")
+    cmd = f"{shlex.quote(sys.executable)} {shlex.quote(denver.__file__)}"
+    script = (
+        f"alias denver={shlex.quote(cmd)}\n"
+        f"eval $({cmd} complete zsh)\n"
+        "autoload -Uz compinit; compinit -u\n"
+        "words=(denver run --show); CURRENT=3\n"
+        'compadd() { print -r -- "$@"; }\n'
+        "_denver_complete\n"
+    )
+    result = subprocess.run(["zsh", "-c", script], capture_output=True, text=True)
+    assert "--show-config" in result.stdout, result.stderr
+    assert "--show-config-min" in result.stdout, result.stderr
+
+
 def test_completion_script_fish_registers_one_complete_c_line_per_bare_name():
     out = denver._completion_script("fish", ["denver", "./src/denver.py"])
     assert "complete -c denver -f -a '(__denver_complete)'" in out

@@ -3568,7 +3568,13 @@ def _completion_script_zsh(quoted):
     # zsh's own completion system (compsys), not bash's -F/COMPREPLY -- $words is
     # the full command line (1-indexed), $CURRENT the index of the word being
     # completed, so $words[2,CURRENT] is the same slice bash's script passes to
-    # __complete. compadd, not COMPREPLY, is how compsys widgets report candidates.
+    # __complete -- but the slice needs the '(@)' flag to stay a real array
+    # through the double quotes: plain "${words[2,CURRENT]}" collapses the
+    # whole slice into one IFS-joined string (zsh quotes an array the same
+    # way it quotes a scalar unless '@' says otherwise), so __complete would
+    # see a single mangled argument like "run --show" instead of two ("run",
+    # "--show") and match nothing. compadd, not COMPREPLY, is how compsys
+    # widgets report candidates.
     # Same alias problem as bash (see above) -- zsh's own $aliases associative
     # array is the equivalent of BASH_ALIASES; the (z) flag splits its value the
     # way the shell itself would, quoting included. Same unquoted-eval hazard as
@@ -3580,7 +3586,7 @@ def _completion_script_zsh(quoted):
         ' local -a resolved=("$cmd");'
         " (( ${+aliases[$cmd]} )) && resolved=(${(z)aliases[$cmd]});"
         " local -a completions;"
-        ' completions=("${(@f)$("${resolved[@]}" __complete "${words[2,CURRENT]}" 2>/dev/null)}");'
+        ' completions=("${(@f)$("${resolved[@]}" __complete "${(@)words[2,CURRENT]}" 2>/dev/null)}");'
         ' compadd -- "${completions[@]}";'
         " };\n"
         f"compdef _denver_complete {' '.join(quoted)};\n"
