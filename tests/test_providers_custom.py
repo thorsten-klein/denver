@@ -159,6 +159,59 @@ def test_source_folds_exports_into_ctx_env(make_context):
     assert ctx.env["MYVAR"] == "1"
 
 
+# ---- info lines -- cmd/source/launcher each log what they're about to do --#
+# Not gated by --verbose (unlike banner()/the '+cmd' echo): a stage combining
+# several of these keys should still be able to tell, from plain default
+# output, which one is actually running -- not just that a "cmd" step
+# started, but what its own 'cmd:'/'source:'/'launcher:' value actually was.
+def test_cmd_logs_its_own_value(make_context, caplog):
+    caplog.set_level("INFO")
+    config = {"custom": {"cmd": "true"}}
+    ctx = make_context(config=config)
+    run_custom(config, ctx)
+    assert "custom[custom]: run cmd: true" in caplog.text
+
+
+def test_source_logs_the_resolved_path(make_context, caplog):
+    caplog.set_level("INFO")
+    config = {"custom": {"source": "vars.sh"}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "vars.sh").write_text("export MYVAR=1\n")
+    run_custom(config, ctx)
+    assert f"custom[custom]: source {ctx.env_dir / 'vars.sh'}" in caplog.text
+
+
+def test_launcher_logs_its_shell_split_tokens(make_context, caplog):
+    caplog.set_level("INFO")
+    config = {"custom": {"launcher": ["myscript.sh --name 'hello world'"]}}
+    ctx = make_context(config=config)
+    n = CustomProvider(config)
+    n.stage = "custom"
+    n.wrap(ctx, ["echo", "hi"])
+    assert "custom[custom]: run launcher: myscript.sh --name 'hello world'" in caplog.text
+
+
+def test_wrap_with_no_launcher_entries_logs_nothing(make_context, caplog):
+    caplog.set_level("INFO")
+    config = {"custom": {"cmd": "true"}}
+    ctx = make_context(config=config)
+    n = CustomProvider(config)
+    n.stage = "custom"
+    n.wrap(ctx, ["echo", "hi"])
+    assert "launcher" not in caplog.text
+
+
+def test_fast_skip_message_replaces_the_cmd_log_line(make_context, caplog):
+    # --fast's own "skips '<cmd>'" message already says what 'cmd:' was --
+    # the plain cmd-log line is for the real run only, not a second time here.
+    caplog.set_level("INFO")
+    config = {"custom": {"cmd": "true"}}
+    ctx = make_context(config=config, fast=True)
+    run_custom(config, ctx)
+    assert "--fast skips 'true'" in caplog.text
+    assert "custom[custom]: run cmd: true" not in caplog.text
+
+
 def test_multiple_custom_stages_use_their_own_section(make_context, tmp_path):
     marker_a = tmp_path / "a"
     marker_b = tmp_path / "b"
@@ -205,6 +258,21 @@ def test_kind_is_wrapper_when_launcher_configured(make_context):
     config = {"custom": {"launcher": ["myscript.sh --"]}}
     n = CustomProvider(config)
     n.stage = "custom"
+    assert n.kind == "wrapper"
+
+
+def test_kind_is_wrapper_for_a_stage_id_other_than_the_provider_name(make_context):
+    # regression test: make_stage() (denver_providers/__init__.py) always
+    # constructs via cls(config) *then* sets provider.stage = stage_id --
+    # self.stage is still 'custom' (Provider.__init__'s default) throughout
+    # __init__ itself. A 'kind' computed once there, from self.config.get(
+    # self.stage), would read the wrong (nonexistent) section for any stage
+    # id other than literally 'custom' and always land on 'setup', even
+    # with 'launcher:' configured -- exactly what make_stage()'s own
+    # construct-then-assign order does for every real stage id.
+    config = {"picotool": {"launcher": ["myscript.sh --"]}}
+    n = CustomProvider(config)  # self.stage == 'custom' here, not yet 'picotool'
+    n.stage = "picotool"  # what make_stage() does right after construction
     assert n.kind == "wrapper"
 
 
