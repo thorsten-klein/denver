@@ -325,13 +325,13 @@ logic itself never has to be regenerated:</p>
 declares</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--scripts</span></code>’ value — the names that env’s <code class="docutils literal notranslate"><span class="pre">scripts:</span></code> sections actually
 define</p></li>
-<li><p>an env’s own <code class="docutils literal notranslate"><span class="pre">args:</span></code> — whatever extra flags its <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> declares (see
+<li><p>an env’s own <code class="docutils literal notranslate"><span class="pre">denver-custom-args:</span></code> — whatever extra flags its <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> declares (see
 “Environment-specific arguments” in
 <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>), completed the same way
 denver’s own flags are</p></li>
 </ul>
 <p>That last point is why there’s nothing to regenerate: add a stage, rename a
-<code class="docutils literal notranslate"><span class="pre">scripts:</span></code> entry, declare a new <code class="docutils literal notranslate"><span class="pre">args:</span></code> flag, and completion picks it up on
+<code class="docutils literal notranslate"><span class="pre">scripts:</span></code> entry, declare a new <code class="docutils literal notranslate"><span class="pre">denver-custom-args:</span></code> flag, and completion picks it up on
 the next <code class="docutils literal notranslate"><span class="pre">&lt;TAB&gt;</span></code> — the script you sourced once never has to change.</p>
 </section>
 <section id="inside-a-docker-relocated-shell-automatically">

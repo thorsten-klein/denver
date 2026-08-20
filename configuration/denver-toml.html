@@ -341,7 +341,7 @@ below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">extensions</span></code></strong> — own, project-local <code class="docutils literal notranslate"><span class="pre">Provider</span></code> subclasses to register
 alongside the built-ins (<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>), no
 denver fork required. See “Extension providers” below.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">args</span></code></strong> — command-line flags of this environment’s own, each one
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">denver-custom-args</span></code></strong> — command-line flags of this environment’s own, each one
 forwarded to argparse’s <code class="docutils literal notranslate"><span class="pre">add_argument</span></code>. See “Environment-specific CLI
 arguments” below.</p></li>
 </ul>
@@ -600,18 +600,18 @@ neither: its child simply inherits <code class="docutils literal notranslate"><s
 the one or two knobs an environment actually wants to offer (“which board?”,
 “debug or release?”): its users have to know the dotted path, nothing
 appears in <code class="docutils literal notranslate"><span class="pre">--help</span></code>, and a typo is a new config key rather than an error.</p>
-<p><code class="docutils literal notranslate"><span class="pre">args:</span></code> declares those knobs as real flags instead. Each entry is one
+<p><code class="docutils literal notranslate"><span class="pre">denver-custom-args:</span></code> declares those knobs as real flags instead. Each entry is one
 <code class="docutils literal notranslate"><span class="pre">parser.add_argument()</span></code> call: <code class="docutils literal notranslate"><span class="pre">flags:</span></code> names the flag (a string, or a list
 to give it aliases), and <strong>every other key is forwarded verbatim as a
 keyword argument</strong> — so an env has argparse’s whole vocabulary (<code class="docutils literal notranslate"><span class="pre">help:</span></code>,
 <code class="docutils literal notranslate"><span class="pre">default:</span></code>, <code class="docutils literal notranslate"><span class="pre">action:</span></code>, <code class="docutils literal notranslate"><span class="pre">nargs:</span></code>, <code class="docutils literal notranslate"><span class="pre">choices:</span></code>, <code class="docutils literal notranslate"><span class="pre">required:</span></code>, <code class="docutils literal notranslate"><span class="pre">metavar:</span></code>,
 <code class="docutils literal notranslate"><span class="pre">dest:</span></code>, …) without denver re-inventing, or gating, any of it:</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[[args]]</span>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[[denver-custom-args]]</span>
 <span class="n">flags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"--board"</span><span class="p">,</span><span class="w"> </span><span class="s2">"-b"</span><span class="p">]</span>
 <span class="n">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"nrf52840dk"</span>
 <span class="n">help</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"which board to build for"</span>
 
-<span class="k">[[args]]</span>
+<span class="k">[[denver-custom-args]]</span>
 <span class="n">flags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"--release"</span><span class="p">]</span>
 <span class="n">action</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"store_true"</span>
 <span class="n">help</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"build with optimisations"</span>
@@ -654,7 +654,7 @@ an env declares live in the very file <code class="docutils literal notranslate"
 resolve <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> before it can know them.</p></li>
 <li><p>A flag that would collide with one of denver’s own (<code class="docutils literal notranslate"><span class="pre">--force</span></code>, or a <code class="docutils literal notranslate"><span class="pre">dest:</span></code>
 of <code class="docutils literal notranslate"><span class="pre">ci</span></code>) is a hard error, not a silent override.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">args:</span></code> is a list, so it follows the normal list-merge rule: an env
+<li><p><code class="docutils literal notranslate"><span class="pre">denver-custom-args:</span></code> is a list, so it follows the normal list-merge rule: an env
 inherits every flag its <code class="docutils literal notranslate"><span class="pre">import:</span></code> chain declares and adds its own (see
 “Layering”).</p></li>
 <li><p>They survive a wrapper relocation: the tokens are re-passed to the denver

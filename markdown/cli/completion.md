@@ -66,13 +66,13 @@ logic itself never has to be regenerated:
   declares
 - `--scripts`’ value — the names that env’s `scripts:` sections actually
   define
-- an env’s own `args:` — whatever extra flags its `denver.toml` declares (see
+- an env’s own `denver-custom-args:` — whatever extra flags its `denver.toml` declares (see
   “Environment-specific arguments” in
   [Configuration](../configuration/denver-toml.md)), completed the same way
   denver’s own flags are
 
 That last point is why there’s nothing to regenerate: add a stage, rename a
-`scripts:` entry, declare a new `args:` flag, and completion picks it up on
+`scripts:` entry, declare a new `denver-custom-args:` flag, and completion picks it up on
 the next `<TAB>` — the script you sourced once never has to change.
 
 ## Inside a docker-relocated shell, automatically
