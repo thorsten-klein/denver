@@ -32,7 +32,8 @@ one-line description.
   declare `scripts: migrate:` and run `denver run <env> --scripts migrate`
   without denver itself changing. Repeatable — each name’s entries run in
   the order given. With no `<name>` (on any occurrence), it lists the names
-  this env defines instead of running anything.
+  this env defines instead of running anything. If `<name>` isn’t declared
+  by any (filtered) stage, denver logs `no '<name>' scripts to run for env '<env>'` at info level rather than exiting silently.
 - **`--setup`**/**`--login`** are shorthand for `--scripts setup`/`--scripts login` — the two conventional names most envs use. They share `--scripts`’
   ordering and repeat rules, so `--login --setup` runs `login` then `setup`,
   and either can still be combined with a plain `--scripts <name>`.
