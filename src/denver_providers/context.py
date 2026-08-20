@@ -23,11 +23,46 @@ import sys
 from pathlib import Path
 from typing import NoReturn, cast
 
-# Every line a --dry-run emits starts with this, so the whole preview can be
-# grepped/filtered out of a terminal session in one go. The marker that
-# follows it ('+', '?', '~', '.', '!') says which kind of line it is -- see
-# dry_run_legend(), which states the same key to the user once per run.
+# Every line a --dry-run emits starts with '[dry-run ', so the whole preview
+# can be grepped/filtered out of a terminal session in one go (e.g. `grep
+# '\[dry-run'`) regardless of which marker it carries. The marker inside the
+# brackets ('+', '?', '~', '.', '!') says which kind of line it is -- see
+# dry_run_legend(), which states the same key to the user once per run, and
+# DRY_MARKER_COLORS, which gives each one its own color.
 DRY_PREFIX = "[dry-run]"
+
+# One color per marker -- bright ANSI codes reset to default foreground
+# (\033[39m), the same convention as every other color in this file.
+# Deliberately unconditional (no isatty check, matching banner()/
+# stage_banner()/skip_banner() and the legend this replaces, which was
+# already unconditionally colored before this) -- an explicit --color/
+# --no-color-style toggle can be layered on later if it's ever needed.
+# Chosen by what each marker means: '+' a real command that would run
+# (green, "go"), '?' a read-only query that really runs (cyan, "just
+# looking"), '~' a write that would happen (yellow, "caution"), '.' a
+# script really sourced (blue, matching info()'s own blue -- it's real,
+# not previewed), '!' a limitation of the preview itself (red, "heads up").
+DRY_MARKER_COLORS = {
+    "+": "\033[92m",
+    "?": "\033[96m",
+    "~": "\033[93m",
+    ".": "\033[94m",
+    "!": "\033[91m",
+}
+_DRY_RESET = "\033[39m"
+
+
+def _dry_tag(marker=None):
+    """The colored '[dry-run <marker>]' tag for one dry-run line, or the bare '[dry-run]' intro tag if ``marker`` is None.
+
+    See DRY_MARKER_COLORS for why a real marker's tag is colored and the
+    bare intro tag (dry_run_legend()'s own opening line, which isn't any
+    one category) is not.
+    """
+    if marker is None:
+        return DRY_PREFIX
+    return f"{DRY_MARKER_COLORS[marker]}[dry-run {marker}]{_DRY_RESET}"
+
 
 # One denver run per env at a time -- see Context.acquire_lock.
 LOCK_FILE_NAME = ".lock"
@@ -193,21 +228,23 @@ def skip_banner(ctx, stage, reason):
 
 
 def dry_run_legend():
-    """Print the one-off ``[dry-run]`` marker legend to stderr, before the first stage runs.
+    """Print the one-off ``[dry-run ...]`` marker legend to stderr, before the first stage runs.
 
     The markers mean genuinely different things -- skipped, really run,
     skipped filesystem write (see Context.run) -- and a preview that doesn't
     say which is which invites reading a '?' line as "would run", i.e. as
     the opposite of what it reports. So the key is stated once, up front,
-    rather than left to the documentation.
+    rather than left to the documentation -- each entry colored the same way
+    its own marker's lines are (see DRY_MARKER_COLORS), so the legend
+    doubles as a color key too.
     """
     print(
-        f"\033[93m{DRY_PREFIX} no command below is executed for its effect. Legend:\n"
-        f"{DRY_PREFIX}   +  command that would run\n"
-        f"{DRY_PREFIX}   ?  read-only query, really run (its output decides what follows)\n"
-        f"{DRY_PREFIX}   ~  file/directory write that would happen\n"
-        f"{DRY_PREFIX}   .  script sourced into the environment, really done\n"
-        f"{DRY_PREFIX}   !  note about what this preview cannot show\033[39m",
+        f"{_dry_tag()} no command below is executed for its effect. Legend:\n"
+        f"{_dry_tag('+')}  command that would run\n"
+        f"{_dry_tag('?')}  read-only query, really run (its output decides what follows)\n"
+        f"{_dry_tag('~')}  file/directory write that would happen\n"
+        f"{_dry_tag('.')}  script sourced into the environment, really done\n"
+        f"{_dry_tag('!')}  note about what this preview cannot show",
         file=sys.stderr,
     )
 
@@ -932,13 +969,15 @@ class Context:
 
     # ---- dry-run reporting ---------------------------------------------- #
     def dry_note(self, marker, message):
-        """Print one ``[dry-run] <marker> <message>`` line to stderr (see Context.run for the markers).
+        """Print one ``[dry-run <marker>] <message>`` line to stderr (see Context.run for the markers).
 
         Always printed, even under --quiet: in a dry run these lines *are*
         the output -- silencing them would leave the run with nothing to
-        show at all.
+        show at all. The tag is colored by marker (see DRY_MARKER_COLORS),
+        so which kind of line this is -- a real command, a read-only query,
+        a write, ... -- is visible without reading the marker itself.
         """
-        print(f"{DRY_PREFIX} {marker} {message}", file=sys.stderr)
+        print(f"{_dry_tag(marker)} {message}", file=sys.stderr)
 
     # ---- process helpers ------------------------------------------------ #
     def run(
@@ -953,14 +992,14 @@ class Context:
         goes through Context.exec, not Context.run) is ever visible.
 
         Under --dry-run (``ctx.dry_run``) a command that exists for its
-        *effect* is printed as ``[dry-run] + cmd`` and not run at all,
+        *effect* is printed as ``[dry-run +] cmd`` and not run at all,
         standing in as an immediately-successful, output-less call. A
         ``query=True`` call is different: some provider is about to branch on
         it (is the image cached? which conan home? what does `west list`
         say? did a skip-on-success/skip-on-failure script exit as configured?), so a dry run would have nothing
         to decide with and would stop reflecting what a real run does. Those
         are genuinely executed -- they are the reads, not the writes -- and
-        reported as ``[dry-run] ? cmd`` so the preview still says so.
+        reported as ``[dry-run ?] cmd`` so the preview still says so.
         A missing executable is not fatal in that case either: half the point
         of a dry run is previewing an env whose tools an earlier (skipped)
         stage would have installed, so it degrades to the same empty,
@@ -1164,7 +1203,7 @@ class Context:
         This is how denver 'activates' things that are only expressible as
         bash (venv activate, conan's conanbuildenv.sh, hook scripts).
 
-        Still done under --dry-run, and reported as ``[dry-run] . script``:
+        Still done under --dry-run, and reported as ``[dry-run .] script``:
         sourcing is how denver *computes* the environment, and a command
         rendered without it would show empty ``${...}`` values and a PATH
         missing every tool an earlier stage put there -- i.e. not the

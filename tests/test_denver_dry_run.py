@@ -10,6 +10,7 @@ no dry run at all.
 """
 
 import json
+import re
 import subprocess
 
 import pytest
@@ -17,17 +18,38 @@ import pytest
 import denver
 import denver_providers as providers
 from denver_providers.conan import ConanProvider
-from denver_providers.context import DRY_PREFIX
+from denver_providers.context import _dry_tag
 from denver_providers.uv import UvProvider
 from denver_providers.zephyr import ZephyrProvider
 
+_ANSI_RE = re.compile(r"\033\[[0-9;]*m")
+
+
+def _without_legend(lines):
+    """``lines`` minus dry_run_legend()'s own one-time block, if it's the first thing in them.
+
+    Exactly six dry-run-tagged lines (one intro, one per marker), always
+    first whenever a run actually prints the legend -- skipped so its "'+'
+    command that would run" etc. don't count as (fake) notes alongside real
+    ones sharing that marker.
+    """
+    if lines and "no command below is executed for its effect" in lines[0]:
+        return lines[6:]
+    return lines
+
 
 def dry_lines(capsys, marker=None):
-    """Every '[dry-run] ...' line from stderr, optionally only those with ``marker``."""
-    lines = [ln for ln in capsys.readouterr().err.splitlines() if ln.startswith(DRY_PREFIX)]
+    """Every real (non-legend) '[dry-run ...] ...' line from stderr (ANSI color stripped), optionally only those with ``marker``.
+
+    Each marker's tag is colored (see DRY_MARKER_COLORS) -- stripped here so
+    callers can assert on the plain message text without also having to
+    spell out which color a given marker uses.
+    """
+    all_lines = [_ANSI_RE.sub("", ln) for ln in capsys.readouterr().err.splitlines() if "[dry-run" in ln]
+    lines = _without_legend(all_lines)
     if marker is None:
         return lines
-    prefix = f"{DRY_PREFIX} {marker} "
+    prefix = f"[dry-run {marker}] "
     return [ln[len(prefix) :] for ln in lines if ln.startswith(prefix)]
 
 
@@ -99,7 +121,7 @@ def test_run_dry_note_reaches_query_before_step_banner(make_context, run_recorde
     ctx.stage_id = "mystage"
     ctx.run(["make", "all"], step="build")
     err = capsys.readouterr().err
-    assert err.index("mystage - build") < err.index(f"{DRY_PREFIX} + make all")
+    assert err.index("mystage - build") < err.index(f"{_dry_tag('+')} make all")
 
 
 def test_run_still_executes_normally_without_dry_run(make_context, run_recorder, capsys):
@@ -412,8 +434,8 @@ def test_run_stages_dry_run_prints_legend_and_never_execs(tmp_path, exec_recorde
     assert "no command below is executed for its effect" in err
     # shlex-quoted -- 'echo hello' is one single argv element ('bash -c'
     # <script>), not two bare words, so the printed line has to show that
-    assert f"{DRY_PREFIX} + bash -c 'echo hello'" in err
-    assert f"{DRY_PREFIX} + exec: echo hi" in err
+    assert f"{_dry_tag('+')} bash -c 'echo hello'" in err
+    assert f"{_dry_tag('+')} exec: echo hi" in err
     assert "NOT started (--dry-run)" in err
     assert exec_recorder == {}
 
