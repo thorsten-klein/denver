@@ -1003,7 +1003,7 @@ def test_main_no_denver_toml_dies_cleanly_without_show_config(tmp_path, caplog):
 def test_main_help_still_works_for_a_dir_with_no_denver_toml(tmp_path, capsys):
     # --help must not trip the "no denver.toml" die -- it needs no config at
     # all, denver's own flags being the whole vocabulary with no env-specific
-    # 'args:' to add to it (see test_help_for_a_directory_without_a_denver_yml_still_works
+    # 'denver-custom-args:' to add to it (see test_help_for_a_directory_without_a_denver_yml_still_works
     # in test_denver_args.py for the pre-existing version of this guarantee).
     env_dir = tmp_path / "not-an-env"
     env_dir.mkdir()

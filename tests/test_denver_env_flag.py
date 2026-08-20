@@ -1,6 +1,6 @@
 """Tests for the -e/--env CLI flag: set an environment variable for this run.
 
-Unlike 'args:' (test_denver_args.py), this is a denver-own flag, not
+Unlike 'denver-custom-args:' (test_denver_args.py), this is a denver-own flag, not
 something an env declares -- these tests drive denver.main() end to end and
 read the values back out of the environment the final command is exec'd
 with, plus os.environ itself (see build_arg_parser's -e/--env).

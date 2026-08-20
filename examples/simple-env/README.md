@@ -19,7 +19,7 @@ Three stages run in the order `stages:` lists them. The middle one sources
 nothing; the stage after it sees all three — and so does the final command.
 
 That last `greeting=hello` comes from this env's own command-line flag,
-declared under `args:` — so it is also `--greeting`'s default:
+declared under `denver-custom-args:` — so it is also `--greeting`'s default:
 
 ```console
 $ denver run examples/simple-env --greeting "hi there" -- true
@@ -53,8 +53,8 @@ genuinely confusing — so this env exists to make the difference visible:
 The `print-vars-before` / `print-vars-after` pair is there purely so you can
 see that boundary being crossed.
 
-**And, in passing, as the smallest `args:` demo.** `--greeting` is one
-`args:` entry — an `argparse.add_argument` call written in YAML — and
+**And, in passing, as the smallest `denver-custom-args:` demo.** `--greeting` is one
+`denver-custom-args:` entry — an `argparse.add_argument` call written in YAML — and
 `denver run examples/simple-env --help` lists it next to denver's own flags. Its
 value arrives in the config as `${DENVER_ARG_GREETING}`, which is expanded
 by *denver*, before `print-vars-after`'s `cmd:` reaches a shell at all —
@@ -79,7 +79,7 @@ the `Examples` workflow.
 
 | File | What it is |
 |---|---|
-| `denver.toml` | Three `custom` stages; the middle one wires up `source:`, plus one `args:` flag |
+| `denver.toml` | Three `custom` stages; the middle one wires up `source:`, plus one `denver-custom-args:` flag |
 | `custom.sh` | The sourced script — just three `export`s |
 
 ## Next

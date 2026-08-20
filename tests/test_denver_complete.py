@@ -349,7 +349,7 @@ def test_dunder_complete_completes_flags_including_the_envs_own_declared_ones(tm
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.toml").write_text(
-        'stages = []\nargs = [\n  { flags = "--board", default = "x" },\n  { flags = [\n  "--release",\n  "-r",\n], action = "store_true" },\n  "justastring",\n  { help = "no \'flags:\' key at all" },\n]\n'  # malformed (no 'flags:') -- ignored too
+        'stages = []\ndenver-custom-args = [\n  { flags = "--board", default = "x" },\n  { flags = [\n  "--release",\n  "-r",\n], action = "store_true" },\n  "justastring",\n  { help = "no \'flags:\' key at all" },\n]\n'  # malformed (no 'flags:') -- ignored too
     )
 
     assert denver.main(["__complete", "run", str(env_dir), "--b"]) == 0
@@ -363,7 +363,7 @@ def test_dunder_complete_completes_flags_including_the_envs_own_declared_ones(tm
 def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('stages = []\n')  # no 'args:' key at all
+    (env_dir / "denver.toml").write_text('stages = []\n')  # no 'denver-custom-args:' key at all
 
     assert denver.main(["__complete", "run", str(env_dir), "--sh"]) == 0
     assert capsys.readouterr().out.splitlines() == ["--show-config", "--show-config-full"]
