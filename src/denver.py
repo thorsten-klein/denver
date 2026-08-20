@@ -1558,7 +1558,28 @@ def run_named_scripts(
 def _run_named_scripts_directly(ctx, setups, names):
     """Run every one of ``names`` for the given setup stages, in order -- the no-active-wrapper case."""
     for name in names:
-        _run_stage_scripts(ctx, _stage_ids_of(setups), name)
+        if not _run_stage_scripts(ctx, _stage_ids_of(setups), name):
+            _warn_no_scripts(ctx, name)
+
+
+def _run_wrapper_scripts_and_find_relocatable(ctx, active_wrappers, setups, names):
+    """Run each of ``names``' wrapper-stage entries on the host; return the subset that also needs relocating.
+
+    The wrapper's own entries (e.g. `docker login` to a private registry)
+    run here, on the host, before the wrapper is ever prepared -- one name
+    at a time, in order. A name with entries in neither the wrapper nor a
+    setup stage never makes it into the returned list (there's nothing left
+    to relocate it for), so it's flagged here, once, via _warn_no_scripts --
+    otherwise it would run nothing and say nothing.
+    """
+    setup_names = []
+    for name in names:
+        ran_on_host = _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
+        if _collect_stage_scripts(ctx, _stage_ids_of(setups), name):
+            setup_names.append(name)
+        elif not ran_on_host:
+            _warn_no_scripts(ctx, name)
+    return setup_names
 
 
 def _relocate_named_scripts(
@@ -1581,12 +1602,7 @@ def _relocate_named_scripts(
     See run_named_scripts, whose own docstring covers the host/wrapper split
     this implements.
     """
-    # the wrapper's own entries (e.g. `docker login` to a private registry)
-    # run here, on the host, before preparing it -- one name at a time, in order
-    for name in names:
-        _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
-
-    setup_names = [name for name in names if _collect_stage_scripts(ctx, _stage_ids_of(setups), name)]
+    setup_names = _run_wrapper_scripts_and_find_relocatable(ctx, active_wrappers, setups, names)
     if not setup_names:
         return  # nothing to relocate into the wrapper for, for any of ``names``
 
@@ -1612,10 +1628,29 @@ def _relocate_named_scripts(
 
 
 def _run_stage_scripts(ctx, stage_ids, name):
-    """Run every ``scripts: <name>:`` entry the given stages declare, in order."""
-    for stage_id, script in _collect_stage_scripts(ctx, stage_ids, name):
+    """Run every ``scripts: <name>:`` entry the given stages declare, in order.
+
+    Returns whether any entry was found (and so ran) -- callers use this to
+    tell "ran nothing because there was nothing to run" apart from a normal
+    run, see _warn_no_scripts.
+    """
+    entries = _collect_stage_scripts(ctx, stage_ids, name)
+    for stage_id, script in entries:
         info(f"{name}-script '{stage_id}': {script}")
         ctx.run([str(script)])
+    return bool(entries)
+
+
+def _warn_no_scripts(ctx, name):
+    """Info-log that ``--scripts <name>`` found nothing to run for this env -- see the two run_named_scripts paths.
+
+    Without this, ``denver run <env> --scripts <name>`` for a name no stage
+    declares silently exits 0 with no output at all, which reads exactly
+    like a successful no-op run of something that *does* exist -- there is
+    nothing else here to distinguish "ran zero entries" from "ran and it
+    happened to have zero entries by design".
+    """
+    info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
 
 
 def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stage_count, *, quiet):
