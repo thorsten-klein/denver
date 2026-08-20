@@ -86,6 +86,16 @@ Both follow the same merge rules as `import:`, explained in
   each shown as a commented-out `# key = null` line (TOML has no `null`) —
   the complete key reference for a stage’s own section, not just what this
   particular env happens to set.
+
+Both are syntax-highlighted (table headers, keys, strings, numbers/booleans
+and `# key = null` comments each their own color) whenever stdout looks like
+a real terminal — auto-detected, off the moment output is piped or
+redirected, so a golden-file snapshot, `| grep`, or a redirect into a file
+all still get plain text. Two environment variables override the
+auto-detection, the same convention most CLI tools use:
+[`NO_COLOR`](https://no-color.org) (any non-empty value) always forces it
+off, and `FORCE_COLOR` forces it on even when piped (e.g. into `less -R`).
+
 - **`--dry-run`** shows what each stage *would* do instead of doing it: no
   command is executed for its effect, no file is written, and the final
   command is printed rather than launched. Useful for answering “what does

@@ -343,7 +343,7 @@ strategy on top of whatever <code class="docutils literal notranslate"><span cla
 </section>
 <section id="inspect-an-environment">
 <h2>Inspect an environment<a class="headerlink" href="#inspect-an-environment" title="Link to this heading"></a></h2>
-<ul>
+<ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--show-config</span></code></strong> prints the fully merged configuration — <code class="docutils literal notranslate"><span class="pre">import:</span></code>
 chain resolved, overrides applied, every default filled in — then exits,
 showing only the keys that actually carry a value (whatever the env itself
@@ -355,6 +355,16 @@ Docker.</p></li>
 each shown as a commented-out <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">key</span> <span class="pre">=</span> <span class="pre">null</span></code> line (TOML has no <code class="docutils literal notranslate"><span class="pre">null</span></code>) —
 the complete key reference for a stage’s own section, not just what this
 particular env happens to set.</p></li>
+</ul>
+<p>Both are syntax-highlighted (table headers, keys, strings, numbers/booleans
+and <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">key</span> <span class="pre">=</span> <span class="pre">null</span></code> comments each their own color) whenever stdout looks like
+a real terminal — auto-detected, off the moment output is piped or
+redirected, so a golden-file snapshot, <code class="docutils literal notranslate"><span class="pre">|</span> <span class="pre">grep</span></code>, or a redirect into a file
+all still get plain text. Two environment variables override the
+auto-detection, the same convention most CLI tools use:
+<a class="reference external" href="https://no-color.org"><code class="docutils literal notranslate"><span class="pre">NO_COLOR</span></code></a> (any non-empty value) always forces it
+off, and <code class="docutils literal notranslate"><span class="pre">FORCE_COLOR</span></code> forces it on even when piped (e.g. into <code class="docutils literal notranslate"><span class="pre">less</span> <span class="pre">-R</span></code>).</p>
+<ul>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> shows what each stage <em>would</em> do instead of doing it: no
 command is executed for its effect, no file is written, and the final
 command is printed rather than launched. Useful for answering “what does
