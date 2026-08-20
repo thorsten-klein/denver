@@ -2475,7 +2475,71 @@ def _provider_keys(section):
 # --------------------------------------------------------------------------- #
 # --show-config rendering
 # --------------------------------------------------------------------------- #
-def dump_toml(data):
+def supports_color(stream=None):
+    """Whether ``stream`` (default: stdout) is a real terminal that would render ANSI color.
+
+    Used to decide --show-config's own syntax highlighting (see dump_toml).
+    ``NO_COLOR`` (https://no-color.org -- any non-empty value) always wins
+    when set: an explicit, universal opt-out. ``FORCE_COLOR`` is the
+    matching opt-in, for a pipeline that redirects stdout but still wants
+    color (e.g. piping through ``less -R``) -- checked after ``NO_COLOR``,
+    so an explicit "no" still wins over an explicit "yes" if a caller
+    somehow sets both. ``TERM=dumb`` is the traditional "this terminal
+    doesn't do escape codes at all" signal. Otherwise, color only makes
+    sense talking to a real terminal, not a file or another program's
+    stdin -- hence the ``isatty()`` fallback.
+    """
+    stream = sys.stdout if stream is None else stream
+    if os.environ.get("NO_COLOR"):
+        return False
+    if os.environ.get("FORCE_COLOR"):
+        return True
+    if os.environ.get("TERM") == "dumb":
+        return False
+    return stream.isatty()
+
+
+# Bright-* (9x) ANSI codes, reset to default foreground (\033[39m) rather than
+# a full \033[0m -- same convention as every other color code in this codebase
+# (context.py's banner()/stage_banner()/etc, the blue "finished in Ns" lines
+# below) needs no different reset story. One color per syntactic role, chosen
+# to stay distinct from those existing yellow/blue banners even though the
+# two are never on screen at once (--show-config never runs a stage).
+_TOML_HEADER_COLOR = "\033[95m"  # [section] / [[section]]
+_TOML_KEY_COLOR = "\033[96m"  # key = ...
+_TOML_STRING_COLOR = "\033[92m"  # "..." / '''...'''
+_TOML_SCALAR_COLOR = "\033[93m"  # true/false, numbers
+_TOML_COMMENT_COLOR = "\033[90m"  # a '# key = null' line -- unset, de-emphasized
+_TOML_RESET = "\033[39m"
+
+# Set once per dump_toml() call (see there), consulted by _c() -- the same
+# "module global, not threaded through every function" pattern context.py's
+# _quiet_level/_verbose already use for banner()/info(), for the same reason:
+# threading a `color` bool through every one of dump_toml's dozen small
+# recursive helpers would obscure what each is actually building.
+_toml_color_enabled = False
+
+
+def _c(code, text):
+    r"""Wrap ``text`` in ANSI color ``code``, reset after -- a no-op unless dump_toml() was asked for color.
+
+    Every call site here opens and closes its own span; none ever nests one
+    of these inside another. That matters because \033[39m resets to
+    *default* foreground, not "whatever the enclosing span's color was" --
+    nesting two spans would truncate the outer one right at the inner
+    span's own reset. dump_toml()'s own helpers are written so no call site
+    ever needs to: a colored key/value pair's two spans are always
+    separated by plain punctuation (` = `, `, `, ...), and a '[section]'
+    header or '# key = null' comment line colors itself as one single span,
+    built from the *plain* (uncolored) _toml_key()/_toml_path(), never the
+    already-colored key text a real 'key = value' line uses.
+    """
+    if not _toml_color_enabled or not text:
+        return text
+    return f"{code}{text}{_TOML_RESET}"
+
+
+def dump_toml(data, *, color=False):
     """A minimal, hand-written TOML rendering of ``data`` for --show-config.
 
     Covers exactly the shapes a resolved denver config can take (nested dicts, lists of scalars or of
@@ -2487,10 +2551,19 @@ def dump_toml(data):
     silently, so --show-config-full's "every possible key, unset ones included" contract still holds
     (the default --show-config drops ``None`` values before they ever reach here -- see show_config's
     own ``minimal`` handling).
+
+    ``color`` (see supports_color) turns on ANSI syntax highlighting -- off
+    by default, since every non-CLI caller (tests writing a synthetic
+    denver.toml to disk, mostly) wants the plain text a real TOML file is.
     """
-    lines = []
-    _dump_toml_table(data, (), lines)
-    return "\n".join(lines) + ("\n" if lines else "")
+    global _toml_color_enabled
+    _toml_color_enabled = color
+    try:
+        lines = []
+        _dump_toml_table(data, (), lines)
+        return "\n".join(lines) + ("\n" if lines else "")
+    finally:
+        _toml_color_enabled = False
 
 
 def _dump_toml_table(table, path, lines):
@@ -2518,9 +2591,11 @@ def _toml_partition_table(table):
 def _dump_toml_plain_key(key, value, lines):
     """Append one plain (non-table-like) ``key = value`` line -- commented out (``None``) if unset."""
     if value is None:
-        lines.append(f"# {_toml_key(key)} = null")
+        # the whole line is one comment span -- built from the plain _toml_key(),
+        # not a colored one, see _c's own docstring for why
+        lines.append(_c(_TOML_COMMENT_COLOR, f"# {_toml_key(key)} = null"))
     else:
-        lines.append(f"{_toml_key(key)} = {_toml_value(value)}")
+        lines.append(f"{_c(_TOML_KEY_COLOR, _toml_key(key))} = {_toml_value(value)}")
 
 
 def _dump_toml_nested_key(value, child_path, lines):
@@ -2528,7 +2603,7 @@ def _dump_toml_nested_key(value, child_path, lines):
     if lines and lines[-1] != "":
         lines.append("")
     if isinstance(value, dict):
-        lines.append(f"[{_toml_path(child_path)}]")
+        lines.append(_c(_TOML_HEADER_COLOR, f"[{_toml_path(child_path)}]"))
         _dump_toml_table(value, child_path, lines)
     else:
         _dump_toml_array_of_tables(value, child_path, lines)
@@ -2539,7 +2614,7 @@ def _dump_toml_array_of_tables(entries, child_path, lines):
     for i, entry in enumerate(entries):
         if i:
             lines.append("")
-        lines.append(f"[[{_toml_path(child_path)}]]")
+        lines.append(_c(_TOML_HEADER_COLOR, f"[[{_toml_path(child_path)}]]"))
         _dump_toml_table(entry, child_path, lines)
 
 
@@ -2619,7 +2694,7 @@ def _toml_inline_table(value):
     """One inline TOML table (``{ k = v, ... }``) for a dict reached outside a '[section]' context."""
     if not value:
         return "{}"
-    items = ", ".join(f"{_toml_key(k)} = {_toml_inline_value(v)}" for k, v in value.items())
+    items = ", ".join(f"{_c(_TOML_KEY_COLOR, _toml_key(k))} = {_toml_inline_value(v)}" for k, v in value.items())
     return "{ " + items + " }"
 
 
@@ -2629,13 +2704,17 @@ def _toml_scalar(value):
     Anything else (e.g. a bare ``None`` reaching here, which shouldn't happen -- fill_unset() only
     ever nulls a dict *value*, never a list entry) is a bug in the caller, so this raises rather than
     silently rendering something wrong.
+
+    Colored here, not in a wrapper around the call site: unlike a key (see
+    _c's docstring), a scalar's own text is never reused for anything but
+    itself -- there's no header/comment context it also has to serve plain.
     """
     if isinstance(value, bool):
-        return "true" if value else "false"
+        return _c(_TOML_SCALAR_COLOR, "true" if value else "false")
     if isinstance(value, (int, float)):
-        return repr(value)
+        return _c(_TOML_SCALAR_COLOR, repr(value))
     if isinstance(value, str):
-        return _toml_string(value)
+        return _c(_TOML_STRING_COLOR, _toml_string(value))
     raise TypeError(f"cannot render {value!r} as a TOML scalar")
 
 
@@ -2704,7 +2783,7 @@ def show_config(
             ordered[stage_id] = _drop_defaulted_stage_keys(ordered[stage_id], ctx.raw_sections.get(stage_id, {}))
         ordered = _drop_null_values(ordered)
 
-    print(dump_toml(ordered))
+    print(dump_toml(ordered, color=supports_color()))
 
 
 def _drop_defaulted_stage_keys(section, raw_section):
