@@ -927,6 +927,10 @@ def collect_import_dirs(config_path, _seen=None):
     that doesn't have one simply falls through to the next.
     """
     config_path, _seen = _register_seen(config_path, _seen)
+    if not config_path.is_file():
+        # an env dir need not have its own denver.toml if -f/-c supply the
+        # whole config (see _load_cli_config) -- nothing to import from here.
+        return []
     imported = _imported_paths(load_config_file(config_path), config_path.parent)
 
     dirs = [p.parent for p in imported]
@@ -970,6 +974,10 @@ def collect_hook_entries(config_path, name, _seen=None):
     ever run if that ``denver.toml`` actually lists it.
     """
     config_path, _seen = _register_seen(config_path, _seen)
+    if not config_path.is_file():
+        # see collect_import_dirs's own guard -- an env dir need not have a
+        # denver.toml of its own when -f/-c supply the whole config.
+        return []
     raw = load_config_file(config_path)
     base_dir = config_path.parent
 
@@ -1665,7 +1673,9 @@ def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()
     resolution runs every provider's existence checks, so "which scripts
     exist?" would fail for reasons having nothing to do with scripts.
     """
-    config = load_config(config_path)
+    # config_path may not exist -- see _load_cli_config's own is_file() guard: an
+    # env dir need not have its own denver.toml if -f/-c supply the whole config.
+    config = load_config(config_path) if config_path.is_file() else {}
     config, _ = expand_section_imports(config, env_dir)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
 
@@ -3812,6 +3822,8 @@ def _run_resolved_cli(argv):
     if _handle_info_flags(args, parser):
         return
 
+    _require_config_source(config_path, args.config_file)
+
     cli_args = CliArgs(cli_arg_env(config.get("args"), args), extra_argv)
 
     if _handle_config_subcommands(args, env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars):
@@ -3905,7 +3917,16 @@ def _handle_env_less_argv(preliminary, head):
 
 
 def _load_cli_config(args, config_path) -> dict:
-    """The env's config as the CLI asked for it: its own file, plus -f files, plus -c overrides -- validated."""
+    """The env's config as the CLI asked for it: its own file, plus -f files, plus -c overrides -- validated.
+
+    ``config_path`` not existing is tolerated here rather than reported --
+    ``--help``/``--version``/``--license`` (handled right after this, in
+    _run_resolved_cli) must still work for a directory with no denver.toml
+    of its own, and -f/--config-file may yet supply the whole config even
+    for a real run. See _require_config_source for where the "no
+    denver.toml" case actually gets reported, once neither of those
+    excuses applies.
+    """
     config = load_config(config_path) if config_path.is_file() else {}
     for config_file in args.config_file:
         config = deep_merge(config, load_config(Path(config_file)))
@@ -3920,6 +3941,21 @@ def _load_cli_config(args, config_path) -> dict:
     # deep_merge/apply_config_overrides are typed for config *values* (a
     # mapping, a list, a scalar); a whole denver.toml is always the mapping.
     return cast(dict, config)
+
+
+def _require_config_source(config_path, config_files):
+    """Die if <env> resolved to a directory with no denver.toml of its own, and no -f/--config-file either.
+
+    Checked once ``--help``/``--version``/``--license`` are ruled out (see
+    _load_cli_config, which tolerates the same situation so those can still
+    work) -- everything past this point (--show-config, --scripts, a real
+    run) needs an actual config from somewhere.
+    """
+    if not config_path.is_file() and not config_files:
+        die(
+            f"no {CONFIG_NAME} in '{config_path.parent}' -- give a path to an env directory that has one, "
+            f"a path directly to a denver.xxx.toml file, or supply --config-file."
+        )
 
 
 def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=None, env_vars=None):
