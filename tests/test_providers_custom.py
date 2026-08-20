@@ -172,6 +172,19 @@ def test_cmd_logs_its_own_value(make_context, caplog):
     assert "custom[custom]: run cmd: true" in caplog.text
 
 
+def test_cmd_log_line_strips_a_toml_triple_quoted_trailing_newline(make_context, tmp_path, caplog):
+    # a TOML triple-quoted 'cmd:' (the usual style for anything longer than
+    # one line) carries a trailing newline before the closing '''; logged
+    # raw, that embedded newline printed as a stray blank line splitting
+    # this INFO line from the command's own output right below it.
+    caplog.set_level("INFO")
+    marker = tmp_path / "marker"
+    config = {"custom": {"cmd": f"touch {marker}\n"}}
+    ctx = make_context(config=config)
+    run_custom(config, ctx)
+    assert caplog.records[-1].message == f"custom[custom]: run cmd: touch {marker}"
+
+
 def test_source_logs_the_resolved_path(make_context, caplog):
     caplog.set_level("INFO")
     config = {"custom": {"source": "vars.sh"}}

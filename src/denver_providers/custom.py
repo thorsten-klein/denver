@@ -69,12 +69,19 @@ class CustomProvider(Provider):
         """
         if not cmd:
             return
+        # logged stripped, not raw: a TOML triple-quoted 'cmd:' (the common
+        # style for anything longer than one line) carries its own trailing
+        # newline before the closing '''; embedding that raw would print a
+        # stray blank line after this one instead of ending it cleanly. bash
+        # itself doesn't care about the surrounding whitespace either way,
+        # so only the logged text is stripped -- the executed cmd is not.
+        logged_cmd = cmd.strip()
         if ctx.fast:
             banner(ctx, self.stage, "cmd (skipped by --fast)")
-            info(f"custom[{self.stage}]: --fast skips '{cmd}'")
+            info(f"custom[{self.stage}]: --fast skips '{logged_cmd}'")
             return
         banner(ctx, self.stage, "cmd")
-        info(f"custom[{self.stage}]: run cmd: {cmd}")
+        info(f"custom[{self.stage}]: run cmd: {logged_cmd}")
         ctx.run(["bash", "-c", cmd])
 
     def _source_script(self, ctx, source):
