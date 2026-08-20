@@ -1,0 +1,38 @@
+/* Overrides for sphinx_rtd_theme's own theme.css -- see doc/conf.py's
+ * html_css_files. Two fixed problems, both from the theme's own defaults:
+ *
+ * 1. ".wy-nav-content { max-width: 800px }" caps the reading column at
+ *    800px regardless of viewport width, leaving most of a normal monitor
+ *    empty. Widened here -- still centered by the theme's own "margin:
+ *    auto", just no longer clamped.
+ *
+ * 2. ".rst-content code, .rst-content tt { white-space: nowrap }" is fine
+ *    for a short inline code span in a paragraph, but inside a table cell
+ *    (this codebase's doc/*.md tables regularly put a code span in a
+ *    column, e.g. doc/configuration/denver-toml.md's shell-variable table)
+ *    it stops that cell from wrapping at all -- the whole table pushes
+ *    wider than its container instead of breaking the line, i.e. exactly
+ *    the "tables don't linebreak" symptom. Restoring normal wrapping only
+ *    inside table cells (not globally -- an inline code span mid-sentence
+ *    still shouldn't break mid-token) fixes that without touching how code
+ *    spans look anywhere else.
+ */
+
+.wy-nav-content {
+  max-width: none;
+}
+
+.rst-content table.docutils code,
+.rst-content table.docutils tt {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+/* The cells themselves: docutils/RTD tables are otherwise auto-sized to
+ * their widest line, which fights the code-span fix above -- a cell whose
+ * only wrappable content is that code span still won't wrap unless the
+ * cell's own text is allowed to break too. */
+.rst-content table.docutils td,
+.rst-content table.docutils th {
+  white-space: normal;
+}
