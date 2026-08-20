@@ -1407,11 +1407,54 @@ def test_run_named_scripts_runs_each_setup_stage_in_order(tmp_path, fake_provide
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])
-def test_run_named_scripts_skips_stage_without_entry(tmp_path, fake_providers, run_recorder, name):
+def test_run_named_scripts_skips_stage_without_entry(tmp_path, fake_providers, run_recorder, caplog, name):
+    caplog.set_level("INFO")
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup"}}
     denver.run_named_scripts(env_dir, config, cfg_path, [name])
     assert run_recorder.commands() == []
+    # nothing ran and nothing was printed -- this is what the user actually
+    # asked for (--scripts <name> found no entries at all), so it has to say
+    # so rather than exiting 0 in total silence
+    assert f"no '{name}' scripts to run for env '{env_dir.name}'" in caplog.text
+
+
+@pytest.mark.parametrize("name", ["setup", "login"])
+def test_run_named_scripts_warns_once_per_empty_name(tmp_path, fake_providers, run_recorder, caplog, name):
+    # two names in one invocation, only one of them declared anywhere --
+    # only the empty one gets warned about, and only once
+    other = "other-name"
+    env_dir, cfg_path = _env(tmp_path, {})
+    (env_dir / "a.sh").write_text("#!/bin/bash\n")
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "scripts": {name: ["a.sh"]}},
+    }
+    caplog.set_level("INFO")
+    denver.run_named_scripts(env_dir, config, cfg_path, [name, other])
+    assert f"no '{other}' scripts to run for env '{env_dir.name}'" in caplog.text
+    assert f"no '{name}' scripts to run" not in caplog.text
+    assert caplog.text.count("scripts to run for env") == 1
+
+
+@pytest.mark.parametrize("name", ["setup", "login"])
+def test_run_named_scripts_wrapper_relocation_warns_when_neither_side_has_entries(
+    tmp_path, fake_providers, run_recorder, exec_recorder, caplog, name
+):
+    # neither the wrapper stage nor the setup stage declares 'name' -- there
+    # is nothing to relocate and nothing ran on the host either, so this has
+    # to be flagged the same way the no-wrapper case is
+    caplog.set_level("INFO")
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["fakewrap", "fakesetup"],
+        "fakewrap": {"provider": "fakewrap"},
+        "fakesetup": {"provider": "fakesetup"},
+    }
+    denver.run_named_scripts(env_dir, config, cfg_path, [name])
+    assert run_recorder.commands() == []
+    assert exec_recorder == {}
+    assert f"no '{name}' scripts to run for env '{env_dir.name}'" in caplog.text
 
 
 @pytest.mark.parametrize("name", ["setup", "login"])
