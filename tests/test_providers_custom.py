@@ -64,6 +64,35 @@ def test_source_missing_file_dies(make_context):
         run_custom(config, ctx)
 
 
+# ---- banner text -- key names, not a generic 'run' -------------------------#
+def test_cmd_banners_as_cmd_not_run(make_context, capsys):
+    config = {"custom": {"cmd": "true"}}
+    ctx = make_context(config=config)
+    run_custom(config, ctx)
+    err = capsys.readouterr().err
+    assert "- cmd" in err
+    assert "- run" not in err
+
+
+def test_source_banners_as_source(make_context, capsys):
+    config = {"custom": {"source": "vars.sh"}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "vars.sh").write_text("export MYVAR=1\n")
+    run_custom(config, ctx)
+    err = capsys.readouterr().err
+    assert "- source" in err
+    assert "- run" not in err
+
+
+def test_cmd_and_source_each_get_their_own_banner_in_order(make_context, capsys):
+    config = {"custom": {"cmd": "true", "source": "vars.sh"}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "vars.sh").write_text("export MYVAR=1\n")
+    run_custom(config, ctx)
+    err = capsys.readouterr().err
+    assert err.index("- cmd") < err.index("- source")
+
+
 # ---- --fast ------------------------------------------------------------------#
 def test_fast_skips_running_cmd(make_context, tmp_path):
     marker = tmp_path / "marker"
@@ -71,6 +100,14 @@ def test_fast_skips_running_cmd(make_context, tmp_path):
     ctx = make_context(config=config, fast=True)
     run_custom(config, ctx)
     assert not marker.exists()
+
+
+def test_fast_banners_cmd_as_skipped(make_context, capsys):
+    config = {"custom": {"cmd": "true"}}
+    ctx = make_context(config=config, fast=True)
+    run_custom(config, ctx)
+    err = capsys.readouterr().err
+    assert "- cmd (skipped by --fast)" in err
 
 
 def test_fast_still_validates_cmd(make_context):
