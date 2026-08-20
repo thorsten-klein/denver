@@ -63,7 +63,7 @@ fakes, requested as fixtures:
 
 **Golden-file tests** (`tests/test_golden_show_config.py`) are the one place
 that *is* end-to-end: for every env under `examples/` tracked in git, it runs
-the real `--show-config` resolution against the real `denver.yml` and
+the real `--show-config` resolution against the real `denver.toml` and
 compares the output to a checked-in snapshot in `tests/golden/`, with this
 checkout’s own absolute path normalized to `<REPO>` and the zephyr
 provider’s workspace-root lookups faked (both documented in that test
@@ -106,10 +106,10 @@ This is for contributing a provider *into denver itself* — one generic
 enough that other projects would want it too. A provider specific to your
 own project (an internal build tool, a deploy step) doesn’t need any of
 this or a fork: see “Extension providers” in
-[Configuration](../configuration/denver-yml.md) instead.
+[Configuration](../configuration/denver-toml.md) instead.
 
 1. Subclass `Provider` (`src/denver_providers/base.py`): set `name`, `KEYS` (every
-   `denver.yml` key your section understands), and `kind` if it’s a wrapper
+   `denver.toml` key your section understands), and `kind` if it’s a wrapper
    (default: `setup`).
 2. Implement `resolve_defaults(cls, ctx, cfg, config)` — a classmethod, and
    the *only* place your provider computes a default (a PATH lookup, a
@@ -168,12 +168,12 @@ no API token stored in the repo), through the `pypi` GitHub environment.
 
 Before tagging: make sure CI is green on the commit being tagged, that
 `README.md`/`doc/` describe what actually ships, and that
-`SUPPORTED_CONFIG_VERSION` in `src/denver.py` still matches the `denver.yml`
+`SUPPORTED_CONFIG_VERSION` in `src/denver.py` still matches the `denver.toml`
 schema — it must be bumped together with any breaking schema change, so an
 older denver rejects a newer file instead of misreading it.
 
-A `denver.yml` states which denver *tool* version it needs with
-`denver-version:` (see [Configuration](../configuration/denver-yml.md)), so a file
+A `denver.toml` states which denver *tool* version it needs with
+`denver-version:` (see [Configuration](../configuration/denver-toml.md)), so a file
 using a brand-new feature names the release that first shipped it. When an
 example under `examples/` is changed to rely on something unreleased, its
 `denver-version:` names the version about to be tagged — a pin for a release
@@ -203,41 +203,31 @@ not a claim to be the release). So:
 
 ## Known limitations
 
-### `import yaml` must work wherever denver runs
+### denver has zero runtime dependencies
 
-PyYAML is denver’s only runtime dependency, and a `pip`/`uv` install brings
-it along — but that only settles the *host*. A wrapper provider re-invokes
-denver inside the environment it just entered (`reinvoke_command()` in
+`denver.toml` is read with the standard library alone (`tomllib` — hence
+`requires-python = ">=3.11"` in `pyproject.toml`). Nothing to install, on the
+host or inside a wrapper’s re-invoked process (`reinvoke_command()` in
 `src/denver.py` builds `["python3", <this file>, ...]`, a bare command
-resolved against the container’s `PATH`), so a docker-wrapped env imports
-PyYAML from the **image**, which no host-side install can influence. Every
-such image has to provide it — `python3-yaml` on Debian/Ubuntu, as both
-example images under `examples/` do.
+resolved against the container’s `PATH` for a docker-wrapped env — an
+interpreter denver cannot pip-install anything into ahead of time, so
+depending on nothing there is exactly the point). Keep it that way when
+contributing: reaching for a runtime dependency for denver’s own config
+handling is what would invalidate this, and turns a documented feature into
+a real compatibility matrix.
 
-The `try: import yaml` guard at the top of `src/denver.py` exists for this
-case alone: it names the failing interpreter (`sys.executable`) and points
-at the Dockerfile, because the bare `ImportError` came from a process the
-user never invoked by name and reads as a denver bug. It carries
-`# pragma: no cover` — it is a property of the interpreter denver is running
-on, so the suite cannot reach it.
+### PyYAML is still a dependency – just not denver’s own
 
-### PyYAML’s version is intentionally unconstrained
-
-The host copy and the image copy come from different package managers, and
-denver makes no attempt to keep them in lockstep — no pin forwarded into the
-container, no runtime version assertion. The tradeoff is deliberate and rests
-on how little of the library is used: **`yaml.safe_load` and
-`yaml.safe_dump`, nothing else**. Two functions whose behaviour has been
-stable across PyYAML releases for years, so importing whichever version
-happens to be present is a risk worth taking against the alternative —
-mandating one version and making every downstream image track denver’s
-choice.
-
-`pyproject.toml` declares `pyyaml>=6`: a floor documenting the API denver
-codes against, not a pin, and one that binds only the host install.
-
-Keep it that way when contributing. Reaching for a third `yaml.*` function
-(or any second runtime dependency) is what would invalidate the reasoning
-above, and turns a documented limitation into a real compatibility matrix.
+`conan_scripts/*.py` (`build_catalog.py`, `get_rrev.py`, `recipes.py`)
+unconditionally `import yaml`, because `conandata.yml`/`catalog.yml` are
+formats Conan itself dictates, not something denver chose – see
+[Configuration](../configuration/denver-toml.md) and
+[the conan provider](../providers/conan.md). This is unrelated to denver’s
+own `denver.toml`: those scripts run inside the env’s own venv (whatever
+`python3` the `conan` provider resolves at that point, see
+`src/denver_providers/conan.py`), not in the process running `denver.py`
+itself, so it’s the `test` dependency group that names it (for the suite,
+which imports those modules directly), not `pyproject.toml`’s own
+`[project] dependencies`.
 Dependencies that are only needed for development or tests belong in a
 `[dependency-groups]` entry, where they never reach a user’s environment.

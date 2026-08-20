@@ -3,7 +3,7 @@
 ![denver logo](../src/denver_assets/logo.svg)
 
 **D**evelopment **Env**ironment Launch**er** — describe your environments as
-Code in a `denver.yml`: reproducible and layerable to fit your project’s needs.
+Code in a `denver.toml`: reproducible and layerable to fit your project’s needs.
 
 ## What problem does denver solve?
 
@@ -27,7 +27,7 @@ The common thread is that **the setup is a suggestion, not a definition.**
 Nothing enforces it, nothing checks it, and nothing tells you when your
 machine has drifted away from it.
 
-denver replaces that suggestion with a file — `denver.yml` — that *defines*
+denver replaces that suggestion with a file — `denver.toml` — that *defines*
 the environment: what it needs, in what order. You then run:
 
 ```bash
@@ -40,7 +40,7 @@ machine and your colleague’s.
 
 Three things follow from that, and they are most of why denver exists:
 
-- **It is declarative, not a script.** Reading the `denver.yml` tells you
+- **It is declarative, not a script.** Reading the `denver.toml` tells you
   what the environment is. There is no “…and then also run this other thing”
   hiding in someone’s shell history.
 - **It is fast on repeat.** A second run checks what actually changed and
@@ -58,15 +58,15 @@ smallest to largest.
 
 Three words carry most of the model, so they are worth pinning down.
 
-An **environment** is simply a directory containing a `denver.yml`, and it is
+An **environment** is simply a directory containing a `denver.toml`, and it is
 the thing denver launches: `denver run <env>`. The file describes it completely —
 read the file and you know what the environment does. (`<env>` can also point
-straight at a YAML file, so one directory can hold several variants side by
-side, e.g. `denver.debug.yml` and `denver.release.yml`.)
+straight at a TOML file, so one directory can hold several variants side by
+side, e.g. `denver.debug.toml` and `denver.release.toml`.)
 
-`denver.yml` is the recipe; denver is the cook that follows it.
+`denver.toml` is the recipe; denver is the cook that follows it.
 
-A **stage** is one step of that recipe. A `denver.yml` lists its stages in
+A **stage** is one step of that recipe. A `denver.toml` lists its stages in
 order, and order matters: each stage leaves behind `PATH` entries,
 environment variables and files that the *next* stage — and finally your
 shell — can use. Think of getting dressed: underwear before trousers before
@@ -75,15 +75,16 @@ shoes.
 Each stage names a **provider**, which is the code that knows *how* to run
 that kind of step — creating a virtualenv, fetching a toolchain, entering a
 container. You never write provider code; you configure it from
-`denver.yml`.
+`denver.toml`.
 
 That is the whole model: an environment is stages, in order, each run by a
 provider. Everything else in this documentation is a detail of those three
 words.
 
-#### NOTE
-Precise definitions of these and every other term denver uses live in the
-[Glossary](../concepts/glossary.md).
+> **Note**
+
+> Precise definitions of these and every other term denver uses live in the
+> [Glossary](../concepts/glossary.md).
 
 ## Is denver flexible?
 
@@ -93,7 +94,7 @@ freedom to describe your environment the way it actually works.
 A handful of providers come bundled with denver, ready to be reused wherever
 they fit. But using any of them is entirely optional — denver has no opinion
 about which tools you should use, and a stage exists only because your
-`denver.yml` lists it:
+`denver.toml` lists it:
 
 | If your project…                                                   | …you may use this provider                                        |
 |--------------------------------------------------------------------|-------------------------------------------------------------------|
@@ -113,9 +114,10 @@ scripts is a perfectly normal way to use denver.
 Should you ever reach the point where you want a provider of your own — real
 lifecycle behavior rather than a script — you can register one out-of-tree,
 without forking denver. See “Extension providers” in
-[Configuration](../configuration/denver-yml.md).
+[Configuration](../configuration/denver-toml.md).
 
-#### NOTE
-**Next:** [Install Denver](install.md), then
-[Denver in 5 minutes](../quickstart/five-minutes.md) to watch all of this
-run in a real environment.
+> **Note**
+
+> **Next:** [Install Denver](install.md), then
+> [Denver in 5 minutes](../quickstart/five-minutes.md) to watch all of this
+> run in a real environment.

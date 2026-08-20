@@ -1,4 +1,4 @@
-# denver.yml
+# denver.toml
 
 ## Overview
 
@@ -6,7 +6,7 @@ Setting up a dev environment usually means running a handful of tools in
 the right order, each building on what the last one set up — get into the
 right OS, install native toolchains, create a Python venv, fetch source
 repos. denver makes that sequence declarative: maintain your environment in
-a `denver.yml`, and `denver` will run it.
+a `denver.toml`, and `denver` will run it.
 
 This page is the complete reference for that file and for the machinery
 behind it — every top-level key, every generic stage key, and how a config
@@ -16,23 +16,23 @@ already met most of it in context; this is where the remaining keys and the
 exact rules live.
 
 Terms used here (*environment*, *stage*, *step*, *provider*, *resolved
-config*, ...) are defined once in the
-[Glossary](../concepts/glossary.md); each provider's own config keys are
+config*, …) are defined once in the
+[Glossary](../concepts/glossary.md); each provider’s own config keys are
 documented on its own page under [Providers](../providers/uv.md).
 
 ## Core model
 
-An *environment* is a `denver.yml`; it declares an ordered list of *stages*
+An *environment* is a `denver.toml`; it declares an ordered list of *stages*
 under `stages:`; each stage names a `provider:` type (`uv`, `conan`,
 `zephyr`, `docker`, `custom`) plus some provider-specific keys in a
-top-level section of the stage's own name.
+top-level section of the stage’s own name.
 
 A provider is a generic, reusable engine — all project specifics come from
-the `denver.yml` itself, never from the provider's own code. Most
+the `denver.toml` itself, never from the provider’s own code. Most
 providers build a piece of the environment in place (create a venv,
 install tools, update a workspace); one, `docker`, is different: instead
 of building anything itself, it relocates the rest of the pipeline into a
-container (see "Wrapper / relocation" below).
+container (see “Wrapper / relocation” below).
 
 A stage id is only a label. The section must always declare its
 `provider:` explicitly, even when the id happens to match a provider name —
@@ -40,32 +40,32 @@ no type is ever guessed from an id. That is what lets one environment run
 two `uv` stages (say `uv` and `uv-zephyr`, targeting the same or
 different venvs) at different points of the pipeline.
 
-## The `denver.yml` schema
+## The `denver.toml` schema
 
 ### Top-level keys
 
 The following keys are recognised at the top level; everything else at that
 level must be a stage id declared in `stages:` (anything else is an error —
-see "Fail loud" in [`philosophy.md`](../concepts/philosophy.md)).
+see “Fail loud” in [`philosophy.md`](../concepts/philosophy.md)).
 
-- **`version`** — the `denver.yml` schema version this file is written
+- **`version`** — the `denver.toml` schema version this file is written
   against. The only value this denver understands is `"1.0"`; any other
   value is rejected with a clear message rather than silently
   misinterpreted. Optional, but worth setting: it exists so a future,
-  incompatible schema change can't quietly do the wrong thing to an old
-  file. Compared as a string, so YAML parsing `1.0` as a float doesn't
-  matter.
+  incompatible schema change can’t quietly do the wrong thing to an old
+  file. Compared as a string, so TOML’s own numeric parsing (a bare `1.0`
+  becoming a float) doesn’t matter.
 - **`denver-version`** — the minimum denver *tool* version this file needs,
-  e.g. `denver-version: ">=1.0.4"`. See "Requiring a denver version" below.
-- **`import`** — a list of environments (or YAML files) whose configuration
-  is inherited as a base, before this file's own content is applied on top.
-  See "Layering" below.
+  e.g. `denver-version = ">=1.0.4"`. See “Requiring a denver version” below.
+- **`import`** — a list of environments (or config files) whose configuration
+  is inherited as a base, before this file’s own content is applied on top.
+  See “Layering” below.
 - **`stages`** — the ordered list of stage ids to run. This *is* the
   pipeline; order is significant, and each id must have a matching top-level
   section declaring its `provider:`.
 - **`command`** — the default command to run once the environment is built,
   when none is given on the command line. If unset, denver falls back to the
-  `docker:` section's `default-cmd:`, then `$SHELL`, then `bash`. A command
+  `docker:` section’s `default-cmd:`, then `$SHELL`, then `bash`. A command
   passed on the CLI after `--` always wins over this.
 - **`runnable`** — set to `false` to mark this file as a base meant only to
   be imported, never started directly; `denver run <that env>` then fails
@@ -74,49 +74,49 @@ see "Fail loud" in [`philosophy.md`](../concepts/philosophy.md)).
 - **`env`** — a mapping of environment variables to set for the whole
   environment (values go through `${...}` interpolation). Applied once,
   right after the `env` hook, before any stage runs.
-- **`hooks`** — scripts sourced at fixed points in the pipeline. See "Hooks"
+- **`hooks`** — scripts sourced at fixed points in the pipeline. See “Hooks”
   below.
 - **`extensions`** — own, project-local `Provider` subclasses to register
   alongside the built-ins (`uv`, `conan`, `zephyr`, `docker`, `custom`), no
-  denver fork required. See "Extension providers" below.
-- **`args`** — command-line flags of this environment's own, each one
-  forwarded to argparse's `add_argument`. See "Environment-specific CLI
-  arguments" below.
+  denver fork required. See “Extension providers” below.
+- **`args`** — command-line flags of this environment’s own, each one
+  forwarded to argparse’s `add_argument`. See “Environment-specific CLI
+  arguments” below.
 
 ### Requiring a denver version
 
 `version:` pins the *schema*; `denver-version:` pins the *tool*. Those are
 two different questions, and only the second one has a good answer for the
 common case: a purely additive change — a new provider key, a new flag —
-never bumps the schema version, but a `denver.yml` relying on it still needs
+never bumps the schema version, but a `denver.toml` relying on it still needs
 a denver new enough to have it. Without `denver-version:`, running such a
 file on an older denver fails somewhere deep inside a stage, or quietly does
 something subtly different; with it, denver says so up front:
 
-```yaml
-version: "1.0"
-denver-version: ">=1.0.4"   # directly below version:, always
+```toml
+version = "1.0"
+denver-version = ">=1.0.4"   # directly below version:, always
 ```
 
-- The value is a version requirement, quoted (an unquoted `>=…` is not
-  valid YAML). A bare version means "at least this one", so
-  `denver-version: "1.0.4"` and `">=1.0.4"` are the same requirement.
+- The value is a version requirement, quoted (an unquoted `>=…` is not a
+  valid TOML value at all). A bare version means “at least this one”, so
+  `denver-version = "1.0.4"` and `">=1.0.4"` are the same requirement.
 - `>=`, `>`, `<=`, `<`, `==` and `!=` are all understood, and several
   comma-separated specifiers are ANDed: `">=1.0.4, <2"`.
 - Requirements are checked against the *merged* config, like every other
-  top-level key: an env inherits its base's requirement through `import:`.
+  top-level key: an env inherits its base’s requirement through `import:`.
   Two stacked layers stating a *different* requirement is the usual
   conflicting-strings error — prefix the overriding one with `!` to mean it
-  (see "Layering" below).
+  (see “Layering” below).
 - The version denver compares against is the one it is really running:
-  from the checkout's git tags when denver runs out of a checkout (the
+  from the checkout’s git tags when denver runs out of a checkout (the
   plain `src/denver.py` script *and* an editable install, whose packaging
   metadata is frozen at install time and would go stale), otherwise from
-  the installed distribution's metadata. `denver --version` prints the
-  same value. A checkout whose tags haven't caught up with what the tree
+  the installed distribution’s metadata. `denver --version` prints the
+  same value. A checkout whose tags haven’t caught up with what the tree
   contains reports against `DEV_VERSION` instead (`1.1.0-17-gabc1234`), so
   running from source works at every commit rather than only after a
-  release — see "Releasing" in [`development.md`](../contributing/development.md). In the rare case where neither can answer (a source copy with
+  release — see “Releasing” in [`development.md`](../contributing/development.md). In the rare case where neither can answer (a source copy with
   no git history and no install at all), the requirement is reported as
   unverifiable — a warning, not a failure.
 - A commit past a tag counts as newer than that tag (`1.0.3-2-gabc1234`
@@ -125,32 +125,39 @@ denver-version: ">=1.0.4"   # directly below version:, always
 
 A denver too old to know the key at all (before it was introduced) rejects
 the file with `unknown top-level key(s) denver-version` — different wording,
-same conclusion: that denver is too old for this `denver.yml`.
+same conclusion: that denver is too old for this `denver.toml`.
 
 ### Generic stage keys
 
-Four keys may appear in *any* stage's section, whatever its provider:
+These keys may appear in *any* stage’s section, whatever its provider:
 
 - **`provider`** (**required**) — which provider engine runs this stage:
   `uv`, `conan`, `zephyr`, `docker` or `custom`.
 - **`description`** — free text (a list of strings) with whatever notes are
-  useful to whoever reads the config: what this stage is for, why it's
+  useful to whoever reads the config: what this stage is for, why it’s
   configured this way. denver never reads it; it is only surfaced in
   `--show-config`.
 - **`disabled`** — `true` opts this stage out of the normal pipeline, as if
   it had been `--skip`ped, without deleting its configuration. Must be a
   real boolean.
+- **`skip-on-success`**/**`skip-on-failure`** — each a list of scripts; when
+  every script in the list exits `0` (`skip-on-success`) or exits exactly
+  `1` (`skip-on-failure`), this stage’s whole setup — its `pre-<stage>` hook
+  included — is skipped for this run, as if it had been `--skip`ped for this
+  one invocation. The two lists are independent: give either, both (each
+  checked on its own group; either group being fully satisfied skips the
+  stage), or neither (no skip check at all). `--force` bypasses both.
 - **`scripts`** — the generic one-shot mechanism: `scripts: <name>: [...]`
   declares scripts run by `denver run <env> --scripts <name>` instead of the
-  normal pipeline. See "Hooks and scripts" below.
+  normal pipeline. See “Hooks and scripts” below.
 
-Every other key in a stage's section must be one the stage's own provider
-recognises — see that provider's page under [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers). An
+Every other key in a stage’s section must be one the stage’s own provider
+recognises — see that provider’s page under [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers). An
 unrecognised key is an error, not silently ignored.
 
 ### Variable interpolation
 
-Any string value in a `denver.yml` may contain `${VAR}` or
+Any string value in a `denver.toml` may contain `${VAR}` or
 `${VAR:-fallback}`, expanded against the environment denver is building
 (so a variable exported by an earlier hook or stage is visible to a later
 one). An unset variable with no fallback expands to the empty string.
@@ -159,18 +166,18 @@ Alongside the real environment, denver seeds a few built-ins of its own,
 which always reflect the current run even if a stale variable of the same
 name is already exported:
 
-- **`DENVER_SRC_DIR`** — where denver's own code lives.
-- **`DENVER_ENV_DIR`** — this environment's directory (the one holding its
-  `denver.yml`). Also the variable denver *reads* as the `<env>` CLI
-  argument's fallback when it's omitted.
-- **`DENVER_ENV_NAME`** — that directory's name.
-- **`DENVER_ENV_WORKDIR`** — denver's own working area for this environment
-  (`<env dir>/.denver/<denver.yml stem>/` by default): venv, install trees,
+- **`DENVER_SRC_DIR`** — where denver’s own code lives.
+- **`DENVER_ENV_DIR`** — this environment’s directory (the one holding its
+  `denver.toml`). Also the variable denver *reads* as the `<env>` CLI
+  argument’s fallback when it’s omitted.
+- **`DENVER_ENV_NAME`** — that directory’s name.
+- **`DENVER_ENV_WORKDIR`** — denver’s own working area for this environment
+  (`<env dir>/.denver/<config file stem>/` by default): venv, install trees,
   fingerprints, logs, `performance.jsonl`. Per environment and never shared
-  — see "Where an environment's state lives" in the top-level
+  — see “Where an environment’s state lives” in the top-level
   [`README.md`](https://github.com/thorsten-klein/denver/blob/develop/README.md).
 - **`DENVER_CACHE_DIR`** — the *shared* cache root (`~/.cache/denver` by
-  default), offered for an env to point a tool's own download cache at, e.g.
+  default), offered for an env to point a tool’s own download cache at, e.g.
   `env: {CONAN_HOME: "${DENVER_CACHE_DIR}/conan2"}`. Safe to share across
   envs and checkouts because the tools owning such caches lock them
   themselves; denver writes nothing there itself.
@@ -182,7 +189,7 @@ name is already exported:
 These are exported into the environment too, so scripts, compose files and
 the final command can read them as ordinary variables. `DENVER_ENV_DIR`,
 `DENVER_STATE_DIR` and `DENVER_CACHE_DIR` — the variables denver *reads*
-rather than sets, and where an env's state lives by default — are documented
+rather than sets, and where an env’s state lives by default — are documented
 in the top-level
 [`README.md`](https://github.com/thorsten-klein/denver/blob/develop/README.md).
 
@@ -191,78 +198,78 @@ in the top-level
 denver marks the shell it starts by writing the prompt variables **the
 shells themselves define** — it contributes to them, it does not own them:
 
-| Variable | Shell | denver writes |
-| --- | --- | --- |
-| `PROMPT_COMMAND` | bash | its snippet, appended after whatever was there |
-| `PROMPT` | zsh | `(<env>) %m%#` — short host, then `%` (or `#` for root) |
-| `SHELL_PROMPT_PREFIX` | fish ≥ 4.8.0 | `(<env>) ` |
+| Variable              | Shell        | denver writes                                           |
+|-----------------------|--------------|---------------------------------------------------------|
+| `PROMPT_COMMAND`      | bash         | its snippet, appended after whatever was there          |
+| `PROMPT`              | zsh          | `(<env>) %m%#` — short host, then `%` (or `#` for root) |
+| `SHELL_PROMPT_PREFIX` | fish ≥ 4.8.0 | `(<env>) `                                              |
 
 **`PS1` is deliberately not set.** An interactive bash re-reads its rc files
 after denver execs it and assigns `PS1` outright, so anything denver put
 there would be discarded before the user ever saw it. `PROMPT_COMMAND` is
-bash's answer to exactly that — it runs after those rc files, before every
+bash’s answer to exactly that — it runs after those rc files, before every
 prompt — so that is where the marker goes for bash instead.
 
 The `PROMPT_COMMAND` snippet is idempotent: it re-applies the prefix only if
-it isn't already present (bash would otherwise grow `PS1` by one copy per
+it isn’t already present (bash would otherwise grow `PS1` by one copy per
 prompt), and a wrapper provider re-invoking denver inside a container never
 appends a second copy.
 
 One ordering subtlety, handled in `Context._prefix_prompt`: in zsh `PROMPT`
 and `PS1` are the *same* parameter, so an inherited `PS1` would win over
-denver's `PROMPT` if it happened to come later in `environ`. `PROMPT` is
+denver’s `PROMPT` if it happened to come later in `environ`. `PROMPT` is
 therefore always written last, so zsh keeps the zsh-syntax value.
 
 ## Config resolution
 
-Loading a `denver.yml` goes through a fixed sequence, and understanding it
+Loading a `denver.toml` goes through a fixed sequence, and understanding it
 explains a lot of otherwise-surprising behavior:
 
 1. **`import:` chain.** Each `import:` entry points at another env (or
-   directly at a YAML file); that file is loaded the same way, recursively,
-   then merged in as the base *before* the importing file's own content is
+   directly at a config file); that file is loaded the same way, recursively,
+   then merged in as the base *before* the importing file’s own content is
    applied on top. A circular `import:` chain is an error.
 2. **Merge rules.** Mappings merge key by key, recursively. A *list* is
-   appended to, not replaced — a lower layer's entries plus this layer's
+   appended to, not replaced — a lower layer’s entries plus this layer’s
    own, in that order, so a derived env only needs to list what it *adds*.
    Prefix one entry with `!` to drop everything from lower layers, or use a
-   bare `<overwrite>` entry to do the same as a pure marker (it's removed from
+   bare `<overwrite>` entry to do the same as a pure marker (it’s removed from
    the merged list, unlike `!foo` which keeps `foo`). A *string*
    works the same way: two layers disagreeing on the same string key (e.g.
-   `uv.python: "3.11"` vs `"3.12"`) is treated as a likely mistake and is a
+   `uv.python = "3.11"` vs `"3.12"`) is treated as a likely mistake and is a
    hard error, unless the overriding value is explicitly prefixed with `!`
-   (e.g. `python: "!3.12"`) to say "yes, replace it on purpose." For both,
-   `!` only means anything when there's an actual lower-layer value to
-   override — on a brand new key it's an ordinary character.
-3. **Section-level `import:`** ("stacking") lets one stage's section pull
-   its content from another env's section, instead of (or in addition to)
-   inheriting the whole file — see "Layering" below.
-4. **Every provider's defaults are filled in centrally**, before any stage
+   (e.g. `python = "!3.12"`) to say “yes, replace it on purpose.” For both,
+   `!` only means anything when there’s an actual lower-layer value to
+   override — on a brand new key it’s an ordinary character.
+3. **Section-level `import:`** (“stacking”) lets one stage’s section pull
+   its content from another env’s section, instead of (or in addition to)
+   inheriting the whole file — see “Layering” below.
+4. **Every provider’s defaults are filled in centrally**, before any stage
    actually runs — never guessed inside the stage itself at run time. The
    practical effect: `--show-config` always shows *exactly* the config a
    real run would use, values already defaulted and all. If a value looks
    wrong in `--show-config`, it will be exactly as wrong in the real run —
-   there's no separate "what setup() actually decides" to go check.
-5. **Unknown keys are an error**, not silently ignored — a typo'd key at
-   the top level, or a key not recognised by a stage's own provider, dies
+   there’s no separate “what setup() actually decides” to go check.
+5. **Unknown keys are an error**, not silently ignored — a typo’d key at
+   the top level, or a key not recognised by a stage’s own provider, dies
    immediately rather than quietly doing nothing.
 
-`--show-config` prints the result of this whole sequence and exits. It is
-the single best way to understand what an environment really does, imports
-included.
+`--show-config` prints the result of this whole sequence, as TOML, and
+exits. It is the single best way to understand what an environment really
+does, imports included.
 
 ## Layering
 
 `import:` is what lets several environments share configuration without
 copy-pasting it:
 
-- **Whole-file `import:`** inherits another env's entire stack as a base,
+- **Whole-file `import:`** inherits another env’s entire stack as a base,
   e.g. a project-specific env importing a shared base that already
   declares `stages:`, `docker:`, `conan:`, `uv:`. The importing file only
-  needs to state what's actually different for it.
+  needs to state what’s actually different for it.
 - **Section-level `import:`** stacks just one section from another env,
-  e.g. a `docker:` section pulling in a shared base's `docker:` config
-  without inheriting that base's *entire* stack. An entry can point at a
+  e.g. a `docker:` section pulling in a shared base’s `docker:` config
+  without inheriting that base’s *entire* stack. An entry can point at a
   specific section by name (`path:section`) instead of always the
   same-named one.
 
@@ -276,11 +283,13 @@ something nobody meant to run.
   addressed by a dotted path (e.g. `-c uv.python=3.13`). Any missing
   parent section along the path is created automatically. `KEY.PATH+=VALUE`
   appends to an existing list/string/number instead of replacing it. The
-  value is parsed as YAML, so `-c uv.no-index=true` sets a real boolean,
-  not the string `"true"`. Repeatable; later `-c`s win over earlier ones
-  targeting the same path.
-- **`-cf FILE`** overlays a whole YAML file on top of the env's own
-  `denver.yml`, using the exact same merge rules as `import:`. Repeatable,
+  value is parsed as JSON when that succeeds, so `-c uv.no-index=true` sets
+  a real boolean, not the string `"true"`; anything that isn’t valid JSON on
+  its own (a bare word, an unquoted version string like `3.12.3`) is kept as
+  a plain string. Repeatable; later `-c`s win over earlier ones targeting
+  the same path.
+- **`-cf FILE`** overlays a whole TOML file on top of the env’s own
+  `denver.toml`, using the exact same merge rules as `import:`. Repeatable,
   applied in the order given.
 - **Ordering**: every `-cf` file is applied first (in order), then every
   `-c` override, last — so `-c` always has the final word over `import:`
@@ -292,48 +301,49 @@ actually does before running it for real.
 ## Command-line environment variables
 
 `-e`/`--env NAME[=VALUE]` sets an environment variable for this run — the
-"as if you'd exported it in your shell first" counterpart to `-c`'s config
-overrides. Applied to denver's own process (`os.environ`), to every stage
+“as if you’d exported it in your shell first” counterpart to `-c`’s config
+overrides. Applied to denver’s own process (`os.environ`), to every stage
 and hook (`ctx.env`), and to the final command; repeatable, later entries
 win over earlier ones of the same name, the same as `-c`. `NAME` alone (no
-`=`) forwards `NAME`'s current value out of denver's own environment,
-mirroring `docker run -e`'s own shorthand.
+`=`) forwards `NAME`’s current value out of denver’s own environment,
+mirroring `docker run -e`’s own shorthand.
 
-It always wins over the same name set by the env's own declarative `env:`
+It always wins over the same name set by the env’s own declarative `env:`
 map (applied *before* any stage runs, right after the `env` hook — see
-"Hooks and scripts"), the same way `-c` always wins over `import:`/`-cf`.
+“Hooks and scripts”), the same way `-c` always wins over `import:`/`-cf`.
 
 A wrapper stage that relocates into an actual container (`docker`) is a
 fresh process with its own, separate environment, so `-e` values are handed
 across that boundary explicitly two ways: as `--env NAME=VALUE` flags on the
-re-invoked denver (see "Wrapper / relocation" below), and as `docker compose
-run -e NAME=VALUE` flags on the container itself — the same mechanism that
+re-invoked denver (see “Wrapper / relocation” below), and as `docker compose run -e NAME=VALUE` flags on the container itself — the same mechanism that
 already carries `DENVER_IN_CONTAINER`/`DENVER_RELOCATED` across (see
-`docker.py`'s `_relocation_env`). A `custom` stage's `launcher:` needs
+`docker.py`’s `_relocation_env`). A `custom` stage’s `launcher:` needs
 neither: its child simply inherits `ctx.env` like any other exec.
 
 ## Environment-specific CLI arguments
 
 `-c` can set *anything*, which is exactly why it makes a poor interface for
-the one or two knobs an environment actually wants to offer ("which board?",
-"debug or release?"): its users have to know the dotted path, nothing
+the one or two knobs an environment actually wants to offer (“which board?”,
+“debug or release?”): its users have to know the dotted path, nothing
 appears in `--help`, and a typo is a new config key rather than an error.
 
 `args:` declares those knobs as real flags instead. Each entry is one
 `parser.add_argument()` call: `flags:` names the flag (a string, or a list
 to give it aliases), and **every other key is forwarded verbatim as a
-keyword argument** — so an env has argparse's whole vocabulary (`help:`,
+keyword argument** — so an env has argparse’s whole vocabulary (`help:`,
 `default:`, `action:`, `nargs:`, `choices:`, `required:`, `metavar:`,
 `dest:`, …) without denver re-inventing, or gating, any of it:
 
-```yaml
-args:
-- flags: [--board, -b]
-  default: nrf52840dk
-  help: which board to build for
-- flags: [--release]
-  action: store_true
-  help: build with optimisations
+```toml
+[[args]]
+flags = ["--board", "-b"]
+default = "nrf52840dk"
+help = "which board to build for"
+
+[[args]]
+flags = ["--release"]
+action = "store_true"
+help = "build with optimisations"
 ```
 
 ```bash
@@ -341,48 +351,48 @@ denver run my-project --board nrf5340dk --release -- west build
 ```
 
 What the user passed is exported as **`DENVER_ARG_<DEST>`**, where `<DEST>`
-is argparse's own destination name uppercased (`--board` → `DENVER_ARG_BOARD`,
+is argparse’s own destination name uppercased (`--board` → `DENVER_ARG_BOARD`,
 `--build-type` → `DENVER_ARG_BUILD_TYPE`, or whatever an explicit `dest:`
 says). That is one variable in the environment denver is building, so it
 reaches everything through the mechanisms already documented above —
-`${...}` interpolation in the same `denver.yml`, hooks, `scripts:`, and the
+`${...}` interpolation in the same `denver.toml`, hooks, `scripts:`, and the
 final command:
 
-```yaml
-zephyr-build:
-  provider: custom
-  cmd: west build -b ${DENVER_ARG_BOARD}
+```toml
+[zephyr-build]
+provider = "custom"
+cmd = "west build -b ${DENVER_ARG_BOARD}"
 ```
 
 The value is always a string, since an environment variable is:
 
 - `action: store_true`/`store_false` → `"1"` / `"0"`.
 - a multi-value flag (`nargs:`, `action: append`) → its items, space-joined.
-- a flag with no `default:` that wasn't given → **not exported at all**,
+- a flag with no `default:` that wasn’t given → **not exported at all**,
   rather than exported empty — so `${DENVER_ARG_BOARD:-nrf52840dk}` still
   falls back the way it reads.
 
-For the same reason, `type:` is rejected: argparse's `type=` is a callable,
-which a YAML file cannot express, and every value ends up a string anyway.
-Use `choices:` (argparse validates it, and lists it in `--help`) or an
+For the same reason, `type:` is rejected: argparse’s `type=` is a callable,
+which TOML cannot express, and every value ends up a string anyway. Use
+`choices:` (argparse validates it, and lists it in `--help`) or an
 `action:`.
 
 A few more properties worth knowing:
 
 - The flags are ordinary argparse flags, so `denver run <env> --help` lists
-  them alongside denver's own, and a mistyped one is argparse's usual
+  them alongside denver’s own, and a mistyped one is argparse’s usual
   `usage:`/`error:` on stderr — never a silently ignored token.
 - Write them **after** `<env>` (`denver run my-project --board x`): the flags
   an env declares live in the very file `<env>` names, so denver has to
   resolve `<env>` before it can know them.
-- A flag that would collide with one of denver's own (`--force`, or a `dest:`
+- A flag that would collide with one of denver’s own (`--force`, or a `dest:`
   of `ci`) is a hard error, not a silent override.
 - `args:` is a list, so it follows the normal list-merge rule: an env
   inherits every flag its `import:` chain declares and adds its own (see
-  "Layering").
+  “Layering”).
 - They survive a wrapper relocation: the tokens are re-passed to the denver
   re-invoked inside the container, which would otherwise only see each
-  flag's `default:` (see "Wrapper / relocation").
+  flag’s `default:` (see “Wrapper / relocation”).
 
 ## Hooks and scripts
 
@@ -395,21 +405,21 @@ exports become part of the environment everything after it runs in:
 - **`pre-cmd`** — right before the final command launches.
 
 Each hook name can be declared by any layer in the `import:` chain
-(`hooks: <name>:`, a list or a single path); a derived env's own hook never
-silently replaces a base env's hook of the same name — both run, base
+(`hooks: <name>:`, a list or a single path); a derived env’s own hook never
+silently replaces a base env’s hook of the same name — both run, base
 first.
 
 Separately, `scripts:` is a generic, open-ended mechanism for one-shot
-actions that are *not* part of the normal pipeline: any stage's section can
+actions that are *not* part of the normal pipeline: any stage’s section can
 declare `scripts: <name>: [...]`, and `denver run <env> --scripts <name>` runs
-every stage's own `<name>` entries, then exits without doing anything else.
+every stage’s own `<name>` entries, then exits without doing anything else.
 Nothing about `<name>` is fixed — `setup` and `login` are just conventions,
 not flags of their own. Which is why `denver run <env> --scripts`, with no
 name at all, lists the names that env actually defines: they are unguessable
 by design, and `scripts:` stacks across the whole `import:` chain, so reading
 one file does not answer it either.
 
-```
+```default
 $ denver run examples/zephyr-devshell-4.3.1 --scripts
 available --scripts names for env 'zephyr-devshell-4.3.1':
   setup        docker (1 script), zephyr (1 script)
@@ -426,11 +436,9 @@ lifecycle a built-in provider gets, rather than squeezing it into a single
 `custom: cmd:` line. `extensions: providers: dirs:` registers one without
 maintaining a fork of denver:
 
-```yaml
-extensions:
-  providers:
-    dirs:
-    - my_providers   # resolved like conan's base-classes: env dir, then imported base envs
+```toml
+[extensions.providers]
+dirs = ["my_providers"]  # resolved like conan's base-classes: env dir, then imported base envs
 ```
 
 Every `*.py` file directly inside each listed dir — except those whose name
@@ -444,7 +452,7 @@ from denver_providers import Provider
 
 class AcmeProvider(Provider):
     name = "acme"  # the 'provider: acme' name a stage's section sets
-    KEYS = ("target",)  # denver.yml keys this provider reads
+    KEYS = ("target",)  # denver.toml keys this provider reads
 
     def setup(self, ctx):
         cfg = self.config_section(ctx)
@@ -457,18 +465,19 @@ PROVIDER = AcmeProvider
 Once registered, any stage can set `provider: acme` exactly like a built-in
 one:
 
-```yaml
-stages: [build]
-build:
-  provider: acme
-  target: release
+```toml
+stages = ["build"]
+
+[build]
+provider = "acme"
+target = "release"
 ```
 
 A provider too big for one file puts its shared code in a `_`-prefixed file
 (`_helpers.py`, or an `__init__.py` making the dir a package): those are
 skipped rather than required to be providers of their own. The dir itself
 goes on `sys.path`, appended — never prepended, so an extension dir cannot
-shadow the stdlib or denver's own modules — which is what makes
+shadow the stdlib or denver’s own modules — which is what makes
 `import _helpers` work from a provider module next to it.
 
 Registration happens once per resolved config, before any stage is
@@ -477,25 +486,25 @@ one everywhere else — `--show-config`, `--fast`, `-c` overrides, `import:`
 layering (the `dirs:` list itself follows the normal list-merge rule, so a
 derived env only needs to list the dirs it adds). A `name` colliding with an
 existing provider (built-in or from another extension dir) is a hard error,
-as is an unknown key under `extensions:` itself — the same "fail loud" rule
+as is an unknown key under `extensions:` itself — the same “fail loud” rule
 every other config mistake gets, never a silent override and never a typo
 that quietly disables the whole mechanism.
 
-Loading an extension provider runs its module's code, so an env's
-`denver.yml` is only ever as trustworthy as the repository it lives in —
+Loading an extension provider runs its module’s code, so an env’s
+`denver.toml` is only ever as trustworthy as the repository it lives in —
 the same already-true statement as for `hooks:`, `custom: cmd:` and a
 sourced `source:` script, not a new trust boundary.
 
 ## Fast by default
 
 Every stage that does real work computes a fingerprint (a checksum of its
-relevant inputs — requirement files, recipe content, workspace state, ...)
-and compares it against the last successful run's. Nothing changed →
+relevant inputs — requirement files, recipe content, workspace state, …)
+and compares it against the last successful run’s. Nothing changed →
 nothing expensive re-runs.
 
-- **`--fast`** skips every stage's (re-)build step entirely and only
+- **`--fast`** skips every stage’s (re-)build step entirely and only
   activates what a previous full run already built — it never looks at
-  fingerprints, it just assumes there's nothing to do. Run once without
+  fingerprints, it just assumes there’s nothing to do. Run once without
   `--fast` first; a stage dies with a clear message if it has nothing to
   activate yet.
 - **`--force`** is the opposite extreme: bypass every fingerprint and
@@ -506,13 +515,13 @@ nothing expensive re-runs.
 Being opposites, `--fast` and `--force` are mutually exclusive and giving
 both is an error. There is no sensible resolution to guess at: a provider
 takes its `--fast` path before it ever looks at `--force`, so the pair would
-otherwise mean "`--fast`, and the `--force` you typed did nothing".
+otherwise mean “`--fast`, and the `--force` you typed did nothing”.
 
 Neither `--force` nor `--ci` is ever read from a real environment variable
-— both only ever come from the flag itself, so behavior can't silently
+— both only ever come from the flag itself, so behavior can’t silently
 change based on what happens to be exported in the calling shell.
 
-Each provider's page under [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers) documents exactly what
+Each provider’s page under [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers) documents exactly what
 `--fast` and `--force` mean for that provider.
 
 ## Previewing a run (`--dry-run`)
@@ -533,15 +542,14 @@ Two categories deliberately still execute, because the preview is derived
 from them:
 
 - **read-only queries** — a `Context.run(..., query=True)` call exists so the
-  provider can immediately branch on it (`docker image inspect`, `conan
-  config home`, `west list`, a `skip-if-0:`/`skip-if-1:` script's exit
+  provider can immediately branch on it (`docker image inspect`, `conan config home`, `west list`, a `skip-on-success:`/`skip-on-failure:` script’s exit
   code). Skipping those would leave a dry run with nothing to decide with,
   and it would stop reflecting what a real run does. They are reported with
   a `?` marker, and a missing executable degrades to a failed query instead
   of aborting. `query` defaults to `capture` — a caller that also needs the
   real *output* back (not just the guarantee it ran) passes `capture=True`
-  too; a caller like `skip-if-0:`/`skip-if-1:` that only branches on the
-  exit code passes `query=True` alone, so the script's own stdout/stderr
+  too; a caller like `skip-on-success:`/`skip-on-failure:` that only branches on the
+  exit code passes `query=True` alone, so the script’s own stdout/stderr
   stay live on the terminal on a real run.
 - **sourced scripts** — `Context.source()` is how denver *computes* the
   environment. Without it, every rendered command would show empty `${...}`
@@ -549,13 +557,13 @@ from them:
 
 Two limits follow from the design rather than from the implementation:
 
-- A dry run describes what would happen **given the machine's current
+- A dry run describes what would happen **given the machine’s current
   state**. An already-built env legitimately previews fewer commands than a
-  clean one — that is exactly what a real run would do too (see "Fast by
-  default" above).
-- A **wrapper** stage can't be previewed past its own boundary. Setup stages
+  clean one — that is exactly what a real run would do too (see “Fast by
+  default” above).
+- A **wrapper** stage can’t be previewed past its own boundary. Setup stages
   run inside the container via a re-invocation (see
-  [Wrapper / relocation](#wrapper--relocation) below), and
+  [Wrapper / relocation]() below), and
   that re-invocation is itself one of the commands not being run — passing
   `--dry-run` inward would mean really starting the wrapper, which is what
   the run promised not to do. denver prints an explicit `!` note there
@@ -564,20 +572,20 @@ Two limits follow from the design rather than from the implementation:
 ## Stage filtering
 
 - **`--until <stage>`** truncates the pipeline: every stage up to and
-  including `<stage>` runs, everything after is dropped. There's no
-  "run only this one stage" flag — a stage practically always needs the
+  including `<stage>` runs, everything after is dropped. There’s no
+  “run only this one stage” flag — a stage practically always needs the
   ones before it.
 - **`--skip <stage>`** removes individual stages from whatever `--until`
   left; repeatable.
-- **`disabled: true`** in a stage's own section opts it out by default,
+- **`disabled: true`** in a stage’s own section opts it out by default,
   without `--skip` having to name it on every invocation.
-- Naming a stage id that isn't in `stages:` is an error. A filtered-out
-  stage's own section is left out of `--show-config`'s output too, along
+- Naming a stage id that isn’t in `stages:` is an error. A filtered-out
+  stage’s own section is left out of `--show-config`’s output too, along
   with its id in `stages:`.
 
 ## Wrapper / relocation
 
-A wrapper stage (`docker`, or a `custom` stage with `launcher:`) doesn't
+A wrapper stage (`docker`, or a `custom` stage with `launcher:`) doesn’t
 build the environment itself — it relocates the rest of the pipeline into
 somewhere else (a container). Running an env that stacks a wrapper
 builds/enters that container and re-invokes denver *inside* it with that
@@ -587,21 +595,21 @@ the exact same stack directly on the host instead, skipping the relocation
 entirely.
 
 That symmetry is deliberate: the host and container paths run the same
-stages from the same config, so "does it work without Docker?" is one flag
+stages from the same config, so “does it work without Docker?” is one flag
 away rather than a separate code path.
 
 ### How the inner run knows where it is
 
 Two separate questions, answered separately rather than by one guess:
 
-- **"Did a wrapper relocate me?"** is denver's own bookkeeping, so it is
+- **“Did a wrapper relocate me?”** is denver’s own bookkeeping, so it is
   *stated*, not detected: the relocating run sets `DENVER_RELOCATED` to the
-  wrapper stage ids that put the inner process there. Being denver's own
+  wrapper stage ids that put the inner process there. Being denver’s own
   variable, it works for a wrapper that relocates into something which is
   not a container at all — a `custom` stage with a `launcher:` — which no
   amount of probing the filesystem could reveal. It is what stops a
   denver-forced `--skip` from being reported as if the user had typed it.
-- **"Am I inside a container?"** is a fact about the machine — it decides
+- **“Am I inside a container?”** is a fact about the machine — it decides
   whether an interpreter can be installed, whether an offline install makes
   sense, and which venv directory is used. A wrapper that relocates into a
   container sets `DENVER_IN_CONTAINER` so the inner run never has to infer
@@ -617,7 +625,7 @@ right there rather than starting a second container.
 
 ## One run per environment at a time
 
-Every part of an environment's state is shared between concurrent runs, and
+Every part of an environment’s state is shared between concurrent runs, and
 several steps *rebuild* rather than update: the conan provider wipes its whole
 install tree before installing, and the uv provider removes and recreates a
 venv whose requirements changed — potentially while another run is using
@@ -639,19 +647,19 @@ and continues rather than pretending the run is serialised.
 ## Quiet levels
 
 - **`-q`** silences info lines, echoed commands, and the output of
-  internally-run build tools — but each stage's own progress banner and
-  "finished in Ns" summary still show, so a long-running invocation stays
+  internally-run build tools — but each stage’s own progress banner and
+  “finished in Ns” summary still show, so a long-running invocation stays
   legible.
 - **`-qq`** additionally silences the banners and summaries too, so only
-  the final launched command's own output reaches the terminal.
+  the final launched command’s own output reaches the terminal.
 - Errors are always reported, at any level.
 
 ## Performance tracing
 
-Every stage's runtime is appended to
+Every stage’s runtime is appended to
 `<DENVER_ENV_WORKDIR>/performance.jsonl` as JSON Lines of Chrome Trace Event
 Format events. Concatenate them into a `{"traceEvents": [...]}` document to
-load in `chrome://tracing` or <https://ui.perfetto.dev> and see where a slow
+load in `chrome://tracing` or [https://ui.perfetto.dev](https://ui.perfetto.dev) and see where a slow
 first run actually spent its time.
 
 A `--dry-run` records nothing here: no stage did its work, so its durations

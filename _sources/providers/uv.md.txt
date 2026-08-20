@@ -3,25 +3,25 @@
 A `uv` stage creates/manages a Python virtualenv with
 [`uv`](https://docs.astral.sh/uv/) (rather than plain `pip`/`venv`).
 
-```yaml
-my-uv-stage:
-  provider: uv
-  python: "3.12.3"
-  requirements:
-  - requirements.txt
+```toml
+[my-uv-stage]
+provider = "uv"
+python = "3.12.3"
+requirements = ["requirements.txt"]
 ```
 
-(`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Everything below is specific to `uv`.)
+(`provider:`/`description:`/`disabled:`/`skip-on-success:`/`skip-on-failure:`/`scripts:` are
+generic keys every stage has —
+see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything below is specific to `uv`.)
 
 ## Requires
 
 **`uv` must already be installed** wherever this stage runs — denver never
 installs it. That's the host for a plain run, or the container when a
 `docker` stage relocated the pipeline first (see "Wrapper / relocation" in
-[Configuration](../configuration/denver-yml.md)), in which case the image needs
+[Configuration](../configuration/denver-toml.md)), in which case the image needs
 it. Install it per [uv's own instructions](https://docs.astral.sh/uv/getting-started/installation/);
-a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
+a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
 
 ## Key reference
 
@@ -31,66 +31,51 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
   file, then the system interpreter) — denver never picks a version nobody
   wrote down. See "One venv, one interpreter" below for what happens when
   this contradicts a venv that already exists.
-- **`uv`** (default: `uv` on `PATH`) — the `uv` executable itself. (Yes,
-  `uv.uv`: the provider is named after the tool, and this key still points at
-  the binary — e.g. `-c uv.uv=/opt/uv/bin/uv`.)
+- **`exe`** (default: `uv` on `PATH`) — the `uv` executable itself, e.g.
+  `-c uv.exe=/opt/uv/bin/uv`.
 - **`requirements`** — a list of `-r` files, installed together.
 - **`install-args`** — extra literal `uv pip install` arguments, e.g.
   `["--pre"]`. An entry wrapped as `$(...)` is instead run as a shell
   command right before install; its stdout is split on whitespace and each
   token appended as its own arg — the way to pull in a dynamically-computed
   set of packages (e.g. `$(west packages pip)`) without hand-maintaining a
-  requirements file for them.
-- **`lock`** — optional; the uv-*project* (`pyproject.toml` + `uv.lock`) way
-  of filling the same venv, independent of `requirements:` above (either,
-  both or neither may be set). Two keys, each a path to a `uv.lock` (uv only
-  ever reads/writes `<project>/uv.lock`, so any other filename is a config
+  requirements file for them. This is also where to pass a uv-specific flag
+  denver has no dedicated key for, e.g. `--link-mode=copy`.
+- **`lockfile`** — optional; the uv-*project* (`pyproject.toml` + `uv.lock`)
+  way of filling the same venv, independent of `requirements:` above
+  (either, both or neither may be set). A path to a `uv.lock` (uv only ever
+  reads/writes `<project>/uv.lock`, so any other filename is a config
   error, and the project is the directory the lockfile sits in — it must
-  hold that project's `pyproject.toml`):
-  - **`create`** — runs `uv lock` for that project, i.e. *writes* the
-    lockfile (an output, like `freeze-to:`).
-  - **`sync`** — runs `uv sync` for that project, installing the lockfile
-    into the venv this stage just activated (`--active`), exactly as locked
-    (`--frozen` — re-resolving it is `create:`'s job, not a silent side
-    effect of syncing) and without pruning packages the lockfile doesn't
-    mention (`--inexact`, so a venv shared with another stage, or filled by
-    this stage's own `requirements:`, survives).
-
-  With both set, `create:` runs first, so one stage can relock and then
-  install what it locked. `sync:`'s lockfile counts as an install input, so
-  changing it recreates the venv the way a changed requirements file does;
-  `create:`'s doesn't (it's this run's own output). Both commands get the
-  same `find-links:`/`no-index:` wheel sources as `uv pip install`.
+  hold that project's `pyproject.toml`). Runs `uv sync` for that project,
+  installing the lockfile into the venv this stage just activated
+  (`--active`), exactly as locked (`--frozen` — denver never re-resolves
+  and rewrites it) and without pruning packages the lockfile doesn't
+  mention (`--inexact`, so a venv shared with another stage, or filled by
+  this stage's own `requirements:`, survives). To (re)write the lockfile
+  itself, run `uv lock` yourself, e.g. via a `custom` stage — `lockfile:`
+  only ever reads it. `lockfile:` counts as an install input, so changing it
+  recreates the venv the way a changed requirements file does. Gets the
+  same `no-index:` wheel sources as `uv pip install`.
 - **`overrides`** — a list of `--override` files.
-- **`find-links`** — extra wheel sources (e.g. a local cache directory).
 - **`no-index`** (default `false`) — `true`/`false`/`auto`. `false` installs
   from an index normally, wherever the stage runs. Set `auto` for an env
   whose *container* is meant to install offline: it then resolves to `true`
   inside a docker-wrapped env and `false` on the host — the assumption being
-  that the image already has everything it needs baked in (a wheel cache
-  reachable via `find-links:`) and shouldn't reach out to the network, while
-  a host run should. `auto` is opt-in rather than the default because a
-  container that has *not* had its wheels baked in is the far more common
-  case, and there the default has to be a working install, not an offline
-  one.
-- **`link-mode`** (default `"copy"`) — `uv`'s own link mode
-  (`UV_LINK_MODE`); `copy` avoids a hardlink warning when the venv and
-  `uv`'s cache are on different filesystems.
-- **`venv-patcher`** — optional. `exe` (default: `venv-patcher` on `PATH`)
-  and `patches` (**required** if `venv-patcher:` is given at all — a path
-  to a patches file). Applies patches to the venv's installed packages
-  after install.
-- **`skip-if-0`** — a list of scripts; if every one exits `0`, the install
-  step is skipped entirely — `uv pip install` as well as `lock:`'s `uv
-  lock`/`uv sync`. If the venv already exists it's still created/activated
-  (later stages depend on it); if it doesn't exist yet, the whole stage is
-  skipped instead, same as `disabled: true` — nothing creates/activates an
-  empty venv nobody would fill in.
-- **`skip-if-1`** — same, but for tools with the inverted convention: skips
-  when every script instead exits `1`. Mutually independent from
-  `skip-if-0:` — an env can give either, both (each checked on its own
-  group; either group being fully satisfied skips the install/stage), or
-  neither.
+  that the image already has everything it needs baked in and shouldn't
+  reach out to the network, while a host run should. `auto` is opt-in
+  rather than the default because a container that has *not* had its wheels
+  baked in is the far more common case, and there the default has to be a
+  working install, not an offline one.
+- **`patches-apply`** (default: `null`) — an optional literal command, run
+  after install (e.g. to patch the venv's installed packages with
+  [`venv-patcher`](https://pypi.org/project/venv-patcher/)):
+  `["venv-patcher", "apply", "-f", "uv/venv-patcher/patches.yml"]`. denver
+  doesn't build this command or know which token is a path — but each token
+  is checked against disk the same way any other path key resolves (this
+  env's dir, then each imported base config's own dir), and rewritten to an
+  absolute path if it matches something real there; a flag, subcommand, or
+  bare exe name with no on-disk match (`apply`, `-f`, `venv-patcher` itself)
+  passes through untouched. Any tool, any args, or unset entirely.
 - **`venv`** — the full dirname of this stage's venv (default `.venv`), so
   several `uv` stages can target distinct venvs (or share one by using the
   same name, or both leaving it unset). A value here replaces the whole
@@ -99,24 +84,25 @@ a stage with no `uv` on `PATH` fails with `uv provider needs 'uv' on PATH`.
 - **`freeze-to`** — a path; after a real install, `uv pip freeze`'s full
   output is written there. Useful as a lockfile a later run (or a different
   `uv` stage) can read back via `requirements:`.
-- **`append-mode`** (default `false`) — see "Reproducibility" in
+- **`reinstall`** (default `false`) — see "Reproducibility" in
   [`../concepts/philosophy.md`](../concepts/philosophy.md) for the full trade-off. When `true`, every `uv pip
-  install` invocation reuses every `-r`/`--override`/`--find-links`/
-  `--no-index`/literal arg any *previous* run of this stage ever resolved,
-  appending only what's new this run — so a source that drops out later
-  (e.g. a project losing a dynamic `install-args:` command) never causes
-  `uv` to reconsider a package only that source pulled in. The accumulated
-  arg list is kept outside the venv itself
+  install` invocation reuses every `-r`/`--override`/`--no-index`/literal
+  arg any *previous* run of this stage ever resolved, appending only what's
+  new this run — so a source that drops out later (e.g. a project losing a
+  dynamic `install-args:` command) never causes `uv` to reconsider a
+  package only that source pulled in. The accumulated arg list is kept
+  outside the venv itself
   (`<DENVER_DIR>/.envs/<env>/.logs/<stage>-install-args.json`), so it
   survives a checksum-triggered venv recreation; delete that file to reset
   it. Off by default because it makes the resulting venv depend on this
-  machine's run history, not just the current `denver.yml`.
+  machine's run history, not just the current `denver.toml`.
 
-`skip-if-0`/`skip-if-1` and `venv-patcher` are never guessed from the env's
-directory layout (see "Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) — with
-neither `skip-if-0:` nor `skip-if-1:` given there is simply no skip check,
-and the venv patcher runs only when `venv-patcher:` names its `patches:`
-file explicitly.
+`patches-apply` is never guessed from the env's directory layout (see
+"Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) —
+it only runs when it's set to a command explicitly. The same is true of the
+generic `skip-on-success:`/`skip-on-failure:` keys (see "Generic stage keys" in
+[Configuration](../configuration/denver-toml.md)): with neither given there
+is simply no skip check for this stage.
 
 ## One venv, one interpreter
 
@@ -164,11 +150,12 @@ A venv holds exactly one interpreter, and the one it already has wins:
   dies with a clear message if the venv doesn't exist yet — run once
   without `--fast` first.
 - **`--force`** recreates the venv from scratch unconditionally and
-  bypasses every `skip-if-0:`/`skip-if-1:` script.
+  bypasses every generic `skip-on-success:`/`skip-on-failure:` script (see
+  "Generic stage keys" in [Configuration](../configuration/denver-toml.md)).
 - **`--dry-run`** prints the `uv` commands (and the checksum/`freeze-to:`
   writes) instead of performing them; an existing venv is never removed. Two
   things still really happen, because the preview depends on them: each
-  `skip-if-0:`/`skip-if-1:` script runs (its exit code is what decides
-  whether an install would be shown at all), and each `$(...)` entry in
-  `install-args:` runs (its output *is* part of the `uv pip install` line
+  `skip-on-success:`/`skip-on-failure:` script runs (its exit code is what
+  decides whether this stage would be skipped altogether), and each `$(...)`
+  entry in `install-args:` runs (its output *is* part of the `uv pip install` line
   being shown).

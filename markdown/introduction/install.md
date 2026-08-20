@@ -25,7 +25,8 @@ gets you tab completion for subcommands, env paths and flags — see
 
 ## Prebuilt Binary
 
-On a machine with no Python at all, take the standalone executable attached
+On a machine with no Python at all, or one stuck on Python < 3.11 (denver
+requires `>=3.11` for `tomllib`), take the standalone executable attached
 to every [release](https://github.com/thorsten-klein/denver/releases)
 instead — it bundles denver, its providers and a Python interpreter in one
 file:
@@ -72,7 +73,8 @@ git-nested clone https://github.com/thorsten-klein/denver.git
 With that approach nothing needs installing — just call `src/denver.py` (or
 the vendored copy’s equivalent path) directly, exactly as `denver run <env> ...` is used throughout the rest of this documentation.
 
-#### NOTE
-**Next:** [Denver in 5 minutes](../quickstart/five-minutes.md) — run a real
-environment end to end. It starts with the handful of host tools you need
-first, which depends on which providers the environment uses.
+> **Note**
+
+> **Next:** [Denver in 5 minutes](../quickstart/five-minutes.md) — run a real
+> environment end to end. It starts with the handful of host tools you need
+> first, which depends on which providers the environment uses.

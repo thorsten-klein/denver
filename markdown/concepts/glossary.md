@@ -5,16 +5,16 @@ these definitions.
 
 ## The core model
 
-**Environment** — a directory containing a `denver.yml`, and the unit denver
+**Environment** — a directory containing a `denver.toml`, and the unit denver
 launches: `denver run <env>`. An environment is fully described by its
-`denver.yml` (plus whatever that file explicitly points at); reading the file
+`denver.toml` (plus whatever that file explicitly points at); reading the file
 tells you everything the environment does. `<env>` may also be a path
-directly to a YAML file, so one directory can hold several variants side by
-side (`denver.debug.yml`, `denver.release.yml`).
+directly to a TOML file, so one directory can hold several variants side by
+side (`denver.debug.toml`, `denver.release.toml`).
 
-**`denver.yml`** — the config file describing one environment: which stages
+**`denver.toml`** — the config file describing one environment: which stages
 run, in what order, and how each is configured. Its schema is documented in
-[Configuration](../configuration/denver-yml.md).
+[Configuration](../configuration/denver-toml.md).
 
 **Stage** — one entry in `stages:`: a provider type plus its own config
 section, run in order. The entry is the *stage id*, and the top-level section
@@ -25,13 +25,13 @@ targeting different venvs.
 
 **Provider** — the generic engine behind a stage type. denver ships five:
 `uv`, `conan`, `zephyr`, `docker` and `custom`. A provider holds no
-project-specific knowledge; everything specific comes from the `denver.yml`
+project-specific knowledge; everything specific comes from the `denver.toml`
 section it is given. See [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers).
 
 **Extension provider** — a project’s own `Provider` subclass, registered via
 `extensions: providers: dirs:` instead of being built into denver. Behaves
 exactly like a built-in provider everywhere else once registered — see
-“Extension providers” in [Configuration](../configuration/denver-yml.md).
+“Extension providers” in [Configuration](../configuration/denver-toml.md).
 
 **Step** — a stage’s own internal sub-phase, e.g. conan’s
 prepare/export/install or uv’s ensure-python/ensure-venv/install/activate.
@@ -70,7 +70,7 @@ filled in centrally, before any stage runs. This is exactly what
 `--show-config` prints, and exactly what a real run uses — the two can never
 disagree, because a provider’s `setup()` never computes a default of its own.
 
-**Whole-file `import:`** — one `denver.yml` inheriting another environment’s
+**Whole-file `import:`** — one `denver.toml` inheriting another environment’s
 entire stack as a base, then adding or overriding only what differs. This is
 how a version-specific environment reuses a shared base without copy-pasting
 its `stages:`/`docker:`/`conan:`/`uv:` config.
@@ -83,10 +83,10 @@ that environment’s entire stack. An entry may name a specific section
 **Merge rules** — how two layers combine: mappings merge key by key
 recursively; lists append (lower layer’s entries first); two layers setting
 the same string key to different values is a hard error unless the override
-is prefixed with `!`. See [Configuration](../configuration/denver-yml.md) for the
+is prefixed with `!`. See [Configuration](../configuration/denver-toml.md) for the
 details, including the `<overwrite>` marker.
 
-**Interpolation** — `${VAR}` / `${VAR:-default}` expansion inside `denver.yml`
+**Interpolation** — `${VAR}` / `${VAR:-default}` expansion inside `denver.toml`
 values, resolved against the environment denver is building (including its
 own built-ins such as `DENVER_ENV_DIR`).
 
@@ -114,7 +114,7 @@ its effect: each stage’s commands and file writes are printed (prefixed
 than launched. Read-only queries (`?`) and sourced scripts (`.`) still run —
 they are what the printed commands are derived from. A wrapper stage can’t
 be previewed past its own boundary; see
-[Configuration](../configuration/denver-yml.md#previewing-a-run-dry-run).
+[Configuration](../configuration/denver-toml.md#previewing-a-run-dry-run).
 
 **Stage filtering** — restricting which stages run: `--until <stage>`
 truncates the pipeline after the named stage, `--skip <stage>` removes
@@ -126,7 +126,7 @@ too, leaving only the launched command’s own output. Errors always print.
 
 **State directory** — where denver keeps everything it builds for one
 environment (venv, install trees, fingerprints, logs, `performance.jsonl`):
-`<env dir>/.denver/<denver.yml stem>/`, inside the environment’s own
+`<env dir>/.denver/<denver.toml stem>/`, inside the environment’s own
 directory and ignoring itself via a `.gitignore` denver writes there. Keyed on
 the config file, so two variants in one folder — and two checkouts of one
 project — never share it.
@@ -137,8 +137,9 @@ the shared cache root denver exports for an env to point a tool’s own
 download cache at. Full explanation in
 [Environment variables](../cli/environment-variables.md).
 
-#### NOTE
-**Next:** [Philosophy](philosophy.md) — the principles these terms were
-chosen to serve. Or go straight to
-[Creating environments](../quickstart/creating-environments.md) and put them
-to use.
+> **Note**
+
+> **Next:** [Philosophy](philosophy.md) — the principles these terms were
+> chosen to serve. Or go straight to
+> [Creating environments](../quickstart/creating-environments.md) and put them
+> to use.

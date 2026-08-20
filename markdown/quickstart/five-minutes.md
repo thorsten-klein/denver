@@ -4,7 +4,7 @@
 
 denver itself only needs Python — it never installs the tools its providers
 drive. This table is a lookup, not a checklist: **only the rows for the
-providers your own `denver.yml` actually lists apply to you.** Each of those
+providers your own `denver.toml` actually lists apply to you.** Each of those
 expects its tool to already be available wherever that stage runs (on the
 host, or inside the container once a `docker` stage relocated into it):
 
@@ -46,7 +46,7 @@ project’s env. It turns this onboarding note:
 into one command.
 
 If you would rather start from the small end, read
-`examples/simple-env/denver.yml` (a couple of shell snippets) instead.
+`examples/simple-env/denver.toml` (a couple of shell snippets) instead.
 For the *biggest* bundled example — a full
 [Zephyr RTOS](https://zephyrproject.org) toolchain across five stages — see
 [`examples/zephyr-devshell-4.3.1`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell-4.3.1)
@@ -89,7 +89,7 @@ Three words from
 now with something concrete attached to them:
 
 - The **environment** is the folder `examples/howto-env`, because that is
-  where its `denver.yml` lives.
+  where its `denver.toml` lives.
 - Each **stage** is one step of that setup, and they ran in the order the
   file lists them — the container first, because everything after it had to
   happen *inside* that container.
@@ -103,23 +103,24 @@ describe the *problem* rather than the tool — which is what lets this one
 environment run two different `custom` stages, `nvim-setup` and
 `best-practices`, without them colliding.
 
-`<env>` also accepts a path straight to a YAML file instead of a folder —
+`<env>` also accepts a path straight to a config file instead of a folder —
 handy when a folder holds several variants side by side (e.g.
-`denver.debug.yml`, `denver.release.yml`):
+`denver.debug.toml`, `denver.release.toml`):
 
 ```bash
-denver run examples/howto-env/denver.yml -- pytest examples/howto-env/tests
+denver run examples/howto-env/denver.toml -- pytest examples/howto-env/tests
 ```
 
 ### The 5 stages of this example
 
-```yaml
-stages:
-- docker-base            # 1. Ubuntu 24.04 + the apt packages + uv
-- uv-packages            # 2. the python 3.12 venv
-- nvim-setup             # 3. one prebuilt release, fetched by hand
-- conan-packages         # 4. cmake 3.31.9 and the ARM toolchain 15.3, exactly
-- best-practices         # 5. the team's PYTEST_ADDOPTS convention
+```toml
+stages = [
+  "docker-base",     # 1. Ubuntu 24.04 + the apt packages + uv
+  "uv-packages",     # 2. the python 3.12 venv
+  "nvim-setup",      # 3. one prebuilt release, fetched by hand
+  "conan-packages",  # 4. cmake 3.31.9 and the ARM toolchain 15.3, exactly
+  "best-practices",  # 5. the team's PYTEST_ADDOPTS convention
+]
 ```
 
 |   # | Stage            | Provider   | What it does                                                                                                                                                                                        |
@@ -197,18 +198,19 @@ of memorizing it.
 `import:`. For the pattern that shares one base setup across a whole fleet
 of projects (Step 5 of the [Introduction](../introduction/index.md)), see
 [`examples/zephyr-devshell-4.3.1`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell-4.3.1),
-whose `denver.yml` is under 60 lines because it imports its entire pipeline
+whose `denver.toml` is under 60 lines because it imports its entire pipeline
 from a shared base and restates only what’s project-specific.
 
-#### NOTE
-**Next:** [Creating environments](creating-environments.md) —
-build the environment you just ran, from an empty folder, one stage at a
-time. Having seen what it does, you now get to see *why* every key in it is
-there.
+> **Note**
 
-Two shortcuts, if you’d rather not build one yet: `examples/zephyr-uv/` is a
-Python venv and nothing else, `examples/simple-env/` just runs a shell
-script — both are a screenful. Or jump straight to the reference: the
-[`denver` command](../cli/arguments.md), the
-[`denver.yml` schema](../configuration/denver-yml.md), and one page
-[per provider](../providers/uv.md).
+> **Next:** [Creating environments](creating-environments.md) —
+> build the environment you just ran, from an empty folder, one stage at a
+> time. Having seen what it does, you now get to see *why* every key in it is
+> there.
+
+> Two shortcuts, if you’d rather not build one yet: `examples/zephyr-uv/` is a
+> Python venv and nothing else, `examples/simple-env/` just runs a shell
+> script — both are a screenful. Or jump straight to the reference: the
+> [`denver` command](../cli/arguments.md), the
+> [`denver.toml` schema](../configuration/denver-toml.md), and one page
+> [per provider](../providers/uv.md).

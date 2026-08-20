@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>denver.yml &mdash; denver</title>
+  <title>denver.toml &mdash; denver</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -102,7 +102,7 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-6-the-best-practices-stage">Step 6 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#step-7-what-actually-starts">Step 7 — what actually starts</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#the-finished-denver-yml">The finished <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#the-finished-denver-toml">The finished <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#prove-it-rather-than-hope">Prove it, rather than hope</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../quickstart/creating-environments.html#everyday-use">Everyday use</a></li>
 </ul>
@@ -156,10 +156,10 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">denver.yml</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">denver.toml</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#core-model">Core model</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#the-denver-yml-schema">The <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> schema</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#the-denver-toml-schema">The <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#top-level-keys">Top-level keys</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#requiring-a-denver-version">Requiring a denver version</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#generic-stage-keys">Generic stage keys</a></li>
@@ -231,8 +231,8 @@
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#ci">CI</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#releasing">Releasing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#known-limitations">Known limitations</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#import-yaml-must-work-wherever-denver-runs"><code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">yaml</span></code> must work wherever denver runs</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#pyyaml-s-version-is-intentionally-unconstrained">PyYAML’s version is intentionally unconstrained</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#denver-has-zero-runtime-dependencies">denver has zero runtime dependencies</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#pyyaml-is-still-a-dependency-just-not-denver-s-own">PyYAML is still a dependency – just not denver’s own</a></li>
 </ul>
 </li>
 </ul>
@@ -253,9 +253,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">denver.yml</li>
+      <li class="breadcrumb-item active">denver.toml</li>
       <li class="wy-breadcrumbs-aside">
-              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/configuration/denver-yml.md" class="fa fa-github"> Edit on GitHub</a>
+              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/configuration/denver-toml.md" class="fa fa-github"> Edit on GitHub</a>
       </li>
   </ul>
   <hr/>
@@ -263,15 +263,15 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="denver-yml">
-<h1>denver.yml<a class="headerlink" href="#denver-yml" title="Link to this heading"></a></h1>
+  <section id="denver-toml">
+<h1>denver.toml<a class="headerlink" href="#denver-toml" title="Link to this heading"></a></h1>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
 <p>Setting up a dev environment usually means running a handful of tools in
 the right order, each building on what the last one set up — get into the
 right OS, install native toolchains, create a Python venv, fetch source
 repos. denver makes that sequence declarative: maintain your environment in
-a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, and <code class="docutils literal notranslate"><span class="pre">denver</span></code> will run it.</p>
+a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, and <code class="docutils literal notranslate"><span class="pre">denver</span></code> will run it.</p>
 <p>This page is the complete reference for that file and for the machinery
 behind it — every top-level key, every generic stage key, and how a config
 is resolved. If you worked through
@@ -285,12 +285,12 @@ documented on its own page under <a class="reference internal" href="../provider
 </section>
 <section id="core-model">
 <h2>Core model<a class="headerlink" href="#core-model" title="Link to this heading"></a></h2>
-<p>An <em>environment</em> is a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>; it declares an ordered list of <em>stages</em>
+<p>An <em>environment</em> is a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>; it declares an ordered list of <em>stages</em>
 under <code class="docutils literal notranslate"><span class="pre">stages:</span></code>; each stage names a <code class="docutils literal notranslate"><span class="pre">provider:</span></code> type (<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>,
 <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>) plus some provider-specific keys in a
 top-level section of the stage’s own name.</p>
 <p>A provider is a generic, reusable engine — all project specifics come from
-the <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> itself, never from the provider’s own code. Most
+the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> itself, never from the provider’s own code. Most
 providers build a piece of the environment in place (create a venv,
 install tools, update a workspace); one, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, is different: instead
 of building anything itself, it relocates the rest of the pipeline into a
@@ -301,24 +301,24 @@ no type is ever guessed from an id. That is what lets one environment run
 two <code class="docutils literal notranslate"><span class="pre">uv</span></code> stages (say <code class="docutils literal notranslate"><span class="pre">uv</span></code> and <code class="docutils literal notranslate"><span class="pre">uv-zephyr</span></code>, targeting the same or
 different venvs) at different points of the pipeline.</p>
 </section>
-<section id="the-denver-yml-schema">
-<h2>The <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> schema<a class="headerlink" href="#the-denver-yml-schema" title="Link to this heading"></a></h2>
+<section id="the-denver-toml-schema">
+<h2>The <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema<a class="headerlink" href="#the-denver-toml-schema" title="Link to this heading"></a></h2>
 <section id="top-level-keys">
 <h3>Top-level keys<a class="headerlink" href="#top-level-keys" title="Link to this heading"></a></h3>
 <p>The following keys are recognised at the top level; everything else at that
 level must be a stage id declared in <code class="docutils literal notranslate"><span class="pre">stages:</span></code> (anything else is an error —
 see “Fail loud” in <a class="reference internal" href="../concepts/philosophy.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">philosophy.md</span></code></span></a>).</p>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">version</span></code></strong> — the <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> schema version this file is written
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">version</span></code></strong> — the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema version this file is written
 against. The only value this denver understands is <code class="docutils literal notranslate"><span class="pre">&quot;1.0&quot;</span></code>; any other
 value is rejected with a clear message rather than silently
 misinterpreted. Optional, but worth setting: it exists so a future,
 incompatible schema change can’t quietly do the wrong thing to an old
-file. Compared as a string, so YAML parsing <code class="docutils literal notranslate"><span class="pre">1.0</span></code> as a float doesn’t
-matter.</p></li>
+file. Compared as a string, so TOML’s own numeric parsing (a bare <code class="docutils literal notranslate"><span class="pre">1.0</span></code>
+becoming a float) doesn’t matter.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">denver-version</span></code></strong> — the minimum denver <em>tool</em> version this file needs,
-e.g. <code class="docutils literal notranslate"><span class="pre">denver-version:</span> <span class="pre">&quot;&gt;=1.0.4&quot;</span></code>. See “Requiring a denver version” below.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">import</span></code></strong> — a list of environments (or YAML files) whose configuration
+e.g. <code class="docutils literal notranslate"><span class="pre">denver-version</span> <span class="pre">=</span> <span class="pre">&quot;&gt;=1.0.4&quot;</span></code>. See “Requiring a denver version” below.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">import</span></code></strong> — a list of environments (or config files) whose configuration
 is inherited as a base, before this file’s own content is applied on top.
 See “Layering” below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">stages</span></code></strong> — the ordered list of stage ids to run. This <em>is</em> the
@@ -350,18 +350,18 @@ arguments” below.</p></li>
 <p><code class="docutils literal notranslate"><span class="pre">version:</span></code> pins the <em>schema</em>; <code class="docutils literal notranslate"><span class="pre">denver-version:</span></code> pins the <em>tool</em>. Those are
 two different questions, and only the second one has a good answer for the
 common case: a purely additive change — a new provider key, a new flag —
-never bumps the schema version, but a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> relying on it still needs
+never bumps the schema version, but a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> relying on it still needs
 a denver new enough to have it. Without <code class="docutils literal notranslate"><span class="pre">denver-version:</span></code>, running such a
 file on an older denver fails somewhere deep inside a stage, or quietly does
 something subtly different; with it, denver says so up front:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">version</span><span class="p">:</span><span class="w"> </span><span class="s">"1.0"</span>
-<span class="nt">denver-version</span><span class="p">:</span><span class="w"> </span><span class="s">"&gt;=1.0.4"</span><span class="w">   </span><span class="c1"># directly below version:, always</span>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"1.0"</span>
+<span class="n">denver-version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&gt;=1.0.4"</span><span class="w">   </span><span class="c1"># directly below version:, always</span>
 </pre></div>
 </div>
 <ul class="simple">
-<li><p>The value is a version requirement, quoted (an unquoted <code class="docutils literal notranslate"><span class="pre">&gt;=…</span></code> is not
-valid YAML). A bare version means “at least this one”, so
-<code class="docutils literal notranslate"><span class="pre">denver-version:</span> <span class="pre">&quot;1.0.4&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;&gt;=1.0.4&quot;</span></code> are the same requirement.</p></li>
+<li><p>The value is a version requirement, quoted (an unquoted <code class="docutils literal notranslate"><span class="pre">&gt;=…</span></code> is not a
+valid TOML value at all). A bare version means “at least this one”, so
+<code class="docutils literal notranslate"><span class="pre">denver-version</span> <span class="pre">=</span> <span class="pre">&quot;1.0.4&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;&gt;=1.0.4&quot;</span></code> are the same requirement.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">&gt;=</span></code>, <code class="docutils literal notranslate"><span class="pre">&gt;</span></code>, <code class="docutils literal notranslate"><span class="pre">&lt;=</span></code>, <code class="docutils literal notranslate"><span class="pre">&lt;</span></code>, <code class="docutils literal notranslate"><span class="pre">==</span></code> and <code class="docutils literal notranslate"><span class="pre">!=</span></code> are all understood, and several
 comma-separated specifiers are ANDed: <code class="docutils literal notranslate"><span class="pre">&quot;&gt;=1.0.4,</span> <span class="pre">&lt;2&quot;</span></code>.</p></li>
 <li><p>Requirements are checked against the <em>merged</em> config, like every other
@@ -386,11 +386,11 @@ release (<code class="docutils literal notranslate"><span class="pre">1.1.0.dev3
 </ul>
 <p>A denver too old to know the key at all (before it was introduced) rejects
 the file with <code class="docutils literal notranslate"><span class="pre">unknown</span> <span class="pre">top-level</span> <span class="pre">key(s)</span> <span class="pre">denver-version</span></code> — different wording,
-same conclusion: that denver is too old for this <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>.</p>
+same conclusion: that denver is too old for this <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>.</p>
 </section>
 <section id="generic-stage-keys">
 <h3>Generic stage keys<a class="headerlink" href="#generic-stage-keys" title="Link to this heading"></a></h3>
-<p>Four keys may appear in <em>any</em> stage’s section, whatever its provider:</p>
+<p>These keys may appear in <em>any</em> stage’s section, whatever its provider:</p>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">provider</span></code></strong> (<strong>required</strong>) — which provider engine runs this stage:
 <code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code> or <code class="docutils literal notranslate"><span class="pre">custom</span></code>.</p></li>
@@ -401,6 +401,13 @@ configured this way. denver never reads it; it is only surfaced in
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">disabled</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">true</span></code> opts this stage out of the normal pipeline, as if
 it had been <code class="docutils literal notranslate"><span class="pre">--skip</span></code>ped, without deleting its configuration. Must be a
 real boolean.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-on-success</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">skip-on-failure</span></code></strong> — each a list of scripts; when
+every script in the list exits <code class="docutils literal notranslate"><span class="pre">0</span></code> (<code class="docutils literal notranslate"><span class="pre">skip-on-success</span></code>) or exits exactly
+<code class="docutils literal notranslate"><span class="pre">1</span></code> (<code class="docutils literal notranslate"><span class="pre">skip-on-failure</span></code>), this stage’s whole setup — its <code class="docutils literal notranslate"><span class="pre">pre-&lt;stage&gt;</span></code> hook
+included — is skipped for this run, as if it had been <code class="docutils literal notranslate"><span class="pre">--skip</span></code>ped for this
+one invocation. The two lists are independent: give either, both (each
+checked on its own group; either group being fully satisfied skips the
+stage), or neither (no skip check at all). <code class="docutils literal notranslate"><span class="pre">--force</span></code> bypasses both.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">scripts</span></code></strong> — the generic one-shot mechanism: <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span> <span class="pre">[...]</span></code>
 declares scripts run by <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code> instead of the
 normal pipeline. See “Hooks and scripts” below.</p></li>
@@ -411,7 +418,7 @@ unrecognised key is an error, not silently ignored.</p>
 </section>
 <section id="variable-interpolation">
 <h3>Variable interpolation<a class="headerlink" href="#variable-interpolation" title="Link to this heading"></a></h3>
-<p>Any string value in a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> may contain <code class="docutils literal notranslate"><span class="pre">${VAR}</span></code> or
+<p>Any string value in a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> may contain <code class="docutils literal notranslate"><span class="pre">${VAR}</span></code> or
 <code class="docutils literal notranslate"><span class="pre">${VAR:-fallback}</span></code>, expanded against the environment denver is building
 (so a variable exported by an earlier hook or stage is visible to a later
 one). An unset variable with no fallback expands to the empty string.</p>
@@ -421,11 +428,11 @@ name is already exported:</p>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">DENVER_SRC_DIR</span></code></strong> — where denver’s own code lives.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_DIR</span></code></strong> — this environment’s directory (the one holding its
-<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>). Also the variable denver <em>reads</em> as the <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> CLI
+<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>). Also the variable denver <em>reads</em> as the <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> CLI
 argument’s fallback when it’s omitted.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_NAME</span></code></strong> — that directory’s name.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code></strong> — denver’s own working area for this environment
-(<code class="docutils literal notranslate"><span class="pre">&lt;env</span> <span class="pre">dir&gt;/.denver/&lt;denver.yml</span> <span class="pre">stem&gt;/</span></code> by default): venv, install trees,
+(<code class="docutils literal notranslate"><span class="pre">&lt;env</span> <span class="pre">dir&gt;/.denver/&lt;config</span> <span class="pre">file</span> <span class="pre">stem&gt;/</span></code> by default): venv, install trees,
 fingerprints, logs, <code class="docutils literal notranslate"><span class="pre">performance.jsonl</span></code>. Per environment and never shared
 — see “Where an environment’s state lives” in the top-level
 <a class="reference external" href="https://github.com/thorsten-klein/denver/blob/develop/README.md"><code class="docutils literal notranslate"><span class="pre">README.md</span></code></a>.</p></li>
@@ -489,11 +496,11 @@ therefore always written last, so zsh keeps the zsh-syntax value.</p>
 </section>
 <section id="config-resolution">
 <h2>Config resolution<a class="headerlink" href="#config-resolution" title="Link to this heading"></a></h2>
-<p>Loading a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> goes through a fixed sequence, and understanding it
+<p>Loading a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> goes through a fixed sequence, and understanding it
 explains a lot of otherwise-surprising behavior:</p>
 <ol class="arabic simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">import:</span></code> chain.</strong> Each <code class="docutils literal notranslate"><span class="pre">import:</span></code> entry points at another env (or
-directly at a YAML file); that file is loaded the same way, recursively,
+directly at a config file); that file is loaded the same way, recursively,
 then merged in as the base <em>before</em> the importing file’s own content is
 applied on top. A circular <code class="docutils literal notranslate"><span class="pre">import:</span></code> chain is an error.</p></li>
 <li><p><strong>Merge rules.</strong> Mappings merge key by key, recursively. A <em>list</em> is
@@ -503,9 +510,9 @@ Prefix one entry with <code class="docutils literal notranslate"><span class="pr
 bare <code class="docutils literal notranslate"><span class="pre">&lt;overwrite&gt;</span></code> entry to do the same as a pure marker (it’s removed from
 the merged list, unlike <code class="docutils literal notranslate"><span class="pre">!foo</span></code> which keeps <code class="docutils literal notranslate"><span class="pre">foo</span></code>). A <em>string</em>
 works the same way: two layers disagreeing on the same string key (e.g.
-<code class="docutils literal notranslate"><span class="pre">uv.python:</span> <span class="pre">&quot;3.11&quot;</span></code> vs <code class="docutils literal notranslate"><span class="pre">&quot;3.12&quot;</span></code>) is treated as a likely mistake and is a
+<code class="docutils literal notranslate"><span class="pre">uv.python</span> <span class="pre">=</span> <span class="pre">&quot;3.11&quot;</span></code> vs <code class="docutils literal notranslate"><span class="pre">&quot;3.12&quot;</span></code>) is treated as a likely mistake and is a
 hard error, unless the overriding value is explicitly prefixed with <code class="docutils literal notranslate"><span class="pre">!</span></code>
-(e.g. <code class="docutils literal notranslate"><span class="pre">python:</span> <span class="pre">&quot;!3.12&quot;</span></code>) to say “yes, replace it on purpose.” For both,
+(e.g. <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">=</span> <span class="pre">&quot;!3.12&quot;</span></code>) to say “yes, replace it on purpose.” For both,
 <code class="docutils literal notranslate"><span class="pre">!</span></code> only means anything when there’s an actual lower-layer value to
 override — on a brand new key it’s an ordinary character.</p></li>
 <li><p><strong>Section-level <code class="docutils literal notranslate"><span class="pre">import:</span></code></strong> (“stacking”) lets one stage’s section pull
@@ -521,9 +528,9 @@ there’s no separate “what setup() actually decides” to go check.</p></li>
 the top level, or a key not recognised by a stage’s own provider, dies
 immediately rather than quietly doing nothing.</p></li>
 </ol>
-<p><code class="docutils literal notranslate"><span class="pre">--show-config</span></code> prints the result of this whole sequence and exits. It is
-the single best way to understand what an environment really does, imports
-included.</p>
+<p><code class="docutils literal notranslate"><span class="pre">--show-config</span></code> prints the result of this whole sequence, as TOML, and
+exits. It is the single best way to understand what an environment really
+does, imports included.</p>
 </section>
 <section id="layering">
 <h2>Layering<a class="headerlink" href="#layering" title="Link to this heading"></a></h2>
@@ -551,11 +558,13 @@ something nobody meant to run.</p>
 addressed by a dotted path (e.g. <code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">uv.python=3.13</span></code>). Any missing
 parent section along the path is created automatically. <code class="docutils literal notranslate"><span class="pre">KEY.PATH+=VALUE</span></code>
 appends to an existing list/string/number instead of replacing it. The
-value is parsed as YAML, so <code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">uv.no-index=true</span></code> sets a real boolean,
-not the string <code class="docutils literal notranslate"><span class="pre">&quot;true&quot;</span></code>. Repeatable; later <code class="docutils literal notranslate"><span class="pre">-c</span></code>s win over earlier ones
-targeting the same path.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">-cf</span> <span class="pre">FILE</span></code></strong> overlays a whole YAML file on top of the env’s own
-<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, using the exact same merge rules as <code class="docutils literal notranslate"><span class="pre">import:</span></code>. Repeatable,
+value is parsed as JSON when that succeeds, so <code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">uv.no-index=true</span></code> sets
+a real boolean, not the string <code class="docutils literal notranslate"><span class="pre">&quot;true&quot;</span></code>; anything that isn’t valid JSON on
+its own (a bare word, an unquoted version string like <code class="docutils literal notranslate"><span class="pre">3.12.3</span></code>) is kept as
+a plain string. Repeatable; later <code class="docutils literal notranslate"><span class="pre">-c</span></code>s win over earlier ones targeting
+the same path.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-cf</span> <span class="pre">FILE</span></code></strong> overlays a whole TOML file on top of the env’s own
+<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, using the exact same merge rules as <code class="docutils literal notranslate"><span class="pre">import:</span></code>. Repeatable,
 applied in the order given.</p></li>
 <li><p><strong>Ordering</strong>: every <code class="docutils literal notranslate"><span class="pre">-cf</span></code> file is applied first (in order), then every
 <code class="docutils literal notranslate"><span class="pre">-c</span></code> override, last — so <code class="docutils literal notranslate"><span class="pre">-c</span></code> always has the final word over <code class="docutils literal notranslate"><span class="pre">import:</span></code>
@@ -596,13 +605,15 @@ to give it aliases), and <strong>every other key is forwarded verbatim as a
 keyword argument</strong> — so an env has argparse’s whole vocabulary (<code class="docutils literal notranslate"><span class="pre">help:</span></code>,
 <code class="docutils literal notranslate"><span class="pre">default:</span></code>, <code class="docutils literal notranslate"><span class="pre">action:</span></code>, <code class="docutils literal notranslate"><span class="pre">nargs:</span></code>, <code class="docutils literal notranslate"><span class="pre">choices:</span></code>, <code class="docutils literal notranslate"><span class="pre">required:</span></code>, <code class="docutils literal notranslate"><span class="pre">metavar:</span></code>,
 <code class="docutils literal notranslate"><span class="pre">dest:</span></code>, …) without denver re-inventing, or gating, any of it:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">args</span><span class="p">:</span>
-<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">flags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--board</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-b</span><span class="p p-Indicator">]</span>
-<span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nrf52840dk</span>
-<span class="w">  </span><span class="nt">help</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">which board to build for</span>
-<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">flags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">--release</span><span class="p p-Indicator">]</span>
-<span class="w">  </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">store_true</span>
-<span class="w">  </span><span class="nt">help</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build with optimisations</span>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[[args]]</span>
+<span class="n">flags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"--board"</span><span class="p">,</span><span class="w"> </span><span class="s2">"-b"</span><span class="p">]</span>
+<span class="n">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"nrf52840dk"</span>
+<span class="n">help</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"which board to build for"</span>
+
+<span class="k">[[args]]</span>
+<span class="n">flags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"--release"</span><span class="p">]</span>
+<span class="n">action</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"store_true"</span>
+<span class="n">help</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"build with optimisations"</span>
 </pre></div>
 </div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>my-project<span class="w"> </span>--board<span class="w"> </span>nrf5340dk<span class="w"> </span>--release<span class="w"> </span>--<span class="w"> </span>west<span class="w"> </span>build
@@ -613,11 +624,11 @@ is argparse’s own destination name uppercased (<code class="docutils literal n
 <code class="docutils literal notranslate"><span class="pre">--build-type</span></code> → <code class="docutils literal notranslate"><span class="pre">DENVER_ARG_BUILD_TYPE</span></code>, or whatever an explicit <code class="docutils literal notranslate"><span class="pre">dest:</span></code>
 says). That is one variable in the environment denver is building, so it
 reaches everything through the mechanisms already documented above —
-<code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation in the same <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, hooks, <code class="docutils literal notranslate"><span class="pre">scripts:</span></code>, and the
+<code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation in the same <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, hooks, <code class="docutils literal notranslate"><span class="pre">scripts:</span></code>, and the
 final command:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">zephyr-build</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">custom</span>
-<span class="w">  </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">west build -b ${DENVER_ARG_BOARD}</span>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[zephyr-build]</span>
+<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"custom"</span>
+<span class="n">cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"west build -b ${DENVER_ARG_BOARD}"</span>
 </pre></div>
 </div>
 <p>The value is always a string, since an environment variable is:</p>
@@ -629,8 +640,8 @@ rather than exported empty — so <code class="docutils literal notranslate"><sp
 falls back the way it reads.</p></li>
 </ul>
 <p>For the same reason, <code class="docutils literal notranslate"><span class="pre">type:</span></code> is rejected: argparse’s <code class="docutils literal notranslate"><span class="pre">type=</span></code> is a callable,
-which a YAML file cannot express, and every value ends up a string anyway.
-Use <code class="docutils literal notranslate"><span class="pre">choices:</span></code> (argparse validates it, and lists it in <code class="docutils literal notranslate"><span class="pre">--help</span></code>) or an
+which TOML cannot express, and every value ends up a string anyway. Use
+<code class="docutils literal notranslate"><span class="pre">choices:</span></code> (argparse validates it, and lists it in <code class="docutils literal notranslate"><span class="pre">--help</span></code>) or an
 <code class="docutils literal notranslate"><span class="pre">action:</span></code>.</p>
 <p>A few more properties worth knowing:</p>
 <ul class="simple">
@@ -689,11 +700,9 @@ lifecycle a built-in provider gets, rather than squeezing it into a single
 `custom: cmd:` line. `extensions: providers: dirs:` registers one without
 maintaining a fork of denver:
 
-```yaml
-extensions:
-  providers:
-    dirs:
-    - my_providers   # resolved like conan's base-classes: env dir, then imported base envs
+```toml
+[extensions.providers]
+dirs = ["my_providers"]  # resolved like conan's base-classes: env dir, then imported base envs
 </pre></div>
 </div>
 <p>Every <code class="docutils literal notranslate"><span class="pre">*.py</span></code> file directly inside each listed dir — except those whose name
@@ -705,7 +714,7 @@ starts with <code class="docutils literal notranslate"><span class="pre">_</span
 
 <span class="k">class</span><span class="w"> </span><span class="nc">AcmeProvider</span><span class="p">(</span><span class="n">Provider</span><span class="p">):</span>
     <span class="n">name</span> <span class="o">=</span> <span class="s2">"acme"</span>  <span class="c1"># the 'provider: acme' name a stage's section sets</span>
-    <span class="n">KEYS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"target"</span><span class="p">,)</span>  <span class="c1"># denver.yml keys this provider reads</span>
+    <span class="n">KEYS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"target"</span><span class="p">,)</span>  <span class="c1"># denver.toml keys this provider reads</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">setup</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctx</span><span class="p">):</span>
         <span class="n">cfg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">config_section</span><span class="p">(</span><span class="n">ctx</span><span class="p">)</span>
@@ -717,10 +726,11 @@ starts with <code class="docutils literal notranslate"><span class="pre">_</span
 </div>
 <p>Once registered, any stage can set <code class="docutils literal notranslate"><span class="pre">provider:</span> <span class="pre">acme</span></code> exactly like a built-in
 one:</p>
-<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stages</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">build</span><span class="p p-Indicator">]</span>
-<span class="nt">build</span><span class="p">:</span>
-<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">acme</span>
-<span class="w">  </span><span class="nt">target</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">release</span>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">stages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"build"</span><span class="p">]</span>
+
+<span class="k">[build]</span>
+<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"acme"</span>
+<span class="n">target</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"release"</span>
 </pre></div>
 </div>
 <p>A provider too big for one file puts its shared code in a <code class="docutils literal notranslate"><span class="pre">_</span></code>-prefixed file
@@ -739,7 +749,7 @@ as is an unknown key under <code class="docutils literal notranslate"><span clas
 every other config mistake gets, never a silent override and never a typo
 that quietly disables the whole mechanism.</p>
 <p>Loading an extension provider runs its module’s code, so an env’s
-<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> is only ever as trustworthy as the repository it lives in —
+<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> is only ever as trustworthy as the repository it lives in —
 the same already-true statement as for <code class="docutils literal notranslate"><span class="pre">hooks:</span></code>, <code class="docutils literal notranslate"><span class="pre">custom:</span> <span class="pre">cmd:</span></code> and a
 sourced <code class="docutils literal notranslate"><span class="pre">source:</span></code> script, not a new trust boundary.</p>
 </section>
@@ -786,13 +796,13 @@ helpers is a review-visible mistake, not a silent hole in <code class="docutils 
 from them:</p>
 <ul class="simple">
 <li><p><strong>read-only queries</strong> — a <code class="docutils literal notranslate"><span class="pre">Context.run(...,</span> <span class="pre">query=True)</span></code> call exists so the
-provider can immediately branch on it (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">inspect</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">config</span> <span class="pre">home</span></code>, <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">list</span></code>, a <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code> script’s exit
+provider can immediately branch on it (<code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">image</span> <span class="pre">inspect</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">config</span> <span class="pre">home</span></code>, <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">list</span></code>, a <code class="docutils literal notranslate"><span class="pre">skip-on-success:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-on-failure:</span></code> script’s exit
 code). Skipping those would leave a dry run with nothing to decide with,
 and it would stop reflecting what a real run does. They are reported with
 a <code class="docutils literal notranslate"><span class="pre">?</span></code> marker, and a missing executable degrades to a failed query instead
 of aborting. <code class="docutils literal notranslate"><span class="pre">query</span></code> defaults to <code class="docutils literal notranslate"><span class="pre">capture</span></code> — a caller that also needs the
 real <em>output</em> back (not just the guarantee it ran) passes <code class="docutils literal notranslate"><span class="pre">capture=True</span></code>
-too; a caller like <code class="docutils literal notranslate"><span class="pre">skip-if-0:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-if-1:</span></code> that only branches on the
+too; a caller like <code class="docutils literal notranslate"><span class="pre">skip-on-success:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-on-failure:</span></code> that only branches on the
 exit code passes <code class="docutils literal notranslate"><span class="pre">query=True</span></code> alone, so the script’s own stdout/stderr
 stay live on the terminal on a real run.</p></li>
 <li><p><strong>sourced scripts</strong> — <code class="docutils literal notranslate"><span class="pre">Context.source()</span></code> is how denver <em>computes</em> the

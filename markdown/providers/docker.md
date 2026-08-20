@@ -1,18 +1,20 @@
 # docker provider
 
 A `docker` stage is a *wrapper*, not a builder — see “Wrapper / relocation”
-in [Configuration](../configuration/denver-yml.md). Instead of building anything itself, it relocates the
+in [Configuration](../configuration/denver-toml.md). Instead of building anything itself, it relocates the
 rest of the pipeline into a docker compose service.
 
-```yaml
-my-docker-stage:
-  provider: docker
-  compose:
-    file: docker-compose.yml
+```toml
+[my-docker-stage]
+provider = "docker"
+
+[my-docker-stage.compose]
+file = "docker-compose.yml"
 ```
 
-(`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see “Generic stage keys” in [Configuration](../configuration/denver-yml.md). Everything below is specific to `docker`.)
+(`provider:`/`description:`/`disabled:`/`skip-on-success:`/`skip-on-failure:`/`scripts:` are
+generic keys every stage has —
+see “Generic stage keys” in [Configuration](../configuration/denver-toml.md). Everything below is specific to `docker`.)
 
 ## Requires
 
@@ -29,32 +31,12 @@ docker. The daemon has to be reachable for the invoking user, too. Point
 ## Key reference
 
 - **`exe`** (default: `docker` on `PATH`) — the docker executable.
-- **`default-cmd`** — the fallback interactive command once relocated into
-  the container, read by denver’s own command resolution (`command:` at
-  the top level still wins over this if set) — not read by this provider
-  itself, but still a real `docker:` key, shown in `--show-config`. When
-  it (or the top-level `command:`, or the plain `$SHELL`/`bash` fallback)
-  names a bare `bash`/`zsh`/`fish`, denver wires up `denver complete` for
-  it automatically before landing there — the container’s own image,
-  unlike the host, is never something a user already has completion set
-  up in themselves. Anything else (extra args aside, which are preserved)
-  is left untouched. See [Shell completion](../cli/completion.md) for the
-  full mechanism.
-- **`image`** — the canonical local tag denver checks for before falling
-  back to a build — checked whenever `image:` is set, whether or not
-  `registries:` is also configured; a hit skips the build entirely
-  (`--force` overrides this, see below). Exported as `$DENVER_DOCKER_IMAGE`
-  before env-scripts/build/run, so the compose file can say `image: "${DENVER_DOCKER_IMAGE}"` instead of hard-coding the same tag a second
-  time — denver doesn’t cross-check the two, this is just how they stay in
-  sync. If unset, `$DENVER_DOCKER_IMAGE` is an empty string, the local
-  check never runs, and `registries:` is silently ignored (nothing to
-  search a registry *for* without a tag) rather than an error.
-- **`registries`** (default `[]`) — ordered list of `{url, username, password}` entries to check, each as `<url>/<image>`, once `image:` has
+- **`registries`** (default `[]`) — ordered list of `{url, username, password}` entries to check, each as `<url>/<image>`, once `compose.image:` has
   missed locally (or `--force` is set — see below), before ever
   considering a build: each entry in turn, via `docker manifest inspect`
   — **never** a real `docker pull` — first hit wins and no further entry
   is tried. On a hit, `$DENVER_DOCKER_IMAGE` is repointed from the bare
-  `image:` tag to that entry’s full `<url>/<image>` ref, so the actual
+  `compose.image:` tag to that entry’s full `<url>/<image>` ref, so the actual
   pull happens lazily, later, whenever `docker compose run` itself needs
   the image. Empty (the default) disables this entirely. If nothing is
   found anywhere and `compose.build: false`, denver dies with a clear
@@ -67,30 +49,55 @@ docker. The daemon has to be reachable for the invoking user, too. Point
   `${VAR}` interpolation, so a literal (`myusername`) and an
   env-var-sourced secret (`${DOCKER_PASSWORD_DOCKERHUB}`) are written the same
   way.
-- **`compose`** — `file` (**required**, a single path or a list for
-  multiple `-f` overlays — never guessed, see “Explicit over implicit” in
-  [`../concepts/philosophy.md`](../concepts/philosophy.md)), `service` (default `"dev"`), `build` (default `true`),
-  `args` (extra `docker compose` args, e.g. `["--project-name", "x"]`).
-- **`run-args`** (default `["--rm"]`) — extra `docker compose run` args.
-- **`env-scripts`** — script(s) run before build/run, e.g. to write a
-  compose `.env` file the compose file itself references. denver has no
-  notion of a compose env-file — it just runs `env-scripts:` and lets
-  `docker compose`/the scripts sort out their own file naming and lookup.
+- **`compose.file`** (**required**) — a single path or a list for multiple
+  `-f` overlays — never guessed, see “Explicit over implicit” in
+  [`../concepts/philosophy.md`](../concepts/philosophy.md).
+- **`compose.service`** (default `"dev"`) — the compose service `run`/`build`
+  target.
+- **`compose.build`** (default `true`) — whether a build is ever attempted
+  (see below).
+- **`compose.default-cmd`** — the fallback interactive command once relocated into
+  the container, read by denver’s own command resolution (`command:` at
+  the top level still wins over this if set) — not read by this provider
+  itself, but still a real `docker.compose:` key, shown in `--show-config`. When
+  it (or the top-level `command:`, or the plain `$SHELL`/`bash` fallback)
+  names a bare `bash`/`zsh`/`fish`, denver wires up `denver complete` for
+  it automatically before landing there — the container’s own image,
+  unlike the host, is never something a user already has completion set
+  up in themselves. Anything else (extra args aside, which are preserved)
+  is left untouched. See [Shell completion](../cli/completion.md) for the
+  full mechanism.
+- **`compose.image`** — the canonical local tag denver checks for before falling
+  back to a build — checked whenever `compose.image:` is set, whether or not
+  `registries:` is also configured; a hit skips the build entirely
+  (`--force` overrides this, see below). Exported as `$DENVER_DOCKER_IMAGE`
+  before build/run, so the compose file can say `image: "${DENVER_DOCKER_IMAGE}"` instead of hard-coding the same tag a second
+  time — denver doesn’t cross-check the two, this is just how they stay in
+  sync. If unset, `$DENVER_DOCKER_IMAGE` is an empty string, the local
+  check never runs, and `registries:` is silently ignored (nothing to
+  search a registry *for* without a tag) rather than an error.
+- **`compose.run-args`** (default `["--rm"]`) — extra `docker compose run` args.
+
+Need something computed at runtime before build/run — a compose `.env` file,
+a login, anything a static compose file can’t express? Use a `hooks: pre-<stage>:` script (see “Hooks and scripts” in
+[Configuration](../configuration/denver-toml.md)) rather than a `docker:`-specific key — it runs on the
+host right before this stage’s `setup()`, same timing, without denver
+needing a per-provider mechanism for it.
 
 ## Design notes
 
-- **`compose.build: true` (the default) does nothing without `image:`.**
-  Denver never calls `docker compose build` unless `image:` is set — with
+- **`compose.build: true` (the default) does nothing without `compose.image:`.**
+  Denver never calls `docker compose build` unless `compose.image:` is set — with
   no tag to check next time, it would just rebuild on every single run,
-  defeating the point. Set `image:` to get denver’s own build-once
+  defeating the point. Set `compose.image:` to get denver’s own build-once
   behavior: it builds the first time, then a local (or `registries:`) hit
-  skips the build on every run after that. Without `image:`, `compose build`/`compose run` are left to the compose file’s own `build:` section
+  skips the build on every run after that. Without `compose.image:`, `compose build`/`compose run` are left to the compose file’s own `build:` section
   to sort out, exactly as if denver’s docker provider weren’t managing
   images at all. Set `compose.build: false` for the opposite of the
-  `image:`-managed case: nothing gets built, ever, denver just relocates
-  into whatever image is already there — e.g. one pulled as part of
-  `env-scripts:` or a CI step outside denver entirely.
-- **Host vs. container.** `setup()` (build the image, run `env-scripts:`)
+  `compose.image:`-managed case: nothing gets built, ever, denver just relocates
+  into whatever image is already there — e.g. one pulled as part of a
+  `hooks: pre-<stage>:` script or a CI step outside denver entirely.
+- **Host vs. container.** `setup()` (build the image)
   always runs on the host — that’s the only place the `docker` CLI
   operates. `wrap()` (turn the resolved command into `docker compose run ...`) is what actually relocates execution. Each prints its own progress
   banner — `setup()`’s `prepare` and then whichever of “build”/”found
@@ -107,7 +114,7 @@ docker. The daemon has to be reachable for the invoking user, too. Point
   locally-cached `image:` hit, though a `registries:` entry that already
   has it still wins over a forced local rebuild — a rebuild only actually
   happens if none of the configured registries have it either.
-- **`--dry-run`** prints the `env-scripts:`, `docker compose build` and
+- **`--dry-run`** prints the `docker compose build` and
   `docker compose run` commands instead of running them; no container is
   ever started. The local/`registries:` existence checks still run (they’re
   the read-only queries deciding whether a build would be shown at all),
@@ -130,6 +137,6 @@ docker. The daemon has to be reachable for the invoking user, too. Point
 - **Automated per-registry login, inline.** Each `registries:` entry can
   carry its own `username:`/`password:` right alongside its `url:`, so a
   private registry in the search list doesn’t need a separate manual
-  login step (e.g. a `scripts: login:` entry run via `denver run <env> --scripts login`, [Configuration](../configuration/denver-yml.md)’s generic one-shot mechanism) — denver logs in
+  login step (e.g. a `scripts: login:` entry run via `denver run <env> --scripts login`, [Configuration](../configuration/denver-toml.md)’s generic one-shot mechanism) — denver logs in
   for you, right before it’s actually needed, only for entries that carry
   credentials.

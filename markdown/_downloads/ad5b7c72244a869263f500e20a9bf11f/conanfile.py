@@ -10,7 +10,7 @@ class ConanRecipe(ConanFile):
 
     def tool_requires_from_catalog(self, name, **kwargs):
         # this unit's catalog, written by denver next to this conanfile (see
-        # 'catalog:' in ../denver.yml). It already covers every recipe dir the
+        # 'catalog:' in ../denver.toml). It already covers every recipe dir the
         # unit installs from -- its own conan/recipes and the reused
         # ../zephyr-devshell/conan/recipes/cmake alike -- so there is exactly
         # one file to read, with no second catalog to merge in.
