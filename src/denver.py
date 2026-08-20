@@ -3620,6 +3620,144 @@ def _flags_value_as_list(raw):
     return []
 
 
+# ---- descriptions ('name\thelp text') for fish, which shows them in its completion pager --- #
+# bash/zsh have no equivalent convention (COMPREPLY/compadd take bare candidate strings -- a
+# literal tab would land in the command line, not a pager), so this is fish-only: see
+# _complete_candidates_described and _completion_script_fish's '__complete --describe'.
+
+_SHELL_HELP = {
+    "bash": "the Bourne Again Shell",
+    "fish": "the friendly interactive shell",
+    "zsh": "the Z shell",
+}
+
+
+def _action_help_by_flag(parser):
+    """{flag spelling: help text} for every argparse.Action on ``parser`` that has a real (non-SUPPRESS) one.
+
+    Reads straight off the actual argparse actions -- the same objects
+    ``--help`` itself formats from -- so a flag's completion description can
+    never drift out of sync with its ``--help`` wording the way a
+    hand-copied second string would.
+    """
+    help_by_flag = {}
+    for action in parser._actions:
+        if not action.help or action.help == argparse.SUPPRESS:
+            continue
+        for flag in action.option_strings:
+            help_by_flag[flag] = action.help
+    return help_by_flag
+
+
+def _top_level_help():
+    """{candidate: help text} for _TOP_LEVEL_COMPLETIONS, all sourced from build_arg_parser() (see _action_help_by_flag).
+
+    'run'/'complete's own one-line blurbs live on the hidden pseudo-actions
+    argparse's own add_subparsers()/add_parser(help=...) machinery creates
+    for the top-level --help listing (parser._subparsers' one _SubParsersAction,
+    its own ._choices_actions) -- there's no public accessor for those, but
+    build_arg_parser already pokes at ._actions directly elsewhere (see
+    add_config_args), so this follows the same established pattern.
+    """
+    parser = build_arg_parser()
+    help_by_name = _action_help_by_flag(parser)
+    sub_action = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    for pseudo in sub_action._choices_actions:
+        if pseudo.help:
+            help_by_name[pseudo.dest] = pseudo.help
+    return help_by_name
+
+
+def _run_flag_help():
+    """{flag: help text} for _RUN_FLAGS -- denver's own 'run' flags, sourced from build_arg_parser().
+
+    config_args=None, so this never loads or validates any env's own denver.toml -- see this function's
+    caller, _completion_description_lookup, for where an env's own declared flags get theirs instead.
+    """
+    run_p = build_arg_parser().subcommand_parsers["run"]
+    return _action_help_by_flag(run_p)
+
+
+def _completion_declared_flag_help(env_value):
+    """{flag: help text} for this env's own 'denver-custom-args:' entries that set a 'help:' -- {} if none/unreadable.
+
+    Reads the raw 'help:' key straight off each entry, deliberately without
+    add_config_args' own validation (a dest collision, an unknown kwarg, ...)
+    -- same best-effort spirit as _completion_declared_flags itself: a
+    malformed denver.toml must degrade a completion request, never die() it.
+    """
+    config = _completion_config(env_value)
+    entries = (config or {}).get("denver-custom-args")
+    if not isinstance(entries, list):
+        return {}
+    help_by_flag = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        help_text = entry.get("help")
+        if not isinstance(help_text, str):
+            continue
+        for flag in _entry_flag_spellings(entry):
+            help_by_flag[flag] = help_text
+    return help_by_flag
+
+
+def _completion_description_lookup(words):
+    """{candidate: help text} for whichever completion context 'words' is in right now -- best-effort.
+
+    Covers only the fixed, self-describing vocabularies (denver's own subcommands/flags, 'complete's
+    shell names, an env's declared flags). {} wherever the context has no such vocabulary (an <env> path,
+    a flag's own pending value, a stage id, ...), so _describe leaves those candidates undecorated rather
+    than guessing. Mirrors _complete_candidates_unsafe's own branching, but isn't called from there: bash/zsh
+    use plain _complete_candidates, unaffected by any of this.
+    """
+    if not words:
+        return _top_level_help()
+    prior = words[:-1]
+    if not prior:
+        return _top_level_help()
+    subcommand = prior[0]
+    if subcommand == "complete":
+        return {} if len(prior) > 1 else _SHELL_HELP
+    if subcommand != "run":
+        return {}
+    rest = prior[1:]
+    if "--" in rest:
+        return {}
+    env_value, pending_flag = _run_completion_state(rest)
+    if pending_flag is not None:
+        return {}
+    return {**_run_flag_help(), **_completion_declared_flag_help(env_value)}
+
+
+def _describe(candidate, lookup):
+    r"""One fish completion line for ``candidate``: 'candidate\tdescription' if ``lookup`` has one.
+
+    Just ``candidate`` bare otherwise -- fish's 'complete -a' treats the part after a tab as the
+    description column, and shows a candidate with none exactly the way it always has.
+    """
+    description = lookup.get(candidate)
+    return f"{candidate}\t{description}" if description else candidate
+
+
+def _complete_candidates_described(words):
+    """_complete_candidates(words), each candidate with a tab-separated help blurb where one's known.
+
+    See _completion_script_fish's '__complete --describe' invocation, the only caller.
+
+    The lookup itself (unlike _complete_candidates) isn't wrapped in
+    _complete_candidates_unsafe's own try/except -- so it gets one of its
+    own here, on the same "never dump a traceback mid-keystroke" grounds:
+    falling back to ``candidates`` themselves (already safe) rather than [].
+    """
+    candidates = _complete_candidates(words)
+    try:
+        lookup = _completion_description_lookup(words)
+    except BaseException:  # NOSONAR -- deliberately broad, see this function's own docstring
+        return candidates
+    return [_describe(c, lookup) for c in candidates]
+
+
 def _completion_path_candidates(cur):
     """Directory/denver.toml completions for the <env> positional, honouring any 'dir/' prefix already in ``cur``."""
     base, prefix = _completion_base_and_prefix(cur)
@@ -3796,11 +3934,18 @@ def _completion_script_fish(names, quoted):
     # included. Every statement below ends in ';' for exactly the same
     # reason the bash/zsh branches do, and the closing comment line is last
     # so a real '#' can never swallow anything after it once newlines are gone.
+    #
+    # '__complete --describe' (rather than plain '__complete') is fish-only:
+    # it switches _handle_dunder_complete over to _complete_candidates_described,
+    # whose 'candidate\tdescription' lines fish's own completion pager already
+    # knows how to split and show -- bash/zsh's COMPREPLY/compadd have no such
+    # convention (a literal tab would land in the command line itself), so
+    # they keep calling plain '__complete', undecorated.
     path_value_flags = " ".join(shlex.quote(flag) for flag in _PATH_VALUE_FLAGS)
     lines = [
         "function __denver_complete;",
         "    set -l tokens (commandline -opc) (commandline -ct);",
-        "    $tokens[1] __complete $tokens[2..-1] 2>/dev/null;",
+        "    $tokens[1] __complete --describe $tokens[2..-1] 2>/dev/null;",
         "end;",
         "function __denver_expects_path;",
         "    set -l prev (commandline -opc)[-1];",
@@ -3976,15 +4121,26 @@ def _run_cli(argv=None):
 
 
 def _handle_dunder_complete(argv):
-    """Handle the hidden 'denver __complete' subcommand, if that's what this is. Returns True if it ran.
+    r"""Handle the hidden 'denver __complete' subcommand, if that's what this is. Returns True if it ran.
 
     Deliberately bypasses argparse and every bit of env resolution below
     (see _run_resolved_cli), so a completion request can never itself
     trigger a usage error or a die() while the user is mid-keystroke.
+
+    An optional leading '--describe' (only fish's own wiring ever sends
+    one -- see _completion_script_fish) switches to
+    _complete_candidates_described, whose 'candidate\tdescription' lines
+    fish's own completion pager knows how to show; bash/zsh never pass it,
+    so they're unaffected.
     """
     if not argv or argv[0] != "__complete":
         return False
-    for candidate in _complete_candidates(argv[1:]):
+    words = argv[1:]
+    if words and words[0] == "--describe":
+        candidates = _complete_candidates_described(words[1:])
+    else:
+        candidates = _complete_candidates(words)
+    for candidate in candidates:
         print(candidate)
     return True
 
@@ -4222,5 +4378,34 @@ def _require_runnable(env_dir, config, config_path):
         die(f"env '{env_dir.name}' declares no 'stages:' in its {CONFIG_NAME}")
 
 
+def _run_main_or_die_quietly_on_broken_pipe():
+    """sys.exit(main()), tolerating a reader that hung up on us mid-write.
+
+    E.g. piping ``denver complete`` into a shell 'source' builtin that --
+    unlike fish's -- refuses piped stdin and closes it unread immediately:
+    both bash's and zsh's do this, and print() only notices on the next write.
+
+    Without this, such a hang-up surfaces as a scary, unhandled-looking
+    "Exception ignored in: ..." / "BrokenPipeError" dump during Python's own
+    atexit flush of stdout, well after main() has already returned -- because
+    stdout is block-buffered (not line-buffered) once it isn't a tty, so a
+    few KB of completion-script output can sit unflushed in the buffer the
+    whole time main() runs, and the broken pipe is only actually discovered
+    once something tries to flush it. The explicit flush() right after
+    main() forces that discovery to happen here, inside this try, instead of
+    during interpreter teardown where nothing can catch it; redirecting
+    stdout to devnull first stops the same error from replaying once more
+    when the interpreter does its own final flush regardless.
+    """
+    try:
+        exit_code = main()
+        sys.stdout.flush()
+    except BrokenPipeError:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+        sys.exit(1)
+    sys.exit(exit_code)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    _run_main_or_die_quietly_on_broken_pipe()
