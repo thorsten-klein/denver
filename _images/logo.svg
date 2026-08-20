@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1540 500" width="1540" height="500" role="img" aria-labelledby="denver-logo-title">
   <title id="denver-logo-title">denver</title>
+  <rect width="1540" height="500" fill="#ffffff"/>
   <g fill="#000000" transform="translate(75 165.68) scale(0.84)">
     <g transform="translate(0 0)"><path d="M0 200L0 133.33L60 133.33L60 66.67L120 66.67L120 0L180 0L180 200Z"/></g>
     <g transform="translate(220 0)"><path d="M0 0L96 0A100 100 0 0 1 96 200L0 200L0 166L96 166A66 66 0 0 0 96 34L0 34Z"/></g>
