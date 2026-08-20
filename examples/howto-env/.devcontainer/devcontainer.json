@@ -1,0 +1,10 @@
+{
+  "name": "howto-env",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "initializeCommand": "${localWorkspaceFolder}/create-env.sh",
+  "overrideCommand": true,
+  "onCreateCommand": "$DENVER_EXE run . --skip docker-base --export-env /tmp/denver.env -- true",
+  "shutdownAction": "stopCompose"
+}

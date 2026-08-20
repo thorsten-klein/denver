@@ -343,6 +343,41 @@ IN_CONTAINER_VAR = "DENVER_IN_CONTAINER"
 # already provides its own way.
 CLI_ENV_VAR_NAMES = "DENVER_CLI_ENV_VAR_NAMES"
 
+
+def _prepended_prefix(value, old):
+    """The bit ctx.prepend_path put ahead of ``old``, or None if this isn't that shape."""
+    if old and value.endswith(old):
+        return value[: len(value) - len(old)]
+    return None
+
+
+def _appended_suffix(value, old):
+    """The bit ctx.append_path_var put after ``old``, or None if this isn't that shape."""
+    if old and value.startswith(old):
+        return value[len(old) :]
+    return None
+
+
+def _export_env_line(key, value, old, forced):
+    """Render one 'export KEY=...' line for Context.write_export_env.
+
+    A forced (-e/--env) value is always the full value. Otherwise, when
+    ``value`` is ``old`` with something prepended or appended (ctx.prepend_path,
+    ctx.append_path_var), the line composes with the sourcing shell's own
+    "$VAR" instead of baking in the whole resolved value -- see
+    write_export_env's own docstring.
+    """
+    if forced:
+        return f"export {key}={shlex.quote(value)}\n"
+    prefix = _prepended_prefix(value, old)
+    if prefix is not None:
+        return f'export {key}={shlex.quote(prefix)}"${key}"\n'
+    suffix = _appended_suffix(value, old)
+    if suffix is not None:
+        return f'export {key}="${key}"{shlex.quote(suffix)}\n'
+    return f"export {key}={shlex.quote(value)}\n"
+
+
 # Files a container runtime leaves behind, most common first. Deliberately
 # not /proc/self/cgroup string-matching: under cgroup v2 that file is often
 # just '0::/' whether containerised or not, so it answers nothing.
@@ -537,6 +572,10 @@ class Context:
 
         # the mutable environment the final command inherits
         self.env = dict(os.environ)
+        # snapshot before any stage (or _init_builtins) touches self.env, so
+        # write_export_env can tell what denver itself changed from what
+        # this process merely inherited -- see that method.
+        self._initial_env = dict(self.env)
         _drop_bundled_library_path(self.env)
         self._init_builtins()
 
@@ -1185,6 +1224,50 @@ class Context:
             os.execvpe(program, cmd, self.env)
         except OSError as exc:
             die(f"failed to exec {cmd[0]}: {exc}")
+
+    def write_export_env(self, path):
+        """Dump what denver itself changed in the env as shell-sourceable 'export' lines to ``path``.
+
+        Only keys whose value actually differs from this process's own
+        starting environment (self._initial_env) are written -- a plain dump
+        of the whole (inherited-plus-built) env would re-assert a hundred
+        unrelated variables (e.g. SSH_AUTH_SOCK) that a fresh shell already
+        has, some of which may since have moved on (e.g. a fresh shell's own
+        SSH_AUTH_SOCK for a new agent socket) and shouldn't be clobbered.
+        For bash/zsh (not fish) -- see --export-env.
+
+        A prepended/appended value (ctx.prepend_path, ctx.append_path_var --
+        PATH being the common case) is written as '=prefix"$VAR"' or
+        '="$VAR"suffix' rather than the whole resolved string, so it composes
+        with whatever that variable already is in the sourcing shell instead
+        of overwriting it outright. Keys that aren't valid shell identifiers
+        (e.g. ``BASH_FUNC_foo%%``, which bash uses to smuggle exported
+        functions through the environment) are skipped either way: sourcing
+        them back as 'export' assignments would just fail.
+
+        A -e/--env value is written unconditionally, even one that happens
+        to equal what the process already had: -e is applied straight to
+        this process's own os.environ before ctx exists (see
+        _run_resolved_cli), so by the time ctx snapshots its baseline it can
+        no longer tell that one apart from something truly inherited --
+        cli_env_vars (denver's own CLI_ENV_VAR_NAMES bookkeeping) is what
+        still remembers it was asked for on this invocation.
+        """
+        if self.dry_run:
+            self.dry_note(".", f"write env to {path}")
+            return
+        Path(path).write_text("".join(self._changed_export_lines()))
+
+    def _changed_export_lines(self):
+        cli_env_vars = self.cli_env_vars
+        for key, value in sorted(self.env.items()):
+            if self._should_export(key, value, cli_env_vars):
+                yield _export_env_line(key, value, self._initial_env.get(key), key in cli_env_vars)
+
+    def _should_export(self, key, value, cli_env_vars):
+        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key):
+            return False
+        return key in cli_env_vars or self._initial_env.get(key) != value
 
 
 def fingerprint_label(path, base=None):

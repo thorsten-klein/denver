@@ -1333,6 +1333,8 @@ def _reinvoke_flags(options):
             flags.append(flag)
     for name, value in options.env_vars.items():
         flags += ["--env", f"{name}={value}"]
+    if options.export_env:
+        flags += ["--export-env", options.export_env]
     return [*flags, "--start-time", repr(options.start_time)]
 
 
@@ -1927,6 +1929,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
             skip_state=skip_state,
             quiet=options.quiet,
             start_time=options.start_time,
+            export_env=options.export_env,
         )
 
 
@@ -2096,6 +2099,7 @@ class RunOptions:
         start_time=None,
         cli_args=None,
         env_vars=None,
+        export_env=None,
     ):
         """Hold one invocation's options; see the class docstring for ``start_time``."""
         self.until_stage = until_stage
@@ -2108,6 +2112,7 @@ class RunOptions:
         self.no_wait = no_wait
         self.start_time = time.time() if start_time is None else start_time
         self.cli_args = _cli_args(cli_args)
+        self.export_env = export_env
         # -e/--env NAME=VALUE (see build_arg_parser); dict rather than a list
         # of tuples so a later entry naturally overrides an earlier one of
         # the same name, same as -c. Order preserved (dicts remember
@@ -2266,6 +2271,7 @@ def _run_stages_directly(
     skip_state,
     quiet,
     start_time,
+    export_env=None,
 ):
     """Host with the wrapper stage skipped (or already inside it): build the env and run the command directly."""
     # One walk over the declared stages, in 'stages:' order, so the progress
@@ -2309,6 +2315,8 @@ def _run_stages_directly(
     # host, so cmd is left alone.
     cmd = resolve_command(config, forwarded, in_container=ctx.in_container)
     run_hook(ctx, config_path, "pre-cmd")
+    if export_env:
+        ctx.write_export_env(export_env)
     ctx.exec(cmd)
 
 
@@ -3018,6 +3026,14 @@ def _add_run_parser(subparsers, config_args):
         "nothing is written, and the final command is printed rather than launched (read-only queries and "
         "sourced scripts do still run -- they are what the shown commands are derived from)",
     )
+    run_p.add_argument(
+        "--export-env",
+        metavar="FILE",
+        default=None,
+        help="write the built env as shell-sourceable 'export KEY=VALUE' lines to FILE, right before "
+        "launching the final command (e.g. for a container's interactive shells to pick up via "
+        "/etc/bash.bashrc)",
+    )
     _add_config_selection_args(run_p)
     # internal-only: how reinvoke_command() carries run_stages()'s own
     # startup clock across a wrapper reinvocation, for the "env started in
@@ -3224,10 +3240,22 @@ _RUN_FLAGS = [
     "--env",
     "--until",
     "--skip",
+    "--export-env",
     "-h",
     "--help",
 ]
-_VALUE_FLAGS = {"-c", "--config", "-cf", "--config-file", "-e", "--env", "--until", "--skip", "--scripts"}
+_VALUE_FLAGS = {
+    "-c",
+    "--config",
+    "-cf",
+    "--config-file",
+    "-e",
+    "--env",
+    "--until",
+    "--skip",
+    "--scripts",
+    "--export-env",
+}
 _PATH_VALUE_FLAGS = ("-c", "--config", "-cf", "--config-file")  # see _pending_flag_value_candidates
 
 
@@ -3836,6 +3864,7 @@ def _run_options(args, cli_args, env_vars):
         start_time=args.start_time,
         cli_args=cli_args,
         env_vars=env_vars,
+        export_env=args.export_env,
     )
 
 

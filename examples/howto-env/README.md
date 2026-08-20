@@ -82,6 +82,7 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
 |---|---|
 | `denver.toml` | the whole env: five stages |
 | `docker-compose.yml`, `container/Dockerfile` | the container the pipeline is relocated into |
+| `.devcontainer/` | opens this same container in VS Code -- reuses `docker-compose.yml`, runs `create-env.sh` via `initializeCommand`, then `denver run . --skip docker-base --export-env /tmp/denver.env` via `onCreateCommand` to bring up the remaining stages and hand the built env to every terminal VS Code opens afterwards |
 | `create-env.sh` | `hooks: pre-docker-base:` — writes the compose `.env` (host UID/GID/HOME) |
 | `setup/install_host_tools.sh` | `scripts: setup:` — one-time host bootstrap, run via `--scripts setup` |
 | `requirements.txt` | the venv's packages (`pytest`, plus `conan` for the next stage) |
@@ -108,6 +109,12 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
   container, and version-keyed so bumping `NVIM_VERSION` in `nvim/nvim.env`
   installs beside the old release rather than on top of it. `rm -rf .denver/`
   is the uninstall.
+- `onCreateCommand` runs once, in a subprocess whose own exports die with it --
+  a fresh VS Code terminal started afterwards would otherwise see none of the
+  env denver just built. `--export-env /tmp/denver.env` writes it out as
+  `export KEY=VALUE` lines instead, and `container/Dockerfile` patches
+  `/etc/bash.bashrc` (at build time, so no runtime sudo) to source that file
+  if present -- every interactive bash shell in the container picks it up.
 - There is no `image:` key in `denver.toml`, so denver never builds anything
   itself — the compose file owns the tag and compose builds it when missing.
   After editing the `Dockerfile`, run `docker compose build` (or delete the

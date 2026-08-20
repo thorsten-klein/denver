@@ -15,10 +15,13 @@ CONAN_HOME=$SELF_DIR/.conan2
 mkdir -p "$CONAN_HOME"
 
 HOST_HOME=$HOME
+
+DENVER_EXE="python3 $(cd "$SELF_DIR/../../src" && pwd)/denver.py"
 (
     echo HOST_UID=$(id -u)
     echo HOST_GID=$(id -g)
     echo HOST_HOME=$HOST_HOME
     echo HOME=$HOST_HOME
     echo CONAN_HOME=$CONAN_HOME
+    echo DENVER_EXE="$DENVER_EXE"
 ) > $SELF_DIR/.env
