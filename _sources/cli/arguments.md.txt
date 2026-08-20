@@ -103,6 +103,29 @@ Both follow the same merge rules as `import:`, explained in
   denver says so and points you at `--skip docker` to preview those stages
   on the host instead.
 
+## Hand the built env to something else
+
+- **`--export-env <file>`** writes what denver itself changed in the
+  environment as `export KEY=VALUE` lines to `<file>`, right before
+  launching the final command — for bash or zsh (not fish) to source.
+  Useful when something other than that final command needs the same env:
+  a container's interactive terminals, say, started fresh by an IDE and
+  unaware denver ever ran. Carried along automatically into a docker
+  wrapper's own reinvocation, so it still reaches the process that
+  actually builds the env rather than the outer one that only relocates
+  into the container.
+
+  Only variables that differ from what this process already had are
+  written — a plain dump of the whole (inherited-plus-built) environment
+  would re-assert a hundred unrelated variables (`SSH_AUTH_SOCK`, say) that
+  the sourcing shell already has its own, possibly different, value for.
+  A variable denver only prepended or appended to (`PATH` via a provider's
+  own setup, most commonly) is written as `prefix"$VAR"` or `"$VAR"suffix`
+  rather than the whole resolved value, so it composes with whatever that
+  variable already is in the sourcing shell instead of overwriting it
+  outright. A value set with `-e`/`--env` is always written, even if it
+  happens to match what the process already had.
+
 ## Output and version
 
 - **`-q`/`-qq`** are two quiet levels. `-q` silences info lines, `+ cmd`

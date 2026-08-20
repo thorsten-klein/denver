@@ -138,6 +138,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#control-the-config-change-values-for-one-run">Control the config: Change values for one run</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#inspect-an-environment">Inspect an environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#hand-the-built-env-to-something-else">Hand the built env to something else</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#output-and-version">Output and version</a></li>
 </ul>
 </li>
@@ -384,6 +385,31 @@ wrapper stage (<code class="docutils literal notranslate"><span class="pre">dock
 entering the container is itself one of the commands not being run —
 denver says so and points you at <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">docker</span></code> to preview those stages
 on the host instead.</p>
+</li>
+</ul>
+</section>
+<section id="hand-the-built-env-to-something-else">
+<h2>Hand the built env to something else<a class="headerlink" href="#hand-the-built-env-to-something-else" title="Link to this heading"></a></h2>
+<ul>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--export-env</span> <span class="pre">&lt;file&gt;</span></code></strong> writes what denver itself changed in the
+environment as <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">KEY=VALUE</span></code> lines to <code class="docutils literal notranslate"><span class="pre">&lt;file&gt;</span></code>, right before
+launching the final command — for bash or zsh (not fish) to source.
+Useful when something other than that final command needs the same env:
+a container’s interactive terminals, say, started fresh by an IDE and
+unaware denver ever ran. Carried along automatically into a docker
+wrapper’s own reinvocation, so it still reaches the process that
+actually builds the env rather than the outer one that only relocates
+into the container.</p>
+<p>Only variables that differ from what this process already had are
+written — a plain dump of the whole (inherited-plus-built) environment
+would re-assert a hundred unrelated variables (<code class="docutils literal notranslate"><span class="pre">SSH_AUTH_SOCK</span></code>, say) that
+the sourcing shell already has its own, possibly different, value for.
+A variable denver only prepended or appended to (<code class="docutils literal notranslate"><span class="pre">PATH</span></code> via a provider’s
+own setup, most commonly) is written as <code class="docutils literal notranslate"><span class="pre">prefix&quot;$VAR&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;$VAR&quot;suffix</span></code>
+rather than the whole resolved value, so it composes with whatever that
+variable already is in the sourcing shell instead of overwriting it
+outright. A value set with <code class="docutils literal notranslate"><span class="pre">-e</span></code>/<code class="docutils literal notranslate"><span class="pre">--env</span></code> is always written, even if it
+happens to match what the process already had.</p>
 </li>
 </ul>
 </section>
