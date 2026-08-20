@@ -26,9 +26,9 @@ one-line description.
   run the stack directly on the host instead of relocating into a
   container.
 - **`--scripts <name>`** runs every (filtered) stage’s own `scripts: <name>:` list, then exits without running the rest of the pipeline — see
-  “One-time host setup” in
-  [Quickstart](../quickstart/five-minutes.md#one-time-host-setup) for an
-  example. `<name>` is open-ended, not a fixed set of flags: a project can
+  [“`scripts:`”](../configuration/denver-toml.md#hooks-and-scripts) in
+  Configuration for an example (one-time host setup, e.g. installing Docker
+  itself, is the usual use). `<name>` is open-ended, not a fixed set of flags: a project can
   declare `scripts: migrate:` and run `denver run <env> --scripts migrate`
   without denver itself changing. Repeatable — each name’s entries run in
   the order given. With no `<name>` (on any occurrence), it lists the names
@@ -56,6 +56,82 @@ one-line description.
 
 Both follow the same merge rules as `import:`, explained in
 [Configuration](../configuration/denver-toml.md).
+
+## An env’s own flags: `denver-custom-args:`
+
+`-c` can set *anything*, which is exactly why it is a poor fit for the one
+or two knobs an env actually wants to offer (“which board?”, “debug or
+release?”): its users have to know the dotted path, nothing shows up in
+`--help`, and a typo just becomes a new config key instead of an error.
+
+`denver-custom-args:`, in the env’s own `denver.toml`, declares those knobs
+as real flags instead. Each entry is one `parser.add_argument()` call:
+`flags:` names the flag (a string, or a list to give it aliases), and
+**every other key is forwarded verbatim as a keyword argument** — so an env
+gets argparse’s whole vocabulary (`help:`, `default:`, `action:`, `nargs:`,
+`choices:`, `required:`, `metavar:`, `dest:`, …) without denver
+re-inventing, or restricting, any of it:
+
+```toml
+[[denver-custom-args]]
+flags = ["--board", "-b"]
+default = "nrf52840dk"
+help = "which board to build for"
+
+[[denver-custom-args]]
+flags = ["--release"]
+action = "store_true"
+help = "build with optimisations"
+```
+
+```bash
+denver run my-project --board nrf5340dk --release -- west build
+```
+
+What the user passed is exported as **`DENVER_ARG_<DEST>`**, where `<DEST>`
+is argparse’s own destination name uppercased (`--board` → `DENVER_ARG_BOARD`,
+`--build-type` → `DENVER_ARG_BUILD_TYPE`, or whatever an explicit `dest:`
+says). That is one variable in the environment denver is building, so it
+reaches everything through the same mechanisms as any other variable —
+`${...}` interpolation in the same `denver.toml`, hooks, `scripts:`, and the
+final command:
+
+```toml
+[zephyr-build]
+provider = "custom"
+cmd = "west build -b ${DENVER_ARG_BOARD}"
+```
+
+The value is always a string, since an environment variable is:
+
+- `action: store_true`/`store_false` → `"1"` / `"0"`.
+- a multi-value flag (`nargs:`, `action: append`) → its items, space-joined.
+- a flag with no `default:` that wasn’t given → **not exported at all**,
+  rather than exported empty — so `${DENVER_ARG_BOARD:-nrf52840dk}` still
+  falls back the way it reads.
+
+For the same reason, `type:` is rejected: argparse’s `type=` is a callable,
+which TOML cannot express, and every value ends up a string anyway. Use
+`choices:` (argparse validates it, and lists it in `--help`) or an
+`action:`.
+
+A few more properties worth knowing:
+
+- The flags are ordinary argparse flags, so `denver run <env> --help` lists
+  them alongside denver’s own, and a mistyped one is argparse’s usual
+  `usage:`/`error:` on stderr — never a silently ignored token.
+- Write them **after** `<env>` (`denver run my-project --board x`): the flags
+  an env declares live in the very file `<env>` names, so denver has to
+  resolve `<env>` before it can know them.
+- A flag that would collide with one of denver’s own (`--force`, or a `dest:`
+  of `ci`) is a hard error, not a silent override.
+- `denver-custom-args:` is a list, so it follows the normal list-merge rule: an env
+  inherits every flag its `import:` chain declares and adds its own (see
+  “Layering” in [Configuration](../configuration/denver-toml.md)).
+- They survive a wrapper relocation: the tokens are re-passed to the denver
+  re-invoked inside the container, which would otherwise only see each
+  flag’s `default:` (see “Wrapper / relocation” in
+  [Configuration](../configuration/denver-toml.md)).
 
 ## Control the speed: Trading speed against freshness
 
@@ -151,7 +227,7 @@ off, and `FORCE_COLOR` forces it on even when piped (e.g. into `less -R`).
 
 By default denver prints only the coarse progress trail — one line per
 stage (`-- [i/n] stage 'id' (provider)` or its “skipped by …” reason) —
-plus whatever each stage’s own build tool prints on its own. Denver’s own
+plus whatever each stage’s own build tool prints on its own. denver’s own
 finer detail (sub-step banners, performance timings, the `+ cmd` echo of
 every command it runs) is off unless asked for with `-v`/`--verbose`.
 

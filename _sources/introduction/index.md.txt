@@ -119,6 +119,6 @@ without forking denver. See "Extension providers" in
 
 > **Note**
 >
-> **Next:** [Install Denver](install.md), then
-> [Denver in 5 minutes](../quickstart/five-minutes.md) to watch all of this
+> **Next:** [Install denver](install.md), then
+> [denver in 5 minutes](../quickstart/five-minutes.md) to watch all of this
 > run in a real environment.

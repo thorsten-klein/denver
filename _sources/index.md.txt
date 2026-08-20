@@ -16,16 +16,15 @@ Development Environments as code — reproducible, flexible, simple and fast.
 ## New to denver? Read in this order
 
 The pages below are written to be read front to back — each one picks up
-where the last left off, and they share a single worked example
-(`examples/howto-env`) so nothing has to be re-explained.
+where the last left off.
 
 | # | Page | What you get out of it |
 |---|---|---|
 | 1 | [What problem denver solves](introduction/index.md) | Why a `denver.toml` beats a `setup.sh`, built up one step at a time |
 | 2 | [What is a denver environment?](introduction/index.md#what-is-a-denver-environment) | The model: environments, stages, providers |
-| 3 | [Install Denver](introduction/install.md) | Getting the `denver` command onto your machine |
-| 4 | [Denver in 5 minutes](quickstart/five-minutes.md) | Run a real environment end to end and watch it work |
-| 5 | [Creating environments](quickstart/creating-environments.md) | Build that same environment yourself, from an empty folder |
+| 3 | [Install denver](introduction/install.md) | Getting the `denver` command onto your machine |
+| 4 | [denver in 5 minutes](quickstart/five-minutes.md) | Run the smallest possible environment end to end and watch it work |
+| 5 | [denver in 15 minutes](quickstart/creating-environments.md) | Build a bigger, more realistic environment yourself, from an empty folder |
 
 After that, the rest is reference you dip into as needed: the
 [`denver` command](cli/arguments.md), the
@@ -47,8 +46,9 @@ introduction/install
 
 ## Quickstart
 
-Run a real environment, then build that same one yourself from an empty
-folder — the whole model in action before any reference material.
+Run the smallest possible environment, then build a bigger, more realistic
+one yourself from an empty folder — the whole model in action before any
+reference material.
 
 ```{toctree}
 :maxdepth: 1

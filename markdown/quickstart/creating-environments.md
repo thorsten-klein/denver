@@ -1,9 +1,10 @@
-# Creating your first environment
+# denver in 15 minutes
 
-In [Quickstart](five-minutes.md) you ran `examples/howto-env`
-and saw what it does. **This page builds that exact environment from an
-empty folder**, one stage at a time, explaining why each key is there — so
-by the end you can write your own `denver.toml` rather than copy one.
+[denver in 5 minutes](five-minutes.md) ran the smallest possible env, three
+lines of shell script. This page is the bigger, more realistic follow-up:
+**a real firmware project’s setup, built into a `denver.toml` from an empty
+folder**, one stage at a time, explaining why each key is there — so by the
+end you can write your own instead of copying one.
 
 Build along in your own repo under `envs/howto-env/`; the finished result is
 bundled as
@@ -55,11 +56,13 @@ Let’s create a `denver.toml` for this so the user can just run:
 denver run envs/howto-env
 ```
 
-## Pre-Requisites for denver
+## What you need before starting
 
-- denver installed — see [Install Denver](../introduction/install.md).
-- Only the docker stage will run on your host. All subsequent stages run inside docker.
-  This means, that only `docker` with Compose plugin must be installed on the host system.
+- denver installed — see [Install denver](../introduction/install.md).
+- Docker, with the Compose plugin, on your host — see [Setting up
+  Docker](../providers/docker.md#setting-up-docker). Only the `docker`
+  stage runs on the host; every stage after it runs inside the container,
+  so nothing else needs to be installed outside it.
 
 ## Step 0 — the skeleton
 
