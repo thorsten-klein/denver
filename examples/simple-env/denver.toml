@@ -24,7 +24,7 @@ stages = [
 # `denver run examples/simple-env --help` lists it like any denver flag, and
 # what the user passes arrives as DENVER_ARG_GREETING below (see
 # "Environment-specific CLI arguments" in doc/configuration/denver-toml.md).
-[[args]]
+[[denver-custom-args]]
 flags = ["--greeting", "-g"]
 default = "hello"
 help = "what the last stage greets with"

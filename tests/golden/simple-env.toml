@@ -6,7 +6,7 @@ stages = [
   "print-vars-after",
 ]
 
-[[args]]
+[[denver-custom-args]]
 default = "hello"
 flags = [
   "--greeting",

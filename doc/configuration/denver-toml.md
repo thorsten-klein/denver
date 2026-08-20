@@ -79,7 +79,7 @@ see "Fail loud" in [`philosophy.md`](../concepts/philosophy.md)).
 - **`extensions`** — own, project-local `Provider` subclasses to register
   alongside the built-ins (`uv`, `conan`, `zephyr`, `docker`, `custom`), no
   denver fork required. See "Extension providers" below.
-- **`args`** — command-line flags of this environment's own, each one
+- **`denver-custom-args`** — command-line flags of this environment's own, each one
   forwarded to argparse's `add_argument`. See "Environment-specific CLI
   arguments" below.
 
@@ -328,7 +328,7 @@ the one or two knobs an environment actually wants to offer ("which board?",
 "debug or release?"): its users have to know the dotted path, nothing
 appears in `--help`, and a typo is a new config key rather than an error.
 
-`args:` declares those knobs as real flags instead. Each entry is one
+`denver-custom-args:` declares those knobs as real flags instead. Each entry is one
 `parser.add_argument()` call: `flags:` names the flag (a string, or a list
 to give it aliases), and **every other key is forwarded verbatim as a
 keyword argument** — so an env has argparse's whole vocabulary (`help:`,
@@ -336,12 +336,12 @@ keyword argument** — so an env has argparse's whole vocabulary (`help:`,
 `dest:`, …) without denver re-inventing, or gating, any of it:
 
 ```toml
-[[args]]
+[[denver-custom-args]]
 flags = ["--board", "-b"]
 default = "nrf52840dk"
 help = "which board to build for"
 
-[[args]]
+[[denver-custom-args]]
 flags = ["--release"]
 action = "store_true"
 help = "build with optimisations"
@@ -388,7 +388,7 @@ A few more properties worth knowing:
   resolve `<env>` before it can know them.
 - A flag that would collide with one of denver's own (`--force`, or a `dest:`
   of `ci`) is a hard error, not a silent override.
-- `args:` is a list, so it follows the normal list-merge rule: an env
+- `denver-custom-args:` is a list, so it follows the normal list-merge rule: an env
   inherits every flag its `import:` chain declares and adds its own (see
   "Layering").
 - They survive a wrapper relocation: the tokens are re-passed to the denver

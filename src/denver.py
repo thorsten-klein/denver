@@ -575,7 +575,7 @@ KNOWN_TOP_LEVEL_KEYS = {
     "env",
     "hooks",
     "extensions",
-    "args",
+    "denver-custom-args",
 }
 
 
@@ -1283,7 +1283,7 @@ def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None)
       is a fresh process, docker included -- see docker.py's
       _relocation_env for how the raw container environment itself gets
       them too);
-    * the env's own 'args:' flags (``options.cli_args.argv``): the inner
+    * the env's own 'denver-custom-args:' flags (``options.cli_args.argv``): the inner
       denver re-reads the same denver.toml, so it declares the same flags --
       but nobody would have given them to it, and every one would quietly
       fall back to its 'default:';
@@ -1370,14 +1370,14 @@ def resolve_full_config(
     so they can never drift apart -- a provider's setup() never guesses a
     default itself, it just reads what's already there. Returns (config, ctx).
 
-    ``cli_args`` (the env's own 'args:', as this invocation resolved them --
+    ``cli_args`` (the env's own 'denver-custom-args:', as this invocation resolved them --
     see CliArgs) is exported into ctx.env *before* any default is resolved,
     for exactly the same reason: a stage section reading
     ``${DENVER_ARG_TARGET}`` must see the same value under --show-config as
     in the real run. ``env_vars`` (-e/--env, see RunOptions) is applied right
     after, for the same reason and overriding it if a name collides -- an
     explicit ``-e FOO=bar`` is a more direct statement of intent than
-    whatever 'args:' happened to export under that name.
+    whatever 'denver-custom-args:' happened to export under that name.
     """
     from denver_providers import Context, load_extension_providers
     from denver_providers.context import CLI_ENV_VAR_NAMES
@@ -1673,7 +1673,7 @@ def _relocated_run_cmd(
     """The ``denver run <config> --scripts <name>`` argv (one pair per name) the wrapper re-invokes.
 
     This run's own filters are re-passed. ``cli_argv`` -- the tokens this
-    env's own 'args:' flags consumed -- is re-passed for the same reason
+    env's own 'denver-custom-args:' flags consumed -- is re-passed for the same reason
     reinvoke_command does it: the inner denver declares the same flags and
     would otherwise only see their defaults. ``env_vars`` (-e/--env) is
     re-passed for the same reason.
@@ -1906,7 +1906,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
 
     ``options`` is everything this invocation chose about *how* to run
     (--until/--skip, -q, --fast/--force/--ci, --dry-run, --no-wait,
-    -e/--env, the env's own 'args:' flags, the startup clock) as one
+    -e/--env, the env's own 'denver-custom-args:' flags, the startup clock) as one
     RunOptions value; it defaults to "no flag given at all". See RunOptions
     for ``start_time``, which reaches the final "env started in Ns" line.
 
@@ -2601,7 +2601,7 @@ def _toml_inline_value(value):
 
     Like ``_toml_value``, but a dict/list entry can't get its own '[section]' header (arrays have no
     headers), so a non-empty dict renders as an inline table (``{ k = v, ... }``) here instead. Reached
-    for e.g. a malformed ``args:`` entry mixing mapping and non-mapping items in one list -- not
+    for e.g. a malformed ``denver-custom-args:`` entry mixing mapping and non-mapping items in one list -- not
     table-like as a whole (see _toml_is_table_like), but each dict entry in it still needs *some*
     rendering.
     """
@@ -2773,9 +2773,9 @@ def _ordered_config(resolved, stage_ids):
 
 
 # --------------------------------------------------------------------------- #
-# denver.toml-declared CLI arguments ('args:')
+# denver.toml-declared CLI arguments ('denver-custom-args:')
 #
-# An env may declare flags of its own: each 'args:' entry is one
+# An env may declare flags of its own: each 'denver-custom-args:' entry is one
 # ``parser.add_argument(*flags, **kwargs)`` call, so an env offering a
 # per-run knob ("which board?", "release or debug?") gets a real flag that
 # `denver run <env> --help` lists, instead of asking its users for a generic
@@ -2784,15 +2784,15 @@ def _ordered_config(resolved, stage_ids):
 # ${...} interpolation, every hook, every stage and the final command
 # through the one mechanism all of those already read.
 # --------------------------------------------------------------------------- #
-# Every 'args:' entry's parsed value is exported under this prefix:
+# Every 'denver-custom-args:' entry's parsed value is exported under this prefix:
 # '--target' -> DENVER_ARG_TARGET.
 ARG_ENV_PREFIX = "DENVER_ARG_"
 
 
 def add_config_args(parser, entries):
-    """Add every denver.toml 'args:' entry to ``parser`` as an ordinary argparse flag.
+    """Add every denver.toml 'denver-custom-args:' entry to ``parser`` as an ordinary argparse flag.
 
-    ``entries`` is the raw 'args:' value (None when the env declares none).
+    ``entries`` is the raw 'denver-custom-args:' value (None when the env declares none).
     Each entry is a mapping: 'flags:' names the flag(s), everything else is
     forwarded verbatim as an ``add_argument`` keyword argument -- so an env
     gets argparse's full vocabulary ('help', 'default', 'action', 'nargs',
@@ -2802,7 +2802,7 @@ def add_config_args(parser, entries):
     if entries is None:
         return
     if not isinstance(entries, list):
-        die(f"denver.toml: 'args:' must be a list of argument definitions, got {entries!r}")
+        die(f"denver.toml: 'denver-custom-args:' must be a list of argument definitions, got {entries!r}")
     # every dest already spoken for: denver's own flags first (so an entry
     # can never quietly overwrite args.force et al.), then each entry added
     # here, so two entries cannot silently collide with each other either.
@@ -2812,16 +2812,18 @@ def add_config_args(parser, entries):
 
 
 def _add_config_arg(parser, entry, taken):
-    """Add one 'args:' entry, refusing a dest that is already spoken for."""
+    """Add one 'denver-custom-args:' entry, refusing a dest that is already spoken for."""
     if not isinstance(entry, dict):
-        die(f"denver.toml 'args:': every entry must be a mapping of add_argument arguments, got {entry!r}")
+        die(
+            f"denver.toml 'denver-custom-args:': every entry must be a mapping of add_argument arguments, got {entry!r}"
+        )
     flags = config_arg_flags(entry)
     kwargs = {key: value for key, value in entry.items() if key != "flags"}
     _reject_type_key(flags, kwargs)
     dest = config_arg_dest(flags, entry)
     if dest in taken:
         die(
-            f"denver.toml 'args:': {', '.join(flags)} resolves to '{dest}', which denver's own arguments "
+            f"denver.toml 'denver-custom-args:': {', '.join(flags)} resolves to '{dest}', which denver's own arguments "
             f"already use -- rename the flag or give the entry a different 'dest:'."
         )
     _add_argument(parser, flags, kwargs)
@@ -2839,7 +2841,7 @@ def config_arg_flags(entry):
     if isinstance(flags, str):
         flags = [flags]
     if not isinstance(flags, list) or not flags:
-        die(f"denver.toml 'args:': entry {entry!r} needs 'flags:' -- a flag string, or a list of them")
+        die(f"denver.toml 'denver-custom-args:': entry {entry!r} needs 'flags:' -- a flag string, or a list of them")
     for flag in flags:
         _validate_flag(flag, entry)
     return flags
@@ -2849,8 +2851,8 @@ def _validate_flag(flag, entry):
     """Die unless one 'flags:' element is a string starting with '-'."""
     if not isinstance(flag, str) or not flag.startswith("-"):
         die(
-            f"denver.toml 'args:': flag {flag!r} in entry {entry!r} must be a string starting with '-' -- "
-            f"an env cannot declare a positional argument (denver's own <env> is the only one)."
+            f"denver.toml 'denver-custom-args:': flag {flag!r} in entry {entry!r} must be a string "
+            f"starting with '-' -- an env cannot declare a positional argument (denver's own <env> is the only one)."
         )
 
 
@@ -2865,7 +2867,7 @@ def _reject_type_key(flags, kwargs):
     """
     if "type" in kwargs:
         die(
-            f"denver.toml 'args:': {', '.join(flags)} sets 'type:', which denver.toml cannot express "
+            f"denver.toml 'denver-custom-args:': {', '.join(flags)} sets 'type:', which denver.toml cannot express "
             f"(argparse needs a callable) -- values are always strings; use 'choices:' or 'action:' instead."
         )
 
@@ -2875,7 +2877,7 @@ def _add_argument(parser, flags, kwargs):
     try:
         parser.add_argument(*flags, **kwargs)
     except (argparse.ArgumentError, TypeError, ValueError) as exc:
-        die(f"denver.toml 'args:': cannot add {', '.join(flags)} -- {exc}")
+        die(f"denver.toml 'denver-custom-args:': cannot add {', '.join(flags)} -- {exc}")
 
 
 def config_arg_dest(flags, entry):
@@ -2892,7 +2894,7 @@ def config_arg_dest(flags, entry):
 
 
 def cli_arg_env(entries, args):
-    """``{DENVER_ARG_<DEST>: text}`` for every 'args:' entry this invocation has a value for."""
+    """``{DENVER_ARG_<DEST>: text}`` for every 'denver-custom-args:' entry this invocation has a value for."""
     env = {}
     for entry in entries or []:
         dest = config_arg_dest(config_arg_flags(entry), entry)
@@ -2925,7 +2927,7 @@ def _arg_value_text(value):
 
 
 class CliArgs:
-    """The env's own 'args:' as one invocation resolved them.
+    """The env's own 'denver-custom-args:' as one invocation resolved them.
 
     Two views of the same thing, both needed: ``env`` is what the
     environment gets to see (DENVER_ARG_<DEST> for every entry with a
@@ -2936,7 +2938,7 @@ class CliArgs:
     """
 
     def __init__(self, env=None, argv=()):
-        """Hold one invocation's 'args:' values: ``env`` to export, ``argv`` to re-pass."""
+        """Hold one invocation's 'denver-custom-args:' values: ``env`` to export, ``argv`` to re-pass."""
         self.env = dict(env or {})
         self.argv = list(argv)
 
@@ -2944,7 +2946,7 @@ class CliArgs:
 def _cli_args(cli_args):
     """``cli_args``, or an empty CliArgs -- so every caller can just read .env/.argv.
 
-    An env declaring no 'args:' at all, and every caller that predates them
+    An env declaring no 'denver-custom-args:' at all, and every caller that predates them
     (a provider driven directly, a test), both land here.
     """
     return cli_args or CliArgs()
@@ -3023,7 +3025,7 @@ def _add_help_flag(parser):
     """A plain store_true -h/--help, not argparse's own exiting action.
 
     'run' needs this instead of the default add_help=True: its
-    --help must reflect the env's own 'args:' once known, which only the
+    --help must reflect the env's own 'denver-custom-args:' once known, which only the
     second, config-aware parse in _run_cli adds -- an exiting help action
     would fire during the first, config-agnostic pass and never see them.
     See _handle_info_flags for where this ends up printed from.
@@ -3174,7 +3176,7 @@ def build_arg_parser(config_args=None):
     store_true rather than argparse's own exiting action (see
     _add_help_flag), so it survives both the first, config-agnostic parse
     and the second, config-aware one -- only the second run's --help can
-    show 'run''s own env-declared 'args:' alongside denver's own, and only
+    show 'run''s own env-declared 'denver-custom-args:' alongside denver's own, and only
     if help exits immediately does that never happen (see _handle_info_flags,
     which prints the right (sub)parser's own format_help() based on
     ``args.subcommand``). 'complete' has no config args of its own to wait
@@ -3183,7 +3185,7 @@ def build_arg_parser(config_args=None):
     etc. are all argparse's own problem to report (its usual `usage: ...` +
     `error: ...` on stderr, exit code 2).
 
-    ``config_args`` is the env's own 'args:' (see add_config_args), added
+    ``config_args`` is the env's own 'denver-custom-args:' (see add_config_args), added
     last to 'run' so those flags are indistinguishable from denver's own
     everywhere after this -- in --help, in the parse, in the error messages.
     Omitted (None) wherever the env isn't known yet, which is why parsing is
@@ -3499,9 +3501,12 @@ def _completion_script_names(env_value):
 
 
 def _completion_declared_flags(env_value):
-    """This env's own 'args:'-declared flag spellings, for completing them alongside denver's own -- [] if none."""
+    """This env's own 'denver-custom-args:'-declared flag spellings, for completing them alongside denver's own.
+
+    [] if none.
+    """
     config = _completion_config(env_value)
-    entries = (config or {}).get("args")
+    entries = (config or {}).get("denver-custom-args")
     if not isinstance(entries, list):
         return []
     flags = []
@@ -3511,7 +3516,10 @@ def _completion_declared_flags(env_value):
 
 
 def _entry_flag_spellings(entry):
-    """One 'args:' entry's own 'flags:' spelling(s), normalised to a list of strings -- [] if malformed."""
+    """One 'denver-custom-args:' entry's own 'flags:' spelling(s), normalised to a list of strings.
+
+    [] if malformed.
+    """
     if not isinstance(entry, dict):
         return []
     return _flags_value_as_list(entry.get("flags"))
@@ -3913,10 +3921,10 @@ def _run_resolved_cli(argv):
     env_dir, config_path = resolve_env_dir(preliminary.env)
     config = _load_cli_config(preliminary, config_path)
 
-    # Second pass, this time with the env's own 'args:' known: an unknown
+    # Second pass, this time with the env's own 'denver-custom-args:' known: an unknown
     # flag is once again argparse's own `usage:`/`error:` + exit 2, and
     # --help lists this env's flags alongside denver's own.
-    parser = build_arg_parser(config.get("args"))
+    parser = build_arg_parser(config.get("denver-custom-args"))
     args = parser.parse_args(head)
 
     if _handle_info_flags(args, parser):
@@ -3924,7 +3932,7 @@ def _run_resolved_cli(argv):
 
     _require_config_source(config_path, args.config_file)
 
-    cli_args = CliArgs(cli_arg_env(config.get("args"), args), extra_argv)
+    cli_args = CliArgs(cli_arg_env(config.get("denver-custom-args"), args), extra_argv)
 
     if _handle_config_subcommands(args, env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars):
         return
@@ -3943,7 +3951,7 @@ def _preliminary_args(head):
     """First-pass parse of denver's own flags, with <env> resolved. Returns (namespace, extra_argv).
 
     Only denver's own flags are known here: the extra flags this env declares
-    (its 'args:') live in the very file <env> names, so they cannot be parsed
+    (its 'denver-custom-args:') live in the very file <env> names, so they cannot be parsed
     before <env> itself has been. Unknown tokens are tolerated and re-parsed
     for real by the caller's second pass -- they are this env's own flags, or
     a typo, and only that second pass can tell the two apart.
@@ -3982,7 +3990,7 @@ def _run_options(args, cli_args, env_vars):
 
 
 def _handle_env_less_argv(preliminary, head):
-    """Handle an invocation with no env to read 'args:' from. Returns True if the run is over.
+    """Handle an invocation with no env to read 'denver-custom-args:' from. Returns True if the run is over.
 
     `denver --help`/`--version`/`--license` must keep working with no <env>
     at all, or with one naming something that isn't there -- but neither can
