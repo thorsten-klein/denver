@@ -819,6 +819,110 @@ def test_exec_oserror_dies(make_context, monkeypatch):
         ctx.exec(["missing-binary"])
 
 
+# ---- write_export_env ------------------------------------------------------ #
+def test_write_export_env_writes_a_brand_new_var(make_context, tmp_path, monkeypatch):
+    monkeypatch.delenv("MY_VAR", raising=False)
+    ctx = make_context()
+    ctx.env["MY_VAR"] = "hello"  # not in the process's own env: denver added it
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert "export MY_VAR=hello\n" in out.read_text()
+
+
+def test_write_export_env_quotes_values_needing_it(make_context, tmp_path, monkeypatch):
+    monkeypatch.delenv("MY_VAR", raising=False)
+    ctx = make_context()
+    ctx.env["MY_VAR"] = "has space"
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert "export MY_VAR='has space'\n" in out.read_text()
+
+
+def test_write_export_env_skips_unchanged_vars(make_context, tmp_path, monkeypatch):
+    # inherited from the process's own env, untouched by any stage -- a
+    # fresh shell sourcing this file already has it, so re-asserting it
+    # would just be noise (or, for something like SSH_AUTH_SOCK, wrong)
+    monkeypatch.setenv("MY_VAR", "unchanged")
+    ctx = make_context()
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert "MY_VAR" not in out.read_text()
+
+
+def test_write_export_env_skips_non_identifier_keys(make_context, tmp_path):
+    # bash smuggles exported functions through the environment as keys like
+    # 'BASH_FUNC_foo%%' -- not valid on the left of a shell assignment
+    ctx = make_context()
+    ctx.env["BASH_FUNC_foo%%"] = "() { :; }"
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert "BASH_FUNC_foo" not in out.read_text()
+
+
+def test_write_export_env_overwrites_existing_file(make_context, tmp_path, monkeypatch):
+    monkeypatch.delenv("MY_VAR", raising=False)
+    ctx = make_context()
+    ctx.env["MY_VAR"] = "hello"
+    out = tmp_path / "denver.env"
+    out.write_text("export STALE=leftover\n")
+    ctx.write_export_env(out)
+    assert "STALE" not in out.read_text()
+
+
+def test_write_export_env_under_dry_run_writes_nothing(make_context, tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("MY_VAR", raising=False)
+    ctx = make_context(dry_run=True)
+    ctx.env["MY_VAR"] = "hello"
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert not out.exists()
+    err = capsys.readouterr().err
+    assert f"write env to {out}" in err
+
+
+def test_write_export_env_prepend_composes_with_the_sourcing_shells_value(make_context, monkeypatch, tmp_path):
+    # ctx.prepend_path's shape: new = <new-dir><sep><old PATH> -- old PATH is
+    # a suffix of the new value
+    monkeypatch.setenv("PATH", "/usr/bin")
+    ctx = make_context()
+    ctx.prepend_path("/opt/venv/bin")
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert 'export PATH=/opt/venv/bin:"$PATH"\n' in out.read_text()
+
+
+def test_write_export_env_append_composes_with_the_sourcing_shells_value(make_context, monkeypatch, tmp_path):
+    # ctx.append_path_var's shape: new = <old><sep><appended> -- old is a
+    # prefix of the new value
+    monkeypatch.setenv("MY_PATH", "/usr/bin")
+    ctx = make_context()
+    ctx.append_path_var("MY_PATH", "/opt/extra")
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert 'export MY_PATH="$MY_PATH":/opt/extra\n' in out.read_text()
+
+
+def test_write_export_env_full_replace_when_not_a_simple_extension(make_context, monkeypatch, tmp_path):
+    monkeypatch.setenv("MY_VAR", "old-value")
+    ctx = make_context()
+    ctx.env["MY_VAR"] = "totally-different"
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert "export MY_VAR=totally-different\n" in out.read_text()
+
+
+def test_write_export_env_treats_an_empty_starting_value_as_a_full_replace(make_context, monkeypatch, tmp_path):
+    # an empty old value is trivially both a prefix and a suffix of anything
+    # -- must not be read as "the whole new value is prepended/appended
+    # ahead of an empty $VAR"
+    monkeypatch.setenv("MY_VAR", "")
+    ctx = make_context()
+    ctx.env["MY_VAR"] = "hello"
+    out = tmp_path / "denver.env"
+    ctx.write_export_env(out)
+    assert "export MY_VAR=hello\n" in out.read_text()
+
+
 # ---- checksums ------------------------------------------------------------ #
 def test_sha256_of_files_is_independent_of_where_the_tree_lives(tmp_path):
     # the same requirements file in two checkouts of one project must
