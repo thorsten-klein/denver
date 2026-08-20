@@ -1,5 +1,7 @@
 """Tests for denver.py's hand-written --show-config renderer (dump_toml)."""
 
+import io
+
 import pytest
 
 import denver
@@ -117,3 +119,104 @@ def test_toml_scalar_rejects_unsupported_types():
         denver._toml_scalar(None)
     with pytest.raises(TypeError):
         denver._toml_scalar({"a": 1})
+
+
+# ---- dump_toml: color=True -- ANSI syntax highlighting -----------------------#
+# One span per syntactic role (see dump_toml's own color constants), each
+# self-contained (opened and reset within the same call) -- never nested, so
+# a plain 'in out' substring check is enough; no need to strip escapes back
+# out to check the underlying text, since the plain-text tests above already
+# cover that with color=False (the default every one of them uses).
+def test_dump_toml_color_highlights_key_string_and_header():
+    out = denver.dump_toml({"uv": {"python": "3.12.3"}}, color=True)
+    assert f"{denver._TOML_HEADER_COLOR}[uv]{denver._TOML_RESET}" in out
+    assert f"{denver._TOML_KEY_COLOR}python{denver._TOML_RESET}" in out
+    assert f'{denver._TOML_STRING_COLOR}"3.12.3"{denver._TOML_RESET}' in out
+    # never nested -- the key's own reset ends its span well before the value's starts
+    assert out.index(denver._TOML_RESET) < out.rindex(denver._TOML_STRING_COLOR)
+
+
+def test_dump_toml_color_highlights_bool_and_number():
+    out = denver.dump_toml({"a": True, "b": 5}, color=True)
+    assert f"{denver._TOML_SCALAR_COLOR}true{denver._TOML_RESET}" in out
+    assert f"{denver._TOML_SCALAR_COLOR}5{denver._TOML_RESET}" in out
+
+
+def test_dump_toml_color_highlights_null_comment_as_one_span():
+    # the whole '# key = null' line is one comment-colored span -- not the
+    # plain-colored key nested inside a separately-colored comment marker
+    out = denver.dump_toml({"python": None}, color=True)
+    assert out == f"{denver._TOML_COMMENT_COLOR}# python = null{denver._TOML_RESET}\n"
+
+
+def test_dump_toml_color_highlights_inline_table_key():
+    out = denver.dump_toml({"args": [{"flags": "--board"}]}, color=True)
+    assert f"{denver._TOML_KEY_COLOR}flags{denver._TOML_RESET}" in out
+
+
+def test_dump_toml_color_false_by_default_stays_plain():
+    # every plain-text test above relies on this -- pinned explicitly too
+    assert denver._TOML_HEADER_COLOR not in denver.dump_toml({"uv": {"a": 1}})
+
+
+def test_dump_toml_color_resets_the_module_flag_even_on_error():
+    # dump_toml's own finally: a TypeError mid-render (an unsupported scalar
+    # type) must not leave color "stuck on" for the next, uncolored caller
+    with pytest.raises(TypeError):
+        denver.dump_toml({"a": {"b": 1}, "c": [object()]}, color=True)
+    assert denver._TOML_HEADER_COLOR not in denver.dump_toml({"uv": {"a": 1}})
+
+
+# ---- supports_color -----------------------------------------------------------#
+def _tty(isatty):
+    """A stand-in stream whose .isatty() returns ``isatty`` -- io.StringIO's own always returns False."""
+    stream = io.StringIO()
+    stream.isatty = lambda: isatty
+    return stream
+
+
+def test_supports_color_true_for_a_tty(monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+    assert denver.supports_color(_tty(True)) is True
+
+
+def test_supports_color_false_when_not_a_tty(monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+    assert denver.supports_color(_tty(False)) is False
+
+
+def test_supports_color_no_color_wins_even_on_a_tty(monkeypatch):
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert denver.supports_color(_tty(True)) is False
+
+
+def test_supports_color_force_color_wins_when_not_a_tty(monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    assert denver.supports_color(_tty(False)) is True
+
+
+def test_supports_color_no_color_beats_force_color_if_both_are_set(monkeypatch):
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setenv("FORCE_COLOR", "1")
+    assert denver.supports_color(_tty(True)) is False
+
+
+def test_supports_color_false_when_term_is_dumb(monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "dumb")
+    assert denver.supports_color(_tty(True)) is False
+
+
+def test_supports_color_defaults_to_checking_real_stdout(monkeypatch):
+    # no stream given -- falls back to sys.stdout itself
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+    monkeypatch.setattr(denver.sys, "stdout", _tty(True))
+    assert denver.supports_color() is True
