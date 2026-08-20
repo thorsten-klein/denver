@@ -45,7 +45,7 @@ class ConanRecipe(DenverConanFile):
     # package being built only sees its *own* tool requires, so the env's
     # conan cmake doesn't reach this build, and tool_requiring it here would
     # stack this recipe on top of another one. Installing a *missing* one
-    # needs tools.system.package_manager:mode=install -- the env's denver.yml
+    # needs tools.system.package_manager:mode=install -- the env's denver.toml
     # passes it to `conan install` (without it conan only checks, and says so).
     system_tools_requires = ("cmake",)
 

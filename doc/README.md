@@ -1,7 +1,7 @@
 # denver documentation
 
 This tree is denver's full reference. It stands on its own: everything here
-is explained in terms of the `denver.yml` schema itself, not by pointing at
+is explained in terms of the `denver.toml` schema itself, not by pointing at
 the example environments under `examples/` (those are self-documenting via
 their own comments).
 
@@ -81,19 +81,19 @@ Everything after that is reference you dip into as needed.
 
 ## Configuration
 
-- **[`configuration/denver-yml.md`](configuration/denver-yml.md)** — the
-  system, once. The complete `denver.yml` schema (every top-level key, every
+- **[`configuration/denver-toml.md`](configuration/denver-toml.md)** — the
+  system, once. The complete `denver.toml` schema (every top-level key, every
   generic stage key), how a config is resolved (`import:` chain → merge
   rules → central default resolution), the mechanisms that make it flexible
   (layering, hooks, extension providers, `-c`/`-cf` overrides, `${...}`
   interpolation) and fast (fingerprints, `--fast`/`--force`), plus stage
   filtering and the wrapper/relocation model. This is the page to read
-  before writing your own `denver.yml`.
+  before writing your own `denver.toml`.
 
 ## Providers
 
 - **[`providers/`](providers/)** — one page per provider: a full key
-  reference for that provider's `denver.yml` section (every key, what it
+  reference for that provider's `denver.toml` section (every key, what it
   does, its default) plus design notes on the patterns it supports and how
   it behaves under `--fast`/`--force`.
 
@@ -111,7 +111,7 @@ Everything after that is reference you dip into as needed.
 
   A project can also register its own provider, without a denver fork —
   see "Extension providers" in
-  [`configuration/denver-yml.md`](configuration/denver-yml.md).
+  [`configuration/denver-toml.md`](configuration/denver-toml.md).
 
 ## Contributing
 

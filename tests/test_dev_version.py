@@ -26,10 +26,10 @@ the constant is only ever wrong *relative to this repo*.
 from __future__ import annotations
 
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
-import yaml
 
 import denver
 
@@ -38,9 +38,9 @@ GOLDEN_DIR = Path(__file__).resolve().parent / "golden"
 
 
 def _tracked_env_names():
-    """Env dir names with a denver.yml tracked in git -- mirrors test_golden_show_config."""
+    """Env dir names with a denver.toml tracked in git -- mirrors test_golden_show_config."""
     result = subprocess.run(
-        ["git", "ls-files", "examples/*/denver.yml"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ["git", "ls-files", "examples/*/denver.toml"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
     )
     return sorted(Path(line).parent.name for line in result.stdout.splitlines() if line)
 
@@ -79,7 +79,7 @@ def test_examples_run_from_a_checkout(env_name, monkeypatch):
     The pin is read from the golden file, i.e. the *merged* config, so a pin
     an env only inherits through 'import:' is covered too.
     """
-    config = yaml.safe_load((GOLDEN_DIR / f"{env_name}.yml").read_text())
+    config = tomllib.loads((GOLDEN_DIR / f"{env_name}.toml").read_text())
     if config.get("denver-version") is None:
         pytest.skip(f"examples/{env_name} pins no 'denver-version:'")
 

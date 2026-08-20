@@ -42,7 +42,7 @@ jobs:
         # works on one end doesn't slip through -- crossed with every OS
         # denver supports, so a change that only works on one of those
         # doesn't either.
-        python-version: ["3.9", "3.13"]
+        python-version: ["3.11", "3.13"]
         os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4

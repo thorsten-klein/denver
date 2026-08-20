@@ -1,0 +1,60 @@
+version = "1.0"
+denver-version = ">=1.1.0"
+command = "bash"
+stages = [
+  "docs-tools",
+  "build-docs",
+]
+
+[hooks]
+# env = null
+# post-build-docs = null
+# post-docs-tools = null
+# pre-build-docs = null
+# pre-cmd = null
+# pre-docs-tools = null
+
+[docs-tools]
+provider = "uv"
+description = [
+  "The Sphinx/MyST/Read-the-Docs-theme venv doc/conf.py needs, pinned in requirements.txt. Deliberately standalone rather than depending on the repo's own uv project -- the top-level project has no 'docs' dependency-group.",
+]
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+exe = "uv"
+# freeze-to = null
+# install-args = null
+# lockfile = null
+no-index = false
+# overrides = null
+# patches-apply = null
+# python = null
+reinstall = false
+requirements = [
+  "requirements.txt",
+]
+# venv = null
+
+[build-docs]
+provider = "custom"
+description = [
+  "Runs sphinx-build against the repo's real doc/ tree, right after 'docs-tools' activates the venv that provides it -- once with the html builder, once with the markdown one (AI/LLM-friendly mirror), the latter copied under the former's own output. Not fingerprinted -- like any custom 'cmd:', it reruns every time, which is exactly what a doc build wants.",
+]
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+cmd = '''
+set -euo pipefail
+DOC="${DENVER_ENV_DIR}/../../doc"
+sphinx-build -b html -W --keep-going "$DOC" "$DOC/_build/html"
+sphinx-build -b markdown -W --keep-going "$DOC" "$DOC/_build/markdown"
+rm -rf "$DOC/_build/html/.doctrees" "$DOC/_build/markdown/.doctrees"
+rm -rf "$DOC/_build/html/markdown"
+cp -r "$DOC/_build/markdown" "$DOC/_build/html/markdown"
+'''
+# launcher = null
+# source = null
+

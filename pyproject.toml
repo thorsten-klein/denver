@@ -7,13 +7,13 @@ name = "denver-tool"
 dynamic = ["version"]
 description = "Development Environments as code -- reproducible, flexible, simple and fast"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-# denver only ever calls yaml.safe_load/safe_dump, so the floor is just the
-# 6.x API -- it is not a pin: a docker-wrapped env re-invokes denver against
-# the image's python3, whose PyYAML this cannot constrain at all.
-dependencies = ["pyyaml>=6"]
+# denver's own config is TOML, read with the standard library (tomllib) --
+# nothing to install for that. requires-python is bumped to 3.11 precisely so
+# tomllib (stdlib since 3.11) can be relied on instead of a dependency.
+dependencies = []
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -21,8 +21,6 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -58,6 +56,12 @@ test = [
     "pytest-cov>=7.0,<8",
     "pytest-mock>=3.6.1,<4",
     "pytest-flakefinder>=1.1.0,<2",
+    # not one of denver's own runtime dependencies (its config is TOML, stdlib
+    # tomllib) -- needed here because conan_scripts/*.py (build_catalog.py,
+    # get_rrev.py, recipes.py) unconditionally read/write conandata.yml and
+    # catalog.yml, formats Conan itself dictates, and the suite imports those
+    # modules directly.
+    "pyyaml>=6",
 ]
 dev = [
     "poethepoet~=0.37",
@@ -148,7 +152,7 @@ color = "auto"
 sort = "asc"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 files = ["src"]
 # conan_scripts run standalone (see catalog.py's docstring): their
 # sibling-module imports (get_rrev, DenverConanFile) only resolve via each
@@ -165,7 +169,7 @@ module = ["conan.*"]
 ignore_missing_imports = true
 
 [tool.pyright]
-pythonVersion = "3.9"
+pythonVersion = "3.11"
 include = ["src"]
 
 [tool.bandit]

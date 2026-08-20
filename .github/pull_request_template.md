@@ -30,16 +30,16 @@ test that fails without your change.
 - [ ] I updated the docs if a setting, a default, or a provider changed
       (`doc/`, `README.md`).
 - [ ] I updated or added an example under `examples/` if a working
-      `denver.yml` now looks different.
+      `denver.toml` now looks different.
 - [ ] My commit messages say *why*, not only *what*.
 
 ## Does this break anything?
 
 <!--
 Delete this part if nothing applies. Otherwise: what people with an existing
-denver.yml, lockfile, or cached env have to do now -- and whether denver
+denver.toml, lockfile, or cached env have to do now -- and whether denver
 tells them, or just behaves differently.
 -->
 
-- [ ] Existing `denver.yml` files behave differently after this.
+- [ ] Existing `denver.toml` files behave differently after this.
 - [ ] A command line flag changed (its name, its default, or what it prints).

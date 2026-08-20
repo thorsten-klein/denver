@@ -111,11 +111,25 @@ def test_west_missing_dies(make_context, which):
 
 
 def test_west_found_on_path(make_context, run_recorder, which):
-    # 'west' is never a denver.yml key -- always the first 'west' on PATH
     config = {"zephyr": {"west-yml": "manifest/west.yml"}}
     ctx = make_ctx(make_context, config)
     run_zephyr(config, ctx)
     assert any("/usr/bin/west config -l" in c for c in run_recorder.commands())
+
+
+def test_exe_configured_explicitly(make_context, run_recorder, which):
+    config = {"zephyr": {"exe": "west3", "west-yml": "manifest/west.yml"}}
+    ctx = make_ctx(make_context, config)
+    run_zephyr(config, ctx)
+    assert any("/usr/bin/west3 config -l" in c for c in run_recorder.commands())
+
+
+def test_exe_missing_dies_with_its_own_name(make_context, which):
+    which["myexe"] = None
+    config = {"zephyr": {"exe": "myexe"}}
+    ctx = make_ctx(make_context, config)
+    with pytest.raises(SystemExit):
+        run_zephyr(config, ctx)
 
 
 # ---- west-yml resolution ------------------------------------------------------#
@@ -313,7 +327,7 @@ def test_apply_project_patches_committer_override(make_context, run_recorder, wh
     config = {
         "zephyr": {
             "west-yml": "west.yml",
-            "patch-committer": {"GIT_COMMITTER_NAME": "custom"},
+            "patch-committer-name": "custom",
         }
     }
     ctx = make_ctx(make_context, config)

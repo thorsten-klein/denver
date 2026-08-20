@@ -1,0 +1,29 @@
+version = 1.0
+# minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
+denver-version = ">=1.1.0"
+
+# Runs the command inside a docker compose service. The 'docker' provider
+# (src/denver_providers/docker.py) builds the image and runs the service.
+stages = ["docker"]
+
+# create-env.sh generates the full compose env-file itself (dynamic bits:
+# host UID/GID, workspace, caches, git credentials, CI detection, conan
+# login, dir creation, ...); denver runs it, with no arguments, right before
+# the 'docker' stage's setup() (see doc/quickstart/creating-environments.md).
+[hooks]
+pre-docker = ["create-env.sh"]
+
+[docker]
+provider = "docker"
+
+[docker.compose]
+default-cmd = "fish"
+run-args = ["--rm"]
+file = "docker-compose.yml"
+service = "dev"
+build = true
+
+# host-side bootstrap (containerd/docker/make/jq/QEMU/udev rules); run via
+# `denver run examples/zephyr-docker --scripts setup`, not on every normal run.
+[docker.scripts]
+setup = ["setup/install_host_tools.sh"]

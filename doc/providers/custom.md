@@ -3,14 +3,14 @@
 A `custom` stage is the escape hatch: an arbitrary shell command, for
 whatever a project needs that doesn't fit `uv`/`conan`/`zephyr`/`docker`.
 
-```yaml
-my-stage:
-  provider: custom
-  cmd: "echo hello"
+```toml
+[my-stage]
+provider = "custom"
+cmd = "echo hello"
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Everything below is specific to `custom`.)
+see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything below is specific to `custom`.)
 
 ## Key reference
 
@@ -23,7 +23,7 @@ see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Eve
   every later stage and the final command. This is the way to make a
   `custom` stage hand environment variables forward, scoped to this one
   stage's section rather than the global `hooks:` mechanism (see
-  [Configuration](../configuration/denver-yml.md)).
+  [Configuration](../configuration/denver-toml.md)).
 - **`launcher`** — makes this stage a *wrapper*, the same way `docker` is
   one: instead of (only) doing its own work, it prepends its own script(s)
   ahead of whatever command would otherwise run. Each entry is a string,
@@ -31,10 +31,11 @@ see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Eve
   shell parsing), and every entry's tokens land in order, ahead of the
   actual command:
 
-  ```yaml
-  launcher:
-  - myscript.sh --
-  - otherscript.sh --
+  ```toml
+  launcher = [
+    "myscript.sh --",
+    "otherscript.sh --",
+  ]
   ```
 
   turns a resolved command of `<cmd>` into `myscript.sh -- otherscript.sh
@@ -51,11 +52,11 @@ The common shape for "download a release tarball and put it on `PATH`" uses
 both keys, because installing and activating are two different jobs
 ([`examples/howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env)'s `nvim-setup` stage):
 
-```yaml
-nvim-setup:
-  provider: custom
-  cmd: bash ${DENVER_ENV_DIR}/nvim/install.sh   # download, checksum, unpack
-  source: nvim/activate.sh                      # export PATH=...
+```toml
+[nvim-setup]
+provider = "custom"
+cmd = "bash ${DENVER_ENV_DIR}/nvim/install.sh"  # download, checksum, unpack
+source = "nvim/activate.sh"                     # export PATH=...
 ```
 
 - **`cmd:`** is the build step: an isolated subprocess is exactly right for

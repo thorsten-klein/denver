@@ -3,6 +3,6 @@
 *.zip
 *.tar.gz
 
-# written by every conan stage (denver.yml's 'catalog:') -- generated output,
+# written by every conan stage (denver.toml's 'catalog:') -- generated output,
 # and stale the moment a recipe or its base class changes
 /catalog.yml

@@ -1,5 +1,5 @@
 """Conan deployer extensions (see symlink.py).
 
-Resolved by path from denver.yml's conan.deployer: -- not imported as a
+Resolved by path from denver.toml's conan.deployers: -- not imported as a
 package at runtime.
 """

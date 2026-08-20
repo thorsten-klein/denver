@@ -14,6 +14,14 @@ services:
     # final `pytest` starts in this env's own directory
     working_dir: ${DENVER_ENV_DIR:-/tmp}
 
+    # trust the host's OS CA bundle for corporate TLS-interception proxies --
+    # Python's bundled certifi (used by requests/urllib3, hence conan) never
+    # includes a private root, only the OS trust store does
+    environment:
+    - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+    - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+    - CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
     volumes:
     # mount the home dir from host at the same path inside and out, so absolute paths inside docker match with host paths
     - ${HOST_HOME}:${HOST_HOME}
@@ -21,3 +29,6 @@ services:
     # the path, creates the dir and writes CONAN_HOME into .env -- which is
     # both what interpolates here and what sets it inside the container
     - ${CONAN_HOME}:${CONAN_HOME}
+    # host's OS CA trust store (may include a corporate MITM proxy root) --
+    # mounted read-only, pointed at by SSL_CERT_FILE/REQUESTS_CA_BUNDLE above
+    - /etc/ssl/certs:/etc/ssl/certs:ro

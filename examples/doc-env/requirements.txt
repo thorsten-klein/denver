@@ -1,7 +1,7 @@
 # The Sphinx/MyST/Read the Docs toolchain doc/conf.py needs. This is the only
 # place these are pinned -- the top-level project has no 'docs'
 # dependency-group; `uv run poe docs` and .github/workflows/docs.yml both
-# build by running this env (see denver.yml), so both get exactly this venv.
+# build by running this env (see denver.toml), so both get exactly this venv.
 sphinx-rtd-theme>=2.0.0
 # <4.0: verified clean against conf.py's nitpicky/-W strict build; myst-parser
 # 4.x/5.x are a straightforward bump but re-verify a strict build before
@@ -9,6 +9,6 @@ sphinx-rtd-theme>=2.0.0
 myst-parser>=3.0,<4.0
 sphinx>=7.2,<8.0
 sphinx-copybutton>=0.5.2
-# the 'markdown' builder -- see build-docs' cmd: in denver.yml. AI-friendly
+# the 'markdown' builder -- see build-docs' cmd: in denver.toml. AI-friendly
 # mirror of the HTML site: one .md per page, published alongside it.
 sphinx-markdown-builder>=0.6.6

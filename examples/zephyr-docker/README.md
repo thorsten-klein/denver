@@ -34,23 +34,24 @@ the container" is one reusable answer, imported wherever it's needed rather
 than copied. The devshell inherits this whole section with a
 *section-level* import:
 
-```yaml
-# ../zephyr-devshell/denver.yml
-docker:
-  import:
-  - ../zephyr-docker      # inherit this env's docker: config, default-cmd included
+```toml
+# ../zephyr-devshell/denver.toml
+[docker]
+import = ["../zephyr-docker"]  # inherit this env's docker: config, default-cmd included
 ```
 
 ## Purpose as an example
 
-**1. `env-scripts:` — computing what a static file can't express.** Compose
-needs an `.env` file, and half its contents can only be known at runtime: the
-host UID/GID, the workspace root, cache locations, git credentials, whether
-this is CI. So `denver.yml` names a script instead of values:
+**1. `hooks: pre-docker:` — computing what a static file can't express.**
+Compose needs an `.env` file, and half its contents can only be known at
+runtime: the host UID/GID, the workspace root, cache locations, git
+credentials, whether this is CI. So `denver.toml` names a script instead of
+values, under the generic `[hooks]` mechanism rather than anything
+docker-specific:
 
-```yaml
-env-scripts:
-- create-env.sh     # denver runs it (no arguments) before compose build/run
+```toml
+[hooks]
+pre-docker = ["create-env.sh"]     # denver sources it (no arguments) right before the 'docker' stage's setup()
 ```
 
 `create-env.sh` renders the whole env-file itself — including walking up the
@@ -82,9 +83,9 @@ has to be *copied* in because git rewrites it in place rather than editing it
 
 | Path | What it is |
 |---|---|
-| `denver.yml` | One `docker` stage |
+| `denver.toml` | One `docker` stage |
 | `docker-compose.yml` | The `dev` service: image, mounts, user, devices |
-| `create-env.sh` | Renders the `.env` Compose reads (`env-scripts:`) |
+| `create-env.sh` | Renders the `.env` Compose reads (`hooks: pre-docker:`) |
 | `container/Dockerfile` | The image itself |
 | `container/fixuid/` | Maps the container user onto your host UID/GID |
 | `configs/` | Shell/git config mounted into the container |
@@ -101,7 +102,7 @@ import chain.
 ## Next
 
 - [`doc/providers/docker.md`](../../doc/providers/docker.md) — every `docker:`
-  key, `env-scripts:`, and how relocation works
-- [`doc/configuration/denver-yml.md`](../../doc/configuration/denver-yml.md) — the wrapper/relocation
+  key, and how relocation works
+- [`doc/configuration/denver-toml.md`](../../doc/configuration/denver-toml.md) — the wrapper/relocation
   model in general
 - [`../zephyr-devshell`](../zephyr-devshell) — the env that imports this one

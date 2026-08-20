@@ -1,8 +1,8 @@
 """zephyr provider: manages a West workspace (Zephyr RTOS).
 
-Configured from denver.yml -> ``zephyr:``. The west executable is never
-configured here -- always the first ``west`` on PATH (installed by an
-earlier uv stage).
+Configured from denver.toml -> ``zephyr:``. The west executable defaults to
+the first ``west`` on PATH (installed by an earlier uv stage), overridable
+via ``exe:``.
 
 Full key reference, worked examples and design notes: ``doc/providers/zephyr.md``.
 """
@@ -14,7 +14,7 @@ from .base import Provider, fill_unset
 from .context import banner, die, find_in_parents, find_outermost_in_parents, fingerprint_label, info
 
 # extra `west update` args added on top of 'update-args:' whenever ctx.ci --
-# a fixed shallow-clone strategy, not a denver.yml key (see doc/providers/zephyr.md).
+# a fixed shallow-clone strategy, not a denver.toml key (see doc/providers/zephyr.md).
 CI_UPDATE_ARGS = ("--narrow", "-o=--depth=1")
 
 # west's own per-workspace marker dir, holding its config file.
@@ -30,16 +30,19 @@ def west_topdir(start):
 
 
 class ZephyrProvider(Provider):
-    """Manages a West workspace (Zephyr RTOS) -- see doc/providers/zephyr.md for denver.yml keys."""
+    """Manages a West workspace (Zephyr RTOS) -- see doc/providers/zephyr.md for denver.toml keys."""
 
     name = "zephyr"
     KEYS = (
+        "exe",
         "west-yml",
         "base",
         "west-config",
         "blobs-cache",
         "blobs-fetch-args",
-        "patch-committer",
+        "patch-committer-name",
+        "patch-committer-email",
+        "patch-committer-date",
         "update-args",
     )
 
@@ -57,19 +60,21 @@ class ZephyrProvider(Provider):
         return str(Path(super_root) / "west.yml")
 
     @staticmethod
-    def _resolved_committer(cfg):
-        """The identity used when applying project patches: denver's own, overridden by 'patch-committer:'."""
-        committer = {
-            "GIT_COMMITTER_NAME": "denver",
-            "GIT_COMMITTER_EMAIL": "denver@denver",
-            "GIT_COMMITTER_DATE": "2000-01-01T00:00:00",
+    def _resolved_patch_committer(cfg):
+        """'patch-committer-name:'/'-email:'/'-date:', each defaulting to denver's own fixed identity.
+
+        Fixed, so applying the same patches twice never produces a
+        different commit -- overridden per field, independently.
+        """
+        return {
+            "patch-committer-name": cfg.get("patch-committer-name") or "denver",
+            "patch-committer-email": cfg.get("patch-committer-email") or "denver@denver",
+            "patch-committer-date": cfg.get("patch-committer-date") or "2000-01-01T00:00:00",
         }
-        committer.update(cfg.get("patch-committer") or {})
-        return committer
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve west-yml/base/blobs-fetch-args/patch-committer -- see doc/providers/zephyr.md."""
+        """Resolve west-yml/base/blobs-fetch-args/patch-committer-* -- see doc/providers/zephyr.md."""
         # WEST_TOPDIR is a zephyr concept, not a denver built-in -- computed
         # and exported here (not in Context) so non-zephyr envs never pay for
         # the parent-directory walk or carry an irrelevant env var. setdefault
@@ -79,10 +84,11 @@ class ZephyrProvider(Provider):
         ctx.env.setdefault("WEST_TOPDIR", str(top) if top else "")
 
         resolved = dict(cfg)
+        resolved["exe"] = cfg.get("exe") or "west"
         resolved["west-yml"] = cls._resolved_west_yml(ctx, cfg.get("west-yml"))
         resolved["base"] = str(ctx.resolve_path(cfg.get("base") or "${WEST_TOPDIR}/zephyr-rtos"))
         resolved["blobs-fetch-args"] = cfg.get("blobs-fetch-args") or ["--auto-accept"]
-        resolved["patch-committer"] = cls._resolved_committer(cfg)
+        resolved.update(cls._resolved_patch_committer(cfg))
 
         return fill_unset(resolved, cls.KEYS)
 
@@ -116,9 +122,9 @@ class ZephyrProvider(Provider):
         # dry_fallback: under --dry-run the uv stage that installs west only
         # printed its commands, so west legitimately isn't on PATH yet and
         # the bare name still renders this stage (see Context.which).
-        west = ctx.which("west", dry_fallback=True)
+        west = ctx.which(cfg["exe"], dry_fallback=True)
         if not west:
-            die(f"zephyr[{self.stage}]: needs 'west' on PATH -- normally installed by an earlier uv stage")
+            die(f"zephyr[{self.stage}]: needs '{cfg['exe']}' on PATH -- normally installed by an earlier uv stage")
 
         west_yml = Path(cfg["west-yml"])
         zephyr_base = Path(cfg["base"])
@@ -175,8 +181,8 @@ class ZephyrProvider(Provider):
         current = ctx.run([west, "config", "-l"], cwd=top, capture=True, echo=False, check=False).stdout
 
         # computed from the (already-resolved) west-yml/base, then any
-        # extra/overriding entries from denver.yml -- these three are workspace
-        # topology, not denver.yml defaults, so they're computed right here.
+        # extra/overriding entries from denver.toml -- these three are workspace
+        # topology, not denver.toml defaults, so they're computed right here.
         west_config = {
             "manifest.path": os.path.relpath(west_yml.parent, top),
             "manifest.file": west_yml.name,
@@ -238,7 +244,11 @@ class ZephyrProvider(Provider):
 
     def _apply_project_patches(self, ctx, cfg, west, top):
         """Apply each west project's own zephyr/patches.yml (if any), reversed so dependents patch before their deps."""
-        committer = cfg["patch-committer"]
+        committer = {
+            "GIT_COMMITTER_NAME": cfg["patch-committer-name"],
+            "GIT_COMMITTER_EMAIL": cfg["patch-committer-email"],
+            "GIT_COMMITTER_DATE": cfg["patch-committer-date"],
+        }
         listing = ctx.run(
             [west, "list", "-f", "{abspath}"],
             cwd=top,

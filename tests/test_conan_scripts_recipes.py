@@ -551,7 +551,7 @@ def test_prepare_noop_on_empty_remotes(monkeypatch, capsys):
 
 
 def test_prepare_cleanup_runs_even_on_empty_remotes(monkeypatch):
-    # cleanup=True (denver.yml's conan.cleanup-remotes:, default on) treats
+    # cleanup=True (denver.toml's not conan.keep-remotes:, default on) treats
     # {} as the exhaustive list too, so conan_enable_remotes({}) still runs
     # -- it's what actually disables every already-present remote.
     calls = []

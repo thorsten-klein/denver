@@ -3,18 +3,18 @@
 A `conan` stage provisions native, non-Python tools (compilers, `cmake`,
 `ninja`, ...) via [Conan](https://conan.io) and puts them on `PATH`.
 
-```yaml
-my-conan-stage:
-  provider: conan
-  conanfiles:
-  - path: conanfile.py
-    recipe-dirs:
-    - path/to/recipes
-    catalog: catalog.yml   # optional
+```toml
+[my-conan-stage]
+provider = "conan"
+conanfile = "conanfile.py"
+
+[[my-conan-stage.recipes]]
+dirs = ["path/to/recipes"]
+catalog = "catalog.yml"  # optional
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
-see "Generic stage keys" in [Configuration](../configuration/denver-yml.md). Everything else is specific to `conan`.)
+see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything else is specific to `conan`.)
 
 ## Requires
 
@@ -28,50 +28,59 @@ needs 'conan' on PATH`.
 ## Key reference
 
 - **`exe`** (default: `conan` on `PATH`) — the conan executable.
-- **`recipes-exporter`** / **`deployer`** (default: denver's own bundled
-  tools) — the scripts that generate/export recipe references and deploy
-  installed packages onto `PATH`. Overriding these is an escape hatch for
-  an unusual setup; most environments never set them.
+- **`deployers`** (default: just denver's own bundled symlink deployer) — a
+  list of scripts that deploy installed packages onto `PATH`, each run as
+  its own `conan install --deployer=<script>`. The env-wide recipes-exporter
+  (the script that generates/exports recipe references) is not
+  user-configurable at this level — only a `recipes:` entry's own
+  `export-tool:` (below) can override it, for that entry only.
 - **`base-classes`** — optional; a list of directories of shared conanfile
   base classes recipes can inherit from. Each is put on the
   recipes-exporter's `PYTHONPATH`, in list order (earlier entries win), and
   may itself live in a base env, resolved the normal way (falling back to an
   imported base env's own directory). A listed dir must exist (it's an error
   if it doesn't). Appends across `import:` layers like any other list (see
-  [Configuration](../configuration/denver-yml.md)'s "Merge rules"), so a derived
+  [Configuration](../configuration/denver-toml.md)'s "Merge rules"), so a derived
   env only needs to list the base-classes dirs it adds itself.
-- **`conanfiles`** — a list of *units*, installed in order. A unit is a
-  conanfile together with the recipes it is installed from, so an env that
-  stacks on another appends whole units rather than merging several parallel
-  lists. Appends across `import:` layers like any other list (see
-  [Configuration](../configuration/denver-yml.md)'s "Merge rules"). Each entry is a
-  mapping — a bare path string is rejected — with these keys:
-  - **`path`** (required) — the conanfile to install.
-  - **`recipe-dirs`** — optional; directories containing recipes to export
-    before installing. Never guessed from the directory layout (see
-    "Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) —
-    each dir must be listed, and must exist. An entry may be a whole recipe
+- **`conanfile`** — optional; the single conanfile to install via `conan
+  install` (a project only ever has one dependency graph, so this is a
+  single path, not a list). Left unset, config/export/prepare still run as
+  normal — this is the only toggle for whether `conan install` (and the
+  `conanbuildenv.sh` activation after it) runs at all; there is no separate
+  `install:` flag to keep in sync with it. Independent of `recipes:` below —
+  which recipes get exported has nothing to do with what the conanfile
+  itself requires; it installs whatever its own
+  `requirements()`/`build_requirements()` reference, whether or not this env
+  exports it itself.
+- **`recipes`** — a list of entries, each exported into the local conan
+  cache before `conanfile:` (if any) is installed. Never guessed from the
+  directory layout (see "Explicit over implicit" in
+  [`../concepts/philosophy.md`](../concepts/philosophy.md)). Appends across `import:`
+  layers like any other list. Each entry is a mapping with these keys:
+  - **`dirs`** — optional; directories containing recipes to export. Each
+    must be listed explicitly and must exist. An entry may be a whole recipe
     tree or a single recipe directory; recipes are found by their
     `conandata.yml`, wherever it sits.
-  - **`catalog`** — optional; a path to write this unit's catalog to (every
+  - **`catalog`** — optional; a path to write this entry's catalog to (every
     one of its recipes pinned as `name/version@user/channel#rrev`). Unset,
     the catalog is built in memory, handed straight to the export step and
     never written — so a run leaves no generated file behind. Set it when the
-    pins should be reviewable/committed, or when the unit's own conanfile
-    reads them back (see
+    pins should be reviewable/committed, or when the conanfile installed via
+    `conanfile:` reads them back (see
     [`../../examples/raspberry-pico/conan/conanfile.py`](../../examples/raspberry-pico/conan/conanfile.py)).
-  - **`recipes-exporter`** — optional; overrides the env-wide default for
-    this unit only.
+    Requires `dirs:` — a catalog with nothing to build it from is rejected.
+  - **`export-tool`** — optional; overrides the env-wide recipes-exporter for
+    this entry only.
 
-  A unit's `recipe-dirs:` are resolved as **one** catalog, so recipes in one
-  dir may require recipes in another dir of the same unit — and a unit's
-  catalog content follows from that unit's membership. Put recipes in their
-  own unit to keep their catalog independent of what another unit does.
+  An entry's `dirs:` are resolved as **one** catalog, so recipes in one dir
+  may require recipes in another dir of the same entry — and an entry's
+  catalog content follows from that entry's membership. Put recipes in their
+  own entry to keep their catalog independent of what another entry does.
 - **`build`** (default `"missing"`) — passed as `--build=<value>` (a
   string or a list) to `conan install`.
 - **`install-args`** — extra literal `conan install` arguments.
-- **`no-auth`** (default `false`) — when `true`, `conan install` runs with
-  `--no-remote`.
+- **`authentication`** (default `true`) — when `false`, `conan install` runs
+  with `--no-remote`.
 - **`profiles`** — `host`/`build`, each a list; every entry becomes its own
   `-pr:h=<value>` / `-pr:b=<value>` flag, in list order. Empty by default
   (no explicit profile flags).
@@ -91,14 +100,14 @@ needs 'conan' on PATH`.
   own login (if reachable) runs as part of the same stage.
   `CONAN_REMOTE_ENABLE_<NAME>` (an env var, `ON`/`OFF`) overrides a given
   remote's `enabled:` at run time.
-- **`cleanup-remotes`** (default `true`) — makes `remotes:` exhaustive even
-  when it's left unset/empty: the prepare stage then disables *every*
-  remote already present in the conan home, so each env's remote
-  configuration is fully self-contained regardless of what an earlier run
-  of a *different* env left behind. Set to `false` to opt out instead: with
-  no `remotes:` of its own, the env then leaves the conan home's existing
-  remote configuration alone entirely. `cleanup-remotes` is automatically
-  skipped (regardless of its own value) whenever `remotes:` is left
+- **`keep-remotes`** (default `false`) — set to `true` to opt out of making
+  `remotes:` exhaustive: with no `remotes:` of its own, the env then leaves
+  the conan home's existing remote configuration alone entirely. Left at the
+  default `false`, the prepare stage disables *every* remote already present
+  in the conan home when `remotes:` is left unset/empty, so each env's
+  remote configuration is fully self-contained regardless of what an earlier
+  run of a *different* env left behind. This cleanup is automatically
+  skipped (regardless of `keep-remotes:`) whenever `remotes:` is left
   unset/empty *and* the env also has a `config:` — its `conan config
   install <dir>` may itself have installed a `remotes.json`, and
   reconciling an empty `remotes:` to "exhaustive" would otherwise silently
@@ -120,13 +129,14 @@ needs 'conan' on PATH`.
   envs and checkouts, and dependencies between tools.
 - **Monorepo pattern.** Recipes commonly live in the same repository as the
   project using them, not a separate recipes repo.
-  A unit's `recipe-dirs:` just points at wherever they
+  A `recipes:` entry's `dirs:` just points at wherever they
   actually are; there's no requirement they live in any particular place
-  relative to the `denver.yml`. This simplifies the integration as there is no deployment necessary.
-- **A base env with recipes but no conanfile.** Since `recipe-dirs:` live
-  inside a unit, a shared base env that ships recipes without a conanfile of
-  its own has no unit to put them in; each env that installs those recipes
-  lists the base's dir in its own unit instead (see
+  relative to the `denver.toml`. This simplifies the integration as there is no deployment necessary.
+- **A base env with recipes but no conanfile.** Since `conanfile:` and
+  `recipes:` are independent, a shared base env can ship `recipes:` with no
+  `conanfile:` of its own; each derived env that wants to actually install
+  something sets its own `conanfile:`, and either inherits the base's
+  `recipes:` or adds more of its own (see
   [`examples/zephyr-devshell`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell) and the
   envs that import it).
 - **Works with or without remotes.** An env with no `remotes:` and no

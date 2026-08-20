@@ -5,23 +5,22 @@ import pytest
 import denver
 
 
-def test_load_yaml_empty_file(tmp_path):
-    p = tmp_path / "empty.yml"
+def test_load_config_file_empty_toml(tmp_path):
+    p = tmp_path / "empty.toml"
     p.write_text("")
-    assert denver.load_yaml(p) == {}
+    assert denver.load_config_file(p) == {}
 
 
-def test_load_yaml_mapping(tmp_path):
-    p = tmp_path / "c.yml"
-    p.write_text("a: 1\n")
-    assert denver.load_yaml(p) == {"a": 1}
+def test_load_config_file_toml_mapping(tmp_path):
+    p = tmp_path / "c.toml"
+    p.write_text("a = 1\n")
+    assert denver.load_config_file(p) == {"a": 1}
 
 
-def test_load_yaml_non_mapping_dies(tmp_path):
-    p = tmp_path / "list.yml"
-    p.write_text("- 1\n- 2\n")
-    with pytest.raises(SystemExit):
-        denver.load_yaml(p)
+def test_load_config_file_nested_value(tmp_path):
+    p = tmp_path / "c.toml"
+    p.write_text("a = [1, 2]\n")
+    assert denver.load_config_file(p) == {"a": [1, 2]}
 
 
 def test_deep_merge_dicts():
@@ -106,9 +105,9 @@ def test_resolve_import_directory(tmp_path):
     base_dir.mkdir()
     target_dir = tmp_path / "base"
     target_dir.mkdir()
-    (target_dir / "denver.yml").write_text("a: 1\n")
+    (target_dir / "denver.toml").write_text('a = 1\n')
     resolved = denver.resolve_import("../base", base_dir)
-    assert resolved == target_dir / "denver.yml"
+    assert resolved == target_dir / "denver.toml"
 
 
 def test_resolve_import_direct_file(tmp_path):
@@ -128,21 +127,21 @@ def test_resolve_import_missing_dies(tmp_path):
 
 
 def test_load_config_no_import(tmp_path):
-    p = tmp_path / "denver.yml"
-    p.write_text("stages: [uv]\n")
+    p = tmp_path / "denver.toml"
+    p.write_text('stages = [\n  "uv",\n]\n')
     assert denver.load_config(p) == {"stages": ["uv"]}
 
 
 def test_load_config_with_import_merges_base_first(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("stages: [uv]\nuv:\n  python: '3.9'\n")
+    (base_dir / "denver.toml").write_text('stages = [\n  "uv",\n]\n\n[uv]\npython = "3.9"\n')
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("import:\n- ../base\nuv:\n  requirements: [r.txt]\n")
+    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\n\n[uv]\nrequirements = [\n  "r.txt",\n]\n')
 
-    cfg = denver.load_config(env_dir / "denver.yml")
+    cfg = denver.load_config(env_dir / "denver.toml")
     assert cfg["stages"] == ["uv"]
     assert cfg["uv"] == {"python": "3.9", "requirements": ["r.txt"]}
     assert "import" not in cfg
@@ -156,21 +155,21 @@ def test_load_config_runnable_false_does_not_leak_through_import(tmp_path):
     # reason -- see load_config()'s own comment).
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("runnable: false\nstages: [uv]\n")
+    (base_dir / "denver.toml").write_text('runnable = false\nstages = [\n  "uv",\n]\n')
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("import:\n- ../base\n")
+    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\n')
 
-    cfg = denver.load_config(env_dir / "denver.yml")
+    cfg = denver.load_config(env_dir / "denver.toml")
     assert "runnable" not in cfg
 
 
 def test_load_config_runnable_own_value_still_applies(tmp_path):
     # unlike 'import', 'runnable' isn't dropped from the file that actually
     # sets it -- only from what an *importer* inherits from it.
-    p = tmp_path / "denver.yml"
-    p.write_text("runnable: false\nstages: [uv]\n")
+    p = tmp_path / "denver.toml"
+    p.write_text('runnable = false\nstages = [\n  "uv",\n]\n')
     cfg = denver.load_config(p)
     assert cfg["runnable"] is False
 
@@ -178,35 +177,35 @@ def test_load_config_runnable_own_value_still_applies(tmp_path):
 def test_load_config_import_override_wins(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("command: fish\n")
+    (base_dir / "denver.toml").write_text('command = "fish"\n')
     env_dir = tmp_path / "env"
     env_dir.mkdir()
     # a different string for a key the base already set requires '!' -- see
     # test_load_config_conflicting_string_dies / test_load_config_bang_override_wins
-    (env_dir / "denver.yml").write_text("import: [../base]\ncommand: '!bash'\n")
-    cfg = denver.load_config(env_dir / "denver.yml")
+    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\ncommand = "!bash"\n')
+    cfg = denver.load_config(env_dir / "denver.toml")
     assert cfg["command"] == "bash"
 
 
 def test_load_config_conflicting_string_dies(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("command: fish\n")
+    (base_dir / "denver.toml").write_text('command = "fish"\n')
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("import: [../base]\ncommand: bash\n")
+    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\ncommand = "bash"\n')
     with pytest.raises(SystemExit):
-        denver.load_config(env_dir / "denver.yml")
+        denver.load_config(env_dir / "denver.toml")
 
 
 def test_load_config_same_string_no_conflict(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.yml").write_text("uv:\n  python: '3.12.3'\n")
+    (base_dir / "denver.toml").write_text('[uv]\npython = "3.12.3"\n')
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("import: [../base]\nuv:\n  python: '3.12.3'\n")
-    cfg = denver.load_config(env_dir / "denver.yml")
+    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\n\n[uv]\npython = "3.12.3"\n')
+    cfg = denver.load_config(env_dir / "denver.toml")
     assert cfg["uv"]["python"] == "3.12.3"
 
 
@@ -215,10 +214,10 @@ def test_load_config_circular_import_dies(tmp_path):
     b_dir = tmp_path / "b"
     a_dir.mkdir()
     b_dir.mkdir()
-    (a_dir / "denver.yml").write_text("import: [../b]\n")
-    (b_dir / "denver.yml").write_text("import: [../a]\n")
+    (a_dir / "denver.toml").write_text('import = [\n  "../b",\n]\n')
+    (b_dir / "denver.toml").write_text('import = [\n  "../a",\n]\n')
     with pytest.raises(SystemExit):
-        denver.load_config(a_dir / "denver.yml")
+        denver.load_config(a_dir / "denver.toml")
 
 
 def test_validate_top_level_keys_known_keys_ok():
@@ -367,15 +366,21 @@ def test_apply_config_override_creates_missing_parent_dicts():
 
 
 def test_apply_config_override_overwrites_existing_value():
-    config = denver.apply_config_override({"uv": {"python": "3.9", "uv": True}}, "uv.python=3.12.3")
-    assert config == {"uv": {"python": "3.12.3", "uv": True}}
+    config = denver.apply_config_override({"uv": {"python": "3.9", "reinstall": True}}, "uv.python=3.12.3")
+    assert config == {"uv": {"python": "3.12.3", "reinstall": True}}
 
 
-def test_apply_config_override_parses_yaml_types():
-    config = denver.apply_config_override({}, "uv.uv=true")
-    assert config["uv"]["uv"] is True
-    config = denver.apply_config_override({}, "uv.requirements=[a, b]")
+def test_apply_config_override_parses_json_types():
+    config = denver.apply_config_override({}, "uv.exe=true")
+    assert config["uv"]["exe"] is True
+    config = denver.apply_config_override({}, 'uv.requirements=["a", "b"]')
     assert config["uv"]["requirements"] == ["a", "b"]
+
+
+def test_apply_config_override_bare_word_stays_a_string():
+    """A value that isn't valid JSON on its own (e.g. a bare version string) falls back to a plain str."""
+    config = denver.apply_config_override({}, "uv.python=3.12.3")
+    assert config["uv"]["python"] == "3.12.3"
 
 
 def test_apply_config_override_does_not_mutate_input():
@@ -390,7 +395,7 @@ def test_apply_config_override_plus_equals_appends_to_list():
 
 
 def test_apply_config_override_plus_equals_on_unset_behaves_like_set():
-    config = denver.apply_config_override({}, "uv.requirements+=[a]")
+    config = denver.apply_config_override({}, 'uv.requirements+=["a"]')
     assert config["uv"]["requirements"] == ["a"]
 
 

@@ -1,7 +1,7 @@
 """Tests for the bundled providers.docker_scripts.* host-setup helpers --
-run standalone as subprocesses by docker.env-scripts:/scripts:, never
-imported by denver itself. subprocess.run/sudo are always mocked: no test
-here may touch the real docker group, docker daemon config, or
+run standalone as subprocesses by hooks: pre-<stage-id>:/docker.scripts:,
+never imported by denver itself. subprocess.run/sudo are always mocked: no
+test here may touch the real docker group, docker daemon config, or
 ~/.docker/config.json.
 """
 

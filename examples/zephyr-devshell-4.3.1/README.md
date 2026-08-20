@@ -41,14 +41,13 @@ Zephyr's own complexity, made explicit. Start at
 [`../zephyr-uv`](../zephyr-uv) (one stage) instead — the CLI and the model are
 identical at both sizes.
 
-## Why is `denver.yml` so short?
+## Why is `denver.toml` so short?
 
 Under 60 lines, half of them comments, and **no `stages:` list and no docker
 config at all** — because of `import:`:
 
-```yaml
-import:
-- ../zephyr-devshell     # inherit that env's entire setup as a base
+```toml
+import = ["../zephyr-devshell"]  # inherit that env's entire setup as a base
 ```
 
 ```
@@ -81,31 +80,34 @@ denver on the merged branch, and commit the regenerated result.
 
 **2. Nothing is inherited by proximity.** Three separate keys here exist
 purely to say out loud what another tool would have guessed from the
-directory layout — `skip-if-0:`, `venv-patcher: patches:`, and `uv-zephyr`'s
+directory layout — `skip-on-success:`, `patches-apply:`, and `uv-zephyr`'s
 `overrides:`. That last one is the sharp edge: `uv-zephyr` shares the `uv`
 stage's *venv*, but it does **not** inherit the `uv` stage's *config*. It
-repeats `overrides:`, `skip-if-0:` and `venv-patcher:` itself, because a stage's
+repeats `overrides:`, `skip-on-success:` and `patches-apply:` itself, because a stage's
 section is its own.
 
 **3. Claiming the base's recipes.** The shared env ships recipes but declares
-no `conanfiles:` unit for them (it has no conanfile). This env's unit lists
-both directories explicitly, base first, and writes the merged catalog:
+no `recipes:` entry for them (it has no conanfile). This env's `recipes:`
+entry lists both directories explicitly, base first, and writes the merged
+catalog:
 
-```yaml
-conanfiles:
-- path: conan/conanfile.py
-  recipe-dirs:
-  - ../zephyr-devshell/conan/recipes   # the shared ones
-  - conan/recipes                      # its own
-  catalog: conan/catalog.yml           # pins, reviewable in a diff
+```toml
+conanfile = "conan/conanfile.py"
+
+[[conan.recipes]]
+dirs = [
+  "../zephyr-devshell/conan/recipes",  # the shared ones
+  "conan/recipes",                     # its own
+]
+catalog = "conan/catalog.yml"          # pins, reviewable in a diff
 ```
 
 **4. Patching things you don't own.** Two different mechanisms, for two
 different targets — and only the first is a denver feature:
 
-- **`venv-patcher:`** is denver's: it patches installed *Python packages*,
-  here three patches against `west` itself.
-- **`zephyr/patches.yml`** is not a `denver.yml` key at all. It is west's own
+- **`patches-apply:`** is denver's: a literal `venv-patcher` command patches
+  installed *Python packages*, here three patches against `west` itself.
+- **`zephyr/patches.yml`** is not a `denver.toml` key at all. It is west's own
   convention: `zephyr/module.yml` declares this env as a Zephyr module, which
   is what makes `west patches` find the file and apply it to the *workspace
   repositories* after `west update`. denver's only involvement is
@@ -123,7 +125,7 @@ recipes, so `conan` (stage 2) can supply them to `uv` (stage 3) via
 `UV_FIND_LINKS` — which is the real reason `conan` runs before `uv` here,
 and lets the install work offline.
 
-**6. `skip-if-0:`.** `uv/skip-if-0.sh` is three lines: if `west` and `conan` are
+**6. `skip-on-success:`.** `uv/skip-on-success.sh` is three lines: if `west` and `conan` are
 both already executable **inside this env's venv** (`$VIRTUAL_ENV/bin`),
 exit 0 and the install is skipped. This is the "fast on repeat runs"
 behaviour made explicit and overridable — `--force` ignores it.
@@ -132,7 +134,7 @@ It checks the venv, not `command -v`, on purpose: a `PATH` lookup also finds
 a `west`/`conan` the developer has installed host-wide, in some other
 version. That would satisfy the check on the very first run, skip the
 install, and leave the venv empty — and every later stage would quietly use
-the host's tools instead of the pinned ones. A `skip-if-0:` script decides
+the host's tools instead of the pinned ones. A `skip-on-success:` script decides
 whether *this env's* work is already done, so it must only ever look at
 this env's own state.
 
@@ -140,11 +142,11 @@ this env's own state.
 
 | Path | What it is |
 |---|---|
-| `denver.yml` | The pins, and nothing else |
+| `denver.toml` | The pins, and nothing else |
 | `conan/conanfile.py` / `catalog.yml` | The tool set for 4.3.1, pinned by revision |
 | `conan/recipes/python-cache/denver/` | Wheel cache; `requirements.final.txt` is the generated lockfile |
 | `conan/recipes/west-blobs-cache/denver/` | Pre-cached west blobs (`blobs.txt`) |
-| `uv/skip-if-0.sh` | The "already installed?" check |
+| `uv/skip-on-success.sh` | The "already installed?" check |
 | `uv/venv-patcher/west/` | Three patches applied to the installed `west` |
 | `zephyr/patches.yml` + `patches/` | Patches `west patches` applies to workspace repos, with upstream status |
 | `zephyr/module.yml` | Declares this env as a Zephyr module — what makes the two files above discoverable |

@@ -1,4 +1,4 @@
-"""Tests for denver.yml-declared CLI arguments ('args:').
+"""Tests for denver.toml-declared CLI arguments ('args:').
 
 Each 'args:' entry becomes one argparse.add_argument call, and whatever the
 user then passes is exported as DENVER_ARG_<DEST> -- so these tests drive
@@ -33,15 +33,12 @@ def echo_env(tmp_path, monkeypatch, exec_recorder):
     def _run(args, argv=(), stage=None):
         env_dir = tmp_path / "e"
         env_dir.mkdir(exist_ok=True)
-        (env_dir / "denver.yml").write_text(
-            denver.yaml.safe_dump(
-                {
-                    "stages": ["fakesetup"],
-                    "fakesetup": {"provider": "fakesetup", **(stage or {})},
-                    "args": args,
-                },
-                sort_keys=False,
-            )
+        (env_dir / "denver.toml").write_text(
+            denver.dump_toml({
+                "stages": ["fakesetup"],
+                "fakesetup": {"provider": "fakesetup", **(stage or {})},
+                "args": args,
+            })
         )
         denver.main(["run", str(env_dir), *argv, "--", "echo", "hi"])
         return exec_recorder["env"]
@@ -69,7 +66,7 @@ def test_default_is_used_when_the_flag_is_not_given(echo_env):
 
 def test_flag_without_a_default_exports_nothing(echo_env):
     # deliberately *unset* rather than empty, so a '${DENVER_ARG_X:-fallback}'
-    # in the denver.yml still takes its fallback
+    # in the denver.toml still takes its fallback
     assert "DENVER_ARG_TARGET" not in echo_env([{"flags": ["--target"]}])
 
 
@@ -102,14 +99,8 @@ def test_value_is_visible_to_interpolation_in_the_same_denver_yml(tmp_path, run_
     # own config can read back what the user passed
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: [c]\n"
-        "args:\n"
-        "- flags: [--target]\n"
-        "  default: debug\n"
-        "c:\n"
-        "  provider: custom\n"
-        "  cmd: echo building ${DENVER_ARG_TARGET}\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "c",\n]\n\n[[args]]\nflags = [\n  "--target",\n]\ndefault = "debug"\n\n[c]\nprovider = "custom"\ncmd = "echo building ${DENVER_ARG_TARGET}"\n'
     )
     denver.main(["run", str(env_dir), "--target", "release", "--", "echo", "hi"])
     assert any("echo building release" in cmd for cmd in run_recorder.commands())
@@ -134,15 +125,8 @@ def test_show_config_sees_the_passed_value(tmp_path, capsys, which):
     # on what the flag was set to
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: [u]\n"
-        "args:\n"
-        "- flags: [--who]\n"
-        "  default: world\n"
-        "u:\n"
-        "  provider: uv\n"
-        "  skip-if-0:\n"
-        "  - ${DENVER_ARG_WHO}.sh\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "u",\n]\n\n[[args]]\nflags = [\n  "--who",\n]\ndefault = "world"\n\n[u]\nprovider = "uv"\nskip-on-success = [\n  "${DENVER_ARG_WHO}.sh",\n]\n'
     )
     assert denver.main(["run", str(env_dir), "--show-config", "--who", "denver"]) == 0
     assert "denver.sh" in capsys.readouterr().out
@@ -151,8 +135,8 @@ def test_show_config_sees_the_passed_value(tmp_path, capsys, which):
 def test_show_config_lists_the_args_section_itself(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: [c]\nargs:\n- flags: [--who]\n  default: world\nc:\n  provider: custom\n  cmd: true\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "c",\n]\n\n[[args]]\nflags = [\n  "--who",\n]\ndefault = "world"\n\n[c]\nprovider = "custom"\ncmd = true\n'
     )
     denver.main(["run", str(env_dir), "--show-config"])
     assert "--who" in capsys.readouterr().out
@@ -162,8 +146,8 @@ def test_run_scripts_see_the_value(tmp_path, run_recorder):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "s.sh").write_text("")
-    (env_dir / "denver.yml").write_text(
-        "stages: [c]\nargs:\n- flags: [--who]\nc:\n  provider: custom\n  cmd: true\n  scripts:\n    setup: [s.sh]\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "c",\n]\n\n[[args]]\nflags = [\n  "--who",\n]\n\n[c]\nprovider = "custom"\ncmd = true\n\n[c.scripts]\nsetup = [\n  "s.sh",\n]\n'
     )
     assert denver.main(["run", str(env_dir), "--who", "denver", "--scripts", "setup"]) == 0
     assert run_recorder.calls[-1].kwargs["env"]["DENVER_ARG_WHO"] == "denver"
@@ -173,8 +157,8 @@ def test_run_scripts_see_the_value(tmp_path, run_recorder):
 def test_help_lists_the_envs_own_flags(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: [c]\nargs:\n- flags: [--target]\n  help: what to build\nc:\n  provider: custom\n  cmd: true\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "c",\n]\n\n[[args]]\nflags = [\n  "--target",\n]\nhelp = "what to build"\n\n[c]\nprovider = "custom"\ncmd = true\n'
     )
     # 'denver run <env> --help' returns normally (0), same as a bare
     # top-level '--help': 'run' uses a plain store_true -h/--help
@@ -224,11 +208,12 @@ def test_version_still_answers_without_an_env(capsys):
 def test_args_stack_across_the_import_chain(tmp_path, capsys):
     base = tmp_path / "base"
     base.mkdir()
-    (base / "denver.yml").write_text("runnable: false\nargs:\n- flags: [--from-base]\n")
+    (base / "denver.toml").write_text('runnable = false\n\n[[args]]\nflags = [\n  "--from-base",\n]\n')
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        f"import: [{base}]\nstages: [c]\nargs:\n- flags: [--from-env]\nc:\n  provider: custom\n  cmd: true\n"
+    (env_dir / "denver.toml").write_text(
+        f'import = ["{base}"]\nstages = ["c"]\n\n[[args]]\nflags = ["--from-env"]\n\n'
+        f'[c]\nprovider = "custom"\ncmd = true\n'
     )
     assert denver.main(["run", str(env_dir), "--help"]) == 0
     out = capsys.readouterr().out
@@ -238,27 +223,30 @@ def test_args_stack_across_the_import_chain(tmp_path, capsys):
 
 # ---- validation ------------------------------------------------------------ #
 @pytest.mark.parametrize(
-    ("args_yaml", "expected"),
+    ("args_toml", "expected"),
     [
-        ("args: nope\n", "must be a list"),
-        ("args: [just-a-string]\n", "must be a mapping"),
-        ("args:\n- help: no flags here\n", "needs 'flags:'"),
-        ("args:\n- flags: []\n", "needs 'flags:'"),
-        ("args:\n- flags: [target]\n", "must be a string starting with '-'"),
-        ("args:\n- flags: [7]\n", "must be a string starting with '-'"),
-        ("args:\n- flags: [--x]\n  type: int\n", "sets 'type:'"),
-        ("args:\n- flags: [--x]\n  helpp: typo\n", "cannot add --x"),
-        ("args:\n- flags: [--x]\n  action: no-such-action\n", "cannot add --x"),
-        ("args:\n- flags: [--force]\n  dest: mine\n", "cannot add --force"),
-        ("args:\n- flags: [--force]\n", "denver's own arguments already use"),
-        ("args:\n- flags: [--ci-mode]\n  dest: ci\n", "denver's own arguments already use"),
-        ("args:\n- flags: [--a]\n- flags: [--b]\n  dest: a\n", "denver's own arguments already use"),
+        ('args = "nope"\n', "must be a list"),
+        ('args = ["just-a-string"]\n', "must be a mapping"),
+        ('[[args]]\nhelp = "no flags here"\n', "needs 'flags:'"),
+        ("[[args]]\nflags = []\n", "needs 'flags:'"),
+        ('[[args]]\nflags = ["target"]\n', "must be a string starting with '-'"),
+        ("[[args]]\nflags = [7]\n", "must be a string starting with '-'"),
+        ('[[args]]\nflags = ["--x"]\ntype = "int"\n', "sets 'type:'"),
+        ('[[args]]\nflags = ["--x"]\nhelpp = "typo"\n', "cannot add --x"),
+        ('[[args]]\nflags = ["--x"]\naction = "no-such-action"\n', "cannot add --x"),
+        ('[[args]]\nflags = ["--force"]\ndest = "mine"\n', "cannot add --force"),
+        ('[[args]]\nflags = ["--force"]\n', "denver's own arguments already use"),
+        ('[[args]]\nflags = ["--ci-mode"]\ndest = "ci"\n', "denver's own arguments already use"),
+        (
+            '[[args]]\nflags = ["--a"]\n\n[[args]]\nflags = ["--b"]\ndest = "a"\n',
+            "denver's own arguments already use",
+        ),
     ],
 )
-def test_invalid_args_entry_dies(tmp_path, caplog, args_yaml, expected):
+def test_invalid_args_entry_dies(tmp_path, caplog, args_toml, expected):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(f"stages: [c]\nc:\n  provider: custom\n  cmd: true\n{args_yaml}")
+    (env_dir / "denver.toml").write_text(f'stages = ["c"]\n{args_toml}\n[c]\nprovider = "custom"\ncmd = true\n')
     with pytest.raises(SystemExit):
         denver.main(["run", str(env_dir), "--show-config"])
     assert expected in caplog.text
@@ -267,18 +255,18 @@ def test_invalid_args_entry_dies(tmp_path, caplog, args_yaml, expected):
 def test_an_env_declaring_no_args_is_unaffected(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [c]\nc:\n  provider: custom\n  cmd: true\n")
+    (env_dir / "denver.toml").write_text('stages = [\n  "c",\n]\n\n[c]\nprovider = "custom"\ncmd = true\n')
     assert denver.main(["run", str(env_dir), "--show-config"]) == 0
     assert "args" not in capsys.readouterr().out
 
 
 # ---- surviving a wrapper relocation ---------------------------------------- #
 def test_reinvoke_command_re_passes_the_flags(tmp_path):
-    # the inner denver re-reads the same denver.yml, so it declares the same
+    # the inner denver re-reads the same denver.toml, so it declares the same
     # flags -- but nobody gave them to it, and each would fall back to its
     # 'default:'
     cmd = denver.reinvoke_command(
-        tmp_path / "denver.yml",
+        tmp_path / "denver.toml",
         ["echo", "hi"],
         ["docker"],
         options=denver.RunOptions(cli_args=denver.CliArgs(argv=["--target", "release"])),
@@ -290,7 +278,7 @@ def test_reinvoke_command_re_passes_the_flags(tmp_path):
 
 def test_relocated_run_cmd_re_passes_the_flags(tmp_path):
     cmd = denver._relocated_run_cmd(
-        tmp_path / "denver.yml",
+        tmp_path / "denver.toml",
         ["setup"],
         quiet=0,
         until_stage=None,
@@ -323,13 +311,8 @@ def test_flags_are_carried_into_the_wrapper(tmp_path, monkeypatch, exec_recorder
 
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: [fakewrap, fakesetup]\n"
-        "args:\n"
-        "- flags: [--target]\n"
-        "  default: debug\n"
-        "fakewrap:\n  provider: fakewrap\n"
-        "fakesetup:\n  provider: fakesetup\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "fakewrap",\n  "fakesetup",\n]\n\n[[args]]\nflags = [\n  "--target",\n]\ndefault = "debug"\n\n[fakewrap]\nprovider = "fakewrap"\n\n[fakesetup]\nprovider = "fakesetup"\n'
     )
     denver.main(["run", str(env_dir), "--target", "release", "--", "echo", "hi"])
 
@@ -354,8 +337,8 @@ def test_resolve_full_config_without_cli_args(tmp_path, which):
     # every caller predating 'args:' (a provider driven directly, a test)
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: []\n")
-    config, ctx = denver.resolve_full_config(env_dir, {"stages": []}, env_dir / "denver.yml")
+    (env_dir / "denver.toml").write_text('stages = []\n')
+    config, ctx = denver.resolve_full_config(env_dir, {"stages": []}, env_dir / "denver.toml")
     assert not [key for key in ctx.env if key.startswith(denver.ARG_ENV_PREFIX)]
     assert config["stages"] == []
 
@@ -364,7 +347,7 @@ def test_frozen_reinvocation_carries_the_flags_too(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "bin" / "denver"))
     cmd = denver.reinvoke_command(
-        tmp_path / "denver.yml",
+        tmp_path / "denver.toml",
         [],
         ["docker"],
         options=denver.RunOptions(cli_args=denver.CliArgs(argv=["--target", "release"])),

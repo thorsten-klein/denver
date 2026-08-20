@@ -13,7 +13,6 @@ import json
 import subprocess
 
 import pytest
-import yaml
 
 import denver
 import denver_providers as providers
@@ -275,15 +274,14 @@ def test_uv_in_container_skips_the_version_check_when_python3_cannot_answer(make
     assert any("uv python find 3.12.3" in c for c in dry_lines(capsys, "+"))
 
 
-def test_uv_dry_run_previews_sync_of_a_lockfile_create_has_not_written_yet(make_context, which, capsys):
-    config = {"uv": {"lock": {"create": "py/uv.lock", "sync": "py/uv.lock"}}}
+def test_uv_dry_run_previews_sync_of_a_lockfile_that_has_not_been_written_yet(make_context, which, capsys):
+    config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config, dry_run=True)
     (ctx.env_dir / "py").mkdir()
     (ctx.env_dir / "py" / "pyproject.toml").write_text("[project]\nname='x'\n")
 
     _run_uv(config, ctx)
     shown = dry_lines(capsys, "+")
-    assert any("uv lock" in c for c in shown)
     assert any("uv sync" in c for c in shown)
 
 
@@ -328,7 +326,7 @@ def test_conan_dry_run_does_not_warn_about_a_venv_it_cannot_compare_against(
 
 
 def test_conan_dry_run_leaves_the_install_tree_alone(make_context, run_recorder, which, tmp_path, capsys):
-    config = {"conan": {"conanfiles": [{"path": "conanfile.py"}]}}
+    config = {"conan": {"conanfile": "conanfile.py"}}
     ctx = make_context(config=config, dry_run=True)
     (ctx.env_dir / "conanfile.py").write_text("# recipe\n")
     install_root = ctx.env_workdir / ".conan"
@@ -372,7 +370,7 @@ def test_docker_dry_run_previews_without_docker_on_path(make_context, run_record
     from denver_providers.docker import DockerProvider
 
     which["docker"] = None
-    config = {"docker": {"image": "img:dev", "compose": {"file": "docker-compose.yml"}}}
+    config = {"docker": {"compose": {"image": "img:dev", "file": "docker-compose.yml"}}}
     ctx = make_context(config=config, dry_run=True)
     (ctx.env_dir / "docker-compose.yml").write_text("services: {}\n")
     # the local-cache probe is a query, so it really runs: miss it, so the
@@ -393,8 +391,8 @@ def test_docker_dry_run_previews_without_docker_on_path(make_context, run_record
 def _env(tmp_path, config):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.yml"
-    cfg_path.write_text(yaml.safe_dump(config, sort_keys=False))
+    cfg_path = env_dir / "denver.toml"
+    cfg_path.write_text(denver.dump_toml(config))
     return env_dir, cfg_path
 
 

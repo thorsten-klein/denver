@@ -11,7 +11,7 @@ patches:
     merge-status: True
     author: Thorsten Klein
     email: thorsten.klein@bshg.com
-    apply-command: echo git am
+    apply-command: git am
     date: 2025-12-10
     comments: |
       Added support for west blobs cache

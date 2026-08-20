@@ -48,7 +48,7 @@ and exits instead of dropping into its shell) rather than calling
 
 | File | What it is |
 |---|---|
-| `denver.yml` | The two stages above |
+| `denver.toml` | The two stages above |
 | `requirements.txt` | Sphinx/MyST/sphinx-rtd-theme pins |
 
 ## Next

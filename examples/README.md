@@ -4,7 +4,7 @@ Examples of working environments, ordered here from smallest to largest.
 Each has its own README explaining what it does, why it exists and what it is
 meant to teach.
 
-They are real, not illustrative. Every `denver.yml` here has its
+They are real, not illustrative. Every `denver.toml` here has its
 `--show-config` output pinned as a golden-file fixture under `tests/golden/`,
 so an example that drifted out of sync with the code fails the build.
 
@@ -15,7 +15,7 @@ so an example that drifted out of sync with the code fails the build.
 | [`simple-env`](simple-env/) | 3 × `custom` | The whole model at minimum size. Also the `cmd:` vs `source:` demo |
 | [`zephyr-uv`](zephyr-uv/) | `uv` | A virtualenv and nothing else — proof that no container or toolchain is required |
 | [`raspberry-pico`](raspberry-pico/) | `uv` → `conan` | A cross-compilation toolchain **without Docker**. Why stage order matters |
-| [`zephyr-docker`](zephyr-docker/) | `docker` | The container layer on its own — a wrapper stage, and `env-scripts:` |
+| [`zephyr-docker`](zephyr-docker/) | `docker` | The container layer on its own — a wrapper stage, and a `hooks: pre-docker:` script |
 | [`howto-env`](howto-env/) | `docker` → `uv` → `custom` → `conan` → `custom` | Four providers in one small env, built step by step in [`doc/quickstart/creating-environments.md`](../doc/quickstart/creating-environments.md). Also: a prebuilt binary installed by hand, right next to the same job done by conan |
 | [`zephyr-devshell`](zephyr-devshell/) | *(base — not runnable)* | The shared base: `import:`, layering, `runnable: false` |
 | [`zephyr-devshell-4.3.1`](zephyr-devshell-4.3.1/) | 5 stages | A full Zephyr RTOS setup. The patterns that only appear at scale |

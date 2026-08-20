@@ -1,12 +1,12 @@
 """Shared runtime context for denver providers.
 
 The Context object is the single place that holds everything a provider
-needs: computed denver built-in paths, the merged denver.yml config, and the
+needs: computed denver built-in paths, the merged denver.toml config, and the
 mutable environment (``env``) that providers build up and that the final
 command is launched with.
 
 Genericity principle: no provider hard-codes project-specific paths or
-values. Everything specific comes from denver.yml, where values may
+values. Everything specific comes from denver.toml, where values may
 reference denver built-ins and each other through ``${VAR}`` interpolation.
 """
 
@@ -273,7 +273,7 @@ def _validate_exec_cmd(cmd):
 
     A resolved command is always denver's own doing (default_command()/
     resolve_command(), a wrapper's wrap(), or a script's own argv) -- sourced
-    from the same invoking user's own denver.yml/CLI, not a remote or
+    from the same invoking user's own denver.toml/CLI, not a remote or
     otherwise privileged party -- but a malformed 'command:'/script entry
     (e.g. an empty string) must not reach os.execvpe() as a bare, confusing
     OSError, and cmd[0] looking like a CLI flag (e.g. a stray '-c' from a
@@ -349,8 +349,28 @@ CLI_ENV_VAR_NAMES = "DENVER_CLI_ENV_VAR_NAMES"
 _CONTAINER_MARKERS = (
     "/.dockerenv",  # docker
     "/run/.containerenv",  # podman
-    "/run/systemd/container",  # systemd-nspawn and friends
 )
+
+# systemd writes its detected environment's name into this file, for both
+# real containers (docker, lxc, systemd-nspawn, ...) and WSL -- systemd
+# lumps WSL in under the same "container" virtualization category (it has no
+# reboot/power management of its own, same as a container), even though it
+# is really a full, separately-kernelled lightweight VM. That distinction is
+# exactly what matters here: a WSL machine runs its own dockerd natively, so
+# a docker wrapper stage relocating into a container there is an ordinary
+# docker run, not docker-in-docker -- unlike the real container kinds below,
+# which do share the host's docker socket/kernel and must not be nested.
+_SYSTEMD_CONTAINER_MARKER = "/run/systemd/container"
+_SYSTEMD_NON_CONTAINER_VALUES = {"wsl"}
+
+
+def _systemd_marks_container():
+    """True unless the systemd container marker is absent, or names a non-container env like WSL (see its own comment)."""
+    marker = Path(_SYSTEMD_CONTAINER_MARKER)
+    if not marker.is_file():
+        return False
+    value = marker.read_text(encoding="utf-8", errors="replace").strip().lower()
+    return value not in _SYSTEMD_NON_CONTAINER_VALUES
 
 
 def in_container(env=None):
@@ -367,11 +387,9 @@ def in_container(env=None):
     systemd-nspawn and lxc set. ``env`` defaults to the real environment.
     """
     env = os.environ if env is None else env
-    if env.get(IN_CONTAINER_VAR):
+    if env.get(IN_CONTAINER_VAR) or env.get("container"):
         return True
-    if env.get("container"):
-        return True
-    return any(Path(marker).exists() for marker in _CONTAINER_MARKERS)
+    return any(Path(marker).exists() for marker in _CONTAINER_MARKERS) or _systemd_marks_container()
 
 
 # denver's own state directory inside an env: <env dir>/.denver/<config stem>.
@@ -488,7 +506,7 @@ class Context:
         # ctx.run(..., step="...")'s auto-banner knows which stage it's
         # for without every call site having to pass self.stage itself.
         self.stage_id = None
-        # each stage's config section exactly as the denver.yml (after
+        # each stage's config section exactly as the denver.toml (after
         # stacking/overrides) spelled it, before any provider default was
         # filled in -- kept by denver.resolve_provider_defaults so a stage's
         # defaults can be resolved *again*, from scratch, right before it
@@ -506,9 +524,9 @@ class Context:
         # denver-owned working area for this env (venv, caches, logs, ...),
         # keyed on the config file rather than on the env dir's bare name --
         # see state_dir_for. config_path defaults to the conventional
-        # denver.yml so a provider driven directly (e.g. in tests) still gets
+        # denver.toml so a provider driven directly (e.g. in tests) still gets
         # a sensible location.
-        self.config_path = Path(config_path) if config_path else self.env_dir / "denver.yml"
+        self.config_path = Path(config_path) if config_path else self.env_dir / "denver.toml"
         self.env_workdir = state_dir_for(self.env_dir, self.config_path, self.denver_dir / ".envs")
         self.logs_dir = self.env_workdir / ".logs"
 
@@ -770,13 +788,36 @@ class Context:
         """
         value = interpolate(value, self.variables)
         if not isinstance(value, (str, os.PathLike)):
-            die(f"expected a path in denver.yml, got a {type(value).__name__}: {value!r}")
+            die(f"expected a path in denver.toml, got a {type(value).__name__}: {value!r}")
         p = Path(value).expanduser()
         if p.is_absolute():
             return p
         found = self._existing_under(p, Path(base) if base else self.env_dir)
         # default to env-dir-relative even if missing (caller may create it)
         return found if found else (self.env_dir / p).resolve()
+
+    def resolve_command(self, cmd):
+        """A literal argv (e.g. 'patches-apply:') with every relative-path-looking token resolved.
+
+        Unlike resolve_path, this doesn't know which token (if any) is a
+        path -- a literal command is free-form, one flag/exe-name/path token
+        after another, and a provider running it isn't meant to parse that
+        structure (see doc/providers/uv.md's 'patches-apply:'). So every
+        string token is tried against the same existing-file search
+        resolve_path itself falls back on (env dir, then each imported base
+        env dir, see _existing_under) -- a token that resolves to a real
+        file/dir there is rewritten to that absolute path; anything else
+        (a bare exe name found on PATH instead, a literal flag, 'apply')
+        is passed through completely untouched.
+        """
+        return [self._resolved_command_token(t) for t in interpolate(cmd, self.variables)]
+
+    def _resolved_command_token(self, token):
+        """One 'resolve_command' token: its resolved absolute path if one exists on disk, else itself untouched."""
+        if not isinstance(token, str):
+            return token
+        found = self._existing_under(Path(token).expanduser(), self.env_dir)
+        return str(found) if found else token
 
     def _existing_under(self, p, base):
         """The first existing candidate for a relative path -- under ``base``, else an imported env dir. None if none."""
@@ -845,7 +886,7 @@ class Context:
         standing in as an immediately-successful, output-less call. A
         ``query=True`` call is different: some provider is about to branch on
         it (is the image cached? which conan home? what does `west list`
-        say? did a skip-if-0/skip-if-1 script exit as configured?), so a dry run would have nothing
+        say? did a skip-on-success/skip-on-failure script exit as configured?), so a dry run would have nothing
         to decide with and would stop reflecting what a real run does. Those
         are genuinely executed -- they are the reads, not the writes -- and
         reported as ``[dry-run] ? cmd`` so the preview still says so.
@@ -858,7 +899,7 @@ class Context:
         (the common case) needs both -- the real output, and the dry-run
         guarantee that it was genuinely produced. The two are independent,
         though: a caller that only branches on ``.returncode`` (e.g.
-        ``skip-if-0``/``skip-if-1``) wants ``query=True`` without ``capture=True``, so the
+        ``skip-on-success``/``skip-on-failure``) wants ``query=True`` without ``capture=True``, so the
         script's own stdout/stderr stay live on the terminal on a real run,
         while --dry-run still executes it for a real answer.
 
@@ -928,7 +969,7 @@ class Context:
         """Report a command that could not be started at all.
 
         A configured 'exe:' naming a file that isn't there, a script without
-        the execute bit, an unreadable cwd. That is a denver.yml problem, but
+        the execute bit, an unreadable cwd. That is a denver.toml problem, but
         Popen raises before check= ever applies, so main()'s
         CalledProcessError handler never sees it and the user gets a
         traceback whose frames name subprocess.py rather than the key at

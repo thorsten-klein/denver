@@ -212,8 +212,8 @@ def test_dunder_complete_completes_env_paths_from_the_current_directory(tmp_path
 def test_dunder_complete_completes_script_names_from_the_envs_own_scripts(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n  scripts:\n    setup: [a.sh]\n    login: [b.sh]\n"
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n\n[fakesetup.scripts]\nsetup = [\n  "a.sh",\n]\nlogin = [\n  "b.sh",\n]\n'
     )
 
     assert denver.main(["__complete", "run", str(env_dir), "--scripts", ""]) == 0
@@ -226,7 +226,7 @@ def test_dunder_complete_completes_script_names_from_the_envs_own_scripts(tmp_pa
 def test_dunder_complete_offers_nothing_past_the_forwarded_command_boundary(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: []\n")
+    (env_dir / "denver.toml").write_text('stages = []\n')
 
     # the word actually being completed must be *after* the '--' for denver
     # to recognise it's past its own flags -- 'denver __complete run <env> --'
@@ -281,7 +281,9 @@ def test_dunder_complete_offers_nothing_for_an_unrecognised_subcommand(capsys):
 def test_dunder_complete_completes_stage_ids_for_until_and_skip(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [fakesetup, docker]\nfakesetup:\n  provider: fakesetup\n")
+    (env_dir / "denver.toml").write_text(
+        'stages = [\n  "fakesetup",\n  "docker",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n'
+    )
 
     assert denver.main(["__complete", "run", str(env_dir), "--until", ""]) == 0
     assert set(capsys.readouterr().out.splitlines()) == {"fakesetup", "docker"}
@@ -302,7 +304,7 @@ def test_dunder_complete_completes_environment_variable_names(monkeypatch, tmp_p
     monkeypatch.setenv("DENVER_TEST_COMPLETION_VAR", "1")
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: []\n")
+    (env_dir / "denver.toml").write_text('stages = []\n')
 
     assert denver.main(["__complete", "run", str(env_dir), "-e", "DENVER_TEST_COMPLETION"]) == 0
     assert "DENVER_TEST_COMPLETION_VAR" in capsys.readouterr().out.splitlines()
@@ -312,7 +314,7 @@ def test_dunder_complete_completes_environment_variable_names(monkeypatch, tmp_p
 def test_dunder_complete_offers_nothing_for_a_flag_with_no_dynamic_completion(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: []\n")
+    (env_dir / "denver.toml").write_text('stages = []\n')
 
     assert denver.main(["__complete", "run", str(env_dir), "-c", ""]) == 0
     assert capsys.readouterr().out == ""
@@ -322,15 +324,8 @@ def test_dunder_complete_offers_nothing_for_a_flag_with_no_dynamic_completion(tm
 def test_dunder_complete_completes_flags_including_the_envs_own_declared_ones(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text(
-        "stages: []\n"
-        "args:\n"
-        "- flags: --board\n"
-        "  default: x\n"
-        "- flags: [--release, -r]\n"
-        "  action: store_true\n"
-        "- justastring\n"  # malformed (not a mapping) -- ignored, not an error
-        "- help: no 'flags:' key at all\n"  # malformed (no 'flags:') -- ignored too
+    (env_dir / "denver.toml").write_text(
+        'stages = []\nargs = [\n  { flags = "--board", default = "x" },\n  { flags = [\n  "--release",\n  "-r",\n], action = "store_true" },\n  "justastring",\n  { help = "no \'flags:\' key at all" },\n]\n'  # malformed (no 'flags:') -- ignored too
     )
 
     assert denver.main(["__complete", "run", str(env_dir), "--b"]) == 0
@@ -344,7 +339,7 @@ def test_dunder_complete_completes_flags_including_the_envs_own_declared_ones(tm
 def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: []\n")  # no 'args:' key at all
+    (env_dir / "denver.toml").write_text('stages = []\n')  # no 'args:' key at all
 
     assert denver.main(["__complete", "run", str(env_dir), "--sh"]) == 0
     assert capsys.readouterr().out.splitlines() == ["--show-config", "--show-config-min"]
@@ -354,7 +349,7 @@ def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tm
 def test_dunder_complete_offers_flags_right_after_env_even_before_a_dash(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: []\n")
+    (env_dir / "denver.toml").write_text('stages = []\n')
 
     assert denver.main(["__complete", "run", str(env_dir), ""]) == 0
     out = set(capsys.readouterr().out.splitlines())
@@ -365,19 +360,19 @@ def test_dunder_complete_offers_flags_right_after_env_even_before_a_dash(tmp_pat
 def test_dunder_complete_offers_nothing_for_a_second_plain_positional(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: []\n")
+    (env_dir / "denver.toml").write_text('stages = []\n')
 
     assert denver.main(["__complete", "run", str(env_dir), "somethingelse"]) == 0
     assert capsys.readouterr().out == ""
 
 
-# ---- 'denver __complete run <path-to-a-denver.yml-file> ...' -- direct file  #
+# ---- 'denver __complete run <path-to-a-denver.toml-file> ...' -- direct file  #
 def test_dunder_complete_accepts_env_given_as_a_direct_config_file_path(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.yml").write_text("stages: [fakesetup]\nfakesetup:\n  provider: fakesetup\n")
+    (env_dir / "denver.toml").write_text('stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n')
 
-    assert denver.main(["__complete", "run", str(env_dir / "denver.yml"), "--until", ""]) == 0
+    assert denver.main(["__complete", "run", str(env_dir / "denver.toml"), "--until", ""]) == 0
     assert capsys.readouterr().out.splitlines() == ["fakesetup"]
 
 
@@ -385,13 +380,13 @@ def test_dunder_complete_accepts_env_given_as_a_direct_config_file_path(tmp_path
 def test_dunder_complete_completes_paths_inside_an_already_typed_directory(tmp_path, monkeypatch, capsys):
     sub = tmp_path / "sub"
     sub.mkdir()
-    (sub / "denver.yml").write_text("stages: []\n")
+    (sub / "denver.toml").write_text('stages = []\n')
     (sub / "readme.txt").write_text("not a denver config or a directory\n")
     monkeypatch.chdir(tmp_path)
 
     assert denver.main(["__complete", "run", "sub/"]) == 0
     out = capsys.readouterr().out.splitlines()
-    assert out == ["sub/denver.yml"]  # readme.txt is neither a dir nor a denver config -- excluded
+    assert out == ["sub/denver.toml"]  # readme.txt is neither a dir nor a denver config -- excluded
 
 
 def test_dunder_complete_path_candidates_empty_for_a_nonexistent_directory(tmp_path, monkeypatch, capsys):
@@ -444,3 +439,116 @@ def test_parent_process_name_none_when_getppid_itself_fails(monkeypatch):
 
     monkeypatch.setattr(os, "getppid", raise_oserror)
     assert denver._parent_process_name() is None
+
+
+def test_parent_process_name_walks_past_a_frozen_builds_own_bootloader(monkeypatch):
+    # a frozen build's immediate parent is its own PyInstaller bootloader (see
+    # _own_process_names) -- pid 111; its parent, pid 42, is the real calling shell.
+    monkeypatch.setattr(os, "getppid", lambda: 111)
+    monkeypatch.setattr(denver, "_own_process_names", lambda: {"denver"})
+    monkeypatch.setattr(denver, "_process_name", lambda pid: {111: "denver", 42: "zsh"}[pid])
+    monkeypatch.setattr(denver, "_parent_pid", lambda pid: {111: 42}[pid])
+    assert denver._parent_process_name() == "zsh"
+
+
+def test_parent_process_name_gives_up_once_the_hop_bound_is_exceeded(monkeypatch):
+    # every ancestor looks like the bootloader itself -- never finds a real shell,
+    # but must still terminate rather than walking /proc forever.
+    monkeypatch.setattr(os, "getppid", lambda: 1)
+    monkeypatch.setattr(denver, "_own_process_names", lambda: {"denver"})
+    monkeypatch.setattr(denver, "_process_name", lambda pid: "denver")
+    monkeypatch.setattr(denver, "_parent_pid", lambda pid: pid + 1)
+    assert denver._parent_process_name() is None
+
+
+def test_parent_process_name_none_when_the_walk_runs_out_of_ancestors(monkeypatch):
+    monkeypatch.setattr(os, "getppid", lambda: 111)
+    monkeypatch.setattr(denver, "_own_process_names", lambda: {"denver"})
+    monkeypatch.setattr(denver, "_process_name", lambda pid: "denver")
+    monkeypatch.setattr(denver, "_parent_pid", lambda pid: None)
+    assert denver._parent_process_name() is None
+
+
+# ---- _own_process_names ------------------------------------------------------ #
+def test_own_process_names_is_just_argv0_when_not_frozen(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["/path/to/denver.py", "complete"])
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    assert denver._own_process_names() == {"denver.py"}
+
+
+def test_own_process_names_includes_the_frozen_executable_too(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["/path/to/denver", "complete"])
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "/tmp/onefile-extract/denver", raising=False)
+    assert denver._own_process_names() == {"denver"}
+
+
+# ---- _process_name / _parent_pid --------------------------------------------- #
+def test_process_name_reads_proc_comm(monkeypatch):
+    monkeypatch.setattr(Path, "read_text", lambda self: "zsh\n")
+    assert denver._process_name(os.getpid()) == "zsh"
+
+
+def test_process_name_falls_back_to_ps_when_proc_is_unreadable(monkeypatch):
+    def raise_oserror(self):
+        raise OSError
+
+    monkeypatch.setattr(Path, "read_text", raise_oserror)
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(args=[], returncode=0, stdout="zsh\n")
+    )
+    assert denver._process_name(2**30) == "zsh"
+
+
+def test_parent_pid_reads_proc_stat_after_the_comms_closing_paren(monkeypatch):
+    # a comm containing ')' itself is exactly why only the tail after the last ')' is parsed.
+    monkeypatch.setattr(Path, "read_text", lambda self: "111 (my )proc) S 42 111 111 0 -1\n")
+    assert denver._parent_pid(111) == 42
+
+
+def test_parent_pid_none_when_the_stat_entry_has_no_ppid_field(monkeypatch):
+    # closing ')' present but nothing usable follows it -- a malformed/truncated entry.
+    monkeypatch.setattr(Path, "read_text", lambda self: "111 (comm)\n")
+    assert denver._parent_pid(111) is None
+
+
+def test_parent_pid_falls_back_to_ps_when_proc_is_unreadable(monkeypatch):
+    def raise_oserror(self):
+        raise OSError
+
+    monkeypatch.setattr(Path, "read_text", raise_oserror)
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(args=[], returncode=0, stdout="42\n")
+    )
+    assert denver._parent_pid(2**30) == 42
+
+
+def test_parent_pid_none_when_ps_is_not_available(monkeypatch):
+    def raise_oserror(*a, **kw):
+        raise OSError
+
+    monkeypatch.setattr(Path, "read_text", raise_oserror)
+    monkeypatch.setattr(subprocess, "run", raise_oserror)
+    assert denver._parent_pid(2**30) is None
+
+
+def test_parent_pid_none_when_ps_exits_nonzero(monkeypatch):
+    def raise_oserror(self):
+        raise OSError
+
+    monkeypatch.setattr(Path, "read_text", raise_oserror)
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(args=[], returncode=1, stdout="")
+    )
+    assert denver._parent_pid(2**30) is None
+
+
+def test_parent_pid_none_when_ps_output_is_not_numeric(monkeypatch):
+    def raise_oserror(self):
+        raise OSError
+
+    monkeypatch.setattr(Path, "read_text", raise_oserror)
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(args=[], returncode=0, stdout="not-a-pid\n")
+    )
+    assert denver._parent_pid(2**30) is None
