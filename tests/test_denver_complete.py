@@ -164,6 +164,21 @@ def test_zsh_completion_passes_each_word_as_its_own_positional_arg():
     assert "--show-config-full" in result.stdout, result.stderr
 
 
+def test_fish_completion_function_defines_via_unquoted_eval():
+    # Same hazard as bash/zsh above, but fish-specific in its failure mode: fish (unlike bash)
+    # never treats a bare space as a statement separator, so without explicit ';'s the whole
+    # script collapsing onto one line left a leading '#' comment free to swallow the entire
+    # line, comment included -- 'eval $(denver complete)' used to silently define nothing at
+    # all in fish, with no error, rather than raising the way bash/zsh's own hazard would have.
+    if not shutil.which("fish"):
+        pytest.skip("fish not installed")
+    cmd = f"{shlex.quote(sys.executable)} {shlex.quote(denver.__file__)} complete fish"
+    script = f"eval $({cmd});\nfunctions -q __denver_complete; and echo DEFINED; or echo NOT_DEFINED\n"
+    result = subprocess.run(["fish", "-c", script], capture_output=True, text=True)
+    assert "DEFINED" in result.stdout.split(), result.stdout + result.stderr
+    assert "NOT_DEFINED" not in result.stdout.split(), result.stdout + result.stderr
+
+
 def test_completion_script_fish_registers_one_complete_c_line_per_bare_name():
     out = denver._completion_script("fish", ["denver", "./src/denver.py"])
     assert "complete -c denver -f -a '(__denver_complete)'" in out
@@ -190,6 +205,250 @@ def test_completion_script_fish_suppresses_filenames_except_for_path_flags():
     assert "function __denver_expects_path" in out
     assert "contains -- $prev -c --config -cf --config-file" in out
     assert "complete -c denver -n __denver_expects_path -F -a '(__denver_complete)'" in out
+
+
+# ---- zsh descriptions -- compadd -d, column-aligned 'value -- description' -------------------- #
+def test_completion_script_zsh_asks_for_descriptions_via_dunder_complete_describe():
+    out = denver._completion_script("zsh", ["denver"])
+    assert "__complete --describe" in out
+    assert "compadd -d descriptions --" in out
+
+
+def test_completion_script_zsh_defines_a_literal_tab_not_a_raw_byte():
+    # See _completion_script_zsh's own docstring: a raw tab byte embedded in the script text
+    # would itself be an IFS character and get word-split away by an unquoted `eval $(...)`,
+    # same as a real newline would -- it has to be the literal 4 characters $ ' \ t ' instead,
+    # for zsh to turn into a real tab only once *it* evaluates the script.
+    out = denver._completion_script("zsh", ["denver"])
+    assert "tab=$'\\t'" in out
+    assert "\t" not in out
+
+
+def test_zsh_completion_descriptions_pair_each_flag_with_its_own_help_text():
+    # Real zsh, real dispatch machinery (not a hand-built `names` list) -- the same harness
+    # test_zsh_real_dispatch_completes_run_flags_for_every_typed_spelling below uses, but reading
+    # back the 'descriptions' array (not just 'values') the completion widget would show.
+    if not shutil.which("zsh"):
+        pytest.skip("zsh not installed")
+    cmd = f"{shlex.quote(sys.executable)} {shlex.quote(denver.__file__)}"
+    script = (
+        f"alias denver={shlex.quote(cmd)}\n"
+        f"eval $({cmd} complete zsh)\n"
+        "autoload -Uz compinit; compinit -u\n"
+        "words=(denver run --show); CURRENT=3\n"
+        'compadd() { local i; for (( i = 1; i <= $#values; i++ )); do print -r -- "$values[$i]|$descriptions[$i]"; done }\n'
+        "_denver_complete\n"
+    )
+    result = subprocess.run(["zsh", "-c", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    pairs = dict(line.split("|", 1) for line in result.stdout.splitlines())
+    assert pairs["--show-config"].startswith("--show-config ")
+    assert "print the fully resolved" in pairs["--show-config"]
+    assert pairs["--show-config-full"].startswith("--show-config-full ")
+    assert "like --show-config" in pairs["--show-config-full"]
+
+
+def test_zsh_completion_descriptions_are_column_aligned_on_the_separator():
+    # compadd -d's own display strings replace what's shown per candidate rather than annotating
+    # it (see _completion_script_zsh's docstring, and compadd(1)) -- so denver pads every value
+    # out to the widest one before appending ' -- description', the same way zsh's own '_describe'
+    # utility does, so every '--' actually lines up instead of ragged-left.
+    if not shutil.which("zsh"):
+        pytest.skip("zsh not installed")
+    cmd = f"{shlex.quote(sys.executable)} {shlex.quote(denver.__file__)}"
+    script = (
+        f"alias denver={shlex.quote(cmd)}\n"
+        f"eval $({cmd} complete zsh)\n"
+        "autoload -Uz compinit; compinit -u\n"
+        "words=(denver run --show); CURRENT=3\n"
+        'compadd() { local i; for (( i = 1; i <= $#values; i++ )); do print -r -- "$descriptions[$i]"; done }\n'
+        "_denver_complete\n"
+    )
+    result = subprocess.run(["zsh", "-c", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    separator_columns = {line.index(" -- ") for line in result.stdout.splitlines() if " -- " in line}
+    assert len(separator_columns) == 1, result.stdout  # every '--' at the same column
+
+
+# ---- real end-to-end dispatch: absolute path / relative path / bare `denver` / an alias ------- #
+# Each of these is a genuinely different way _completion_bind_names ends up wiring things, and (as
+# the zsh basename-first dispatch quirk showed -- see _completion_script_zsh's own docstring)
+# string-matching _completion_script's own output can't catch a shell's *own* completer lookup
+# quietly deciding not to use any of it. These run every case through the real shell: generate the
+# wiring the exact same way a real rc file would (a real subprocess launch, not a hand-built
+# `names` list), source it for real, then complete for real and check the candidates that come back.
+
+_DENVER_ABS = str(Path(denver.__file__).resolve())
+_REPO_ROOT = Path(denver.__file__).resolve().parent.parent
+_DISPATCH_CASES = ["absolute path", "relative path", "denver", "alias"]
+
+
+def _dispatch_cases(tmp_path):
+    """The 4 ways of typing the denver command real dispatch must resolve, for every shell.
+
+    'gen': how 'denver complete <shell>' itself gets launched to generate the wiring -- a real
+    subprocess, launched the exact same way 'word' is typed, so _completion_bind_names sees
+    whatever sys.argv[0] a real shell hands it for that spelling. That's what actually
+    distinguishes the absolute/relative cases from each other; 'denver' and 'alias' both just
+    need *a* wiring script, since the bare 'denver' name is always in it regardless of how
+    'denver complete' itself was launched (see _completion_bind_names).
+
+    'word': what's actually typed at the prompt for the dispatch half of each test.
+    'cwd': where *dispatch* needs to run from (only 'relative path' cares -- './src/denver.py'
+    only resolves to anything from the repo root).
+    'path': an extra PATH entry dispatch needs to resolve 'word' (only 'denver' does -- a
+    stand-in for a real 'pip install -e .' console-script, since one may not exist here; the
+    others are either a real path or resolved via BASH_ALIASES/zsh's $aliases/a fish function,
+    none of which touch PATH at all).
+    'alias': whether this case needs 'denver' aliased to _DENVER_ABS before completing (only
+    'alias' does -- proving the alias-resolution branch present in every one of the three
+    generated scripts, with nothing real named 'denver' on PATH at all).
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    wrapper = bin_dir / "denver"
+    wrapper.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} {shlex.quote(_DENVER_ABS)} \"$@\"\n")
+    wrapper.chmod(0o755)
+    return {
+        "absolute path": {
+            "gen": [sys.executable, _DENVER_ABS],
+            "word": _DENVER_ABS,
+            "cwd": None,
+            "path": None,
+            "alias": False,
+        },
+        "relative path": {
+            "gen": ["./src/denver.py"],
+            "word": "./src/denver.py",
+            "cwd": _REPO_ROOT,
+            "path": None,
+            "alias": False,
+        },
+        "denver": {"gen": ["denver"], "word": "denver", "cwd": None, "path": str(bin_dir), "alias": False},
+        "alias": {"gen": [sys.executable, _DENVER_ABS], "word": "denver", "cwd": None, "path": None, "alias": True},
+    }
+
+
+def _dispatch_env(case):
+    env = dict(os.environ)
+    if case["path"]:
+        env["PATH"] = f"{case['path']}:{env.get('PATH', '')}"
+    return env
+
+
+def _dispatch_cwd(case):
+    return str(case["cwd"]) if case["cwd"] else None
+
+
+def _generate_wiring(shell, case):
+    """The wiring script 'denver complete <shell>' prints, launched the way this case names."""
+    result = subprocess.run(
+        [*case["gen"], "complete", shell],
+        capture_output=True,
+        text=True,
+        cwd=_dispatch_cwd(case),
+        env=_dispatch_env(case),
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
+@pytest.mark.parametrize("case_name", _DISPATCH_CASES)
+def test_bash_real_dispatch_completes_run_flags_for_every_typed_spelling(tmp_path, case_name):
+    if not shutil.which("bash"):
+        pytest.skip("bash not installed")
+    case = _dispatch_cases(tmp_path)[case_name]
+    word = case["word"]
+    script = _generate_wiring("bash", case)
+    alias_line = f"alias denver={shlex.quote(_DENVER_ABS)}\n" if case["alias"] else ""
+    comp_line = f"{word} run --sh"
+    test_script = (
+        script
+        + alias_line
+        # bash's own dispatch is nothing more than "is COMP_WORDS[0] one of the names 'complete
+        # -F' registered" -- confirmed here via 'complete -p', then exercised for real by setting
+        # COMP_WORDS/COMP_CWORD/COMP_LINE/COMP_POINT and calling the very function it resolved to.
+        + f"complete -p {shlex.quote(word)} > /dev/null || {{ echo DENVER_TEST_NOT_REGISTERED; exit 1; }}\n"
+        + f"COMP_WORDS=({shlex.quote(word)} run --sh)\n"
+        "COMP_CWORD=2\n"
+        f"COMP_LINE={shlex.quote(comp_line)}\n"
+        "COMP_POINT=${#COMP_LINE}\n"
+        "_denver_complete\n"
+        'printf "%s\\n" "${COMPREPLY[@]}"\n'
+    )
+    result = subprocess.run(
+        ["bash", "-c", test_script], capture_output=True, text=True, cwd=_dispatch_cwd(case), env=_dispatch_env(case)
+    )
+    assert result.returncode == 0, result.stderr
+    assert "DENVER_TEST_NOT_REGISTERED" not in result.stdout
+    candidates = result.stdout.split()
+    assert "--show-config" in candidates, (result.stdout, result.stderr)
+    assert "--show-config-full" in candidates, (result.stdout, result.stderr)
+
+
+@pytest.mark.parametrize("case_name", _DISPATCH_CASES)
+def test_zsh_real_dispatch_completes_run_flags_for_every_typed_spelling(tmp_path, case_name):
+    if not shutil.which("zsh"):
+        pytest.skip("zsh not installed")
+    case = _dispatch_cases(tmp_path)[case_name]
+    word = case["word"]
+    script = _generate_wiring("zsh", case)
+    alias_line = f"alias denver={shlex.quote(_DENVER_ABS)}\n" if case["alias"] else ""
+    test_script = (
+        # extendedglob is the harder of the two real-world cases -- see _completion_script_zsh's
+        # own docstring: it's what turns a leading-dot relative word's fallback lookup key into a
+        # malformed, never-matching string, which is exactly the bug this whole section guards.
+        "setopt extendedglob\n"
+        "autoload -Uz compinit; compinit -u\n"
+        + script
+        + alias_line
+        # zsh's real dispatcher (_normal -> _set_command -> _dispatch, see
+        # Completion/Base/Core/_set_command upstream) needs an actual completion widget context
+        # to run end to end -- this drives its two load-bearing pieces directly instead: the
+        # real, autoloaded _set_command computes the exact lookup keys zsh's own dispatch would,
+        # and _comps is the exact table 'compdef' populated, checked in the same order _dispatch
+        # itself tries them.
+        + "autoload -Uz _set_command\n"
+        + f"words=({shlex.quote(word)} run --sh); CURRENT=3\n"
+        "_set_command\n"
+        "comp=''\n"
+        'for key in "$_comp_command" "$_comp_command1" "$_comp_command2"; do\n'
+        "  [[ -n ${_comps[$key]} ]] && { comp=${_comps[$key]}; break }\n"
+        "done\n"
+        "[[ -z $comp ]] && { print DENVER_TEST_NO_DISPATCH; exit 1 }\n"
+        'compadd() { local i; for (( i = 1; i <= $#values; i++ )); do print -r -- "$values[$i]"; done }\n'
+        '"$comp"\n'
+    )
+    result = subprocess.run(
+        ["zsh", "-c", test_script], capture_output=True, text=True, cwd=_dispatch_cwd(case), env=_dispatch_env(case)
+    )
+    assert result.returncode == 0, result.stderr
+    assert "DENVER_TEST_NO_DISPATCH" not in result.stdout, "zsh's own dispatch never resolved to _denver_complete"
+    candidates = result.stdout.split()
+    assert "--show-config" in candidates, (result.stdout, result.stderr)
+    assert "--show-config-full" in candidates, (result.stdout, result.stderr)
+
+
+@pytest.mark.parametrize("case_name", _DISPATCH_CASES)
+def test_fish_real_dispatch_completes_run_flags_for_every_typed_spelling(tmp_path, case_name):
+    if not shutil.which("fish"):
+        pytest.skip("fish not installed")
+    case = _dispatch_cases(tmp_path)[case_name]
+    word = case["word"]
+    script = _generate_wiring("fish", case)
+    alias_line = f"alias denver {shlex.quote(_DENVER_ABS)}\n" if case["alias"] else ""
+    # 'complete --do-complete' is fish's own real dispatch end to end (commandline parsing,
+    # '-c'/'-p' matching, the lot) -- not a hand-called function, unlike bash/zsh above, since
+    # fish has no non-interactive way to introspect *which* completer it would pick without
+    # actually asking it to complete something for real.
+    test_script = script + alias_line + f"complete --do-complete={shlex.quote(f'{word} run --sh')}\n"
+    result = subprocess.run(
+        ["fish", "-c", test_script], capture_output=True, text=True, cwd=_dispatch_cwd(case), env=_dispatch_env(case)
+    )
+    assert result.returncode == 0, result.stderr
+    candidates = [line.split("\t", 1)[0] for line in result.stdout.splitlines() if line]
+    assert "--show-config" in candidates, (result.stdout, result.stderr)
+    assert "--show-config-full" in candidates, (result.stdout, result.stderr)
 
 
 def test_detect_shell_reads_the_parent_processs_name(monkeypatch):
@@ -367,6 +626,109 @@ def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tm
 
     assert denver.main(["__complete", "run", str(env_dir), "--sh"]) == 0
     assert capsys.readouterr().out.splitlines() == ["--show-config", "--show-config-full"]
+
+
+# ---- 'denver __complete --describe' -- the 'candidate\tdescription' lines fish/zsh show -------- #
+# In-process (denver.main + capsys), not through a real shell -- see the real-dispatch and zsh
+# description tests above/below for that end; these instead pin down _completion_description_lookup's
+# own branching directly, the same way the plain (undescribed) __complete tests above do for
+# _complete_candidates_unsafe's.
+def test_dunder_complete_describe_top_level_pairs_run_with_its_own_blurb(capsys):
+    assert denver.main(["__complete", "--describe"]) == 0
+    out = capsys.readouterr().out
+    assert "run\tbuild/enter an env" in out
+    assert "--help\tshow this help and exit" in out
+
+
+def test_dunder_complete_describe_top_level_with_a_partial_word_still_shows_blurbs(capsys):
+    # A single (non-empty) word is still "nothing typed yet" for _completion_description_lookup
+    # -- words[:-1] is [] either way -- so this hits the same _top_level_help() branch as the
+    # 'literally no words at all' case above, just reached from one word instead of zero.
+    assert denver.main(["__complete", "--describe", "r"]) == 0
+    out = capsys.readouterr().out
+    assert "run\tbuild/enter an env" in out
+
+
+def test_dunder_complete_describe_shell_names_pair_each_with_its_own_blurb(capsys):
+    assert denver.main(["__complete", "--describe", "complete", ""]) == 0
+    out = capsys.readouterr().out
+    assert "fish\tthe friendly interactive shell" in out
+    assert "zsh\tthe Z shell" in out
+
+
+def test_dunder_complete_describe_offers_nothing_once_complete_already_has_a_shell(capsys):
+    assert denver.main(["__complete", "--describe", "complete", "bash", ""]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_dunder_complete_describe_unrecognised_subcommand_has_no_vocabulary_either(capsys):
+    # Neither 'complete' nor 'run' -- _complete_candidates_unsafe already offers nothing for
+    # this (see test_dunder_complete_offers_nothing_for_an_unrecognised_subcommand below), so
+    # there's nothing to describe either, but _completion_description_lookup still runs and
+    # must fall all the way through to its own final `return {}`.
+    assert denver.main(["__complete", "--describe", "frobnicate", "x"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_dunder_complete_describe_run_flags_pair_each_with_its_own_help_text(capsys):
+    assert denver.main(["__complete", "--describe", "run", "--show-conf"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert out[0].startswith("--show-config\t")
+    assert "print the fully resolved" in out[0]
+    assert out[1].startswith("--show-config-full\t")
+
+
+def test_dunder_complete_describe_offers_nothing_past_the_forwarded_command_boundary(tmp_path, capsys):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.toml").write_text("stages = []\n")
+    assert denver.main(["__complete", "--describe", "run", str(env_dir), "--", "extra"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_dunder_complete_describe_stays_undescribed_mid_flag_value(tmp_path, capsys):
+    # A pending flag's own value (here --until's) has no description vocabulary at all -- see
+    # _run_description_lookup -- so whatever stage ids come back are never tab-decorated.
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.toml").write_text('stages = ["build"]\n')
+    assert denver.main(["__complete", "--describe", "run", str(env_dir), "--until", ""]) == 0
+    assert capsys.readouterr().out == "build\n"
+
+
+def test_dunder_complete_describe_declared_flags_pair_with_their_own_help(tmp_path, capsys):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.toml").write_text(
+        'stages = []\ndenver-custom-args = [\n'
+        '  { flags = "--target", help = "which board to build for" },\n'
+        '  { flags = "--release" },\n'  # no 'help:' -- stays undescribed
+        '  "justastring",\n'  # malformed (not a mapping at all) -- ignored, not raised on
+        "]\n"
+    )
+    assert denver.main(["__complete", "--describe", "run", str(env_dir), "--tar"]) == 0
+    assert capsys.readouterr().out == "--target\twhich board to build for\n"
+
+    assert denver.main(["__complete", "--describe", "run", str(env_dir), "--rel"]) == 0
+    assert capsys.readouterr().out == "--release\n"
+
+
+def test_dunder_complete_describe_env_paths_have_no_description_vocabulary(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "myenv").mkdir()
+    assert denver.main(["__complete", "--describe", "run", "my"]) == 0
+    assert capsys.readouterr().out == "myenv/\n"
+
+
+def test_dunder_complete_describe_swallows_a_lookup_exception_and_still_returns_bare_candidates(monkeypatch, capsys):
+    monkeypatch.setattr(
+        denver,
+        "_completion_description_lookup",
+        lambda words: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert denver.main(["__complete", "--describe", "run", "--dry"]) == 0
+    out = capsys.readouterr().out
+    assert out == "--dry-run\n"  # bare -- no tab, since the lookup itself blew up
 
 
 # ---- 'denver __complete run <env> ' -- flags offered before typing '-' ----- #
