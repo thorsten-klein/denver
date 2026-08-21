@@ -63,6 +63,38 @@ def test_complete_with_no_shell_auto_detects_from_the_parent_process(monkeypatch
     assert capsys.readouterr().out == denver._completion_script(shell, denver._completion_bind_names())
 
 
+# One marker string per shell's own wiring script, unique enough to tell them apart -- same
+# strings the explicit-shell tests above already assert on.
+_SHELL_SCRIPT_MARKER = {"bash": "complete -F", "zsh": "compdef", "fish": "complete -c denver"}
+
+
+@pytest.mark.parametrize("shell", ["bash", "zsh", "fish"])
+def test_complete_with_no_shell_auto_detects_through_a_real_uv_run_wrapper(shell):
+    # End-to-end regression test for README's own recommended dev-checkout alias,
+    # `alias denver="uv run $PWD/src/denver.py"`: 'uv run' is an unrelated process
+    # between denver.py and the real invoking shell (see _NON_SHELL_LAUNCHER_NAMES),
+    # so this drives a real 'uv run' through a real shell rather than mocking
+    # _parent_process_name -- the only way to catch a regression in the actual
+    # ancestor walk, not just in what _detect_shell does with its result.
+    if not shutil.which(shell):
+        pytest.skip(f"{shell} not installed")
+    if not shutil.which("uv"):
+        pytest.skip("uv not installed")
+    # bash/zsh both exec() their own process image away for a script's trailing simple
+    # command instead of forking a child for it -- harmless normally (nothing left to do
+    # after), but here it would silently erase the very "zsh"/"bash" ancestor this test
+    # means to walk past, so 'uv run ...' wouldn't be its last command's real parent at
+    # all. The trailing ';true' forces a real fork instead. fish never does this, but
+    # it's harmless to include there too.
+    cmd = f"uv run {shlex.quote(sys.executable)} {shlex.quote(denver.__file__)} complete; true"
+    result = subprocess.run([shell, "-c", cmd], capture_output=True, text=True)
+    assert result.returncode == 0, (result.stdout, result.stderr)
+    assert _SHELL_SCRIPT_MARKER[shell] in result.stdout, (result.stdout, result.stderr)
+    for other_shell, marker in _SHELL_SCRIPT_MARKER.items():
+        if other_shell != shell:
+            assert marker not in result.stdout, (shell, result.stdout)
+
+
 # ---- _completion_bind_names -- which command words get wired up ------------- #
 def test_completion_bind_names_always_starts_with_denver():
     assert denver._completion_bind_names()[0] == "denver"
@@ -507,6 +539,18 @@ def test_detect_shell_falls_back_to_bash_when_nothing_is_recognised(monkeypatch)
     assert denver._detect_shell() == "bash"
 
 
+def test_detect_shell_falls_back_to_the_shell_env_var_past_an_unrelated_wrapper(monkeypatch):
+    # e.g. `alias denver="uv run $PWD/src/denver.py"` (README's own recommended dev
+    # setup): the immediate parent is "uv" itself, not the shell that ran the
+    # alias -- an unrelated process in between, same as the docstring's tmux/su
+    # example. Bug: since "uv" is truthy, the old code never even looked at
+    # $SHELL and fell straight through to "bash", so fish users sourcing
+    # `denver complete` got a bash completion script fish can't parse.
+    monkeypatch.setattr(denver, "_parent_process_name", lambda: "uv")
+    monkeypatch.setenv("SHELL", "/usr/bin/fish")
+    assert denver._detect_shell() == "fish"
+
+
 # ---- 'denver __complete' -- top-level candidates ---------------------------- #
 def test_dunder_complete_with_no_words_lists_top_level_subcommands_and_flags(capsys):
     assert denver.main(["__complete", ""]) == 0
@@ -869,6 +913,17 @@ def test_parent_process_name_walks_past_a_frozen_builds_own_bootloader(monkeypat
     monkeypatch.setattr(denver, "_process_name", lambda pid: {111: "denver", 42: "zsh"}[pid])
     monkeypatch.setattr(denver, "_parent_pid", lambda pid: {111: 42}[pid])
     assert denver._parent_process_name() == "zsh"
+
+
+def test_parent_process_name_walks_past_a_uv_run_wrapper(monkeypatch):
+    # `alias denver="uv run $PWD/src/denver.py"` (README's own recommended dev
+    # setup): pid 111 is the "uv run" child that actually launches python, so
+    # its immediate parent, pid 111, isn't the real shell -- pid 42 is.
+    monkeypatch.setattr(os, "getppid", lambda: 111)
+    monkeypatch.setattr(denver, "_own_process_names", lambda: {"denver.py"})
+    monkeypatch.setattr(denver, "_process_name", lambda pid: {111: "uv", 42: "fish"}[pid])
+    monkeypatch.setattr(denver, "_parent_pid", lambda pid: {111: 42}[pid])
+    assert denver._parent_process_name() == "fish"
 
 
 def test_parent_process_name_gives_up_once_the_hop_bound_is_exceeded(monkeypatch):
