@@ -1242,3 +1242,43 @@ def test_main_runnable_false_still_allows_show_config(tmp_path, capsys, which):
     env_dir.mkdir()
     (env_dir / "denver.toml").write_text('runnable = false\nstages = [\n  "uv",\n]\n\n[uv]\nprovider = "uv"\n')
     assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+
+
+# ---- _run_main_or_die_quietly_on_broken_pipe -- e.g. `denver complete | source` in bash/zsh --- #
+# ('source' can't read piped stdin at all in either shell -- only fish's can -- so it exits
+# without reading, and the leftover buffered completion-script output then hits a broken pipe;
+# see the function's own docstring for why that's caught here rather than during interpreter
+# teardown, where a bare `print()` would otherwise surface it as a scary "Exception ignored in:
+# ..." dump instead of a clean exit.)
+class _FakeStdout:
+    """A minimal sys.stdout stand-in -- just enough for _run_main_or_die_quietly_on_broken_pipe."""
+
+    def __init__(self, raise_broken_pipe=False):
+        self._raise_broken_pipe = raise_broken_pipe
+
+    def flush(self):
+        if self._raise_broken_pipe:
+            raise BrokenPipeError
+
+    def fileno(self):
+        return 1
+
+
+def test_run_main_or_die_quietly_on_broken_pipe_exits_with_mains_own_code(monkeypatch):
+    monkeypatch.setattr(denver, "main", lambda: 0)
+    monkeypatch.setattr(denver.sys, "stdout", _FakeStdout())
+    with pytest.raises(SystemExit) as exc:
+        denver._run_main_or_die_quietly_on_broken_pipe()
+    assert exc.value.code == 0
+
+
+def test_run_main_or_die_quietly_on_broken_pipe_swallows_it_and_exits_1(monkeypatch):
+    monkeypatch.setattr(denver, "main", lambda: 0)
+    monkeypatch.setattr(denver.sys, "stdout", _FakeStdout(raise_broken_pipe=True))
+    monkeypatch.setattr(denver.os, "open", lambda *a, **kw: 99)
+    redirected = []
+    monkeypatch.setattr(denver.os, "dup2", lambda fd, target: redirected.append((fd, target)))
+    with pytest.raises(SystemExit) as exc:
+        denver._run_main_or_die_quietly_on_broken_pipe()
+    assert exc.value.code == 1
+    assert redirected == [(99, 1)]  # stdout's own fileno() redirected to devnull, not left broken
