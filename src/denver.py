@@ -3640,13 +3640,14 @@ def _action_help_by_flag(parser):
     never drift out of sync with its ``--help`` wording the way a
     hand-copied second string would.
     """
-    help_by_flag = {}
-    for action in parser._actions:
-        if not action.help or action.help == argparse.SUPPRESS:
-            continue
-        for flag in action.option_strings:
-            help_by_flag[flag] = action.help
-    return help_by_flag
+    return {
+        flag: action.help for action in parser._actions for flag in action.option_strings if _real_help(action.help)
+    }
+
+
+def _real_help(text):
+    """Whether ``text`` (an argparse action's own .help) is real help, not None/'' /argparse.SUPPRESS."""
+    return bool(text) and text != argparse.SUPPRESS
 
 
 def _top_level_help():
@@ -3692,14 +3693,21 @@ def _completion_declared_flag_help(env_value):
         return {}
     help_by_flag = {}
     for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        help_text = entry.get("help")
-        if not isinstance(help_text, str):
-            continue
-        for flag in _entry_flag_spellings(entry):
-            help_by_flag[flag] = help_text
+        help_by_flag.update(_entry_flag_help(entry))
     return help_by_flag
+
+
+def _entry_flag_help(entry):
+    """One 'denver-custom-args:' entry's own {flag: help text}, from its 'help:' -- {} if malformed/missing.
+
+    See _completion_declared_flag_help, the only caller.
+    """
+    if not isinstance(entry, dict):
+        return {}
+    help_text = entry.get("help")
+    if not isinstance(help_text, str):
+        return {}
+    return dict.fromkeys(_entry_flag_spellings(entry), help_text)
 
 
 def _completion_description_lookup(words):
@@ -3718,10 +3726,19 @@ def _completion_description_lookup(words):
         return _top_level_help()
     subcommand = prior[0]
     if subcommand == "complete":
-        return {} if len(prior) > 1 else _SHELL_HELP
-    if subcommand != "run":
-        return {}
-    rest = prior[1:]
+        return _complete_shell_names_help(prior)
+    if subcommand == "run":
+        return _run_description_lookup(prior[1:])
+    return {}
+
+
+def _complete_shell_names_help(prior):
+    """{shell: blurb} for 'complete <TAB>' -- {} once a shell's already given. See _complete_shell_names."""
+    return {} if len(prior) > 1 else _SHELL_HELP
+
+
+def _run_description_lookup(rest):
+    """{flag: help text} for 'run ...<TAB>' -- see _completion_description_lookup, the only caller."""
     if "--" in rest:
         return {}
     env_value, pending_flag = _run_completion_state(rest)
@@ -4208,16 +4225,26 @@ def _handle_dunder_complete(argv):
     their own completion pagers know how to show; bash never passes it, so
     it's unaffected.
     """
-    if not argv or argv[0] != "__complete":
+    if not _is_dunder_complete(argv):
         return False
-    words = argv[1:]
-    if words and words[0] == "--describe":
-        candidates = _complete_candidates_described(words[1:])
-    else:
-        candidates = _complete_candidates(words)
-    for candidate in candidates:
+    for candidate in _dunder_complete_candidates(argv[1:]):
         print(candidate)
     return True
+
+
+def _is_dunder_complete(argv):
+    """Whether ``argv`` is 'denver __complete ...' -- see _handle_dunder_complete, the only caller."""
+    return bool(argv) and argv[0] == "__complete"
+
+
+def _dunder_complete_candidates(words):
+    """The candidates for '__complete's own argv (past '__complete' itself).
+
+    See _handle_dunder_complete for what its optional leading '--describe' does.
+    """
+    if words and words[0] == "--describe":
+        return _complete_candidates_described(words[1:])
+    return _complete_candidates(words)
 
 
 def _run_resolved_cli(argv):
