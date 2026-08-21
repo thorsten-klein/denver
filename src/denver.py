@@ -192,7 +192,7 @@ UNKNOWN_VERSION = "unknown (not installed)"
 # of the newest tag once there are commits past it (a new cycle has started,
 # so it has to name the release those commits are heading for) -- see
 # tests/test_dev_version.py.
-DEV_VERSION = None
+DEV_VERSION = "1.5.1"
 
 
 def scm_version():

@@ -1,6 +1,6 @@
 version = 1.0
 # minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
-denver-version = ">=1.1.0"
+denver-version = ">=1.5.1"
 
 # A lightweight, uv-managed virtualenv -- the "system venv" (no conan, zephyr or
 # docker). Replaces system_venv.sh / system_venv_activate.sh: the uv provider

@@ -1,6 +1,6 @@
 version = 1.0
 # minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
-denver-version = ">=1.1.0"
+denver-version = ">=1.5.1"
 
 # Inherit providers, shared conan setup and environment from the base devshell.
 import = ["../zephyr-devshell"]
