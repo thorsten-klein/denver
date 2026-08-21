@@ -1,7 +1,7 @@
 # Arguments
 
 You have already used a handful of these in
-[Quickstart](../quickstart/five-minutes.md) — `--scripts`, `--fast`,
+[Quickstart](../quickstart/05-minutes.md) — `--scripts`, `--fast`,
 `--skip`, `--dry-run`. This page is the full list.
 
 denver’s CLI is subcommand-based: `denver run <env> ...` is the normal entry
@@ -255,7 +255,7 @@ every command it runs) is off unless asked for with `-v`/`--verbose`.
   [Configuration](../configuration/denver-toml.md)).
 
 Each stage’s runtime is also appended to
-`<DENVER_DIR>/.envs/<env>/performance.jsonl` as JSON Lines of Chrome Trace
+`$DENVER_ENV_WORKDIR/performance.jsonl` as JSON Lines of Chrome Trace
 Event Format events — concatenate them into a `{"traceEvents": [...]}`
 document to load at chrome://tracing or https://ui.perfetto.dev.
 

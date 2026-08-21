@@ -1,6 +1,6 @@
 # About denver
 
-![denver logo](../src/denver_assets/logo.svg)
+<img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="denver logo" width="500"/>
 
 **D**evelopment **Env**ironment Launch**er** — describe your environments as
 Code in a `denver.toml`: reproducible and layerable to fit your project’s needs.
@@ -38,7 +38,7 @@ and denver builds whatever isn’t built yet, reuses whatever is, and drops
 you into a shell with everything ready. Same file, same result, on your
 machine and your colleague’s.
 
-Three things follow from that, and they are most of why denver exists:
+Few things follow from that, and they are most of why denver exists:
 
 - **It is declarative, not a script.** Reading the `denver.toml` tells you
   what the environment is. There is no “…and then also run this other thing”
@@ -54,9 +54,35 @@ from a single shell script to a full cross-compilation toolchain running
 inside a container. [Examples](../quickstart/examples.md) walks that range,
 smallest to largest.
 
-## What is a denver environment?
+## Why denver and not writing your own scripts?
 
-Three words carry most of the model, so they are worth pinning down.
+For a handful of `apt install`s and few `export`, a `setup.sh` is honestly
+the better choice — no framework to learn, nothing to fight.
+
+denver starts paying off once a project outgrows that:
+
+- **Reuse.** A `custom` stage is a script too — just one denver can run
+  from more than one environment, instead of copy-pasting it around.
+- **Composable.** `import:` lets a `denver.toml` inherit another one’s
+  entire stage stack as a base, then override or adapt just the sections
+  that need to differ — a project-specific environment on top of a shared
+  one, instead of forking the whole file.
+- **Selective runs.** `--until <stage>` and `--skip <stage>` run *part* of
+  the pipeline — the container without the toolchain, the venv without
+  Docker — without you hand-rolling flags for that in your own script.
+- **Fast repeats.** denver fingerprints each stage’s inputs and skips it
+  when nothing changed, so a second run costs seconds. A hand-rolled script
+  usually redoes everything, every time, unless you build that caching
+  yourself.
+- **A shared shape.** Once more than one project uses denver, every
+  `denver.toml` looks the same — a teammate who has read one environment
+  already knows how to read the next.
+
+If none of that matters — the project is small, one person maintains it,
+nobody needs to skip part of it — a plain script is not a mistake. denver is
+for when it stops being one.
+
+## What is a denver environment?
 
 An **environment** is simply a directory containing a `denver.toml`, and it is
 the thing denver launches: `denver run <env>`. The file describes it completely —
@@ -119,5 +145,5 @@ without forking denver. See “Extension providers” in
 > **Note**
 
 > **Next:** [Install denver](install.md), then
-> [denver in 5 minutes](../quickstart/five-minutes.md) to watch all of this
+> [denver in 5 minutes](../quickstart/05-minutes.md) to watch all of this
 > run in a real environment.

@@ -91,7 +91,7 @@ a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
   dynamic `install-args:` command) never causes `uv` to reconsider a
   package only that source pulled in. The accumulated arg list is kept
   outside the venv itself
-  (`<DENVER_DIR>/.envs/<env>/.logs/<stage>-install-args.json`), so it
+  (`$DENVER_ENV_WORKDIR/.logs/<stage>-install-args.json`), so it
   survives a checksum-triggered venv recreation; delete that file to reset
   it. Off by default because it makes the resulting venv depend on this
   machine’s run history, not just the current `denver.toml`.

@@ -11,7 +11,7 @@ a `denver.toml`, and `denver` will run it.
 This page is the complete reference for that file and for the machinery
 behind it — every top-level key, every generic stage key, and how a config
 is resolved. If you worked through
-[denver in 15 minutes](../quickstart/creating-environments.md), you have
+[denver in 30 minutes](../quickstart/30-minutes.md), you have
 already met most of it in context; this is where the remaining keys and the
 exact rules live.
 

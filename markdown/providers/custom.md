@@ -48,7 +48,7 @@ command.
 
 The common shape for “download a release tarball and put it on `PATH`” uses
 both keys, because installing and activating are two different jobs
-([`examples/howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env)’s `nvim-setup` stage):
+([`examples/firmware-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env)’s `nvim-setup` stage):
 
 ```toml
 [nvim-setup]

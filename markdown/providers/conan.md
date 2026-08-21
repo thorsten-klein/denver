@@ -119,7 +119,7 @@ specific one. A stage with no conan available fails with `conan provider needs '
   no dependencies, `curl` + `sha256sum -c` + `tar` in a `custom` stage is an
   honest twenty lines and needs no conan on `PATH` — see “Bringing a
   prebuilt binary in by hand” in [`custom.md`](custom.md), which
-  [`examples/howto-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env) deliberately shows right
+  [`examples/firmware-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env) deliberately shows right
   next to a conan stage doing the same job. What conan adds is the per-tool
   cost: a url and a checksum instead of a script, plus a cache shared across
   envs and checkouts, and dependencies between tools.

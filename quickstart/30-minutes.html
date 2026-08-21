@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>denver in 15 minutes &mdash; denver</title>
+  <title>denver in 30 minutes &mdash; denver</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -25,7 +25,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="Examples" href="examples.html" />
-    <link rel="prev" title="denver in 5 minutes" href="five-minutes.html" /> 
+    <link rel="prev" title="denver in 5 minutes" href="05-minutes.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -52,6 +52,7 @@
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../introduction/index.html">About denver</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/index.html#what-problem-does-denver-solve">What problem does denver solve?</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../introduction/index.html#why-denver-and-not-writing-your-own-scripts">Why denver and not writing your own scripts?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/index.html#what-is-a-denver-environment">What is a denver environment?</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/index.html#is-denver-flexible">Is denver flexible?</a></li>
 </ul>
@@ -68,16 +69,15 @@
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Quickstart</span></p>
 <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="five-minutes.html">denver in 5 minutes</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="five-minutes.html#have-a-look-first">Have a look first</a></li>
-<li class="toctree-l2"><a class="reference internal" href="five-minutes.html#preview-it-dry-run">Preview it: <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="five-minutes.html#run-it-for-real">Run it for real</a></li>
-<li class="toctree-l2"><a class="reference internal" href="five-minutes.html#what-just-happened">What just happened</a></li>
-<li class="toctree-l2"><a class="reference internal" href="five-minutes.html#pre-conditions-for-a-real-project">Pre-conditions for a real project</a></li>
-<li class="toctree-l2"><a class="reference internal" href="five-minutes.html#the-handful-of-flags-you-ll-use-daily">The handful of flags you’ll use daily</a></li>
+<li class="toctree-l1"><a class="reference internal" href="05-minutes.html">denver in 5 minutes</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="05-minutes.html#have-a-look-first">Have a look first</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05-minutes.html#run-the-environment">Run the environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05-minutes.html#what-just-happened">What just happened</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05-minutes.html#pre-conditions-for-a-real-project">Pre-conditions for a real project</a></li>
+<li class="toctree-l2"><a class="reference internal" href="05-minutes.html#the-handful-of-flags-you-ll-use-daily">The handful of flags you’ll use daily</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">denver in 15 minutes</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">denver in 30 minutes</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#the-use-case">The use case</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#what-you-need-before-starting">What you need before starting</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#step-0-the-skeleton">Step 0 — the skeleton</a></li>
@@ -95,11 +95,12 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#step-5-the-conan-packages-stage">Step 5 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#the-files-the-conan-stage-needs">The files the conan stage needs</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#keeping-conan-s-cache">Keeping conan’s cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#by-hand-or-via-conan">By hand or via conan?</a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="#step-6-the-best-practices-stage">Step 6 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#step-7-what-actually-starts">Step 7 — what actually starts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-7-the-default-command">Step 7 — the default command</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#the-finished-denver-toml">The finished <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#prove-it-rather-than-hope">Prove it, rather than hope</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#everyday-use">Everyday use</a></li>
@@ -254,9 +255,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">denver in 15 minutes</li>
+      <li class="breadcrumb-item active">denver in 30 minutes</li>
       <li class="wy-breadcrumbs-aside">
-              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/creating-environments.md" class="fa fa-github"> Edit on GitHub</a>
+              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/30-minutes.md" class="fa fa-github"> Edit on GitHub</a>
       </li>
   </ul>
   <hr/>
@@ -264,16 +265,16 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="denver-in-15-minutes">
-<h1>denver in 15 minutes<a class="headerlink" href="#denver-in-15-minutes" title="Link to this heading"></a></h1>
-<p><a class="reference internal" href="five-minutes.html"><span class="std std-doc">denver in 5 minutes</span></a> ran the smallest possible env, three
+  <section id="denver-in-30-minutes">
+<h1>denver in 30 minutes<a class="headerlink" href="#denver-in-30-minutes" title="Link to this heading"></a></h1>
+<p><a class="reference internal" href="05-minutes.html"><span class="std std-doc">denver in 5 minutes</span></a> ran the smallest possible env, three
 lines of shell script. This page is the bigger, more realistic follow-up:
 <strong>a real firmware project’s setup, built into a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> from an empty
 folder</strong>, one stage at a time, explaining why each key is there — so by the
 end you can write your own instead of copying one.</p>
-<p>Build along in your own repo under <code class="docutils literal notranslate"><span class="pre">envs/howto-env/</span></code>; the finished result is
+<p>Build along in your own repo under <code class="docutils literal notranslate"><span class="pre">envs/firmware-env/</span></code>; the finished result is
 bundled as
-<a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env"><code class="docutils literal notranslate"><span class="pre">examples/howto-env</span></code></a>
+<a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env"><code class="docutils literal notranslate"><span class="pre">examples/firmware-env</span></code></a>
 if you want to compare, or skip ahead.</p>
 <p>Terms used here (<em>environment</em>, <em>stage</em>, <em>provider</em>, <em>wrapper</em>, …) were
 introduced in
@@ -282,14 +283,14 @@ and are each defined precisely in the
 <a class="reference internal" href="../concepts/glossary.html"><span class="std std-doc">Glossary</span></a>.</p>
 <section id="the-use-case">
 <h2>The use case<a class="headerlink" href="#the-use-case" title="Link to this heading"></a></h2>
-<p>A team maintains <strong><code class="docutils literal notranslate"><span class="pre">howto-env</span></code></strong>, a small firmware repository. A new colleague
+<p>A team maintains <strong><code class="docutils literal notranslate"><span class="pre">firmware-env</span></code></strong>, a small firmware repository. A new colleague
 who wants to build it is told:</p>
 <blockquote>
-<div><p>Use Ubuntu 24.04, as our CI does. Make sure you have installed following
+<div><p>Use Ubuntu 24.04, as our CI does. We recommend to use docker.</p>
+<p>Make sure you have installed following
 packages via <code class="docutils literal notranslate"><span class="pre">apt</span> <span class="pre">install</span></code>:</p>
 <ul class="simple">
-<li><p>jq</p></li>
-<li><p>net-tools</p></li>
+<li><p>gcc</p></li>
 <li><p>curl</p></li>
 </ul>
 <p>Grab the editor we all use, <code class="docutils literal notranslate"><span class="pre">neovim</span></code> 0.12.4, from its GitHub releases page —
@@ -299,60 +300,54 @@ it ships as a prebuilt tarball, just unpack it somewhere and put it on
 (Important: use exactly those specified versions):</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">cmake</span></code> 3.31.9</p></li>
-<li><p>ARM toolchain 15.3</p></li>
 </ul>
 <p>Make sure uv is installed (install from  <code class="docutils literal notranslate"><span class="pre">PyPi</span></code>).
 Then create a Python 3.12 virtualenv via <code class="docutils literal notranslate"><span class="pre">uv</span></code> and install <code class="docutils literal notranslate"><span class="pre">pytest==9.1.1</span></code>.</p>
 <p>PS: In our team it is a best practice to export environment variable
-<code class="docutils literal notranslate"><span class="pre">PYTEST_ADDOPTS=&quot;-v</span> <span class="pre">-s</span></code> so pytest always runs verbose and show live logs.</p>
-<p>Finally you should be able to run <code class="docutils literal notranslate"><span class="pre">pytest</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">PYTEST_ADDOPTS=&quot;-v</span> <span class="pre">-s&quot;</span></code> so pytest always runs verbose and shows live logs.</p>
+<p>Finally you should be able to run our <code class="docutils literal notranslate"><span class="pre">pytest</span></code> tests and compile our <code class="docutils literal notranslate"><span class="pre">hello-world</span></code> cmake project.</p>
 </div></blockquote>
 <p>Every step of that is one simple action.
 But in total it is a lot of setup effort for the user.</p>
-<p>Let’s create a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> for this so the user can just run:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env
+<p>Let’s create a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> for this so the user can instead open the environment with:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env
 </pre></div>
 </div>
 </section>
 <section id="what-you-need-before-starting">
 <h2>What you need before starting<a class="headerlink" href="#what-you-need-before-starting" title="Link to this heading"></a></h2>
+<p>If <code class="docutils literal notranslate"><span class="pre">docker</span></code> is used, every stage after it runs inside the container.
+As a result nothing else needs to be installed on the host, but only:</p>
 <ul class="simple">
 <li><p>denver installed — see <a class="reference internal" href="../introduction/install.html"><span class="std std-doc">Install denver</span></a>.</p></li>
-<li><p>Docker, with the Compose plugin, on your host — see <a class="reference internal" href="../providers/docker.html#setting-up-docker"><span class="std std-ref">Setting up
-Docker</span></a>. Only the <code class="docutils literal notranslate"><span class="pre">docker</span></code>
-stage runs on the host; every stage after it runs inside the container,
-so nothing else needs to be installed outside it.</p></li>
+<li><p>Docker, with the Compose plugin, on your host — see <a class="reference internal" href="../providers/docker.html#setting-up-docker"><span class="std std-ref">Setting up Docker</span></a>.</p></li>
 </ul>
 </section>
 <section id="step-0-the-skeleton">
 <h2>Step 0 — the skeleton<a class="headerlink" href="#step-0-the-skeleton" title="Link to this heading"></a></h2>
 <p>The environment is described by a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, which can live
-anywhere in your repo. Let’s use <code class="docutils literal notranslate"><span class="pre">envs/howto-env/</span></code>.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>envs/howto-env
-touch<span class="w"> </span>envs/howto-env/denver.toml
+anywhere in your repo. Let’s use <code class="docutils literal notranslate"><span class="pre">envs/firmware-env/</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>mkdir<span class="w"> </span>-p<span class="w"> </span>envs/firmware-env
+touch<span class="w"> </span>envs/firmware-env/denver.toml
 </pre></div>
 </div>
-<p>We add the first general entries to <code class="docutils literal notranslate"><span class="pre">envs/howto-env/denver.toml</span></code>:</p>
+<p>We add the first general entries to <code class="docutils literal notranslate"><span class="pre">envs/firmware-env/denver.toml</span></code>:</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"1.0"</span><span class="w">            </span><span class="c1"># the denver.toml schema version -- currently only "1.0" exists</span>
 <span class="n">denver-version</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"&gt;=1.1.0"</span><span class="w"> </span><span class="c1"># the minimum denver *tool* this file needs</span>
 </pre></div>
 </div>
-<p>Two different questions, so two keys: <code class="docutils literal notranslate"><span class="pre">version:</span></code> pins the schema, and
-<code class="docutils literal notranslate"><span class="pre">denver-version:</span></code> pins the tool, so for example a colleague on an older denver
-gets a clear message upfront.</p>
-<p>Check it loads:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--show-config
+<p><code class="docutils literal notranslate"><span class="pre">version:</span></code> pins the schema, and <code class="docutils literal notranslate"><span class="pre">denver-version:</span></code> pins the tool, so for example a colleague on an older denver gets a clear message upfront.</p>
+<p>Check that denver can load it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--show-config
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">--show-config</span></code> resolves the whole config — imports, merges, defaults — and
-prints it, without running anything. It needs no toolchain, no network and no
-Docker. Tip: <strong>You may use it after every step below as it might support
-understanding.</strong> (Add <code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code> for every key, including ones
-nothing set.)</p>
+<p>Tip: run <code class="docutils literal notranslate"><span class="pre">--show-config</span></code> after any step below to see how it changed the
+resolved config. <code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code> also shows every key denver supports,
+even the ones you haven’t set.</p>
 </section>
 <section id="step-1-declare-the-stages">
 <h2>Step 1 — declare the stages<a class="headerlink" href="#step-1-declare-the-stages" title="Link to this heading"></a></h2>
-<p>Let’s identify the necessary stages. From the use case description we can see that we might need following stages:</p>
+<p>Let’s identify the necessary stages. From the use case description we might need the following stages:</p>
 <table class="docutils align-default">
 <thead>
 <tr class="row-odd"><th class="head"><p>What the colleague was told</p></th>
@@ -361,7 +356,7 @@ nothing set.)</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p>“use Ubuntu 24.04” + <code class="docutils literal notranslate"><span class="pre">apt</span> <span class="pre">install</span> <span class="pre">jq</span> <span class="pre">net-tools</span> <span class="pre">curl</span></code></p></td>
+<tr class="row-even"><td><p>“use Ubuntu 24.04” + <code class="docutils literal notranslate"><span class="pre">apt</span> <span class="pre">install</span> <span class="pre">gcc</span> <span class="pre">curl</span></code></p></td>
 <td><p><a class="reference internal" href="../providers/docker.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">docker</span></code></span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">docker-base</span></code></p></td>
 </tr>
@@ -373,7 +368,7 @@ nothing set.)</p>
 <td><p><a class="reference internal" href="../providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>“<code class="docutils literal notranslate"><span class="pre">cmake</span></code> 3.31.9 and ARM 15.3 — exactly those versions”</p></td>
+<tr class="row-odd"><td><p>“cmake 3.31.9”</p></td>
 <td><p><a class="reference internal" href="../providers/conan.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">conan</span></code></span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">conan-packages</span></code></p></td>
 </tr>
@@ -385,7 +380,7 @@ nothing set.)</p>
 </table>
 <p><strong>Note</strong>: A stage id is a name we freely choose. <code class="docutils literal notranslate"><span class="pre">uv-packages</span></code> is a <code class="docutils literal notranslate"><span class="pre">uv</span></code>
 stage because its section says <code class="docutils literal notranslate"><span class="pre">provider:</span> <span class="pre">uv</span></code>, not because of what it is called.</p>
-<p>Now Write the <code class="docutils literal notranslate"><span class="pre">stages:</span></code> list first: it <em>is</em> the core of the environment. Note that the order is significant here.</p>
+<p>Now write the <code class="docutils literal notranslate"><span class="pre">stages:</span></code> list first: it <em>is</em> the core of the environment. Note that the order is significant here.</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">stages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="s2">"docker-base"</span><span class="p">,</span>
 <span class="w">  </span><span class="s2">"uv-packages"</span><span class="p">,</span>
@@ -402,17 +397,20 @@ that declares <code class="docutils literal notranslate"><span class="pre">provi
 which is exactly what lets this one environment run two <code class="docutils literal notranslate"><span class="pre">custom</span></code> stages
 (<code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> and <code class="docutils literal notranslate"><span class="pre">best-practices</span></code>) under different ids.</p></li>
 <li><p><strong>Order is the dependency chain.</strong> <code class="docutils literal notranslate"><span class="pre">conan</span></code> comes after <code class="docutils literal notranslate"><span class="pre">uv</span></code> because the
-conan provider never installs conan itself. As <code class="docutils literal notranslate"><span class="pre">conan</span></code> is a Python package,
-it is installed into the venv by the uv stage. For simplicity we only want one uv stage, where we install all Python packages. This is why it must be before the conan stage.</p></li>
+conan provider never installs conan itself — conan is a Python package, so
+the uv stage’s venv is what puts it on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. One <code class="docutils literal notranslate"><span class="pre">uv</span></code> stage installs
+every Python package this env needs, which is why it comes before
+<code class="docutils literal notranslate"><span class="pre">conan-packages</span></code>.</p></li>
 </ul>
-<p>In the next step we can create each stage.</p>
+<p>In the next step we create each stage.</p>
 </section>
 <section id="step-2-the-docker-base-stage">
 <h2>Step 2 — the <code class="docutils literal notranslate"><span class="pre">docker-base</span></code> stage<a class="headerlink" href="#step-2-the-docker-base-stage" title="Link to this heading"></a></h2>
-<p>A <code class="docutils literal notranslate"><span class="pre">docker</span></code> stage is a <strong>wrapper</strong>: it builds nothing itself, it <em>relocates</em>
-the rest of the pipeline into a compose service. denver builds/enters the
-container and re-invokes itself inside it with this stage skipped, so the
-<code class="docutils literal notranslate"><span class="pre">uv</span></code> and <code class="docutils literal notranslate"><span class="pre">conan</span></code> stages build their work in there rather than on your host.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">docker-base</span></code> stage is a <strong>wrapper</strong>: it uses denver’s <code class="docutils literal notranslate"><span class="pre">docker</span></code>
+provider, which <em>relocates</em> every stage after it into the container. The
+provider builds/enters the container and re-invokes denver inside it, so
+<code class="docutils literal notranslate"><span class="pre">uv-packages</span></code> and everything after it do their work in there instead of on
+your host.</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[docker-base]</span><span class="w">      </span><span class="c1"># the id from stages:, not the provider name</span>
 <span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"docker"</span>
 
@@ -421,28 +419,42 @@ container and re-invokes itself inside it with this stage skipped, so the
 <span class="n">service</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"dev"</span>
 </pre></div>
 </div>
-<p>Note: It is a best-practice, that you install all basic packages into a docker container, where you do not need a specific version. Dependencies, where you need a specific version or that change regularly, should be installed via a package manager on top.</p>
+<p>Best practice: put packages that don’t need an exact version straight into
+the docker image. Anything version-pinned, or that changes often, should
+come from a package manager stage on top instead.</p>
 <section id="the-files-the-docker-stage-needs">
 <h3>The files the docker stage needs<a class="headerlink" href="#the-files-the-docker-stage-needs" title="Link to this heading"></a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/docker-compose.yml</span></code> — an ordinary compose file. Let’s create a simple one</p>
+<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/docker-compose.yml</span></code> is an ordinary compose file. Let’s create a simple one</p>
 <div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">services</span><span class="p">:</span>
 <span class="w">  </span><span class="nt">dev</span><span class="p">:</span>
-<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">howto-env:2026-08-09</span>
+<span class="w">    </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">firmware-env:latest</span>
 <span class="w">    </span><span class="nt">build</span><span class="p">:</span>
 <span class="w">      </span><span class="nt">context</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">container</span>
 <span class="w">      </span><span class="nt">dockerfile</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Dockerfile</span>
 <span class="w">    </span><span class="nt">user</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${HOST_UID:-1000}:${HOST_GID:-1000}</span>
-<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
-<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">$HOME:$HOME</span>
 <span class="w">    </span><span class="nt">env_file</span><span class="p">:</span>
 <span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.env</span><span class="w"> </span><span class="c1"># generated below by create-env.sh</span>
+<span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">HOME=${CONTAINER_HOME}</span><span class="w">  </span><span class="c1"># the container-only home create-env.sh creates</span>
+<span class="w">    </span><span class="nt">volumes</span><span class="p">:</span>
+<span class="w">    </span><span class="c1"># this env's own directory, and denver's own source, each at the same</span>
+<span class="w">    </span><span class="c1"># path inside and out -- so paths match, and the docker provider can</span>
+<span class="w">    </span><span class="c1"># re-invoke denver from inside the container it just relocated into.</span>
+<span class="w">    </span><span class="c1"># ${DENVER_ENV_DIR}/${DENVER_SRC_DIR} are denver's own built-ins, more on</span>
+<span class="w">    </span><span class="c1"># those in the next step.</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${DENVER_ENV_DIR}:${DENVER_ENV_DIR}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${DENVER_SRC_DIR}:${DENVER_SRC_DIR}</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${CONTAINER_HOME}:${CONTAINER_HOME}</span><span class="w">  </span><span class="c1"># created below by create-env.sh</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/container/Dockerfile</span></code> . an ordinary Dockerfile:</p>
+<p>Note the real host <code class="docutils literal notranslate"><span class="pre">$HOME</span></code> is never mounted in at all — only this env’s own
+directory, denver’s own source, and a dedicated, empty home for the
+container’s non-root user.</p>
+<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/container/Dockerfile</span></code> is an ordinary Dockerfile:</p>
 <div class="highlight-dockerfile notranslate"><div class="highlight"><pre><span></span><span class="k">FROM</span><span class="w"> </span><span class="s">ubuntu:24.04</span>
 
 <span class="k">RUN</span><span class="w"> </span>apt-get<span class="w"> </span>update<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>apt-get<span class="w"> </span>install<span class="w"> </span>-y<span class="w"> </span>--no-install-recommends<span class="w"> </span><span class="se">\</span>
-<span class="w">      </span>jq<span class="w"> </span>net-tools<span class="w"> </span>curl<span class="w"> </span><span class="se">\</span>
+<span class="w">      </span>gcc<span class="w"> </span>libc6-dev<span class="w"> </span>make<span class="w"> </span>curl<span class="w"> </span><span class="se">\</span>
 <span class="w">      </span>ca-certificates<span class="w"> </span>git<span class="w"> </span><span class="se">\</span>
 <span class="w">      </span>python3<span class="w"> </span><span class="se">\</span>
 <span class="w">    </span><span class="o">&amp;&amp;</span><span class="w"> </span>rm<span class="w"> </span>-rf<span class="w"> </span>/var/lib/apt/lists/*
@@ -458,34 +470,49 @@ container and re-invokes itself inside it with this stage skipped, so the
 <em>inside</em> the container, and denver is a Python program that needs nothing
 installed for its own sake (<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> is read with the standard
 library’s <code class="docutils literal notranslate"><span class="pre">tomllib</span></code>) beyond a <code class="docutils literal notranslate"><span class="pre">&gt;=3.11</span></code> interpreter – Ubuntu 24.04’s
-<code class="docutils literal notranslate"><span class="pre">python3</span></code> is already 3.12. <code class="docutils literal notranslate"><span class="pre">git</span></code> is for the conan stage, whose recipe
+<code class="docutils literal notranslate"><span class="pre">python3</span></code> is already 3.12.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">git</span></code> is for the conan stage, whose recipe
 exporter shells out to it. The rule of thumb for the image: whatever has to
 exist before denver’s own stages can run in there.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">curl</span></code> is in the apt list because the use case asked for it — and the
-<code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> stage later downloads with it, so it would have to be there
-anyway.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">cmake</span></code>, the ARM toolchain and <code class="docutils literal notranslate"><span class="pre">neovim</span></code> are <strong>not</strong> installed via apt. The
-use case requires exact versions, and pinning versions through a distro’s
-package manager is a losing game. This is why the two stages below fetch
-them at pinned versions instead — one by hand, one via <code class="docutils literal notranslate"><span class="pre">conan</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">make</span></code>, which <code class="docutils literal notranslate"><span class="pre">cmake</span></code>’s default generator drives, is what later compiles
+the <code class="docutils literal notranslate"><span class="pre">hello-world</span></code> cmake project</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">curl</span></code> is needed to download files, e.g. in the <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> stage later</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">cmake</span></code> and <code class="docutils literal notranslate"><span class="pre">neovim</span></code> are <strong>not</strong> installed via apt. The use case requires
+exact versions, and pinning versions through a distro’s package manager is
+a losing game. This is why the two stages below fetch them at pinned
+versions instead — one <code class="docutils literal notranslate"><span class="pre">custom</span></code>, one via <code class="docutils literal notranslate"><span class="pre">conan</span></code>.</p></li>
 </ul>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/create-env.sh</span></code> — This script will generate <code class="docutils literal notranslate"><span class="pre">.env</span></code> file with user-specific informations.
-When we specify it in <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> as a <code class="docutils literal notranslate"><span class="pre">hooks:</span> <span class="pre">pre-docker-base:</span></code> entry, it will run right before that
-stage’s build/run (on the host machine).
-Background: Dynamic values a compose file cannot compute itself (host UID/GID, user-specific cache dirs, …).</p>
+<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/create-env.sh</span></code> — this script generates a <code class="docutils literal notranslate"><span class="pre">.env</span></code> file with
+user-specific information used by <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code>, and creates any
+mounted folders that need to exist with the right permissions beforehand.
+We wire it into <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> under <code class="docutils literal notranslate"><span class="pre">[hooks]</span></code> as a <code class="docutils literal notranslate"><span class="pre">pre-docker-base:</span></code> entry,
+so it always runs right before that stage.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">create-env.sh</span></code> script:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash -e</span>
 <span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">"</span><span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
-<span class="nv">HOST_HOME</span><span class="o">=</span><span class="nv">$HOME</span>
+
+<span class="c1"># Created here, not left to docker: a bind-mount target that does not exist</span>
+<span class="c1"># yet is created by docker as root, which the non-root container user could</span>
+<span class="c1"># then not write to.</span>
+<span class="nv">CONTAINER_HOME</span><span class="o">=</span><span class="nv">$SELF_DIR</span>/.denver/container-home
+mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span><span class="nv">$CONTAINER_HOME</span><span class="s2">"</span>
+
 <span class="o">(</span>
 <span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="nv">HOST_UID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-u<span class="k">)</span>
 <span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="nv">HOST_GID</span><span class="o">=</span><span class="k">$(</span>id<span class="w"> </span>-g<span class="k">)</span>
-<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="nv">HOST_HOME</span><span class="o">=</span><span class="nv">$HOST_HOME</span>
-<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="nv">HOME</span><span class="o">=</span><span class="nv">$HOST_HOME</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="nv">CONTAINER_HOME</span><span class="o">=</span><span class="nv">$CONTAINER_HOME</span>
 <span class="o">)</span><span class="w"> </span>&gt;<span class="w"> </span><span class="nv">$SELF_DIR</span>/.env
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/setup/install_host_tools.sh</span></code> — This script will ensure the host requirements for the docker are installed.
-Note: This setup script will only run when the user invokes <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/howto-env</span> <span class="pre">--scripts</span> <span class="pre">setup</span></code>.</p>
+<p>This is the only host-specific work left: your user/group id (so the
+container writes files you can edit back on the host, not files owned by
+root) and a folder for the container’s own <code class="docutils literal notranslate"><span class="pre">$HOME</span></code>, created up front for the
+reason in the comment above. Everything else the container needs —
+<code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_DIR}</span></code>, <code class="docutils literal notranslate"><span class="pre">${DENVER_SRC_DIR}</span></code>, <code class="docutils literal notranslate"><span class="pre">${CONAN_HOME}</span></code> (Step 5) — is
+already a denver built-in or a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> <code class="docutils literal notranslate"><span class="pre">[env]</span></code> entry, so it doesn’t
+have to be computed by hand here at all.</p>
+<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/setup/install_host_tools.sh</span></code> — This script will ensure the host requirements for the docker are installed.
+Note: This setup script will only run when the user invokes <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/firmware-env</span> <span class="pre">--scripts</span> <span class="pre">setup</span></code>.</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>docker<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>docker.io
 <span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>containerd<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>containerd
@@ -504,28 +531,27 @@ Note: This setup script will only run when the user invokes <code class="docutil
 <span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"docker"</span>
 
 <span class="k">[docker-base.compose]</span>
-<span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"docker-compose.yml"</span><span class="w">  </span><span class="c1"># required -- never guessed from the directory</span>
+<span class="n">file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"docker-compose.yml"</span>
 <span class="n">service</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"dev"</span>
 
 <span class="k">[docker-base.scripts]</span>
 <span class="n">setup</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"setup/install_host_tools.sh"</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Hint: You may add <code class="docutils literal notranslate"><span class="pre">.env</span></code> (the generated file) to <code class="docutils literal notranslate"><span class="pre">envs/howto-env/.gitignore</span></code>.</p>
+<p>Hint: In order to ignore this generated machine-specific <code class="docutils literal notranslate"><span class="pre">.env</span></code>, it is added to <code class="docutils literal notranslate"><span class="pre">envs/firmware-env/.gitignore</span></code>.</p>
 </section>
 <section id="check-it-the-container">
 <h3>Check it — the container<a class="headerlink" href="#check-it-the-container" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>docker-base<span class="w"> </span>--<span class="w"> </span>cat<span class="w"> </span>/etc/os-release
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--until<span class="w"> </span>docker-base<span class="w"> </span>--<span class="w"> </span>cat<span class="w"> </span>/etc/os-release
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">--until</span></code> only runs the pipeline until the named stage, so this builds and
+<p><code class="docutils literal notranslate"><span class="pre">--until</span></code> only runs the pipeline until the named stage (including it), so this builds and
 enters the container and does nothing else. We expect to see Ubuntu 24.04 in the output.</p>
 <p>One thing to know before you start editing that <code class="docutils literal notranslate"><span class="pre">Dockerfile</span></code> again: with no
 <code class="docutils literal notranslate"><span class="pre">image:</span></code> key in the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, <strong>denver never builds anything itself</strong> —
-it leaves the image to the compose file, and compose only builds when the
-tag is missing. So a changed <code class="docutils literal notranslate"><span class="pre">Dockerfile</span></code> does <em>not</em> rebuild on the next
-<code class="docutils literal notranslate"><span class="pre">denver</span></code> run. Run <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">build</span></code> yourself, or give the docker stage
-an <code class="docutils literal notranslate"><span class="pre">image:</span></code> and let denver manage the build-once behaviour
+docker compose only builds when the tag changes. So a changed <code class="docutils literal notranslate"><span class="pre">Dockerfile</span></code> does <em>not</em> rebuild on the next
+<code class="docutils literal notranslate"><span class="pre">denver</span></code> run. Run <code class="docutils literal notranslate"><span class="pre">docker</span> <span class="pre">compose</span> <span class="pre">build</span></code> yourself to rebuild the container, or give the docker stage
+an <code class="docutils literal notranslate"><span class="pre">image:</span></code> and let denver manage the build automatically. For more details see
 (<a class="reference internal" href="../providers/docker.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">providers/docker.md</span></code></span></a>).</p>
 </section>
 </section>
@@ -535,14 +561,14 @@ an <code class="docutils literal notranslate"><span class="pre">image:</span></c
 above relocated everything after it in there.</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[uv-packages]</span>
 <span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"uv"</span>
-<span class="c1"># in a docker-wrapped env this is checked against the image's own python</span>
-<span class="c1"># rather than installed -- and checked as an exact string, so it has to be</span>
-<span class="c1"># the container's full `python3 --version` (Ubuntu 24.04: 3.12.3)</span>
 <span class="n">python</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"3.12.3"</span>
 <span class="n">requirements</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"requirements.txt"</span><span class="p">]</span>
 </pre></div>
 </div>
-<p>Create <code class="docutils literal notranslate"><span class="pre">envs/howto-env/requirements.txt</span></code>:</p>
+<p><code class="docutils literal notranslate"><span class="pre">python:</span></code> has to be the container’s exact <code class="docutils literal notranslate"><span class="pre">python3</span> <span class="pre">--version</span></code> (<code class="docutils literal notranslate"><span class="pre">3.12.3</span></code>),
+not just <code class="docutils literal notranslate"><span class="pre">3.12</span></code> — denver can’t install an interpreter inside a container, it
+can only check the one that’s already there.</p>
+<p>Create <code class="docutils literal notranslate"><span class="pre">envs/firmware-env/requirements.txt</span></code>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># needed by the conan provider</span>
 <span class="n">conan</span><span class="o">==</span><span class="mf">2.31.2</span>
 
@@ -550,23 +576,12 @@ above relocated everything after it in there.</p>
 <span class="n">pytest</span><span class="o">==</span><span class="mf">9.1.1</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">pytest</span></code> is what the use case asked for. <code class="docutils literal notranslate"><span class="pre">conan</span></code> is there because of the
-<em>next</em> stage: the conan provider never installs conan itself, it expects it
-on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>, and this venv is what puts it there. That is the whole reason
+<p><code class="docutils literal notranslate"><span class="pre">pytest</span></code> is what the use case asked for. <code class="docutils literal notranslate"><span class="pre">conan</span></code> is there for the next
+stage: the conan provider never installs conan itself, it just expects it
+on <code class="docutils literal notranslate"><span class="pre">PATH</span></code> — and this venv is what puts it there. That is the whole reason
 <code class="docutils literal notranslate"><span class="pre">uv-packages</span></code> sits before <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> in <code class="docutils literal notranslate"><span class="pre">stages:</span></code>.</p>
-<p>The provider drives <a class="reference external" href="https://docs.astral.sh/uv/"><code class="docutils literal notranslate"><span class="pre">uv</span></code></a> rather than plain
-<code class="docutils literal notranslate"><span class="pre">pip</span></code> — which is why the <code class="docutils literal notranslate"><span class="pre">Dockerfile</span></code> installs <code class="docutils literal notranslate"><span class="pre">uv</span></code>, and why the provider is
-named after it. Three keys worth knowing early:</p>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">requirements:</span></code></strong> is a <em>list</em> of <code class="docutils literal notranslate"><span class="pre">-r</span></code> files resolved together in one
-install, not one install per entry.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">overrides:</span></code></strong> pins a conflicting transitive dependency without editing
-(or forking) the requirements file it overrides.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">freeze-to:</span></code></strong> writes the fully-resolved <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">pip</span> <span class="pre">freeze</span></code> output to a
-file — a lockfile a later run can read back via <code class="docutils literal notranslate"><span class="pre">requirements:</span></code>.</p></li>
-</ul>
-<p>Check the environment now with</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>uv-packages<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>--version
+<p>Check the environment now, for example by running <code class="docutils literal notranslate"><span class="pre">pytest</span> <span class="pre">--version</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--until<span class="w"> </span>uv-packages<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>--version
 </pre></div>
 </div>
 </section>
@@ -574,32 +589,24 @@ file — a lockfile a later run can read back via <code class="docutils literal 
 <h2>Step 4 — the <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> stage<a class="headerlink" href="#step-4-the-nvim-setup-stage" title="Link to this heading"></a></h2>
 <p>The next line of the use case is a prebuilt binary: download a tarball,
 unpack it, put it on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. Nothing about that needs a package manager, so
-for this simple case let’s do it with a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage — a shell script that
-takes care about the provisioning of this tool:</p>
+for this simple case let’s do it with a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage:</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[nvim-setup]</span>
 <span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"custom"</span>
-<span class="c1"># the build step: an isolated subprocess, so it prints what it does and</span>
-<span class="c1"># nothing it exports has to survive. Skipped by --fast.</span>
 <span class="n">cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"bash ${DENVER_ENV_DIR}/nvim/install.sh"</span>
-<span class="c1"># the activation: sourced, so the PATH entry it exports survives into</span>
-<span class="c1"># every later stage and the final command</span>
 <span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"nvim/activate.sh"</span>
 </pre></div>
 </div>
 <p><strong>Why two scripts and not one.</strong> <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> runs via <code class="docutils literal notranslate"><span class="pre">bash</span> <span class="pre">-c</span></code> in a subprocess of
 its own — perfect for downloading and unpacking, useless for <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">PATH=</span></code>,
-because that export dies with the subprocess. <code class="docutils literal notranslate"><span class="pre">source:</span></code> is the opposite: the
+because that export dies with the subprocess. <code class="docutils literal notranslate"><span class="pre">source:</span></code> is the solution here: the
 script is <em>sourced</em> into the environment denver is assembling, so whatever it
 exports reaches everything after it. Installing and activating are two
 different jobs, so they are two scripts. (More on this pair in
-<a class="reference internal" href="../providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">providers/custom.md</span></code></span></a>; <code class="docutils literal notranslate"><span class="pre">examples/simple-env</span></code> is a
-three-stage demo of nothing else.)</p>
+<a class="reference internal" href="../providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">providers/custom.md</span></code></span></a>)</p>
 <p><strong>Note</strong>: one sourced script would do the whole job just as well — check,
 download, unpack, <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">PATH=</span></code>, all in <code class="docutils literal notranslate"><span class="pre">source:</span> <span class="pre">install-nvim.sh</span></code> and no
 <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> at all. It is split into two here to make the two roles visible, and
-the split has small advantages of its own: <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>’s output is shown while it
-downloads (denver captures a <em>sourced</em> script’s output, since it has to read
-the resulting environment out of it), and <code class="docutils literal notranslate"><span class="pre">--fast</span></code>/<code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> skip a <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>
+the split has small advantages of its own: <code class="docutils literal notranslate"><span class="pre">--fast</span></code>/<code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> skips a <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>
 while they always run a <code class="docutils literal notranslate"><span class="pre">source:</span></code>. If you go with one script, mind that a
 sourced script must never call <code class="docutils literal notranslate"><span class="pre">exit</span></code> — it would end denver’s own sourcing
 shell before it reads the environment back, and the <code class="docutils literal notranslate"><span class="pre">PATH</span></code> entry would be
@@ -612,7 +619,7 @@ holding this <code class="docutils literal notranslate"><span class="pre">denver
 none of that: it is resolved relative to the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> already.</p>
 <section id="the-files-the-nvim-stage-needs">
 <h3>The files the nvim stage needs<a class="headerlink" href="#the-files-the-nvim-stage-needs" title="Link to this heading"></a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/nvim/nvim.env</span></code> — the pin itself, in one place, so the
+<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/nvim/nvim.env</span></code> — the pin itself, in one place, so the
 installing and the activating script can never disagree about which version
 they mean or where it lives:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">NVIM_VERSION</span><span class="o">=</span><span class="s2">"0.12.4"</span>
@@ -624,17 +631,16 @@ they mean or where it lives:</p>
 <p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code> is the other built-in worth knowing here: denver’s own
 state directory for this environment (<code class="docutils literal notranslate"><span class="pre">&lt;env</span> <span class="pre">dir&gt;/.denver/&lt;config</span> <span class="pre">file</span> <span class="pre">stem&gt;/</span></code>).
 Unpacking into it means the install belongs to this env, is not shared with
-any other, survives the <code class="docutils literal notranslate"><span class="pre">--rm</span></code> container (it lives inside the env directory,
-which is bind-mounted), and disappears with the checkout. <code class="docutils literal notranslate"><span class="pre">/usr/local/bin</span></code>
-would need root and would leak into every other environment on the machine
-(if run without docker). The version is part of the path, so bumping
-<code class="docutils literal notranslate"><span class="pre">NVIM_VERSION</span></code> installs next to the old release rather than on top of it.</p>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/nvim/install.sh</span></code> — download, verify, unpack:</p>
+any other, and survives the <code class="docutils literal notranslate"><span class="pre">--rm</span></code> container — it lives inside the env
+directory, which <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code> bind-mounts in (Step 2). The version
+is part of the path, so bumping <code class="docutils literal notranslate"><span class="pre">NVIM_VERSION</span></code> installs next to the old
+release rather than on top of it.</p>
+<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/nvim/install.sh</span></code> — download, verify, unpack:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash -e</span>
 <span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">"</span><span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
 <span class="nb">source</span><span class="w"> </span><span class="s2">"</span><span class="nv">$SELF_DIR</span><span class="s2">/nvim.env"</span>
 
-<span class="c1"># runs on every start, so it has to recognise what it already installed</span>
+<span class="c1"># runs on every start, so it can exit early if already installed</span>
 <span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span>-x<span class="w"> </span><span class="s2">"</span><span class="nv">$NVIM_PREFIX</span><span class="s2">/bin/nvim"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
 <span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"nvim </span><span class="nv">$NVIM_VERSION</span><span class="s2"> already installed: </span><span class="nv">$NVIM_PREFIX</span><span class="s2">"</span>
 <span class="w">    </span><span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
@@ -657,7 +663,7 @@ mv<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</sp
 <span class="nb">trap</span><span class="w"> </span>-<span class="w"> </span>EXIT
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/nvim/activate.sh</span></code> — the one line that makes it usable:</p>
+<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/nvim/activate.sh</span></code> — the one line that makes it usable:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="nv">SELF_DIR</span><span class="o">=</span><span class="k">$(</span><span class="nb">cd</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>dirname<span class="w"> </span><span class="s2">"</span><span class="si">${</span><span class="nv">BASH_SOURCE</span><span class="p">[0]</span><span class="si">}</span><span class="s2">"</span><span class="k">)</span><span class="s2">"</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">pwd</span><span class="k">)</span>
 <span class="nb">source</span><span class="w"> </span><span class="s2">"</span><span class="nv">$SELF_DIR</span><span class="s2">/nvim.env"</span>
@@ -668,66 +674,47 @@ mv<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</sp
 </section>
 <section id="check-it-nvim-on-path">
 <h3>Check it — nvim on PATH<a class="headerlink" href="#check-it-nvim-on-path" title="Link to this heading"></a></h3>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>nvim-setup<span class="w"> </span>--<span class="w"> </span>nvim<span class="w"> </span>--version
+<p>Check the environment now, for example by running <code class="docutils literal notranslate"><span class="pre">nvim</span> <span class="pre">--version</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--until<span class="w"> </span>nvim-setup<span class="w"> </span>--<span class="w"> </span>nvim<span class="w"> </span>--version
 </pre></div>
 </div>
-<p>Expected: <code class="docutils literal notranslate"><span class="pre">NVIM</span> <span class="pre">v0.12.4</span></code>. Run it a second time — the download is gone and the
-stage costs milliseconds, because of that <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">[</span> <span class="pre">-x</span> <span class="pre">...</span> <span class="pre">]</span></code>.</p>
-<p><strong>Read the install script again before the next step.</strong> Twenty lines, and
-almost none of them are about neovim: a checksum, a staging directory, an
-idempotence check, a place to put things — every one of them a decision you
-now own, for exactly one tool. The next step is the same job for two more
-tools, and it is where that stops scaling.</p>
+<p>After some short time for downloading and unpacking, we expect:
+<code class="docutils literal notranslate"><span class="pre">NVIM</span> <span class="pre">v0.12.4</span></code>.</p>
+<p>Run the command a second time — the download is gone and the output comes in
+milliseconds as the installation is skipped as <code class="docutils literal notranslate"><span class="pre">nvim</span></code> is already present.</p>
 </section>
 </section>
 <section id="step-5-the-conan-packages-stage">
 <h2>Step 5 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage<a class="headerlink" href="#step-5-the-conan-packages-stage" title="Link to this heading"></a></h2>
-<p>This is the other way to get exact tool versions into an environment: conan.</p>
+<p>This is the other way to get exact tool versions into an environment: <code class="docutils literal notranslate"><span class="pre">conan</span></code>.</p>
 <p>conan is a package manager, and it does for you what you just did by hand in
 <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code>: it downloads a pinned archive, verifies its checksum, unpacks
 it into a package of its own and puts that package on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. No <code class="docutils literal notranslate"><span class="pre">apt</span></code>, no
 version drift, same result on every machine.</p>
-<p>What changes is how much of that you write yourself. Here it is which tool,
-in which version — the download, the checksum check, the “already installed”
-shortcut and the cache belong to conan rather than to a script of yours.</p>
+<p>What changes is how much you write yourself: you can write your own recipe
+(a <code class="docutils literal notranslate"><span class="pre">conanfile.py</span></code>, as we do here), or use an existing package from a remote
+like conan-center. See the
+<a class="reference external" href="https://docs.conan.io/">official conan documentation</a> for the full
+picture.</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[conan-packages]</span>
 <span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"conan"</span>
 <span class="n">conanfile</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"conan/conanfile.py"</span>
 
-<span class="c1"># 'conanfile:' (what to install) and 'recipes:' (what to export first) are</span>
-<span class="c1"># independent lists -- see doc/providers/conan.md.</span>
 <span class="k">[[conan-packages.recipes]]</span>
 <span class="n">dirs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"conan/recipes"</span><span class="p">]</span>
 </pre></div>
 </div>
 <section id="the-files-the-conan-stage-needs">
 <h3>The files the conan stage needs<a class="headerlink" href="#the-files-the-conan-stage-needs" title="Link to this heading"></a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/conan/conanfile.py</span></code> — what this environment wants, and in which
-versions:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConanFile</span>
-
-
-<span class="k">class</span><span class="w"> </span><span class="nc">HowtoEnv</span><span class="p">(</span><span class="n">ConanFile</span><span class="p">):</span>
-    <span class="n">name</span> <span class="o">=</span> <span class="s2">"howto-env"</span>
-    <span class="n">version</span> <span class="o">=</span> <span class="s2">"1.0"</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">build_requirements</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tool_requires</span><span class="p">(</span><span class="s2">"cmake/3.31.9@denver/snapshot"</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">tool_requires</span><span class="p">(</span><span class="s2">"arm-none-eabi/15.3@denver/snapshot"</span><span class="p">)</span>
-</pre></div>
-</div>
-<p><strong>Note</strong>: The <code class="docutils literal notranslate"><span class="pre">&#64;denver/snapshot</span></code> half is the user/channel denver’s recipes-exporter
-stamps onto every recipe it exports. It is the default of <code class="docutils literal notranslate"><span class="pre">user:</span></code>/<code class="docutils literal notranslate"><span class="pre">channel:</span></code>.</p>
 <p>denver expects one directory per recipe, laid out as <strong><code class="docutils literal notranslate"><span class="pre">&lt;name&gt;/&lt;version&gt;/</span></code></strong>. That
 layout is what names the reference, so <code class="docutils literal notranslate"><span class="pre">conan/recipes/cmake/3.31.9/</span></code> becomes
 <code class="docutils literal notranslate"><span class="pre">cmake/3.31.9</span></code>:</p>
-<p>Let’s create the conan recipes:</p>
+<p>Let’s create the conan recipe:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>conan/recipes/
-├── cmake/3.31.9/{conanfile.py,conandata.yml}
-└── arm-none-eabi/15.3/{conanfile.py,conandata.yml}
+└── cmake/3.31.9/{conanfile.py,conandata.yml}
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">conanfile.py</span></code> is an ordinary conan recipe. Please refer to official conan documentation.
+<p><code class="docutils literal notranslate"><span class="pre">conanfile.py</span></code> is an ordinary conan recipe. Please refer to the official conan documentation.
 <code class="docutils literal notranslate"><span class="pre">conandata.yml</span></code> is used to store data — e.g. a url plus the checksum of each file used in the conan recipe.
 Its name and YAML format are Conan’s own, not denver’s — unlike <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> above, this one always
 stays <code class="docutils literal notranslate"><span class="pre">conandata.yml</span></code>.</p>
@@ -757,193 +744,129 @@ stays <code class="docutils literal notranslate"><span class="pre">conandata.yml
         <span class="k">pass</span>  <span class="c1"># build() already put the unpacked release where it belongs</span>
 </pre></div>
 </div>
-<p>Now check if it works:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>conan-packages<span class="w"> </span>--<span class="w"> </span>cmake<span class="w"> </span>--version
-denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--until<span class="w"> </span>conan-packages<span class="w"> </span>--<span class="w"> </span>arm-none-eabi-gcc<span class="w"> </span>--version
+<p>Now let’s use this conan package in <code class="docutils literal notranslate"><span class="pre">envs/firmware-env/conan/conanfile.py</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">conan</span><span class="w"> </span><span class="kn">import</span> <span class="n">ConanFile</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">FirmwareEnv</span><span class="p">(</span><span class="n">ConanFile</span><span class="p">):</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="s2">"firmware-env"</span>
+    <span class="n">version</span> <span class="o">=</span> <span class="s2">"1.0"</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">build_requirements</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tool_requires</span><span class="p">(</span><span class="s2">"cmake/3.31.9@denver/snapshot"</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>It is expected that both tools are present in their pinned versions.</p>
+<p><strong>Note</strong>: The <code class="docutils literal notranslate"><span class="pre">&#64;denver/snapshot</span></code> half is the user/channel denver’s recipes-exporter
+stamps onto every recipe it exports. It is the default of <code class="docutils literal notranslate"><span class="pre">user:</span></code>/<code class="docutils literal notranslate"><span class="pre">channel:</span></code>.</p>
+<p>Now check that it works, by running <code class="docutils literal notranslate"><span class="pre">cmake</span> <span class="pre">--version</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--until<span class="w"> </span>conan-packages<span class="w"> </span>--<span class="w"> </span>cmake<span class="w"> </span>--version
+</pre></div>
+</div>
+<p>It is expected that the tool is present in its pinned version.</p>
+</section>
+<section id="keeping-conan-s-cache">
+<h3>Keeping conan’s cache<a class="headerlink" href="#keeping-conan-s-cache" title="Link to this heading"></a></h3>
+<p>conan’s own cache lives wherever <code class="docutils literal notranslate"><span class="pre">$CONAN_HOME</span></code> points, downloaded archives
+included — worth keeping around rather than losing it every time the <code class="docutils literal notranslate"><span class="pre">--rm</span></code>
+container is thrown away and both toolchains get re-downloaded from
+scratch. <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>’s top-level <code class="docutils literal notranslate"><span class="pre">[env]</span></code> table (more on it in the next
+step) is the simplest way to pin it:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[env]</span>
+<span class="n">CONAN_HOME</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"${DENVER_ENV_DIR}/.conan2"</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_DIR}</span></code> — one of denver’s own built-ins, see
+<a class="reference internal" href="../configuration/denver-toml.html#variable-interpolation"><span class="std std-ref">Configuration</span></a> —
+keeps the cache inside this env’s own directory rather than somewhere
+shared. Since that directory is already bind-mounted into the container
+(Step 2), the conan cache persists too, with no extra mount needed.</p>
 </section>
 <section id="by-hand-or-via-conan">
 <h3>By hand or via conan?<a class="headerlink" href="#by-hand-or-via-conan" title="Link to this heading"></a></h3>
-<p>Both stages solved the same sentence — “this exact prebuilt tool, on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>” —
-so it is worth naming what actually differs:</p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p></p></th>
-<th class="head"><p><code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> (<code class="docutils literal notranslate"><span class="pre">custom</span></code>)</p></th>
-<th class="head"><p><code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> (<code class="docutils literal notranslate"><span class="pre">conan</span></code>)</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p>What you write per tool</p></td>
-<td><p>~20 lines of bash</p></td>
-<td><p>a <code class="docutils literal notranslate"><span class="pre">conandata.yml</span></code> (url + checksum) and a small recipe</p></td>
-</tr>
-<tr class="row-odd"><td><p>Download, checksum, unpack</p></td>
-<td><p>your script’s job</p></td>
-<td><p>conan’s</p></td>
-</tr>
-<tr class="row-even"><td><p>“already installed” shortcut</p></td>
-<td><p>your <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">[</span> <span class="pre">-x</span> <span class="pre">...</span> <span class="pre">]</span></code></p></td>
-<td><p>conan’s cache, keyed by reference</p></td>
-</tr>
-<tr class="row-odd"><td><p>Cache shared between envs/checkouts</p></td>
-<td><p>no — one copy per env</p></td>
-<td><p>yes, one <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span></code></p></td>
-</tr>
-<tr class="row-even"><td><p>Dependencies between tools</p></td>
-<td><p>none possible</p></td>
-<td><p>conan resolves them</p></td>
-</tr>
-<tr class="row-odd"><td><p>Needs <code class="docutils literal notranslate"><span class="pre">conan</span></code> on <code class="docutils literal notranslate"><span class="pre">PATH</span></code> first</p></td>
-<td><p>no</p></td>
-<td><p>yes (hence the <code class="docutils literal notranslate"><span class="pre">uv</span></code> stage before it)</p></td>
-</tr>
-</tbody>
-</table>
-<p>Rules of thumb:</p>
-<ul class="simple">
-<li><p><strong>One tool, one archive, nothing depends on it</strong> → by hand is honest and
-has no moving parts. <code class="docutils literal notranslate"><span class="pre">curl</span> <span class="pre">|</span> <span class="pre">sha256sum</span> <span class="pre">-c</span> <span class="pre">|</span> <span class="pre">tar</span></code> is not a thing worth a
-package manager.</p></li>
-<li><p><strong>Several tools, or one you keep re-pinning, or several environments
-wanting the same 800 MB toolchain</strong> → conan. The per-tool cost drops to a
-url and a checksum, and the second environment on the machine pays nothing.</p></li>
-</ul>
-<p>The example keeps both on purpose: <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> is the escape hatch you
-will need eventually for the tool nobody packaged, and it is also the
-clearest description of what the conan stage next to it is doing for you.</p>
+<p>Both stages solved the same sentence — “this exact prebuilt tool, on
+<code class="docutils literal notranslate"><span class="pre">PATH</span></code>” — just with a different amount of code. Rule of thumb: by hand for
+a single archive nothing else depends on; conan once you have several
+tools, want the cache shared across environments, or need one tool to
+depend on another.</p>
 </section>
 </section>
 <section id="step-6-the-best-practices-stage">
 <h2>Step 6 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage<a class="headerlink" href="#step-6-the-best-practices-stage" title="Link to this heading"></a></h2>
-<p>The last line of the use case is solved with a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage again — the
-second one in this environment, and this time with no <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> at all, since
-there is nothing to install.</p>
-<p><code class="docutils literal notranslate"><span class="pre">envs/howto-env/best-practices.sh</span></code>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
-<span class="nb">export</span><span class="w"> </span><span class="nv">PYTEST_ADDOPTS</span><span class="o">=</span><span class="s2">"-v -s"</span>
-</pre></div>
-</div>
+<p>The last line of the use case — applying the team’s best practice — is
+solved with a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage again. This time with no <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>, only
+<code class="docutils literal notranslate"><span class="pre">source:</span></code>, since nothing has to run, only environment variables are set.</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[best-practices]</span>
 <span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"custom"</span>
 <span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"best-practices.sh"</span>
 </pre></div>
 </div>
-<p>The key is <code class="docutils literal notranslate"><span class="pre">source:</span></code>, not <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>, as the script shall be sourced so that the export of environment variables persists for subsequent commands.</p>
-<p><strong>Note</strong>: For a plain constant, by the way, a whole stage is more than you need. Actually you could also do this via docker environment variables (<code class="docutils literal notranslate"><span class="pre">create-env.sh</span></code> or <code class="docutils literal notranslate"><span class="pre">env:</span></code> in <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code>):</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[env]</span>
-<span class="n">PYTEST_ADDOPTS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"-v -s"</span><span class="w">    </span><span class="c1"># top-level, applied once, before any stage</span>
+<p>This is the sourced script <code class="docutils literal notranslate"><span class="pre">envs/firmware-env/best-practices.sh</span></code>:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">PYTEST_ADDOPTS</span><span class="o">=</span><span class="s2">"-v -s"</span>
 </pre></div>
 </div>
-<p>A <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage earns its place as soon as the script is reused (e.g. reused in other environments), or if actual shell logic is necessary
-— e.g. in case of conditional settings (<code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">...;</span> <span class="pre">then</span> <span class="pre">...;</span> <span class="pre">fi</span></code>) or dynamic path computations.</p>
+<p>The key is <code class="docutils literal notranslate"><span class="pre">source:</span></code>, not <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> — sourcing is what makes the exported variable survive into later commands.</p>
+<p><strong>Note</strong>: For a plain constant, by the way, a whole stage is more than you
+need — alternatively the <code class="docutils literal notranslate"><span class="pre">[env]</span></code> table (already used for <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span></code> in Step 5)
+would work as well:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[env]</span>
+<span class="n">PYTEST_ADDOPTS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"-v -s"</span>
+</pre></div>
+</div>
+<p>A <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage earns its place as soon as shell logic is necessary — e.g. in case of
+conditions (<code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">...;</span> <span class="pre">then</span> <span class="pre">...;</span> <span class="pre">fi</span></code>) or if paths are computed dynamically.</p>
 </section>
-<section id="step-7-what-actually-starts">
-<h2>Step 7 — what actually starts<a class="headerlink" href="#step-7-what-actually-starts" title="Link to this heading"></a></h2>
-<p>Everything so far <em>builds</em> the environment. The last line of the use case —
-“finally you should be able to run <code class="docutils literal notranslate"><span class="pre">pytest</span></code>” — is about <em>using</em> it, and that
-is one top-level key:</p>
+<section id="step-7-the-default-command">
+<h2>Step 7 — the default command<a class="headerlink" href="#step-7-the-default-command" title="Link to this heading"></a></h2>
+<p>Everything so far <em>builds</em> the environment. But when we run denver, we
+usually want a specific command by default — here, an interactive shell:</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">command</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"bash"</span>
 </pre></div>
 </div>
-<p>Command resolution, first hit wins:</p>
-<ol class="arabic simple">
-<li><p>whatever follows <code class="docutils literal notranslate"><span class="pre">--</span></code> on the command line</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">command:</span></code></p></li>
-<li><p>the docker stage’s <code class="docutils literal notranslate"><span class="pre">default-cmd:</span></code></p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">$SHELL</span></code>, then <code class="docutils literal notranslate"><span class="pre">bash</span></code></p></li>
-</ol>
-<p><code class="docutils literal notranslate"><span class="pre">command:</span> <span class="pre">bash</span></code> drops you into a shell with everything set up, and <code class="docutils literal notranslate"><span class="pre">pytest</span></code>
-is then just something you type. Setting <code class="docutils literal notranslate"><span class="pre">command:</span> <span class="pre">pytest</span></code> instead would make
-<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/howto-env</span></code> <em>run the tests</em> and exit — a good choice for an
-environment whose whole job is one command (a CI env, a linter env), and
-<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/howto-env</span> <span class="pre">--</span> <span class="pre">bash</span></code> still gets you the shell.</p>
+<p>This is only the <em>default</em>. <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/firmware-env</span> <span class="pre">--</span> <span class="pre">&lt;command&gt;</span></code> always
+runs <code class="docutils literal notranslate"><span class="pre">&lt;command&gt;</span></code> instead. With no <code class="docutils literal notranslate"><span class="pre">--</span> <span class="pre">&lt;command&gt;</span></code> given, denver drops you
+into a shell with everything set up, and you can invoke <code class="docutils literal notranslate"><span class="pre">pytest</span></code> or <code class="docutils literal notranslate"><span class="pre">cmake</span></code>
+yourself.</p>
 </section>
 <section id="the-finished-denver-toml">
 <h2>The finished <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code><a class="headerlink" href="#the-finished-denver-toml" title="Link to this heading"></a></h2>
-<p>See <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env"><code class="docutils literal notranslate"><span class="pre">examples/howto-env</span></code></a> for all of this as a
+<p>See <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env"><code class="docutils literal notranslate"><span class="pre">examples/firmware-env</span></code></a> for all of this as a
 real, runnable environment: every file below, complete and working, ready to
-be started with <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">examples/howto-env</span></code>.</p>
+be started with <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">examples/firmware-env</span></code>.</p>
 <p>The many manual steps a new colleague used to be told about are now:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>examples/firmware-env
 </pre></div>
 </div>
 </section>
 <section id="prove-it-rather-than-hope">
 <h2>Prove it, rather than hope<a class="headerlink" href="#prove-it-rather-than-hope" title="Link to this heading"></a></h2>
 <p>A worthwhile habit for an environment like this: let it carry a test that
-checks what each stage promised. <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/howto-env/tests"><code class="docutils literal notranslate"><span class="pre">examples/howto-env/tests/</span></code></a>
-does exactly that — one assertion per stage:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_docker_stage_gave_us_ubuntu_24_04</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="s2">"Ubuntu 24.04"</span> <span class="ow">in</span> <span class="n">platform</span><span class="o">.</span><span class="n">freedesktop_os_release</span><span class="p">()[</span><span class="s2">"PRETTY_NAME"</span><span class="p">]</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">test_uv_stage_gave_us_python_3_12_and_pytest</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">12</span><span class="p">)</span>
-    <span class="k">assert</span> <span class="n">pytest</span><span class="o">.</span><span class="n">__version__</span> <span class="o">==</span> <span class="s2">"9.1.1"</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">test_custom_stage_put_the_hand_installed_nvim_on_path</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="s2">"NVIM v0.12.4"</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">"nvim"</span><span class="p">,</span> <span class="s2">"--version"</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">test_conan_stage_gave_us_the_pinned_tool_versions</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="s2">"3.31.9"</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">"cmake"</span><span class="p">,</span> <span class="s2">"--version"</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
-    <span class="k">assert</span> <span class="s2">"15.3"</span> <span class="ow">in</span> <span class="n">run</span><span class="p">([</span><span class="s2">"arm-none-eabi-gcc"</span><span class="p">,</span> <span class="s2">"--version"</span><span class="p">],</span> <span class="n">capture_output</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">text</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">stdout</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">test_custom_stage_exported_the_team_convention</span><span class="p">():</span>
-    <span class="k">assert</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">"PYTEST_ADDOPTS"</span><span class="p">]</span> <span class="o">==</span> <span class="s2">"-v -s"</span>
+checks what each stage promised. <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env/tests"><code class="docutils literal notranslate"><span class="pre">examples/firmware-env/tests/</span></code></a>
+does exactly that.</p>
+<p>So let’s run those tests:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>examples/firmware-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/firmware-env/tests
 </pre></div>
 </div>
-<div class="highlight-console notranslate"><div class="highlight"><pre><span></span><span class="gp">$ </span>denver<span class="w"> </span>run<span class="w"> </span>examples/howto-env<span class="w"> </span>-q<span class="w"> </span>--<span class="w"> </span>pytest<span class="w"> </span>examples/howto-env/tests
-
-<span class="go">test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED</span>
-<span class="go">test_environment.py::test_docker_stage_installed_the_apt_packages PASSED</span>
-<span class="go">test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED</span>
-<span class="go">test_environment.py::test_custom_stage_put_the_hand_installed_nvim_on_path PASSED</span>
-<span class="go">test_environment.py::test_conan_stage_gave_us_the_pinned_tool_versions PASSED</span>
-<span class="go">test_environment.py::test_custom_stage_exported_the_team_convention PASSED</span>
-</pre></div>
-</div>
+<p>All of them should pass — a green run means the environment was really
+<em>built</em>, not just configured.</p>
 </section>
 <section id="everyday-use">
 <h2>Everyday use<a class="headerlink" href="#everyday-use" title="Link to this heading"></a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--scripts<span class="w"> </span>setup<span class="w">            </span><span class="c1"># one-time initial host setup, then never again</span>
-denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w">                            </span><span class="c1"># open interactive bash in the environment (bash is configured as command:)</span>
-denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--<span class="w"> </span>pytest<span class="w">                  </span><span class="c1"># run one command instead of interactive shell</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w">                            </span><span class="c1"># open interactive bash in the environment (bash is configured as command:)</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--<span class="w"> </span>nvim<span class="w">                    </span><span class="c1"># open nvim editor in the environment</span>
 
-denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--fast<span class="w">                     </span><span class="c1"># activate what is already built; run no build step</span>
-denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--force<span class="w">                    </span><span class="c1"># ignore every "nothing changed" shortcut</span>
-denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>--skip<span class="w"> </span>docker-base<span class="w">          </span><span class="c1"># same stack, directly on the host</span>
-denver<span class="w"> </span>run<span class="w"> </span>envs/howto-env<span class="w"> </span>-c<span class="w"> </span>uv-packages.python<span class="o">=</span><span class="m">3</span>.13<span class="w">  </span><span class="c1"># override one value, this run</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--fast<span class="w">                     </span><span class="c1"># activate what is already built; run no build step</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--force<span class="w">                    </span><span class="c1"># ignore every "nothing changed" shortcut</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--skip<span class="w"> </span>docker-base<span class="w">          </span><span class="c1"># same stack, directly on the host</span>
+denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>-c<span class="w"> </span>uv-packages.python<span class="o">=</span><span class="m">3</span>.13<span class="w">  </span><span class="c1"># override one specific config value (for this run)</span>
 </pre></div>
 </div>
-<p>Tip: <code class="docutils literal notranslate"><span class="pre">eval</span> <span class="pre">&quot;$(denver</span> <span class="pre">complete)&quot;</span></code> in your shell rc file tab-completes all of
-the above — subcommands, <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> paths, flags, <code class="docutils literal notranslate"><span class="pre">--until</span></code>/<code class="docutils literal notranslate"><span class="pre">--skip</span></code>’s stage
-ids and <code class="docutils literal notranslate"><span class="pre">--scripts</span></code>’ names — see <a class="reference internal" href="../cli/completion.html"><span class="std std-doc">Shell completion</span></a>.</p>
-<p>The first run is the slow one. After that, each stage fingerprints its own
-inputs — the requirement files, the recipe contents — and skips its expensive
-step when nothing relevant changed, so a repeat run costs seconds. <code class="docutils literal notranslate"><span class="pre">--force</span></code>
-is how you bypass that; <code class="docutils literal notranslate"><span class="pre">--fast</span></code> is the other extreme, skipping the build step
-without even checking, which needs one full run to have happened first. A
-<code class="docutils literal notranslate"><span class="pre">custom</span></code> stage is the exception on both counts: denver has no idea what an
-arbitrary command changes, so <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> re-runs <code class="docutils literal notranslate"><span class="pre">install.sh</span></code> every time
-(which is why that script checks for itself and exits) and under <code class="docutils literal notranslate"><span class="pre">--fast</span></code> its
-<code class="docutils literal notranslate"><span class="pre">cmd:</span></code> is skipped entirely, while its <code class="docutils literal notranslate"><span class="pre">source:</span></code> still runs — the <code class="docutils literal notranslate"><span class="pre">PATH</span></code> entry
-is not a build step.</p>
 <p><strong>Note on <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">docker-base</span></code></strong>: worth trying at least once — it builds
 the very same stack directly on the host instead of in the container, so “does
 this work without Docker?” is one flag away rather than a separate code path.
-Whatever the container was providing must then exist on the host itself: for
-this env that is <code class="docutils literal notranslate"><span class="pre">uv</span></code> (the uv stage), <code class="docutils literal notranslate"><span class="pre">curl</span></code> (the <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> stage’s
-<code class="docutils literal notranslate"><span class="pre">install.sh</span></code>; <code class="docutils literal notranslate"><span class="pre">tar</span></code> and <code class="docutils literal notranslate"><span class="pre">sha256sum</span></code> it also uses are on every Linux host) and
-<code class="docutils literal notranslate"><span class="pre">git</span></code> (the conan stage’s recipe exporter). <code class="docutils literal notranslate"><span class="pre">conan</span></code> is <em>not</em> one of them — it arrives through the uv stage’s
-venv on the host exactly as it does in the container. Note also that
-<code class="docutils literal notranslate"><span class="pre">create-env.sh</span></code> never runs on this path, so <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span></code> is unset and conan
-falls back to <code class="docutils literal notranslate"><span class="pre">~/.conan2</span></code> rather than the env’s own cache.</p>
+Whatever the container was providing must then exist on the host itself —
+for this env that’s <code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">curl</span></code>, and a C toolchain (<code class="docutils literal notranslate"><span class="pre">gcc</span></code>,
+<code class="docutils literal notranslate"><span class="pre">libc6-dev</span></code>, <code class="docutils literal notranslate"><span class="pre">make</span></code>).</p>
 <blockquote>
 <div><p><strong>Note</strong></p>
 <p><strong>Next:</strong> <a class="reference internal" href="examples.html"><span class="std std-doc">Examples</span></a> — the other bundled environments, from a
@@ -961,7 +884,7 @@ closest to your own project and start from it.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="five-minutes.html" class="btn btn-neutral float-left" title="denver in 5 minutes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="05-minutes.html" class="btn btn-neutral float-left" title="denver in 5 minutes" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="examples.html" class="btn btn-neutral float-right" title="Examples" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
