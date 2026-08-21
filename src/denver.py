@@ -4097,13 +4097,22 @@ def _detect_shell():
     grandparent past a frozen build's PyInstaller bootloader hop (see
     _parent_process_name). Falls back to $SHELL, then to "bash", if no ancestor
     can be identified at all or none is recognised as one of bash/zsh/fish
-    (e.g. it's a script, or wrapped by tmux/su/... with an unrelated process
-    in between) -- never raises. An explicit `denver complete <shell>` bypasses
+    (e.g. it's a script, or wrapped by tmux/su/uv run/... with an unrelated
+    process in between -- that wrapper's own name is still truthy, so $SHELL
+    has to be tried explicitly rather than only when there's no ancestor name
+    at all) -- never raises. An explicit `denver complete <shell>` bypasses
     this outright.
     """
-    name = _parent_process_name() or os.environ.get("SHELL", "")
-    name = Path(name).name.lstrip("-")  # login shells prefix their name, e.g. "-zsh"
+    name = _normalised_shell_name(_parent_process_name())
+    if name in _COMPLETION_SHELLS:
+        return name
+    name = _normalised_shell_name(os.environ.get("SHELL", ""))
     return name if name in _COMPLETION_SHELLS else "bash"
+
+
+def _normalised_shell_name(name):
+    """``name`` (a process name or $SHELL value, possibly None) as a bare shell name. See _detect_shell."""
+    return Path(name or "").name.lstrip("-")  # login shells prefix their name, e.g. "-zsh"
 
 
 def _own_process_names():
@@ -4114,6 +4123,14 @@ def _own_process_names():
     return names
 
 
+# Launchers that run denver as a child without themselves being the invoking shell -- e.g.
+# README's own recommended dev-checkout alias, `alias denver="uv run $PWD/src/denver.py"`,
+# whose immediate parent is "uv" itself, not the shell the alias was typed into. Walked past
+# just like a frozen build's own bootloader hop (see _parent_process_name), so the real shell
+# underneath is found instead of stopping one hop too early.
+_NON_SHELL_LAUNCHER_NAMES = {"uv", "uvx"}
+
+
 def _parent_process_name():
     """The nearest ancestor process's command name that isn't this program itself, or None. See _detect_shell.
 
@@ -4121,17 +4138,18 @@ def _parent_process_name():
     to run the actual interpreter in -- that child's immediate parent is the
     bootloader itself, whose command name is this same program's, never the
     shell that invoked it. Walking past ancestors that match one of
-    _own_process_names' names skips that hop so the shell underneath is
-    found instead. Bounded to a handful of hops so a pathological /proc (or
-    ``ps``) can never spin forever.
+    _own_process_names' names, or one of _NON_SHELL_LAUNCHER_NAMES (e.g. a
+    `uv run` wrapper), skips that hop so the shell underneath is found
+    instead. Bounded to a handful of hops so a pathological /proc (or ``ps``)
+    can never spin forever.
     """
     pid = _own_ppid()
-    own_names = _own_process_names()
+    skip_names = _own_process_names() | _NON_SHELL_LAUNCHER_NAMES
     for _ in range(5):
         if pid is None:
             return None
         name = _process_name(pid)
-        if name not in own_names:  # also covers name is None -- never a member of own_names
+        if name not in skip_names:  # also covers name is None -- never a member of skip_names
             return name
         pid = _parent_pid(pid)
     return None
