@@ -1,6 +1,6 @@
 # denver
 
-![denver logo](../src/denver_assets/logo.svg)
+<img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="denver logo" width="500"/>
 
 Development Environments as code — reproducible, flexible, simple and fast.
 
@@ -9,22 +9,20 @@ Development Environments as code — reproducible, flexible, simple and fast.
 > This documentation is also published as **plain Markdown**, one file per page
 > mirroring this exact page tree — meant for AI tools/LLMs to ingest directly,
 > without having to scrape rendered HTML. Start at
-> <a href="markdown/index.md">markdown/index.md</a>; every page below has a
-> twin under <code>markdown/</code> at the same path. See <code>doc/conf.py</code>
-> and <code>examples/doc-env/denver.toml</code> for how it's built.
+> <a href="markdown/index.md">markdown/index.md</a>
 
-## New to denver? Read in this order
+## New to denver?
 
-The pages below are written to be read front to back — each one picks up
-where the last left off.
+It is recommended to read the following documentation first
+
 
 | # | Page | What you get out of it |
 |---|---|---|
 | 1 | [What problem denver solves](introduction/index.md) | Why a `denver.toml` beats a `setup.sh`, built up one step at a time |
 | 2 | [What is a denver environment?](introduction/index.md#what-is-a-denver-environment) | The model: environments, stages, providers |
 | 3 | [Install denver](introduction/install.md) | Getting the `denver` command onto your machine |
-| 4 | [denver in 5 minutes](quickstart/five-minutes.md) | Run the smallest possible environment end to end and watch it work |
-| 5 | [denver in 15 minutes](quickstart/creating-environments.md) | Build a bigger, more realistic environment yourself, from an empty folder |
+| 4 | [denver in 5 minutes](quickstart/05-minutes.md) | Run the smallest possible environment end to end and watch it work |
+| 5 | [denver in 30 minutes](quickstart/30-minutes.md) | Build a bigger, more realistic environment yourself, from an empty folder |
 
 After that, the rest is reference you dip into as needed: the
 [`denver` command](cli/arguments.md), the
@@ -55,8 +53,8 @@ reference material.
 :caption: Quickstart
 :hidden:
 
-quickstart/five-minutes
-quickstart/creating-environments
+quickstart/05-minutes
+quickstart/30-minutes
 quickstart/examples
 ```
 

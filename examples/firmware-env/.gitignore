@@ -3,3 +3,6 @@
 
 # conan's cache (CONAN_HOME in denver.toml): downloaded packages, not sources
 .conan2/
+
+# the hello-world cmake project's build output
+hello-world/build/

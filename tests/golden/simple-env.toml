@@ -23,9 +23,7 @@ disabled = false
 skip-on-success = []
 skip-on-failure = []
 # scripts = null
-cmd = '''
-echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
-'''
+cmd = "echo \"[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR\""
 # launcher = null
 # source = null
 
@@ -36,9 +34,7 @@ disabled = false
 skip-on-success = []
 skip-on-failure = []
 # scripts = null
-cmd = '''
-echo "[set-vars] sourcing custom.sh..."
-'''
+cmd = "echo \"[set-vars] sourcing custom.sh...\""
 # launcher = null
 source = "custom.sh"
 
@@ -49,9 +45,7 @@ disabled = false
 skip-on-success = []
 skip-on-failure = []
 # scripts = null
-cmd = '''
-echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
-'''
+cmd = "echo \"[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR\""
 # launcher = null
 # source = null
 

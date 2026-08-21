@@ -22,19 +22,13 @@ stages = [
 
 [print-vars-before]
 provider = "custom"
-cmd = '''
-echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
-'''
+cmd = 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
 
 [set-vars]
 provider = "custom"
-cmd = '''
-echo "[set-vars] sourcing custom.sh..."
-'''
+cmd = 'echo "[set-vars] sourcing custom.sh..."'
 source = "custom.sh"
 
 [print-vars-after]
 provider = "custom"
-cmd = '''
-echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"
-'''
+cmd = 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'

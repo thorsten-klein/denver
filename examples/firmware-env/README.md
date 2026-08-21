@@ -1,7 +1,7 @@
-# examples/howto-env
+# examples/firmware-env
 
 **The environment built step by step in
-[`doc/quickstart/creating-environments.md`](../../doc/quickstart/creating-environments.md) — five stages over the four providers
+[`doc/quickstart/30-minutes.md`](../../doc/quickstart/30-minutes.md) — five stages over the four providers
 how-to uses.** Read the how-to for the reasoning; this folder is the result,
 runnable.
 
@@ -9,22 +9,24 @@ runnable.
 
 It turns this onboarding note:
 
-> Use Ubuntu 24.04, as our CI does. `apt install jq net-tools curl`. Grab the
+> Use Ubuntu 24.04, as our CI does. `apt install gcc curl`. Grab the
 > prebuilt `neovim` 0.12.4 tarball from GitHub and put it on `PATH`. Download
-> `cmake` 3.31.9 and the ARM toolchain 15.3 — exactly those versions. Install
+> `cmake` 3.31.9 — exactly that version. Install
 > `uv`, create a python 3.12 virtualenv, install `pytest==9.1.1`. Export
-> `PYTEST_ADDOPTS="-v -s"`, our team convention. Then you can run `pytest`.
+> `PYTEST_ADDOPTS="-v -s"`, our team convention. Then you can run `pytest` and
+> compile the `hello-world` cmake project.
 
 into one command:
 
 ```console
-$ denver run examples/howto-env -- pytest examples/howto-env/tests
+$ denver run examples/firmware-env -- pytest examples/firmware-env/tests
 test_environment.py::test_docker_stage_gave_us_ubuntu_24_04 PASSED
 test_environment.py::test_docker_stage_installed_the_apt_packages PASSED
 test_environment.py::test_uv_stage_gave_us_python_3_12_and_pytest PASSED
 test_environment.py::test_custom_stage_put_the_hand_installed_nvim_on_path PASSED
-test_environment.py::test_conan_stage_gave_us_the_pinned_tool_versions PASSED
+test_environment.py::test_conan_stage_gave_us_the_pinned_tool_version PASSED
 test_environment.py::test_custom_stage_exported_the_team_convention PASSED
+test_environment.py::test_we_can_compile_and_run_the_hello_world_cmake_project PASSED
 ```
 
 Five stages, each named after the problem it solves rather than after its
@@ -35,7 +37,7 @@ provider:
 | `docker-base` | `docker` | relocates everything below into an Ubuntu 24.04 container |
 | `uv-packages` | `uv` | the python 3.12 venv: `pytest` (and `conan`, for the next stage) |
 | `nvim-setup` | `custom` | downloads, checksums and unpacks one prebuilt release, by hand |
-| `conan-packages` | `conan` | downloads `cmake` 3.31.9 and `arm-none-eabi` 15.3, exactly |
+| `conan-packages` | `conan` | downloads `cmake` 3.31.9, exactly |
 | `best-practices` | `custom` | exports `PYTEST_ADDOPTS`, sourced so it survives |
 
 The middle two are deliberately the same job twice — "this exact prebuilt
@@ -83,7 +85,7 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
 | `denver.toml` | the whole env: five stages |
 | `docker-compose.yml`, `container/Dockerfile` | the container the pipeline is relocated into |
 | `.devcontainer/` | opens this same container in VS Code -- reuses `docker-compose.yml`, runs `create-env.sh` via `initializeCommand`, then `denver run . --skip docker-base --export-env /tmp/denver.env` via `onCreateCommand` to bring up the remaining stages and hand the built env to every terminal VS Code opens afterwards |
-| `create-env.sh` | `hooks: pre-docker-base:` — writes the compose `.env` (host UID/GID/HOME) |
+| `create-env.sh` | `hooks: pre-docker-base:` — writes the compose `.env` (host UID/GID, and a container-only `$HOME` folder it creates) |
 | `setup/install_host_tools.sh` | `scripts: setup:` — one-time host bootstrap, run via `--scripts setup` |
 | `requirements.txt` | the venv's packages (`pytest`, plus `conan` for the next stage) |
 | `nvim/nvim.env` | the pin — version, url, sha256, install prefix — shared by the two scripts below |
@@ -92,23 +94,36 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
 | `conan/conanfile.py` | which tools, in which versions |
 | `conan/recipes/<name>/<version>/` | one recipe each: `conanfile.py` + the pinned url/md5 in `conandata.yml` |
 | `best-practices.sh` | the `source:`d script exporting `PYTEST_ADDOPTS` |
+| `hello-world/` | an ordinary CMake project — nothing denver-specific, just something to compile with the `gcc` and `cmake` the pipeline put on `PATH` |
 | `tests/` | the per-stage assertions above |
 
 ## Notes
 
-- `create-env.sh` points `CONAN_HOME` at `.conan2/` in this folder and writes
-  it into `.env`; the compose file mounts that same path into the container.
-  Without it the cache would live inside a `--rm` container and both
-  toolchains would be re-downloaded on every run — the difference between
-  2m57s and 2.3s on the second run. Both `.conan2/` and the generated `.env`
-  are `.gitignore`d.
+- **The container never sees your real `$HOME`.** Only two things are
+  mounted in: this env's own directory (`${DENVER_ENV_DIR}`, so paths inside
+  and outside the container match) and denver's own source
+  (`${DENVER_SRC_DIR}`, so the docker provider can re-invoke it once
+  relocated). The container's non-root user still needs a home of its own
+  (bash history, ...), so `create-env.sh` creates one —
+  `.denver/container-home/` — and `docker-compose.yml` mounts and sets
+  `$HOME` to it. Created ahead of time rather than left to docker: a
+  bind-mount source that doesn't exist yet is created by docker as root,
+  which the non-root container user could then not write to.
+- `denver.toml`'s `[env]` table points `CONAN_HOME` at `.conan2/` in this
+  folder, forwarded into the container as `${CONAN_HOME}` — no separate
+  mount needed, since it already lives inside `${DENVER_ENV_DIR}`. Without
+  it the cache would live inside a `--rm` container and both toolchains
+  would be re-downloaded on every run — the difference between 2m57s and
+  2.3s on the second run. Both `.conan2/` and the generated `.env` are
+  `.gitignore`d.
 - `nvim` is unpacked into `${DENVER_ENV_WORKDIR}/nvim/<version>/`, i.e.
   `.denver/denver/` in this folder — denver's own state dir for this env,
-  which already ignores itself in git. Per env rather than shared (that is
-  what `.conan2/` above is for), inside the env dir so it survives the `--rm`
-  container, and version-keyed so bumping `NVIM_VERSION` in `nvim/nvim.env`
-  installs beside the old release rather than on top of it. `rm -rf .denver/`
-  is the uninstall.
+  which already ignores itself in git (the same rule that covers
+  `create-env.sh`'s `.denver/container-home/` above). Per env rather than
+  shared (that is what `.conan2/` above is for), inside the env dir so it
+  survives the `--rm` container, and version-keyed so bumping
+  `NVIM_VERSION` in `nvim/nvim.env` installs beside the old release rather
+  than on top of it. `rm -rf .denver/` is the uninstall.
 - `onCreateCommand` runs once, in a subprocess whose own exports die with it --
   a fresh VS Code terminal started afterwards would otherwise see none of the
   env denver just built. `--export-env /tmp/denver.env` writes it out as
@@ -123,7 +138,7 @@ The pin they share lives in `nvim/nvim.env`, so the two can never disagree.
 
 ## Next
 
-- [`doc/quickstart/creating-environments.md`](../../doc/quickstart/creating-environments.md) — the step-by-step build-up of this
+- [`doc/quickstart/30-minutes.md`](../../doc/quickstart/30-minutes.md) — the step-by-step build-up of this
   env, and why each key is there
 - [`../simple-env`](../simple-env) — smaller still: three `custom` stages
 - [`../zephyr-devshell-4.3.1`](../zephyr-devshell-4.3.1) — the opposite end:

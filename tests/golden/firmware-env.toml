@@ -9,6 +9,9 @@ stages = [
   "best-practices",
 ]
 
+[env]
+CONAN_HOME = "${DENVER_ENV_DIR}/.conan2"
+
 [hooks]
 # env = null
 # post-best-practices = null
@@ -20,7 +23,7 @@ stages = [
 # pre-cmd = null
 # pre-conan-packages = null
 pre-docker-base = [
-  "<REPO>/examples/howto-env/create-env.sh",
+  "<REPO>/examples/firmware-env/create-env.sh",
 ]
 # pre-nvim-setup = null
 # pre-uv-packages = null
@@ -90,7 +93,7 @@ source = "nvim/activate.sh"
 [conan-packages]
 provider = "conan"
 description = [
-  "Downloads cmake and the ARM toolchain at exactly the pinned versions and puts them on PATH. One conanfile plus the recipes it installs. The same job as 'nvim-setup' above, minus the shell script -- conan owns the download, the checksum, the cache and the PATH.",
+  "Downloads cmake at exactly the pinned version and puts it on PATH. One conanfile plus the recipe it installs. The same job as 'nvim-setup' above, minus the shell script -- conan owns the download, the checksum, the cache and the PATH.",
 ]
 disabled = false
 skip-on-success = []
@@ -100,7 +103,7 @@ authentication = true
 base-classes = []
 build = "missing"
 channel = "snapshot"
-conanfile = "<REPO>/examples/howto-env/conan/conanfile.py"
+conanfile = "<REPO>/examples/firmware-env/conan/conanfile.py"
 # config = null
 deployers = [
   "<REPO>/src/denver_providers/conan_scripts/extensions/symlink.py",
@@ -118,7 +121,7 @@ host = []
 [[conan-packages.recipes]]
 catalog = ""
 dirs = [
-  "<REPO>/examples/howto-env/conan/recipes",
+  "<REPO>/examples/firmware-env/conan/recipes",
 ]
 export-tool = "<REPO>/src/denver_providers/conan_scripts/recipes.py"
 
