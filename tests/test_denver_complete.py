@@ -198,12 +198,16 @@ def test_fish_completion_function_defines_via_unquoted_eval():
     # Same hazard as bash/zsh above, but fish-specific in its failure mode: fish (unlike bash)
     # never treats a bare space as a statement separator, so without explicit ';'s the whole
     # script collapsing onto one line left a leading '#' comment free to swallow the entire
-    # line, comment included -- 'eval $(denver complete)' used to silently define nothing at
+    # line, comment included -- 'eval (denver complete)' used to silently define nothing at
     # all in fish, with no error, rather than raising the way bash/zsh's own hazard would have.
+    #
+    # Uses fish's own '(cmd)' substitution, not bash/zsh-style '$(cmd)' -- the latter is only
+    # valid from fish 3.4 on, and it's the unquoted word-splitting that's under test here, which
+    # '(cmd)' triggers identically on every fish version.
     if not shutil.which("fish"):
         pytest.skip("fish not installed")
     cmd = f"{shlex.quote(sys.executable)} {shlex.quote(denver.__file__)} complete fish"
-    script = f"eval $({cmd});\nfunctions -q __denver_complete; and echo DEFINED; or echo NOT_DEFINED\n"
+    script = f"eval ({cmd});\nfunctions -q __denver_complete; and echo DEFINED; or echo NOT_DEFINED\n"
     result = subprocess.run(["fish", "-c", script], capture_output=True, text=True)
     assert "DEFINED" in result.stdout.split(), result.stdout + result.stderr
     assert "NOT_DEFINED" not in result.stdout.split(), result.stdout + result.stderr
