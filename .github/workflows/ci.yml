@@ -55,6 +55,16 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
+      # the fish/zsh completion tests skip themselves (via shutil.which)
+      # when the shell isn't on PATH -- installing both here is what
+      # actually exercises them, rather than leaving them permanently
+      # skipped on every CI leg.
+      - name: Install fish and zsh (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fish zsh
+      - name: Install fish and zsh (macOS)
+        if: runner.os == 'macOS'
+        run: brew install fish zsh
       - run: uv sync --group dev --python ${{ matrix.python-version }}
       - run: uv run poe test
       # coverage/Sonar are properties of the code, not of the OS it ran
