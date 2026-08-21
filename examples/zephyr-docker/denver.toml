@@ -1,6 +1,6 @@
 version = 1.0
 # minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
-denver-version = ">=1.1.0"
+denver-version = ">=1.5.1"
 
 # Runs the command inside a docker compose service. The 'docker' provider
 # (src/denver_providers/docker.py) builds the image and runs the service.
