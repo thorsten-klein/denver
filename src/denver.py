@@ -3887,6 +3887,19 @@ def _completion_script_bash(quoted):
     # word-splitting on $raw does what real alias expansion's re-parse would
     # have: split it into a command plus its own arguments.
     #
+    # 'local -a args=("${COMP_WORDS[@]:1:COMP_CWORD}")' has to happen *before*
+    # IFS is ever touched below, not inlined into the same command substitution
+    # as the IFS=$'\n' change: bash 3.2 has a real bug where a double-quoted
+    # *sliced* array expansion ('${arr[@]:offset:length}', unlike a plain
+    # '${arr[@]}') stops treating each element as its own word once IFS no
+    # longer contains a space, silently IFS-joining the whole slice into ONE
+    # word instead ("run --show" instead of "run", "--show") -- verified
+    # against real bash 3.2 via Docker. __complete would then see one mangled
+    # argument and match nothing, exactly the empty-candidates failure this
+    # guards against. Building 'args' first, while IFS is still bash's own
+    # default, sidesteps the bug entirely; IFS is only ever changed afterward,
+    # for its real purpose -- splitting __complete's own output into COMPREPLY.
+    #
     # Every statement below ends in ';', and the closing '}' is followed by one
     # too, so the whole thing still parses if run as `eval $(denver complete)`
     # (unquoted): unquoted command substitution word-splits on IFS, which turns
@@ -3901,8 +3914,11 @@ def _completion_script_bash(quoted):
         ' local -a resolved=("$cmd");'
         " local aliased raw;"
         ' aliased=$(alias -- "$cmd" 2>/dev/null) && eval "raw=${aliased#*=}" && resolved=($raw);'
+        ' local -a args=("${COMP_WORDS[@]:1:COMP_CWORD}");'
+        " local out;"
+        ' out=$("${resolved[@]}" __complete "${args[@]}" 2>/dev/null);'
         " local IFS=$'\\n';"
-        ' COMPREPLY=($("${resolved[@]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null));'
+        " COMPREPLY=($out);"
         " };\n"
         f"complete -F _denver_complete -o default -o bashdefault {' '.join(quoted)};\n"
         '# denver bash completion -- wire up with: eval "$(denver complete)"\n'
