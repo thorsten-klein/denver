@@ -1,4 +1,4 @@
-"""The test `denver run examples/howto-env` runs by default.
+"""The test `denver run examples/firmware-env` runs by default.
 
 It asserts what each stage of the pipeline promised: the OS from the docker
 stage, the interpreter and packages from the uv stage, the hand-installed
@@ -20,7 +20,7 @@ def test_docker_stage_gave_us_ubuntu_24_04():
 
 
 def test_docker_stage_installed_the_apt_packages():
-    for tool in ("jq", "netstat", "curl"):
+    for tool in ("gcc", "make", "curl"):
         assert shutil.which(tool), f"{tool} is not on PATH"
 
 
@@ -42,16 +42,29 @@ def test_custom_stage_put_the_hand_installed_nvim_on_path():
     assert shutil.which("nvim") == str(workdir / "nvim" / "0.12.4" / "bin" / "nvim")
 
 
-def test_conan_stage_gave_us_the_pinned_tool_versions():
+def test_conan_stage_gave_us_the_pinned_tool_version():
     cmake = subprocess.run(["cmake", "--version"], capture_output=True, text=True, check=True)
     assert "3.31.9" in cmake.stdout
-
-    gcc = subprocess.run(["arm-none-eabi-gcc", "--version"], capture_output=True, text=True, check=True)
-    assert "15.3" in gcc.stdout
 
 
 def test_custom_stage_exported_the_team_convention():
     assert os.environ["PYTEST_ADDOPTS"] == "-v -s"
+
+
+def test_we_can_compile_and_run_the_hello_world_cmake_project():
+    """gcc from the docker stage's apt list, cmake from the conan stage."""
+    env_dir = Path(__file__).resolve().parent.parent
+    build_dir = env_dir / "hello-world" / "build"
+    subprocess.run(
+        ["cmake", "-S", str(env_dir / "hello-world"), "-B", str(build_dir)],
+        check=True,
+    )
+    subprocess.run(["cmake", "--build", str(build_dir)], check=True)
+
+    hello_world = subprocess.run(
+        [str(build_dir / "hello-world")], capture_output=True, text=True, check=True
+    )
+    assert hello_world.stdout == "Hello, world!\n"
 
 
 def test_conan_cache_is_the_one_mounted_from_the_host():

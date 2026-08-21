@@ -1,10 +1,10 @@
 {
-  "name": "howto-env",
+  "name": "firmware-env",
   "dockerComposeFile": "../docker-compose.yml",
   "service": "dev",
   "workspaceFolder": "${localWorkspaceFolder}",
   "initializeCommand": "${localWorkspaceFolder}/create-env.sh",
   "overrideCommand": true,
-  "onCreateCommand": "$DENVER_EXE run . --skip docker-base --export-env /tmp/denver.env -- true",
+  "onCreateCommand": "python3 $DENVER_SRC_DIR/denver.py run . --skip docker-base --export-env /tmp/denver.env -- true",
   "shutdownAction": "stopCompose"
 }

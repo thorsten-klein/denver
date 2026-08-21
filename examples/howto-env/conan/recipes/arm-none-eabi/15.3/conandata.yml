@@ -1,4 +1,0 @@
-sources:
-  arm-gnu-toolchain-15.3.rel1-x86_64-arm-none-eabi.tar.xz:
-    md5: bbe1e4bf65591692ed93cd19706c93af
-    url: https://gitlab.arm.com/api/v4/projects/tooling%2Fgnu-toolchains-for-arm/packages/generic/gnu-toolchain/15.3.rel1/arm-gnu-toolchain-15.3.rel1-x86_64-arm-none-eabi.tar.xz

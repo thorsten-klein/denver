@@ -101,7 +101,7 @@ Alpine are not covered. Build it yourself with
 `scripts/create-python-exe.sh` (or, from a dev checkout, `uv run poe
 pyinstaller`). Note this only replaces *denver's own* installation — the
 tools its providers drive (see
-[Pre-conditions](../quickstart/five-minutes.md#pre-conditions-for-a-real-project))
+[Pre-conditions](../quickstart/05-minutes.md#pre-conditions-for-a-real-project))
 still have to be there.
 
 ## Editable install
@@ -136,6 +136,6 @@ repository instead of cloned standalone.
 
 > **Note**
 >
-> **Next:** [denver in 5 minutes](../quickstart/five-minutes.md) — run a real
+> **Next:** [denver in 5 minutes](../quickstart/05-minutes.md) — run a real
 > environment end to end. It starts with the handful of host tools you need
 > first, which depends on which providers the environment uses.

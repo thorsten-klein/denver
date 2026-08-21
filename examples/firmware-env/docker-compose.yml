@@ -1,0 +1,47 @@
+services:
+  dev:
+    build:
+      context: container
+      dockerfile: Dockerfile
+
+    # HOST_UID/HOST_GID/CONTAINER_HOME come from .env, written by create-env.sh
+    user: ${HOST_UID:-1000}:${HOST_GID:-1000}
+
+    env_file:
+    - .env
+
+    # DENVER_ENV_DIR/DENVER_SRC_DIR/CONAN_HOME are exported by denver itself
+    # (the last one via this env's own [env] table) before build/run, so the
+    # final `pytest` starts in this env's own directory
+    working_dir: ${DENVER_ENV_DIR:-/tmp}
+
+    environment:
+    # a home of its own for the container's non-root user -- the real host
+    # $HOME is never mounted in, see the volumes below
+    - HOME=${CONTAINER_HOME}
+    - CONAN_HOME=${CONAN_HOME}
+    # so a shell in the container (e.g. .devcontainer's onCreateCommand) can
+    # re-invoke denver by name instead of hard-coding a path to it
+    - DENVER_SRC_DIR=${DENVER_SRC_DIR}
+    # trust the host's OS CA bundle for corporate TLS-interception proxies --
+    # Python's bundled certifi (used by requests/urllib3, hence conan) never
+    # includes a private root, only the OS trust store does
+    - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+    - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+    - CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+    volumes:
+    # this env's own directory, at the same path inside and out, so
+    # DENVER_ENV_DIR-relative absolute paths (the venv, the hand-installed
+    # nvim, conan's cache) match on both sides -- this also covers
+    # ${CONAN_HOME} above, since it lives inside this same directory
+    - ${DENVER_ENV_DIR}:${DENVER_ENV_DIR}
+    # denver's own source, so the docker provider can re-invoke it from
+    # inside the container it just relocated into
+    - ${DENVER_SRC_DIR}:${DENVER_SRC_DIR}
+    # the container-only home created by create-env.sh (see its own comment
+    # for why it has to exist before this mount, not after)
+    - ${CONTAINER_HOME}:${CONTAINER_HOME}
+    # host's OS CA trust store (may include a corporate MITM proxy root) --
+    # mounted read-only, pointed at by SSL_CERT_FILE/REQUESTS_CA_BUNDLE above
+    - /etc/ssl/certs:/etc/ssl/certs:ro

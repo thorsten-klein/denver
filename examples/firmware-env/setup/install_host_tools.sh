@@ -1,7 +1,7 @@
 #!/bin/bash -e
 # One-time host bootstrap: everything the docker stage itself needs before it
 # can run at all. Wired in as 'scripts: setup:', so it never runs as part of a normal start,
-# but ONLY when the user explicitly calls `denver run examples/howto-env --scripts setup`
+# but ONLY when the user explicitly calls `denver run examples/firmware-env --scripts setup`
 
 command -v docker >/dev/null || sudo apt-get install -y docker.io
 command -v jq >/dev/null || sudo apt-get install -y jq

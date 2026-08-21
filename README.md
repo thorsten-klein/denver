@@ -1,6 +1,6 @@
 # denver
 
-<img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="logo" width="80%"/>
+<img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="logo" width="500"/>
 
 **Development Environments as code — reproducible, flexible, simple and fast.**
 
@@ -19,42 +19,48 @@
 Every project needs *some* setup before it builds — a fresh clone, a
 submodule init, a venv, a toolchain install. How much varies wildly, but the
 pattern is the same: you run a pile of one-off steps to get a working build
-the first time, then forget which ones to rerun after switching branches.
-The result is broken builds and "works on my machine" debugging that has
-nothing to do with your actual code.
+the first time.
 
-`denver` fixes this by making setup declarative. You describe the steps a
-project needs in a `denver.toml`, and `denver` runs them the same way every
-time — for you, for teammates, and in CI. It only runs the stages your
-project actually needs, so it stays fast, and it has no opinion about which
-tools you use: `denver` just runs what you declare.
-
-**[Read the full walkthrough →](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/index.md)**
-— the problem built up one step at a time, from that first script to
-`import:`-based inheritance across a whole fleet of projects.
+`denver` gives you a declarative way to setup your environment. You describe the steps a
+project needs in a `denver.toml`, and `denver` runs them -- the same way every
+time on any machine — for you, for teammates, and in CI. `denver` is optimized to run
+only necessary stages, so it stays fast.
 
 ## Documentation
 
-Built documentation is available
-[on GitHub Pages](https://thorsten-klein.github.io/denver/).
+You can find the full documentation in Markdown [here](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/index.md)
+
+Additionally it is hosted [on GitHub Pages](https://thorsten-klein.github.io/denver/).
 
 ## Install
 
+You can install `denver` with `pip`:
 ```bash
-pip install denver-tool   # or: uv tool install denver-tool
+pip install denver-tool
 ```
 
-Alternatively, call `src/denver.py` directly, no install needed:
+If you prefer, you can also install with `uv`. Please refer to official uv documentation https://docs.astral.sh/uv/getting-started/installation how to install uv
+```bash
+uv tool install denver-tool
+```
+
+Instead of installing `denver`, you can also run the script `src/denver.py` directly:
 ```bash
 src/denver.py --version
 ```
-or set up an alias so it behaves like an installed command:
+For easier usage you can also set up an alias so it behaves like an installed command:
 ```bash
 alias denver="$PWD/src/denver.py"
 denver --version
 ```
 
-For more alternatives how to use or install `denver` see
+> **Note:** stuck on Python < 3.11 (missing tomllib)?
+> You have to run the script with `uv run src/denver.py`, e.g by setting `alias denver="uv run $PWD/src/denver.py"`.
+> Alternatively grab a prebuilt executable from a
+> [release](https://github.com/thorsten-klein/denver/releases), or build one
+> yourself with `uv run poe pyinstaller`.
+
+For more details about how to install or run `denver` see
 **[Install denver →](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/install.md)**.
 
 
@@ -66,51 +72,82 @@ bash/zsh:
 ```bash
 eval "$(denver complete)"
 ```
+
 fish:
 ```fish
 denver complete | source
 ```
 
-See **[Shell completion →](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/completion.md)** for making it permanent.
 
-## Try it
+For more details see **[Shell completion →](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/completion.md)**.
 
+## Try it out
+
+Have a look at the `examples/simple-env/denver.toml`:
 ```bash
-denver run examples/howto-env -- pytest examples/howto-env/tests
+stages = [
+  "print-vars-before",
+  "set-vars",
+  "print-vars-after",
+]
+
+[print-vars-before]
+provider = "custom"
+cmd = 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
+
+[set-vars]
+provider = "custom"
+cmd = 'echo "[set-vars] sourcing custom.sh..."'
+source = "custom.sh"
+
+[print-vars-after]
+provider = "custom"
+cmd = 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
 ```
 
-A minute or two later (much less on repeat runs), that one command has built
-a container, a Python venv, a hand-installed tool, and a conan-installed
-toolchain, applied a team convention, and run tests proving all five actually
-work — from a single `denver.toml`, identically on your machine or your
-colleague's.
+As you can see, this environment consists of three stages.
+- First stage prints out the variables and their values how they are currently set (most probably empty)
+- Second stage prints some text, and it sources custom.sh script. In this script each variable is set to a value
+- Third stage prints out the variables and their values again so see if the second stage has worked
 
-**[denver in 15 minutes →](https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/creating-environments.md)**
-walks through each stage and explains it, including all the flags and config options you'll
-actually use. Prefer something smaller first? **[denver in 5 minutes →](https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/five-minutes.md)**
-runs a three-line environment end to end instead. For every flag, see
+You can run an own command (e.g. `printenv FOO MYVAR BAR`) within this environment as following:
+
+```bash
+denver run examples/simple-env -- printenv MYVAR
+```
+
+Output:
+```bash
+[print-vars-before] MYVAR= FOO= BAR=
+[set-vars] sourcing custom.sh...
+[print-vars-after] MYVAR=1 FOO=2 BAR=3
+2
+1
+3
+```
+
+For available flag (e.g. the `-q`, see
 **[CLI arguments →](https://github.com/thorsten-klein/denver/blob/develop/doc/cli/arguments.md)**
-or run `denver --help`.
+or run `denver --help` respectively `denver run --help`.
+
+You want to see some more advanced example? Have a look at **[denver in 5 minutes →](https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/five-minutes.md)**.
+
+You want to see some even more advanced example? Have a look at **[denver in 30 minutes →](https://github.com/thorsten-klein/denver/blob/develop/doc/quickstart/30-minutes.md)**
+
 
 ## Known limitations
 
 **denver has zero runtime dependencies.** Its config format is TOML
-(`denver.toml`), parsed with the standard library's `tomllib` — hence the
-`>=3.11` floor. Nothing extra to install, on the host or inside a
-`docker`-wrapped image: a Dockerfile only needs `python3` itself, since denver
-re-invoked inside the container needs nothing beyond the interpreter.
-
-> **Note:** stuck on Python < 3.11? Grab the prebuilt executable from a
-> [release](https://github.com/thorsten-klein/denver/releases), or build one
-> yourself with `uv run poe pyinstaller`, and use that binary instead — see
-> [Prebuilt Binary](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/install.md#prebuilt-binary).
-> Alternatively run with `uv run src/denver.py`, e.g by setting `alias denver="uv run $PWD/src/denver.py"`.
+(`denver.toml`), parsed with the standard library's `tomllib` — hence it
+requires python `>=3.11`. You are stuck on Python < 3.11 (e.g. Ubuntu 22)?
+Have a look at [install or run denver](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/install.md).
 
 ## Contributing
 
-Bug reports, feature requests and pull requests are welcome — see
-[`doc/contributing/development.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/contributing/development.md) for the workflow (`uv run poe all`
-runs lint, format, mypy and the test suite; denver keeps 100% coverage).
+Bug reports, feature requests and pull requests are very welcome — see
+[`doc/contributing/development.md`](https://github.com/thorsten-klein/denver/blob/develop/doc/contributing/development.md) for the workflow.
+
+To sum up: `uv run poe all` should always pass.
 
 ## License
 
