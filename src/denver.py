@@ -3863,10 +3863,29 @@ def _completion_script_bash(quoted):
     # COMP_WORDS[0] is the literal word typed at the prompt -- if that word is a
     # bash alias (as with `alias denver=/path/to/denver.py`), it's not something
     # `"$cmd" __complete ...` can exec directly: alias expansion happens at parse
-    # time, on the literal token, never on a variable's value. BASH_ALIASES maps
-    # alias names to their (possibly multi-word, possibly quoted) expansion, so
-    # look it up and split it -- via eval, to honour any quoting in it -- before
-    # invoking; unaliased words fall through unchanged.
+    # time, on the literal token, never on a variable's value.
+    #
+    # Resolved via the 'alias' *builtin* itself ('alias -- "$cmd"'), not by
+    # indexing $BASH_ALIASES directly the way an earlier version of this did:
+    # $BASH_ALIASES is an *associative* array, a bash-4.0+ feature, and macOS's
+    # own system /bin/bash is still 3.2.57 (frozen there pre-GPLv3) -- indexing
+    # it as if it always existed silently falls back to bash 3.2's only other
+    # interpretation of an array subscript, arithmetic evaluation of "$cmd"
+    # itself, which either crashes outright ("operand expected") for any 'cmd'
+    # containing a '/' (any path -- the normal way to run a checkout) or
+    # silently misresolves for one that doesn't. The 'alias' builtin, unlike
+    # associative-array indexing, has always existed and behaved identically
+    # since bash 3.2.
+    #
+    # 'alias -- "$cmd"' prints 'alias NAME=VALUE' with VALUE as one single
+    # quoted string (round-trippable as a whole, the same way declare -p prints
+    # any string) -- not as separately-quoted words the way real alias
+    # expansion's later re-parse would treat it. So this unwraps it in two
+    # eval'd steps: 'raw=${aliased#*=}' first (ordinary scalar assignment,
+    # eval'd once to strip that one quoting layer down to VALUE's own literal
+    # characters), then 'resolved=($raw)' -- unquoted, so bash's normal
+    # word-splitting on $raw does what real alias expansion's re-parse would
+    # have: split it into a command plus its own arguments.
     #
     # Every statement below ends in ';', and the closing '}' is followed by one
     # too, so the whole thing still parses if run as `eval $(denver complete)`
@@ -3880,7 +3899,8 @@ def _completion_script_bash(quoted):
         "_denver_complete() {"
         " local cmd=${COMP_WORDS[0]};"
         ' local -a resolved=("$cmd");'
-        ' [[ -n ${BASH_ALIASES[$cmd]+x} ]] && eval "resolved=(${BASH_ALIASES[$cmd]})";'
+        " local aliased raw;"
+        ' aliased=$(alias -- "$cmd" 2>/dev/null) && eval "raw=${aliased#*=}" && resolved=($raw);'
         " local IFS=$'\\n';"
         ' COMPREPLY=($("${resolved[@]}" __complete "${COMP_WORDS[@]:1:COMP_CWORD}" 2>/dev/null));'
         " };\n"

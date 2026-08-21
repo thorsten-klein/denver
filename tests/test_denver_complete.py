@@ -98,8 +98,12 @@ def test_completion_script_bash_registers_every_name_and_reinvokes_via_comp_word
 
 
 def test_completion_script_bash_resolves_the_typed_word_through_bash_aliases():
+    # Via the 'alias' builtin itself, not by indexing $BASH_ALIASES directly -- that's an
+    # associative array, a bash-4.0+ feature, and macOS's own system bash is still 3.2 (see
+    # _completion_script_bash's own docstring for what indexing it there actually does).
     out = denver._completion_script("bash", ["denver"])
-    assert "BASH_ALIASES[$cmd]" in out  # e.g. `alias denver=/path/to/denver.py`
+    assert 'alias -- "$cmd"' in out  # e.g. `alias denver=/path/to/denver.py`
+    assert "BASH_ALIASES" not in out
 
 
 def test_completion_script_zsh_registers_every_name_and_reinvokes_via_words_1():
@@ -133,6 +137,32 @@ def _run_unquoted_eval(shell, extra_setup=""):
 def test_bash_completion_function_defines_via_unquoted_eval():
     result = _run_unquoted_eval("bash")
     assert "is a function" in result.stdout, result.stderr
+
+
+def test_bash_completion_resolves_a_multi_word_alias_into_separate_words():
+    # Regression test: 'alias -- "$cmd"' prints the alias's *whole* value as one quoted string
+    # ("alias denver='python3 /path/to/denver.py'") -- eval'ing that string straight into the
+    # resolved=(...) array literal would make it ONE element (the literal 22-odd-character
+    # string, spaces and all), not two ("python3", "/path/to/denver.py") the way real alias
+    # expansion's own re-parse would split it. Driven through a real bash (not string-matching
+    # on the script text), the same way the unquoted-eval tests above are, because that's the
+    # only thing that actually exercises bash's own word-splitting.
+    if not shutil.which("bash"):
+        pytest.skip("bash not installed")
+    cmd = f"{shlex.quote(sys.executable)} {shlex.quote(denver.__file__)}"
+    script = (
+        f"alias denver={shlex.quote(cmd)}\n"
+        f"eval $({cmd} complete bash)\n"
+        "COMP_WORDS=(denver run --show)\n"
+        "COMP_CWORD=2\n"
+        "COMP_LINE='denver run --show'\n"
+        "COMP_POINT=${#COMP_LINE}\n"
+        "_denver_complete\n"
+        'printf "%s\\n" "${COMPREPLY[@]}"\n'
+    )
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert "--show-config" in result.stdout.split(), (result.stdout, result.stderr)
+    assert "--show-config-full" in result.stdout.split(), (result.stdout, result.stderr)
 
 
 def test_zsh_completion_function_defines_via_unquoted_eval():
