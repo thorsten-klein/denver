@@ -33,13 +33,9 @@ provider = "docker"
 disabled = false
 skip-on-success = []
 skip-on-failure = []
+scripts = { setup = ["setup/install_host_tools.sh"] }
 exe = "docker"
 # registries = null
-
-[docker.scripts]
-setup = [
-  "setup/install_host_tools.sh",
-]
 
 [docker.compose]
 build = true
@@ -72,13 +68,10 @@ deployers = [
 exe = "conan"
 # install-args = null
 keep-remotes = false
+profiles = { build = [], host = [] }
 recipes = []
 remotes = {}
 user = "denver"
-
-[conan.profiles]
-build = []
-host = []
 
 [uv]
 provider = "uv"
@@ -105,6 +98,7 @@ provider = "zephyr"
 disabled = false
 skip-on-success = []
 skip-on-failure = []
+scripts = { setup = ["setup/install_jlink_udev_rules.sh"] }
 base = "/fake-west-topdir/zephyr-rtos"
 # blobs-cache = null
 blobs-fetch-args = [
@@ -117,11 +111,6 @@ patch-committer-name = "denver"
 # update-args = null
 # west-config = null
 west-yml = "/fake-west-topdir/west.yml"
-
-[zephyr.scripts]
-setup = [
-  "setup/install_jlink_udev_rules.sh",
-]
 
 [uv-zephyr]
 provider = "uv"

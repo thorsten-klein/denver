@@ -61,12 +61,9 @@ install-args = [
   "-c:a=tools.system.package_manager:sudo=True",
 ]
 keep-remotes = false
+profiles = { build = [], host = [] }
 remotes = {}
 user = "denver"
-
-[conan.profiles]
-build = []
-host = []
 
 [[conan.recipes]]
 catalog = "<REPO>/examples/raspberry-pico/conan/catalog.yml"

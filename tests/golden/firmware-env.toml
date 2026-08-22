@@ -39,13 +39,9 @@ description = [
 disabled = false
 skip-on-success = []
 skip-on-failure = []
+scripts = { setup = ["setup/install_host_tools.sh"] }
 exe = "docker"
 # registries = null
-
-[docker-base.scripts]
-setup = [
-  "setup/install_host_tools.sh",
-]
 
 [docker-base.compose]
 build = true
@@ -106,6 +102,7 @@ skip-on-failure = []
 [[ninja-setup.packages]]
 description = ""
 env-append = {}
+env-prepend = { PATH = "." }
 env-sep = ":"
 md5sum = ""
 name = "ninja"
@@ -114,9 +111,6 @@ sha256sum = "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"
 unpack-cmd = ""
 unpack-dir = "<REPO>/examples/firmware-env/.denver/denver/download/ninja"
 url = "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"
-
-[ninja-setup.packages.env-prepend]
-PATH = "."
 
 [conan-packages]
 provider = "conan"
@@ -139,12 +133,9 @@ deployers = [
 exe = "conan"
 # install-args = null
 keep-remotes = false
+profiles = { build = [], host = [] }
 remotes = {}
 user = "denver"
-
-[conan-packages.profiles]
-build = []
-host = []
 
 [[conan-packages.recipes]]
 catalog = ""

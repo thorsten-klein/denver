@@ -1,6 +1,7 @@
 """Tests for denver.py's hand-written --show-config renderer (dump_toml)."""
 
 import io
+import tomllib
 
 import pytest
 
@@ -55,9 +56,30 @@ def test_dump_toml_nested_table():
     assert out == '[uv]\npython = "3.12.3"\n'
 
 
-def test_dump_toml_deeply_nested_table_uses_dotted_path():
+def test_dump_toml_sub_table_of_a_section_is_inline():
+    # only the top level hands out '[section]' headers -- below one, a table
+    # stays with the section it belongs to
     out = denver.dump_toml({"example": {"nested": {"key": "value"}}})
-    assert out == '[example]\n\n[example.nested]\nkey = "value"\n'
+    assert out == '[example]\nnested = { key = "value" }\n'
+
+
+def test_dump_toml_sub_table_with_an_unset_key_keeps_its_header():
+    # '# key = null' is a comment line, and TOML has no comment inside an
+    # inline table -- so the key would otherwise vanish from --show-config-full
+    out = denver.dump_toml({"example": {"nested": {"key": None}}})
+    assert out == "[example]\n\n[example.nested]\n# key = null\n"
+
+
+def test_dump_toml_sub_table_with_an_unset_key_deep_inside_keeps_its_header():
+    out = denver.dump_toml({"example": {"nested": {"key": [{"deep": None}]}}})
+    assert out == "[example]\n\n[example.nested]\n\n[[example.nested.key]]\n# deep = null\n"
+
+
+def test_dump_toml_array_of_tables_inside_a_section_still_gets_blocks():
+    # an entry per block, one key per line -- more readable than one flattened
+    # line per entry, so this shape keeps its header at any depth
+    out = denver.dump_toml({"conan": {"exe": "conan", "recipes": [{"dirs": ["a"]}]}})
+    assert out == '[conan]\nexe = "conan"\n\n[[conan.recipes]]\ndirs = [\n  "a",\n]\n'
 
 
 def test_dump_toml_scalar_then_table_gets_blank_line_separator():
@@ -79,6 +101,24 @@ def test_dump_toml_array_of_tables_single_entry():
 def test_dump_toml_array_of_tables_multiple_entries_are_blank_line_separated():
     out = denver.dump_toml({"conanfiles": [{"path": "a"}, {"path": "b"}]})
     assert out == '[[conanfiles]]\npath = "a"\n\n[[conanfiles]]\npath = "b"\n'
+
+
+def test_dump_toml_entry_keeps_a_nested_table_inline():
+    # a '[packages.env]' header would attach to whichever entry precedes it by
+    # position -- an entry is rendered self-contained instead
+    out = denver.dump_toml({"packages": [{"name": "ninja", "env": {"PATH": "."}}]})
+    assert out == '[[packages]]\nname = "ninja"\nenv = { PATH = "." }\n'
+
+
+def test_dump_toml_entry_inline_table_stays_on_one_line():
+    # TOML allows a multi-line array, but never a multi-line inline table
+    out = denver.dump_toml({"packages": [{"env": {"PATH": ["bin", "sbin"], "deep": {"a": 1}}}]})
+    assert out == '[[packages]]\nenv = { PATH = ["bin", "sbin"], deep = { a = 1 } }\n'
+
+
+def test_dump_toml_entry_with_a_nested_table_parses_back_unchanged():
+    data = {"packages": [{"name": "ninja", "env": {"PATH": "."}}, {"name": "gcc", "env": {"PATH": "bin"}}]}
+    assert tomllib.loads(denver.dump_toml(data)) == data
 
 
 # ---- dump_toml: keys needing quoting -----------------------------------------#
