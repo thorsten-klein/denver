@@ -413,16 +413,22 @@ def _merge_scalar(base, override, path):
     return override
 
 
+def _import_target(entry, base_dir):
+    """Where an ``import:`` entry points -- a directory means its ``denver.toml`` -- or None if no file is there."""
+    target = (base_dir / entry).resolve()
+    if target.is_dir():
+        target = target / CONFIG_NAME
+    return target if target.is_file() else None
+
+
 def resolve_import(entry, base_dir):
     """Resolve an ``import:`` entry to the denver.toml path it refers to.
 
     An entry may point at a directory (its ``denver.toml`` is used) or directly
     at a TOML file, relative to the importing config's directory.
     """
-    target = (base_dir / entry).resolve()
-    if target.is_dir():
-        target = target / CONFIG_NAME
-    if not target.is_file():
+    target = _import_target(entry, base_dir)
+    if target is None:
         die(f"import '{entry}' in {base_dir} does not resolve to a {CONFIG_NAME}")
     return target
 
@@ -3119,7 +3125,7 @@ def _cli_args(cli_args):
 
 
 # --------------------------------------------------------------------------- #
-# 'run --clean': removing an env's own state
+# Removing an env's state ('run --clean' and 'denver clean')
 # --------------------------------------------------------------------------- #
 def clean_env(env_dir, config_path, *, dry_run=False):
     """Remove denver's own state for one env, and report what went.
@@ -3152,22 +3158,100 @@ def clean_env(env_dir, config_path, *, dry_run=False):
     and which config file was picked, so this is the same directory a run
     would have used, whatever that run's config happens to say.
     """
-    from denver_providers.context import STATE_DIRNAME, state_dir_for
+    from denver_providers.context import state_dir_for
 
     state_dir = state_dir_for(env_dir, config_path, DENVER_DIR / ".envs")
-    if not state_dir.exists():
+    if not _remove_state_dir(state_dir, env_dir, dry_run=dry_run):
         info(f"clean: nothing to remove -- no denver state at {state_dir}")
-        return
+
+
+def clean_env_and_imports(config_path, *, dry_run=False):
+    """'denver clean <env>': remove every directory denver keeps for <env> and for the envs it imports.
+
+    Both places state can live are removed, not only the one a run would
+    pick right now: the workdir inside the env
+    (``<env>/.denver/<config stem>``) and the state dir under a shared root
+    (``DENVER_STATE_DIR``, or denver's own ``.envs``). An env built once
+    under a shared root and once without has state in both, and state left
+    in the other place would quietly survive every clean.
+
+    An imported env is cleaned too: it is built as part of building whatever
+    imports it, so leaving its state behind leaves the env half-built.
+    """
+    removed = False
+    for path in [Path(config_path), *_import_chain(config_path)]:
+        for state_dir in _state_dirs_for(path.parent, path):
+            removed |= _remove_state_dir(state_dir, path.parent, dry_run=dry_run)
+    if not removed:
+        info("clean: nothing to remove -- denver keeps no state for this env")
+
+
+def _import_chain(config_path):
+    """Every denver.toml in ``config_path``'s whole-file 'import:' chain, nearest first.
+
+    Nothing here is fatal: a config that will not parse, or an 'import:'
+    entry pointing nowhere, costs only the part of the chain below it and is
+    reported as a warning -- an env is worth cleaning exactly when its
+    config is broken.
+    """
+    start = Path(config_path).resolve()
+    seen, queue, chain = {start}, [start], []
+    while queue:
+        layer = [path for path in _readable_imports(queue.pop(0)) if path not in seen]
+        seen.update(layer)
+        chain += layer
+        queue += layer
+    return chain
+
+
+def _readable_imports(config_path):
+    """The configs one layer's 'import:' entries name -- warning about, and skipping, whatever cannot be read."""
+    try:
+        raw = load_config_file(config_path)
+    except (OSError, tomllib.TOMLDecodeError):
+        logger.warning(f"clean: cannot read {config_path} -- the envs it imports are left alone")
+        return []
+
+    targets = []
+    for entry in raw.get("import", []) or []:
+        target = _import_target(entry, config_path.parent)
+        if target is None:
+            logger.warning(f"clean: import '{entry}' in {config_path.parent} points nowhere -- left alone")
+            continue
+        targets.append(target)
+    return targets
+
+
+def _state_dirs_for(env_dir, config_path):
+    """Both directories denver may keep this env's state in -- the env's own workdir first, then a shared root's."""
+    from denver_providers.context import STATE_DIR_VAR, STATE_DIRNAME, env_state_key
+
+    key = env_state_key(env_dir, config_path)
+    dirs = [Path(env_dir) / STATE_DIRNAME / Path(config_path).stem]
+    override = os.environ.get(STATE_DIR_VAR)
+    if override:
+        dirs.append(Path(override).expanduser().resolve() / key)
+    dirs.append(DENVER_DIR / ".envs" / key)
+    return list(dict.fromkeys(dirs))
+
+
+def _remove_state_dir(state_dir, env_dir, *, dry_run):
+    """Remove one state directory, and a '<env>/.denver' left spent around it. False if there was nothing there."""
+    from denver_providers.context import STATE_DIRNAME
+
+    if not state_dir.exists():
+        return False
     parent = state_dir.parent
     # compared against this env's own path, not merely by name: a
     # DENVER_STATE_DIR pointing at '~/.denver' has that name too, and that
-    # root is shared (see the docstring). Asked before the removal, so
-    # --dry-run answers it exactly as a real run would.
+    # root is shared. Asked before the removal, so --dry-run answers it
+    # exactly as a real run would.
     in_env_dir = parent == Path(env_dir) / STATE_DIRNAME
     spent_parent = in_env_dir and _only_denver_leftovers(parent, state_dir)
     _remove_tree(state_dir, dry_run=dry_run)
     if spent_parent:
         _remove_tree(parent, dry_run=dry_run)
+    return True
 
 
 def _only_denver_leftovers(parent, state_dir):
@@ -3429,6 +3513,21 @@ def _add_complete_parser(subparsers):
     return complete_p
 
 
+def _add_clean_parser(subparsers):
+    """'denver clean <env>': remove the directories denver keeps for that env and the ones it imports."""
+    clean_p = subparsers.add_parser(
+        "clean",
+        help="remove the directories denver keeps for an env and the envs it imports",
+        description="Remove denver's workdir and state dir for <env> and for every env it imports -- venvs, "
+        "installed tool trees, downloads, logs and the fingerprints deciding what can be skipped. The next "
+        "`denver run` rebuilds all of it from the config. Anything the env's own config points elsewhere "
+        "(e.g. a CONAN_HOME under the env dir) is left alone.",
+    )
+    _add_env_positional(clean_p)
+    clean_p.add_argument("--dry-run", action="store_true", help="only print what would be removed, and remove nothing")
+    return clean_p
+
+
 def build_arg_parser(config_args=None):
     """The argparse.ArgumentParser for every denver-own flag (not the forwarded command).
 
@@ -3436,7 +3535,7 @@ def build_arg_parser(config_args=None):
     lists are never shared/mutated across repeated main() calls in the same
     process (as happens across denver.main() calls in the test suite).
 
-    denver's own CLI is subcommand-based ('run'/'complete'): every
+    denver's own CLI is subcommand-based ('run'/'clean'/'complete'): every
     ``-h``/``--help`` in it, top-level or per-subcommand, is a plain
     store_true rather than argparse's own exiting action (see
     _add_help_flag), so it survives both the first, config-agnostic parse
@@ -3463,11 +3562,12 @@ def build_arg_parser(config_args=None):
     parser.add_argument("--license", action="store_true", help="show denver's LICENSE (Apache-2.0) and exit")
     subparsers = parser.add_subparsers(dest="subcommand")
     run_p = _add_run_parser(subparsers, config_args)
+    clean_p = _add_clean_parser(subparsers)
     complete_p = _add_complete_parser(subparsers)
     # Looked up by _handle_info_flags to print the *invoked* subcommand's own
     # help (this parser instance's, config_args and all) rather than the
     # top-level summary -- see the docstring above.
-    parser.subcommand_parsers = {"run": run_p, "complete": complete_p}
+    parser.subcommand_parsers = {"run": run_p, "clean": clean_p, "complete": complete_p}
     return parser
 
 
@@ -3587,7 +3687,8 @@ def _complete_candidates(words):
         return []
 
 
-_TOP_LEVEL_COMPLETIONS = ["run", "complete", "--help", "--version", "--license"]
+_TOP_LEVEL_COMPLETIONS = ["run", "clean", "complete", "--help", "--version", "--license"]
+_CLEAN_FLAGS = ["--dry-run", "-h", "--help"]
 _RUN_FLAGS = [
     "--scripts",
     "--setup",
@@ -3647,9 +3748,23 @@ def _complete_candidates_unsafe(words):
     subcommand = prior[0]
     if subcommand == "complete":
         return _complete_shell_names(prior, cur)
+    if subcommand == "clean":
+        return _complete_clean_candidates(prior[1:], cur)
     if subcommand != "run":
         return []  # anything unrecognised takes no further args
     return _complete_run_candidates(prior[1:], cur)
+
+
+def _complete_clean_candidates(rest, cur):
+    """Completions for 'denver clean ...<TAB>' -- the <env> path first, then clean's own flags.
+
+    No flag of 'clean' takes a value, so no token in ``rest`` can have been
+    consumed as one and the first non-flag token is the <env> positional.
+    """
+    env_value = _first_positional(rest, [False] * len(rest))
+    if env_value is None and not cur.startswith("-"):
+        return _completion_path_candidates(cur)
+    return _matching(_CLEAN_FLAGS, cur)
 
 
 def _complete_shell_names(prior, cur):
@@ -3907,6 +4022,8 @@ def _completion_description_lookup(words):
     subcommand = prior[0]
     if subcommand == "complete":
         return _complete_shell_names_help(prior)
+    if subcommand == "clean":
+        return _action_help_by_flag(build_arg_parser().subcommand_parsers["clean"])
     if subcommand == "run":
         return _run_description_lookup(prior[1:])
     return {}
@@ -4497,6 +4614,15 @@ def _run_resolved_cli(argv):
     if _handle_env_less_argv(preliminary, head):
         return
 
+    # Handled here, ahead of everything below: none of the run-only
+    # machinery -- '-e' env vars, the config-aware second parse, the
+    # denver-version check -- applies to removing directories, and cleaning
+    # has to work for an env whose denver.toml is broken (see clean_env_and_imports).
+    if preliminary.subcommand == "clean":
+        _, config_path = resolve_env_dir(preliminary.env)
+        clean_env_and_imports(config_path, dry_run=preliminary.dry_run)
+        return
+
     # Applied to denver's own process environment as early as possible --
     # before the env's config is even loaded -- so it reaches everything
     # downstream (${...} interpolation, hooks, every stage, the final
@@ -4549,13 +4675,14 @@ def _preliminary_args(head):
     <env> falls back to DENVER_ENV_DIR when omitted from argv entirely, so a
     shell/CI that already exports it (e.g. one denver invocation per project
     checkout) need not repeat it on every command line. An <env> actually
-    given on the command line always wins. Only meaningful for 'run': with
-    no subcommand (or 'complete', which has no <env> of its own at all) the
-    namespace simply has no ``env`` attribute, since argparse only adds one
-    when a subparser that declares it actually ran.
+    given on the command line always wins. Only meaningful for the
+    subcommands that take an <env> at all ('run'/'clean'): with no
+    subcommand (or 'complete', which has no <env> of its own) the namespace
+    simply has no ``env`` attribute, since argparse only adds one when a
+    subparser that declares it actually ran.
     """
     preliminary, extra_argv = build_arg_parser().parse_known_args(head)
-    if preliminary.subcommand == "run" and preliminary.env is None:
+    if preliminary.subcommand in ("run", "clean") and preliminary.env is None:
         preliminary.env = os.environ.get("DENVER_ENV_DIR") or None
     return preliminary, extra_argv
 
@@ -4592,8 +4719,9 @@ def _handle_env_less_argv(preliminary, head):
 
     Also where a missing subcommand entirely is reported: 'complete' is
     already handled by the caller before this runs, so by construction
-    ``preliminary.subcommand`` here is None or "run" -- and only "run" even
-    has an ``env`` attribute to check (see _preliminary_args).
+    ``preliminary.subcommand`` here is None, "run" or "clean" -- and only
+    those last two even have an ``env`` attribute to check (see
+    _preliminary_args).
 
     A non-existent <env> falls through (False) rather than being reported
     here: resolve_env_dir says that far better.
@@ -4607,7 +4735,7 @@ def _handle_env_less_argv(preliminary, head):
         return True
 
     if preliminary.subcommand is None:
-        die("no subcommand given -- use 'run' or 'complete'; see `denver --help`")
+        die("no subcommand given -- use 'run', 'clean' or 'complete'; see `denver --help`")
 
     if env is None:
         die("no environment given -- pass one, set $DENVER_ENV_DIR, or see `denver --help`")
