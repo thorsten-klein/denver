@@ -37,12 +37,14 @@ who wants to build it is told:
 > Download and install the following tools from the internet:
 > (Important: use exactly those specified versions):
 > - `cmake` 3.31.9
+> - `ninja` 1.13.2 (a prebuilt zip, same as neovim)
 >
 > Make sure uv is installed (install from  `PyPi`).
 > Then create a Python 3.12 virtualenv via `uv` and install `pytest==9.1.1`.
 >
-> PS: In our team it is a best practice to export environment variable
-> `PYTEST_ADDOPTS="-v -s"` so pytest always runs verbose and shows live logs.
+> PS: In our team it is a best practice to export two environment variables --
+> `PYTEST_ADDOPTS="-v -s"` so pytest always runs verbose and shows live logs,
+> and `CMAKE_GENERATOR="Ninja"` so cmake uses the ninja above instead of make.
 >
 > Finally you should be able to run our `pytest` tests and compile our `hello-world` cmake project.
 
@@ -103,8 +105,9 @@ Let's identify the necessary stages. From the use case description we might need
 | "use Ubuntu 24.04" + `apt install gcc curl` | [`docker`](../providers/docker.md) | `docker-base` |
 | "create a python 3.12 virtualenv, install `pytest==9.1.1`" | [`uv`](../providers/uv.md) | `uv-packages` |
 | "unpack the neovim 0.12.4 tarball and put it on `PATH`" | [`custom`](../providers/custom.md) | `nvim-setup` |
+| "ninja 1.13.2" -- the same job again, but now using bundled provider | [`download`](../providers/download.md) | `ninja-setup` |
 | "cmake 3.31.9" | [`conan`](../providers/conan.md) | `conan-packages` |
-| "export `PYTEST_ADDOPTS`" | [`custom`](../providers/custom.md) | `best-practices` |
+| "export `PYTEST_ADDOPTS`, `CMAKE_GENERATOR`" | [`custom`](../providers/custom.md) | `best-practices` |
 
 **Note**: A stage id is a name we freely choose. `uv-packages` is a `uv`
 stage because its section says `provider: uv`, not because of what it is called.
@@ -116,6 +119,7 @@ stages = [
   "docker-base",
   "uv-packages",
   "nvim-setup",
+  "ninja-setup",
   "conan-packages",
   "best-practices",
 ]
@@ -250,7 +254,7 @@ This is the only host-specific work left: your user/group id (so the
 container writes files you can edit back on the host, not files owned by
 root) and a folder for the container's own `$HOME`, created up front for the
 reason in the comment above. Everything else the container needs —
-`${DENVER_ENV_DIR}`, `${DENVER_SRC_DIR}`, `${CONAN_HOME}` (Step 5) — is
+`${DENVER_ENV_DIR}`, `${DENVER_SRC_DIR}`, `${CONAN_HOME}` (Step 6) — is
 already a denver built-in or a `denver.toml` `[env]` entry, so it doesn't
 have to be computed by hand here at all.
 
@@ -452,12 +456,58 @@ After some short time for downloading and unpacking, we expect:
 Run the command a second time — the download is gone and the output comes in
 milliseconds as the installation is skipped as `nvim` is already present.
 
-## Step 5 — the `conan-packages` stage
+## Step 5 — the `ninja-setup` stage
 
-This is the other way to get exact tool versions into an environment: `conan`.
+Look at what that install script actually does: check whether the tool is
+already there, download it, verify the checksum, unpack it, put it on
+`PATH`. Almost none of that is about neovim. The `download` provider does
+those five things for you, so the next prebuilt tool — ninja 1.13.2 — needs
+no script at all. Instead we use `denver`'s bundled `download` provider:
 
-conan is a package manager, and it does for you what you just did by hand in
-`nvim-setup`: it downloads a pinned archive, verifies its checksum, unpacks
+```toml
+[ninja-setup]
+provider = "download"
+
+[[ninja-setup.packages]]
+name = "ninja"
+url = "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"
+sha256sum = "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"
+env-prepend = { PATH = "." }
+```
+
+One `[[ninja-setup.packages]]` table per tool. Three keys carry the whole
+stage:
+
+- **`url:`** — what to download. The file name at the end of it (here
+  `ninja-linux.zip`) is also the name the archive is stored under.
+- **`sha256sum:`** — what the downloaded file must hash to. Leave it out and
+  you trust whatever that url serves today.
+- **`env-prepend:`** — what the unpacked tool adds to the environment.
+  Values are paths *inside* the package: `"."` is its root, `"bin"` its
+  `bin/` folder. This zip holds a single `ninja` executable at the root, so
+  the root is what goes on `PATH`.
+
+Check it:
+
+```bash
+denver run envs/firmware-env --until ninja-setup -- ninja --version
+```
+
+Expect `1.13.2`, and a second run in milliseconds — everything is reused
+from the previous run. The careful parts of the hand-written
+script are covered too: an interrupted download or unpack is never mistaken
+for a finished one, and a file whose checksum no longer matches is fetched
+again.
+
+The full documentation of the `download` provider you can find in
+[`providers/download.md`](../providers/download.md).
+
+## Step 6 — the `conan-packages` stage
+
+This is the third way to get exact tool versions into an environment: `conan`.
+
+conan is a package manager, and it does what the two stages before it did:
+it downloads a pinned archive, verifies its checksum, unpacks
 it into a package of its own and puts that package on `PATH`. No `apt`, no
 version drift, same result on every machine.
 
@@ -568,15 +618,16 @@ keeps the cache inside this env's own directory rather than somewhere
 shared. Since that directory is already bind-mounted into the container
 (Step 2), the conan cache persists too, with no extra mount needed.
 
-### By hand or via conan?
+### By hand, `download` or conan?
 
-Both stages solved the same sentence — "this exact prebuilt tool, on
-`PATH`" — just with a different amount of code. Rule of thumb: by hand for
-a single archive nothing else depends on; conan once you have several
-tools, want the cache shared across environments, or need one tool to
-depend on another.
+Three stages solved the same sentence — "this exact prebuilt tool, on
+`PATH`" — with a different amount of code each. Rule of thumb: `download`
+for a plain release archive (the normal case); by hand only when the install
+really needs shell logic of its own; conan once you have several tools, want
+the cache shared across environments, or need one tool to depend on
+another.
 
-## Step 6 — the `best-practices` stage
+## Step 7 — the `best-practices` stage
 
 The last line of the use case — applying the team's best practice — is
 solved with a `custom` stage again. This time with no `cmd:`, only
@@ -593,23 +644,27 @@ This is the sourced script `envs/firmware-env/best-practices.sh`:
 ```bash
 #!/bin/bash
 export PYTEST_ADDOPTS="-v -s"
+export CMAKE_GENERATOR="Ninja"
 ```
 
-The key is `source:`, not `cmd:` — sourcing is what makes the exported variable survive into later commands.
+The key is `source:`, not `cmd:` — sourcing is what makes the exported variables survive into later commands.
+`CMAKE_GENERATOR="Ninja"` is what makes the cmake of Step 6 build with the
+ninja of Step 5, instead of falling back to `make`.
 
 **Note**: For a plain constant, by the way, a whole stage is more than you
-need — alternatively the `[env]` table (already used for `CONAN_HOME` in Step 5)
+need — alternatively the `[env]` table (already used for `CONAN_HOME` in Step 6)
 would work as well:
 
 ```toml
 [env]
 PYTEST_ADDOPTS = "-v -s"
+CMAKE_GENERATOR = "Ninja"
 ```
 
 A `custom` stage earns its place as soon as shell logic is necessary — e.g. in case of
 conditions (`if ...; then ...; fi`) or if paths are computed dynamically.
 
-## Step 7 — the default command
+## Step 8 — the default command
 
 Everything so far *builds* the environment. But when we run denver, we
 usually want a specific command by default — here, an interactive shell:

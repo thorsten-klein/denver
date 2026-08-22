@@ -9,8 +9,9 @@ stages = [
   "docker-base",     # 1. Ubuntu 24.04 + the apt packages + uv
   "uv-packages",     # 2. the python 3.12 venv
   "nvim-setup",      # 3. one prebuilt release, fetched by hand
-  "conan-packages",  # 4. cmake 3.31.9, exactly
-  "best-practices",  # 5. the team's PYTEST_ADDOPTS convention
+  "ninja-setup",     # 4. one prebuilt release, fetched by the 'download' provider
+  "conan-packages",  # 5. cmake 3.31.9, exactly
+  "best-practices",  # 6. the team's PYTEST_ADDOPTS/CMAKE_GENERATOR conventions
 ]
 
 # what the finished environment starts when no command follows '--'
@@ -66,6 +67,18 @@ cmd = "bash ${DENVER_ENV_DIR}/nvim/install.sh"
 # are worth seeing apart.)
 source = "nvim/activate.sh"
 
+[ninja-setup]
+provider = "download"
+description = [
+  "The same job as 'nvim-setup' above, minus the two shell scripts -- the 'download' provider owns the download, the checksum, the unpacking and the PATH entry. One entry per prebuilt release.",
+]
+
+[[ninja-setup.packages]]
+name = "ninja"
+url = "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"
+sha256sum = "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"
+env-prepend = { PATH = "." }
+
 [conan-packages]
 provider = "conan"
 description = [
@@ -79,6 +92,6 @@ dirs = ["conan/recipes"]
 [best-practices]
 provider = "custom"
 description = [
-  "Team convention: pytest always verbose, with live logs. Declared as 'source:' rather than 'cmd:', so the export survives into the final command.",
+  "Team conventions -- pytest always verbose with live logs, and cmake building with the ninja from 'ninja-setup' rather than make. Declared as 'source:' rather than 'cmd:', so the exports survive into the final command.",
 ]
 source = "best-practices.sh"

@@ -14,6 +14,7 @@ from .conan import ConanProvider
 from .context import Context, banner, die, info
 from .custom import CustomProvider
 from .docker import DockerProvider
+from .download import DownloadProvider
 from .uv import UvProvider
 from .zephyr import ZephyrProvider
 
@@ -27,6 +28,7 @@ PROVIDERS = {
     "zephyr": ZephyrProvider,
     "docker": DockerProvider,
     "custom": CustomProvider,
+    "download": DownloadProvider,
 }
 
 # the 'extensions:' sub-schema, validated the same way denver.py validates

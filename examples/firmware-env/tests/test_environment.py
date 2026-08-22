@@ -2,8 +2,9 @@
 
 It asserts what each stage of the pipeline promised: the OS from the docker
 stage, the interpreter and packages from the uv stage, the hand-installed
-release from the first custom stage, the pinned tools from the conan stage,
-and the exported variable from the second custom stage. A green run means the
+release from the first custom stage, the release the download stage fetched,
+the pinned tools from the conan stage, and the exported variable from the
+second custom stage. A green run means the
 whole environment really was built, not just configured.
 """
 
@@ -42,17 +43,29 @@ def test_custom_stage_put_the_hand_installed_nvim_on_path():
     assert shutil.which("nvim") == str(workdir / "nvim" / "0.12.4" / "bin" / "nvim")
 
 
+def test_download_stage_put_ninja_on_path():
+    """The prebuilt release the download provider fetched, verified and unpacked."""
+    ninja = subprocess.run(["ninja", "--version"], capture_output=True, text=True, check=True)
+    assert ninja.stdout.strip() == "1.13.2"
+
+    # not some ninja the host happens to have: the one this env unpacked,
+    # under its own state dir
+    workdir = Path(os.environ["DENVER_ENV_WORKDIR"])
+    assert shutil.which("ninja") == str(workdir / "download" / "ninja" / "ninja")
+
+
 def test_conan_stage_gave_us_the_pinned_tool_version():
     cmake = subprocess.run(["cmake", "--version"], capture_output=True, text=True, check=True)
     assert "3.31.9" in cmake.stdout
 
 
-def test_custom_stage_exported_the_team_convention():
+def test_custom_stage_exported_the_team_conventions():
     assert os.environ["PYTEST_ADDOPTS"] == "-v -s"
+    assert os.environ["CMAKE_GENERATOR"] == "Ninja"
 
 
 def test_we_can_compile_and_run_the_hello_world_cmake_project():
-    """gcc from the docker stage's apt list, cmake from the conan stage."""
+    """gcc from the docker stage's apt list, cmake from the conan stage, ninja from the download stage."""
     env_dir = Path(__file__).resolve().parent.parent
     build_dir = env_dir / "hello-world" / "build"
     subprocess.run(
