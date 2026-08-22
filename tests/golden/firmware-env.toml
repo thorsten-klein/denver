@@ -5,6 +5,7 @@ stages = [
   "docker-base",
   "uv-packages",
   "nvim-setup",
+  "ninja-setup",
   "conan-packages",
   "best-practices",
 ]
@@ -17,6 +18,7 @@ CONAN_HOME = "${DENVER_ENV_DIR}/.conan2"
 # post-best-practices = null
 # post-conan-packages = null
 # post-docker-base = null
+# post-ninja-setup = null
 # post-nvim-setup = null
 # post-uv-packages = null
 # pre-best-practices = null
@@ -25,6 +27,7 @@ CONAN_HOME = "${DENVER_ENV_DIR}/.conan2"
 pre-docker-base = [
   "<REPO>/examples/firmware-env/create-env.sh",
 ]
+# pre-ninja-setup = null
 # pre-nvim-setup = null
 # pre-uv-packages = null
 
@@ -90,6 +93,31 @@ cmd = "bash ${DENVER_ENV_DIR}/nvim/install.sh"
 # launcher = null
 source = "nvim/activate.sh"
 
+[ninja-setup]
+provider = "download"
+description = [
+  "The same job as 'nvim-setup' above, minus the two shell scripts -- the 'download' provider owns the download, the checksum, the unpacking and the PATH entry. One entry per prebuilt release.",
+]
+disabled = false
+skip-on-success = []
+skip-on-failure = []
+# scripts = null
+
+[[ninja-setup.packages]]
+description = ""
+env-append = {}
+env-sep = ":"
+md5sum = ""
+name = "ninja"
+outfile = "<REPO>/examples/firmware-env/.denver/denver/downloads/ninja-linux.zip"
+sha256sum = "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"
+unpack-cmd = ""
+unpack-dir = "<REPO>/examples/firmware-env/.denver/denver/download/ninja"
+url = "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"
+
+[ninja-setup.packages.env-prepend]
+PATH = "."
+
 [conan-packages]
 provider = "conan"
 description = [
@@ -128,7 +156,7 @@ export-tool = "<REPO>/src/denver_providers/conan_scripts/recipes.py"
 [best-practices]
 provider = "custom"
 description = [
-  "Team convention: pytest always verbose, with live logs. Declared as 'source:' rather than 'cmd:', so the export survives into the final command.",
+  "Team conventions -- pytest always verbose with live logs, and cmake building with the ninja from 'ninja-setup' rather than make. Declared as 'source:' rather than 'cmd:', so the exports survive into the final command.",
 ]
 disabled = false
 skip-on-success = []

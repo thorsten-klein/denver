@@ -5,3 +5,4 @@
 # the final command.
 
 export PYTEST_ADDOPTS="-v -s"
+export CMAKE_GENERATOR="Ninja"
