@@ -69,9 +69,6 @@ def test_package_version_installed(monkeypatch):
 
 
 def test_package_version_installed_dev_build_is_rebased(monkeypatch):
-    # a wheel built off an untagged commit: what setuptools-scm baked in is
-    # re-based onto DEV_VERSION, so it reports what a checkout of the same
-    # commit does rather than a pre-release ranking below it.
     monkeypatch.setattr(denver, "scm_version", lambda: None)
     monkeypatch.setattr(denver, "DEV_VERSION", "8.8.8")
     monkeypatch.setattr(denver.importlib.metadata, "version", lambda name: "8.8.8.dev27+gabc1234")
@@ -81,25 +78,26 @@ def test_package_version_installed_dev_build_is_rebased(monkeypatch):
 @pytest.mark.parametrize(
     ("metadata", "expected"),
     [
-        # the normal in-development state: a build off an untagged commit,
-        # named after the release it is heading for. Re-based, commit and all.
+        # an untagged build, named after the release it heads for
         ("8.8.8.dev27+gabc1234", "8.8.8-27-gabc1234"),
-        # setuptools-scm configured without a local segment -- nothing to carry.
-        ("8.8.8.dev27", "8.8.8-27"),
-        # metadata still naming an older release than DEV_VERSION (a pin was
-        # bumped, this build predates the tag) -- re-based just the same.
-        ("1.0.3.dev18+gabc1234", "8.8.8-18-gabc1234"),
-        # a release somebody actually tagged: never touched.
+        ("8.8.8.dev27", "8.8.8-27"),  # no local segment to carry
+        ("1.0.3.dev18+gabc1234", "8.8.8-18-gabc1234"),  # built before the tag a pin needs
+        # anything somebody actually tagged, and anything already past
+        # DEV_VERSION, is left alone
         ("8.8.8", "8.8.8"),
         ("1.0.3", "1.0.3"),
-        # a tagged rc is deliberately incomplete -- ranking it after the
-        # release it precedes would be a lie, so it stays a pre-release.
         ("8.8.8rc1", "8.8.8rc1"),
-        # metadata already past DEV_VERSION (the tag landed, DEV_VERSION has
-        # not been bumped past it yet): re-basing would understate it.
         ("9.9.9.dev3+gabc1234", "9.9.9.dev3+gabc1234"),
     ],
-    ids=["untagged", "no-local-segment", "behind-dev-version", "on-the-tag", "on-an-older-tag", "rc", "past-dev-version"],
+    ids=[
+        "untagged",
+        "no-local-segment",
+        "behind-dev-version",
+        "on-the-tag",
+        "on-an-older-tag",
+        "rc",
+        "past-dev-version",
+    ],
 )
 def test_dev_metadata_version(monkeypatch, metadata, expected):
     monkeypatch.setattr(denver, "DEV_VERSION", "8.8.8")
@@ -107,7 +105,7 @@ def test_dev_metadata_version(monkeypatch, metadata, expected):
 
 
 def test_dev_metadata_version_without_a_dev_version(monkeypatch):
-    """DEV_VERSION = None switches the re-basing off here too -- see test_scm_version_without_a_dev_version."""
+    """DEV_VERSION = None switches the re-basing off here too."""
     monkeypatch.setattr(denver, "DEV_VERSION", None)
     assert denver._dev_metadata_version("8.8.8.dev27+gabc1234") == "8.8.8.dev27+gabc1234"
 
