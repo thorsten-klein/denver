@@ -10,18 +10,24 @@ shell script (see doc/providers/custom.md) looks like once it is a provider:
 the same four jobs, but idempotent, checksum-verified and ``--fast``-aware
 without every project writing that logic again.
 
+A url behind a login is served by the top-level ``[[download-auth]]``
+entries -- credentials per *host*, read by every download stage of the
+config (see AUTH_SECTION below).
+
 Full key reference, worked examples and design notes: ``doc/providers/download.md``.
 """
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import shutil
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
+from urllib.error import HTTPError
 from urllib.parse import urlparse
-from urllib.request import urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from .base import Provider, fill_unset
 from .context import banner, die, info, interpolate, warn
@@ -50,6 +56,20 @@ DEFAULT_ENV_SEP = ":"
 # the config key naming each supported checksum, and the hashlib algorithm
 # it pins. Both are optional; giving both checks both.
 CHECKSUM_KEYS = (("sha256sum", "sha256"), ("md5sum", "md5"))
+
+# the top-level denver.toml key holding the credentials this provider
+# sends. Deliberately *not* a stage key: a token belongs to a server, not to
+# one stage's package list, so every stage and every package fetching from
+# that server is covered by the one entry, written once at the top of the
+# config.
+AUTH_SECTION = "download-auth"
+
+# every key one '[[download-auth]]' entry understands
+AUTH_KEYS = ("host", "username", "password", "headers")
+
+# the response codes whose "cannot fetch" message is really about
+# credentials, and gets told so
+AUTH_FAILURE_CODES = (401, 403)
 
 # read in chunks rather than all at once: these are release archives, and a
 # multi-GB toolchain must not have to fit in memory to be verified.
@@ -134,6 +154,202 @@ def absolute_entries(value, base, sep):
     return sep.join(entry if Path(entry).is_absolute() else str(Path(base) / entry) for entry in entries)
 
 
+# ---- authenticated downloads ------------------------------------------------ #
+def auth_entries(config):
+    """Every '[[download-auth]]' entry of the whole denver.toml, validated -- [] when the config declares none."""
+    entries = config.get(AUTH_SECTION)
+    if entries is None:
+        return []
+    if not isinstance(entries, list):
+        die(f"'{AUTH_SECTION}:' must be a list of entries, got {entries!r}")
+    for index, entry in enumerate(entries):
+        _validate_auth_entry(entry, f"{AUTH_SECTION}[{index}]")
+    return entries
+
+
+def _validate_auth_entry(entry, where):
+    """Die unless one '[[download-auth]]' entry is a mapping this provider fully understands."""
+    if not isinstance(entry, dict):
+        die(f"{where}: each entry must be a mapping (got {entry!r})")
+    unknown = sorted(set(entry) - set(AUTH_KEYS))
+    if unknown:
+        die(f"{where}: unknown key(s) {', '.join(unknown)} -- known: {', '.join(AUTH_KEYS)}.")
+    host = entry.get("host")
+    if not isinstance(host, str) or not host.strip():
+        die(f"{where}: 'host:' is required and must be a non-empty string (got {host!r})")
+    _validate_auth_credentials(entry, where)
+    _validate_auth_headers(entry.get("headers"), where)
+
+
+def _validate_auth_credentials(entry, where):
+    """Die unless the entry has both 'username:' and 'password:' (or neither), and something to send at all."""
+    for key in ("username", "password"):
+        _validate_auth_string(entry.get(key), f"{where}: '{key}:'")
+    # one without the other is a mistake, never a half-configured login --
+    # the docker provider's 'registries:' rejects the same shape
+    if bool(entry.get("username")) != bool(entry.get("password")):
+        die(f"{where} ('{entry['host']}'): needs both 'username:' and 'password:', or neither")
+    _validate_auth_sends_something(entry, where)
+
+
+def _validate_auth_string(value, where):
+    """Die unless one optional string-valued auth key is a string."""
+    if value is not None and not isinstance(value, str):
+        die(f"{where} must be a string (got {value!r})")
+
+
+def _validate_auth_sends_something(entry, where):
+    """Die on an entry that carries no credentials at all.
+
+    It would look configured and change nothing: the download still goes
+    out bare, and still comes back 401.
+    """
+    if not entry.get("username") and not entry.get("headers"):
+        die(f"{where} ('{entry['host']}'): needs 'username:'/'password:' or 'headers:' -- it sends nothing as written")
+
+
+def _validate_auth_headers(headers, where):
+    """Die unless an entry's 'headers:' is a flat {name = "value"} mapping."""
+    if headers is None:
+        return
+    if not isinstance(headers, dict):
+        die(f"{where}: 'headers:' must be a mapping of header name to value (got {headers!r})")
+    for name, value in headers.items():
+        if not isinstance(value, str):
+            die(f"{where}: 'headers:' '{name}:' must be a string (got {value!r})")
+
+
+def auth_headers_for(config, url, variables):
+    """The request headers '[[download-auth]]' adds for ``url`` -- {} when no entry names its host.
+
+    The first matching entry wins and nothing later is merged into it: two
+    entries for one host are a config mistake rather than a merge, and
+    first-wins keeps a base env's entry the one in force once a derived env
+    appends its own (list keys stack across layers, see "Layering" in the
+    configuration doc).
+
+    Credential values are interpolated *here*, per fetch, and never in
+    resolve_defaults(): what --show-config prints is then the
+    '${ARTIFACTORY_TOKEN}' the file was written with, never the token it
+    stands for.
+    """
+    parsed = urlparse(url)
+    for entry in auth_entries(config):
+        if _host_matches(entry["host"], parsed):
+            return _entry_headers(entry, variables)
+    return {}
+
+
+def _host_matches(configured, parsed):
+    """Whether one entry's 'host:' names the host ``parsed`` points at.
+
+    Compared case-insensitively against the bare host name -- or against
+    'host:port' when the entry itself names a port, so one server reachable
+    on two ports can carry different credentials per port.
+    """
+    wanted = configured.strip().lower()
+    host = (parsed.hostname or "").lower()
+    if ":" in wanted:
+        return wanted == f"{host}:{parsed.port}"
+    return wanted == host
+
+
+def _entry_headers(entry, variables):
+    """One matching entry as the headers to send: 'username:'/'password:' as Basic auth, plus its own 'headers:'."""
+    where = f"{AUTH_SECTION} ('{entry['host']}')"
+    headers = {}
+    if entry.get("username"):
+        username = auth_value(f"{where} 'username:'", entry["username"], variables)
+        password = auth_value(f"{where} 'password:'", entry["password"], variables)
+        headers["Authorization"] = basic_auth(username, password)
+    # applied last, so an explicit 'Authorization' in 'headers:' (a bearer
+    # token, say) is what goes out if an entry writes both
+    for name, raw in (entry.get("headers") or {}).items():
+        headers[name] = auth_value(f"{where} 'headers:' '{name}:'", raw, variables)
+    return headers
+
+
+def auth_value(where, raw, variables):
+    """One credential value, interpolated -- dying if its '${...}' resolved to nothing.
+
+    An unset variable interpolates to the empty string (see "Variable
+    interpolation" in the configuration doc), and an empty password would
+    have denver send credentials it does not have, for the server to answer
+    with a 401 that says nothing about why.
+    """
+    value = interpolate(raw, variables)
+    if raw and not value:
+        die(f"{where}: '{raw}' resolves to nothing -- the variable it reads is unset in this environment")
+    return value
+
+
+def basic_auth(username, password):
+    """``username``/``password`` as one HTTP Basic 'Authorization' header value."""
+    return "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
+
+
+def auth_hint(exc, url, headers):
+    """The tail a 401/403 adds to "cannot fetch", about the credentials it wanted -- '' for any other failure."""
+    if not isinstance(exc, HTTPError) or exc.code not in AUTH_FAILURE_CODES:
+        return ""
+    host = urlparse(url).hostname or url
+    if headers:
+        return f" -- the '[[{AUTH_SECTION}]]' entry for '{host}' was sent and rejected"
+    return f' -- this url needs credentials: add a \'[[{AUTH_SECTION}]]\' entry with host = "{host}"'
+
+
+class AuthStrippingRedirectHandler(HTTPRedirectHandler):
+    """urllib's redirect handling, minus the credentials, once a redirect leaves the host they were written for.
+
+    Release downloads redirect constantly: a github/gitlab/artifactory url
+    answers 302 and hands the actual transfer to a CDN or a pre-signed S3
+    url. urllib copies every header of the original request onto the
+    redirected one, so without this the 'Authorization' header configured
+    for artifactory.example.com would be replayed verbatim at whatever
+    third-party host it points at. A scheme change (https -> http) counts as
+    leaving too -- the same header must not go out unencrypted.
+    """
+
+    def __init__(self, header_names):
+        """Remember which header names carry credentials: exactly the ones this env configured."""
+        super().__init__()
+        self._header_names = {name.lower() for name in header_names}
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        """The redirected request urllib would make, with every configured auth header dropped off-host."""
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None or _same_origin(req.full_url, newurl):
+            return redirected
+        # Request stores header names capitalised ('X-jfrog-art-api'), so the
+        # match has to be case-insensitive on both sides. Collected before
+        # deleting anything: the loop below mutates the dict it matched over.
+        configured = [name for name in redirected.headers if name.lower() in self._header_names]
+        for name in configured:
+            del redirected.headers[name]
+        return redirected
+
+
+def _same_origin(url, other):
+    """Whether two urls share scheme, host and port -- i.e. whether credentials may follow the redirect."""
+    first, second = urlparse(url), urlparse(other)
+    return (first.scheme, first.hostname, first.port) == (second.scheme, second.hostname, second.port)
+
+
+def open_url(url, headers):
+    """Open ``url``, sending ``headers`` if there are any.
+
+    With no credentials configured this is urllib's plain urlopen, exactly
+    as before: an opener that drops auth headers across a redirect has
+    nothing to drop when none were sent in the first place.
+    """
+    if not headers:
+        # scheme validated by the caller -- file:/ and other local-file schemes are rejected
+        return urlopen(url)  # nosec B310
+    # scheme validated by the caller, same as the plain path above
+    request = Request(url, headers=headers)  # nosec B310
+    return build_opener(AuthStrippingRedirectHandler(headers)).open(request)
+
+
 class DownloadProvider(Provider):
     """Downloads, verifies and unpacks prebuilt release archives -- see doc/providers/download.md for denver.toml keys."""
 
@@ -171,7 +387,7 @@ class DownloadProvider(Provider):
 
     # ---- config defaults ------------------------------------------------- #
     @classmethod
-    def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
+    def resolve_defaults(cls, ctx, cfg, config):
         """Resolve every 'packages:' entry -- outfile, unpack-dir, checksums, env maps.
 
         Both paths come out absolute here, so --show-config shows exactly
@@ -181,6 +397,10 @@ class DownloadProvider(Provider):
         packages = cfg.get("packages") or []
         if not isinstance(packages, list):
             die(f"download: 'packages:' must be a list of entries, got {packages!r}")
+        # the credentials are a top-level section, but this is their only
+        # reader -- validating them here means a typo'd entry dies while the
+        # config is resolved (--show-config included), not mid-download.
+        auth_entries(config)
         resolved = dict(cfg)
         resolved["packages"] = [cls._resolve_package(ctx, entry, index=i) for i, entry in enumerate(packages)]
         cls._check_unique_names(resolved["packages"])
@@ -345,7 +565,12 @@ class DownloadProvider(Provider):
         return None
 
     def _download(self, ctx, pkg, archive):
-        """Fetch 'url:' to ``archive``, via a .part file so an interrupted transfer is never mistaken for a complete one."""
+        """Fetch 'url:' to ``archive``, with whatever '[[download-auth]]' configured for its host.
+
+        The transfer goes to a .part file, renamed into place only once it
+        is complete, so an interrupted run never leaves a truncated archive
+        the next run would accept as downloaded.
+        """
         url = pkg["url"]
         if urlparse(url).scheme not in ("http", "https"):
             die(f"download[{self.stage}]: {pkg['name']}: 'url:' must be http(s), got {url!r}")
@@ -353,14 +578,18 @@ class DownloadProvider(Provider):
             ctx.dry_note("~", f"download {url} -> {archive}")
             return
         info(f"download[{self.stage}]: {pkg['name']}: fetching {url}")
+        headers = auth_headers_for(ctx.config, url, ctx.variables)
+        if headers:
+            info(
+                f"download[{self.stage}]: {pkg['name']}: with the '{AUTH_SECTION}' credentials for {urlparse(url).hostname}"
+            )
         part = archive.with_name(archive.name + ".part")
         try:
-            # scheme validated above -- file:/ and other local-file schemes are rejected
-            with urlopen(url) as response, part.open("wb") as fh:  # nosec B310
+            with open_url(url, headers) as response, part.open("wb") as fh:
                 shutil.copyfileobj(response, fh)
-        except OSError as exc:  # URLError and every socket/filesystem failure below it
+        except OSError as exc:  # URLError (HTTPError included) and every socket/filesystem failure below it
             part.unlink(missing_ok=True)
-            die(f"download[{self.stage}]: {pkg['name']}: cannot fetch {url}: {exc}")
+            die(f"download[{self.stage}]: {pkg['name']}: cannot fetch {url}: {exc}{auth_hint(exc, url, headers)}")
         part.replace(archive)
 
     # ---- unpack -------------------------------------------------------------- #

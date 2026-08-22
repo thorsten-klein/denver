@@ -61,6 +61,60 @@ The stage has exactly one key of its own:
 - **`description`** — free text about this package, for whoever reads the
   config. denver never acts on it; it only shows up in `--show-config`.
 
+## Authenticated downloads
+
+A url behind a login is served by the top-level `[[download-auth]]` entries —
+credentials **per host**, not per package:
+
+```toml
+[[download-auth]]
+host = "artifactory.example.com"
+username = "${ARTIFACTORY_USER}"
+password = "${ARTIFACTORY_TOKEN}"
+
+[[download-auth]]
+host = "api.github.com"
+headers = { Authorization = "Bearer ${GH_TOKEN}", Accept = "application/octet-stream" }
+```
+
+They are a top-level key, not a stage key, because a token belongs to a
+*server*: one entry covers every package of every `download` stage that
+fetches from that host, and a base env can declare the company mirror's
+credentials once for every env importing it.
+
+- **`host`** (**required**) — the host these credentials belong to, matched
+  case-insensitively against the url's own host. Write it as `host:port`
+  (e.g. `nexus.example.com:8443`) to match only that port; without a port it
+  matches the host on its default port. The first entry matching a url wins,
+  and nothing later is merged into it.
+- **`username`** / **`password`** — sent as an HTTP Basic `Authorization`
+  header. Optional, but if either is set both must be — a half-configured
+  login is an error, not a bare request (the same rule `docker:`'s
+  `registries:` follows).
+- **`headers`** — headers to send verbatim, as `{ Name = "value" }`. This is
+  what bearer tokens and vendor-specific schemes need (`Authorization =
+  "Bearer ..."`, `PRIVATE-TOKEN`, `X-JFrog-Art-Api`, …). An `Authorization`
+  written here wins over one built from `username:`/`password:`.
+
+An entry that would send nothing at all (no `username:`, no `headers:`) is an
+error rather than a silently unauthenticated download.
+
+**Write the secret as `${VAR}`, not as a literal.** Credential values are
+interpolated per fetch, at the moment the request is built — never while the
+config is resolved — so `--show-config` prints the `${ARTIFACTORY_TOKEN}` the
+file was written with and never the token it stands for. A `${VAR}` that is
+unset in the environment is a hard error, not an empty password sent to the
+server.
+
+**Credentials never follow a redirect off their host.** Release downloads
+redirect constantly (a github/gitlab/artifactory url answers `302` and hands
+the transfer to a CDN or a pre-signed S3 url), and urllib would otherwise
+replay the `Authorization` header written for one host at whatever host it
+is pointed at next. denver drops every configured auth header as soon as a
+redirect changes scheme, host or port. A `401`/`403` says which
+`[[download-auth]]` entry was missing, or that the one it found was
+rejected.
+
 ## Where things go
 
 ```
@@ -169,6 +223,12 @@ env-prepend = { PATH = "bin", LD_LIBRARY_PATH = "lib" }
   tool, and appending it would let whatever the OS happens to ship win
   instead. `env-append:` is there for the cases where the opposite is true
   (a fallback `MANPATH`, a low-priority `CMAKE_PREFIX_PATH`).
+- **Credentials are configured per host, once.** Per-package credentials
+  would mean the same token repeated in every entry fetching from the same
+  server — and repeated again in the next stage, and in the next env that
+  imports this one. `[[download-auth]]` is matched against the url a package
+  already has, so adding a package behind the same login needs no auth
+  config at all. See "Authenticated downloads" above.
 - **`--fast`** skips the download and the unpack entirely and only applies
   `env-prepend:`/`env-append:`; it dies with a clear message if a package
   has never been unpacked — run once without `--fast` first.
