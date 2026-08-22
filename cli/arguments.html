@@ -140,7 +140,10 @@
 <li class="toctree-l2"><a class="reference internal" href="#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#inspect-an-environment">Inspect an environment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#hand-the-built-env-to-something-else">Hand the built env to something else</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#remove-an-environment-s-state">Remove an environment’s state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#remove-an-environment-s-state">Remove an environment’s state</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#denver-clean-env"><code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span> <span class="pre">&lt;env&gt;</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#output-and-version">Output and version</a></li>
 </ul>
 </li>
@@ -287,8 +290,9 @@
 <p>denver’s CLI is subcommand-based: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code> is the normal entry
 point, and every flag below except <code class="docutils literal notranslate"><span class="pre">--version</span></code>/<code class="docutils literal notranslate"><span class="pre">--license</span></code> belongs to it.
 (<code class="docutils literal notranslate"><span class="pre">--version</span></code> and <code class="docutils literal notranslate"><span class="pre">--license</span></code> are top-level, before the subcommand, e.g.
-<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">--version</span></code>. <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code> is the other subcommand — see
-<a class="reference internal" href="completion.html"><span class="std std-doc">Shell completion</span></a> — and takes no flags of its own.)</p>
+<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">--version</span></code>. The other two subcommands are <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span> <span class="pre">&lt;env&gt;</span></code> — see
+<a class="reference internal" href="#remove-an-environment-s-state">Remove an environment’s state</a> below — and
+<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">complete</span></code>, see <a class="reference internal" href="completion.html"><span class="std std-doc">Shell completion</span></a>.)</p>
 <p><code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">--help</span></code> is always authoritative and lists <em>every</em> <code class="docutils literal notranslate"><span class="pre">run</span></code> flag;
 the notes below are for the ones whose behavior isn’t obvious from a
 one-line description.</p>
@@ -570,6 +574,23 @@ this env’s own directory inside it is.</p></li>
 <p><code class="docutils literal notranslate"><span class="pre">--clean</span></code> is the bigger hammer next to <code class="docutils literal notranslate"><span class="pre">--force</span></code>: <code class="docutils literal notranslate"><span class="pre">--force</span></code> rebuilds what a
 run would otherwise skip, <code class="docutils literal notranslate"><span class="pre">--clean</span></code> removes it so there is nothing to skip
 in the first place.</p>
+<section id="denver-clean-env">
+<h3><code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span> <span class="pre">&lt;env&gt;</span></code><a class="headerlink" href="#denver-clean-env" title="Link to this heading"></a></h3>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>clean<span class="w"> </span>&lt;env&gt;<span class="w">              </span><span class="c1"># remove every directory denver keeps for it</span>
+denver<span class="w"> </span>clean<span class="w"> </span>&lt;env&gt;<span class="w"> </span>--dry-run<span class="w">    </span><span class="c1"># only say what would go</span>
+</pre></div>
+</div>
+<p>The subcommand is the wider one, and runs no scripts. It removes state in
+<em>both</em> places it can live — the workdir inside the env
+(<code class="docutils literal notranslate"><span class="pre">&lt;env&gt;/.denver/&lt;config</span> <span class="pre">stem&gt;</span></code>) and the state dir under a shared root
+(<code class="docutils literal notranslate"><span class="pre">DENVER_STATE_DIR</span></code>, or denver’s own <code class="docutils literal notranslate"><span class="pre">.envs</span></code>) — so an env built once each
+way is left with nothing either way. And it does the same for every env
+<code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> imports, since a base env is built as part of building whatever
+imports it.</p>
+<p>It needs no working config: an env whose <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> will not parse still
+has its own directories removed, with a warning that the envs it imports
+were left alone.</p>
+</section>
 </section>
 <section id="output-and-version">
 <h2>Output and version<a class="headerlink" href="#output-and-version" title="Link to this heading"></a></h2>

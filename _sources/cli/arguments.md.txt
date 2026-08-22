@@ -7,8 +7,9 @@ You have already used a handful of these in
 denver's CLI is subcommand-based: `denver run <env> ...` is the normal entry
 point, and every flag below except `--version`/`--license` belongs to it.
 (`--version` and `--license` are top-level, before the subcommand, e.g.
-`denver --version`. `denver complete` is the other subcommand — see
-[Shell completion](completion.md) — and takes no flags of its own.)
+`denver --version`. The other two subcommands are `denver clean <env>` — see
+[Remove an environment's state](#remove-an-environments-state) below — and
+`denver complete`, see [Shell completion](completion.md).)
 
 `denver run --help` is always authoritative and lists *every* `run` flag;
 the notes below are for the ones whose behavior isn't obvious from a
@@ -271,6 +272,25 @@ Four things worth knowing:
 `--clean` is the bigger hammer next to `--force`: `--force` rebuilds what a
 run would otherwise skip, `--clean` removes it so there is nothing to skip
 in the first place.
+
+### `denver clean <env>`
+
+```bash
+denver clean <env>              # remove every directory denver keeps for it
+denver clean <env> --dry-run    # only say what would go
+```
+
+The subcommand is the wider one, and runs no scripts. It removes state in
+*both* places it can live — the workdir inside the env
+(`<env>/.denver/<config stem>`) and the state dir under a shared root
+(`DENVER_STATE_DIR`, or denver's own `.envs`) — so an env built once each
+way is left with nothing either way. And it does the same for every env
+`<env>` imports, since a base env is built as part of building whatever
+imports it.
+
+It needs no working config: an env whose `denver.toml` will not parse still
+has its own directories removed, with a warning that the envs it imports
+were left alone.
 
 ## Output and version
 

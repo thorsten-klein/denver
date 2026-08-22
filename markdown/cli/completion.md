@@ -59,7 +59,7 @@ the script — the only part of the printed script that varies by *how* you
 invoked `denver complete` is the registration line above; the completion
 logic itself never has to be regenerated:
 
-- `run` and `complete`, the two subcommands themselves
+- `run`, `clean` and `complete`, the subcommands themselves
 - `<env>` — directories and `denver.toml`/`denver.*.toml` files on disk
 - denver’s own `run` flags (`--fast`, `--until`, `--skip`, `--scripts`, …)
 - `--until`/`--skip`’s values — the stage ids the given `<env>` actually
