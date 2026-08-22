@@ -221,6 +221,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../providers/download.html#package-keys">Package keys</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#authenticated-downloads">Authenticated downloads</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../providers/download.html#where-things-go">Where things go</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../providers/download.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../providers/download.html#unpacking">Unpacking</a></li>
@@ -358,6 +359,12 @@ denver fork required. See “Extension providers” below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">denver-custom-args</span></code></strong> — command-line flags of this environment’s own, each one
 forwarded to argparse’s <code class="docutils literal notranslate"><span class="pre">add_argument</span></code>. See “Environment-specific CLI
 arguments” below.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">download-auth</span></code></strong> — a list of <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">host,</span> <span class="pre">username,</span> <span class="pre">password,</span> <span class="pre">headers</span> <span class="pre">}</span></code>
+entries, the credentials the <a class="reference internal" href="../providers/download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">download</span></code></span></a>
+provider sends per host. Top-level rather than per stage: a token belongs
+to a server, so every stage and every package fetching from that server is
+covered by the one entry. See “Authenticated downloads” in the download
+provider’s page.</p></li>
 </ul>
 </section>
 <section id="requiring-a-denver-version">

@@ -221,6 +221,7 @@
 <li class="toctree-l3"><a class="reference internal" href="#package-keys">Package keys</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="#authenticated-downloads">Authenticated downloads</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#where-things-go">Where things go</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#unpacking">Unpacking</a></li>
@@ -340,6 +341,55 @@ config. denver never acts on it; it only shows up in <code class="docutils liter
 </ul>
 </section>
 </section>
+<section id="authenticated-downloads">
+<h2>Authenticated downloads<a class="headerlink" href="#authenticated-downloads" title="Link to this heading"></a></h2>
+<p>A url behind a login is served by the top-level <code class="docutils literal notranslate"><span class="pre">[[download-auth]]</span></code> entries —
+credentials <strong>per host</strong>, not per package:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[[download-auth]]</span>
+<span class="n">host</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"artifactory.example.com"</span>
+<span class="n">username</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"${ARTIFACTORY_USER}"</span>
+<span class="n">password</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"${ARTIFACTORY_TOKEN}"</span>
+
+<span class="k">[[download-auth]]</span>
+<span class="n">host</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"api.github.com"</span>
+<span class="n">headers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">Authorization</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"Bearer ${GH_TOKEN}"</span><span class="p">,</span><span class="w"> </span><span class="n">Accept</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"application/octet-stream"</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>They are a top-level key, not a stage key, because a token belongs to a
+<em>server</em>: one entry covers every package of every <code class="docutils literal notranslate"><span class="pre">download</span></code> stage that
+fetches from that host, and a base env can declare the company mirror’s
+credentials once for every env importing it.</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">host</span></code></strong> (<strong>required</strong>) — the host these credentials belong to, matched
+case-insensitively against the url’s own host. Write it as <code class="docutils literal notranslate"><span class="pre">host:port</span></code>
+(e.g. <code class="docutils literal notranslate"><span class="pre">nexus.example.com:8443</span></code>) to match only that port; without a port it
+matches the host on its default port. The first entry matching a url wins,
+and nothing later is merged into it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">username</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">password</span></code></strong> — sent as an HTTP Basic <code class="docutils literal notranslate"><span class="pre">Authorization</span></code>
+header. Optional, but if either is set both must be — a half-configured
+login is an error, not a bare request (the same rule <code class="docutils literal notranslate"><span class="pre">docker:</span></code>’s
+<code class="docutils literal notranslate"><span class="pre">registries:</span></code> follows).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">headers</span></code></strong> — headers to send verbatim, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">Name</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code>. This is
+what bearer tokens and vendor-specific schemes need (<code class="docutils literal notranslate"><span class="pre">Authorization</span> <span class="pre">=</span> <span class="pre">&quot;Bearer</span> <span class="pre">...&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">PRIVATE-TOKEN</span></code>, <code class="docutils literal notranslate"><span class="pre">X-JFrog-Art-Api</span></code>, …). An <code class="docutils literal notranslate"><span class="pre">Authorization</span></code>
+written here wins over one built from <code class="docutils literal notranslate"><span class="pre">username:</span></code>/<code class="docutils literal notranslate"><span class="pre">password:</span></code>.</p></li>
+</ul>
+<p>An entry that would send nothing at all (no <code class="docutils literal notranslate"><span class="pre">username:</span></code>, no <code class="docutils literal notranslate"><span class="pre">headers:</span></code>) is an
+error rather than a silently unauthenticated download.</p>
+<p><strong>Write the secret as <code class="docutils literal notranslate"><span class="pre">${VAR}</span></code>, not as a literal.</strong> Credential values are
+interpolated per fetch, at the moment the request is built — never while the
+config is resolved — so <code class="docutils literal notranslate"><span class="pre">--show-config</span></code> prints the <code class="docutils literal notranslate"><span class="pre">${ARTIFACTORY_TOKEN}</span></code> the
+file was written with and never the token it stands for. A <code class="docutils literal notranslate"><span class="pre">${VAR}</span></code> that is
+unset in the environment is a hard error, not an empty password sent to the
+server.</p>
+<p><strong>Credentials never follow a redirect off their host.</strong> Release downloads
+redirect constantly (a github/gitlab/artifactory url answers <code class="docutils literal notranslate"><span class="pre">302</span></code> and hands
+the transfer to a CDN or a pre-signed S3 url), and urllib would otherwise
+replay the <code class="docutils literal notranslate"><span class="pre">Authorization</span></code> header written for one host at whatever host it
+is pointed at next. denver drops every configured auth header as soon as a
+redirect changes scheme, host or port. A <code class="docutils literal notranslate"><span class="pre">401</span></code>/<code class="docutils literal notranslate"><span class="pre">403</span></code> says which
+<code class="docutils literal notranslate"><span class="pre">[[download-auth]]</span></code> entry was missing, or that the one it found was
+rejected.</p>
+</section>
 <section id="where-things-go">
 <h2>Where things go<a class="headerlink" href="#where-things-go" title="Link to this heading"></a></h2>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>&lt;env dir&gt;/.denver/&lt;config stem&gt;/     # the env's workdir (DENVER_ENV_WORKDIR)
@@ -458,6 +508,12 @@ to be <em>prepended</em>: a package exists to provide a specific version of a
 tool, and appending it would let whatever the OS happens to ship win
 instead. <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> is there for the cases where the opposite is true
 (a fallback <code class="docutils literal notranslate"><span class="pre">MANPATH</span></code>, a low-priority <code class="docutils literal notranslate"><span class="pre">CMAKE_PREFIX_PATH</span></code>).</p></li>
+<li><p><strong>Credentials are configured per host, once.</strong> Per-package credentials
+would mean the same token repeated in every entry fetching from the same
+server — and repeated again in the next stage, and in the next env that
+imports this one. <code class="docutils literal notranslate"><span class="pre">[[download-auth]]</span></code> is matched against the url a package
+already has, so adding a package behind the same login needs no auth
+config at all. See “Authenticated downloads” above.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code></strong> skips the download and the unpack entirely and only applies
 <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code>; it dies with a clear message if a package
 has never been unpacked — run once without <code class="docutils literal notranslate"><span class="pre">--fast</span></code> first.</p></li>
