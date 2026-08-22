@@ -83,6 +83,12 @@ see "Fail loud" in [`philosophy.md`](../concepts/philosophy.md)).
 - **`denver-custom-args`** — command-line flags of this environment's own, each one
   forwarded to argparse's `add_argument`. See "Environment-specific CLI
   arguments" below.
+- **`download-auth`** — a list of `{ host, username, password, headers }`
+  entries, the credentials the [`download`](../providers/download.md)
+  provider sends per host. Top-level rather than per stage: a token belongs
+  to a server, so every stage and every package fetching from that server is
+  covered by the one entry. See "Authenticated downloads" in the download
+  provider's page.
 
 ### Requiring a denver version
 

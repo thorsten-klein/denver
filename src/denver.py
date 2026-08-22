@@ -577,6 +577,7 @@ KNOWN_TOP_LEVEL_KEYS = {
     "hooks",
     "extensions",
     "denver-custom-args",
+    "download-auth",
 }
 
 

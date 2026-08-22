@@ -8,6 +8,8 @@ import subprocess
 import tarfile
 import zipfile
 from pathlib import Path
+from urllib.error import HTTPError
+from urllib.request import Request
 
 import pytest
 
@@ -67,6 +69,31 @@ def run_download(config, ctx, stage="download"):
 def resolved_package(ctx, entry, stage="download"):
     """The single resolved package of a one-package stage."""
     return DownloadProvider.resolve_defaults(ctx, {"packages": [entry]}, {})["packages"][0]
+
+
+@pytest.fixture
+def fake_opener(monkeypatch):
+    """Capture the Request the authenticated path builds, and serve canned bytes for it."""
+    opened = []
+
+    class _Opener:
+        def __init__(self, payload, handlers):
+            self._payload = payload
+            self.handlers = handlers
+
+        def open(self, request):
+            opened.append(request)
+            if isinstance(self._payload, Exception):
+                raise self._payload
+            return io.BytesIO(self._payload)
+
+    def _build_opener(*handlers):
+        return _Opener(_build_opener.payload, handlers)
+
+    _build_opener.payload = make_zip()
+    _build_opener.opened = opened
+    monkeypatch.setattr(download_provider, "build_opener", _build_opener)
+    return _build_opener
 
 
 @pytest.fixture
@@ -518,6 +545,234 @@ def test_fast_banners_say_what_it_skipped(make_context, fake_urlopen, capsys):
     err = capsys.readouterr().err
     assert "tool: download (skipped by --fast)" in err
     assert "tool: activate" in err
+
+
+# ---- '[[download-auth]]' ----------------------------------------------------#
+def auth_config(packages, auth, stage="download"):
+    """A config whose download stage is served by the given top-level '[[download-auth]]' entries."""
+    return {**config_for(packages, stage=stage), "download-auth": auth}
+
+
+def sent_headers(fake_opener):
+    """The headers of the single request the authenticated path made."""
+    return dict(fake_opener.opened[0].headers)
+
+
+def test_username_and_password_are_sent_as_basic_auth(make_context, fake_opener):
+    config = auth_config(
+        [{"name": "tool", "url": URL}],
+        [{"host": "example.invalid", "username": "${ART_USER}", "password": "${ART_TOKEN}"}],
+    )
+    ctx = make_context(config=config, env={"ART_USER": "ci", "ART_TOKEN": "s3cret"})
+
+    run_download(config, ctx)
+
+    assert sent_headers(fake_opener)["Authorization"] == download_provider.basic_auth("ci", "s3cret")
+    assert fake_opener.opened[0].full_url == URL
+
+
+def test_headers_are_sent_verbatim(make_context, fake_opener):
+    config = auth_config(
+        [{"name": "tool", "url": URL}],
+        [
+            {
+                "host": "example.invalid",
+                "headers": {"Authorization": "Bearer ${GH_TOKEN}", "Accept": "application/octet-stream"},
+            }
+        ],
+    )
+    ctx = make_context(config=config, env={"GH_TOKEN": "ghp_x"})
+
+    run_download(config, ctx)
+
+    headers = sent_headers(fake_opener)
+    assert headers["Authorization"] == "Bearer ghp_x"
+    assert headers["Accept"] == "application/octet-stream"
+
+
+def test_explicit_headers_win_over_username_and_password(make_context, fake_opener):
+    config = auth_config(
+        [{"name": "tool", "url": URL}],
+        [{"host": "example.invalid", "username": "ci", "password": "pw", "headers": {"Authorization": "Bearer t"}}],
+    )
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    assert sent_headers(fake_opener)["Authorization"] == "Bearer t"
+
+
+def test_a_url_on_another_host_is_fetched_unauthenticated(make_context, fake_urlopen, fake_opener):
+    fake_urlopen.payloads["*"] = make_zip()
+    config = auth_config(
+        [{"name": "tool", "url": URL}],
+        [{"host": "artifactory.invalid", "username": "ci", "password": "pw"}],
+    )
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    assert fake_urlopen.calls == [URL]
+    assert fake_opener.opened == []
+
+
+def test_the_first_matching_entry_wins(make_context, fake_opener):
+    config = auth_config(
+        [{"name": "tool", "url": URL}],
+        [
+            {"host": "example.invalid", "headers": {"Authorization": "Bearer first"}},
+            {"host": "example.invalid", "headers": {"Authorization": "Bearer second"}},
+        ],
+    )
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    assert sent_headers(fake_opener)["Authorization"] == "Bearer first"
+
+
+def test_a_host_with_a_port_only_matches_that_port(make_context, fake_urlopen, fake_opener):
+    fake_urlopen.payloads["*"] = make_zip()
+    auth = [{"host": "example.invalid:8443", "headers": {"Authorization": "Bearer port"}}]
+
+    # the same host on its default port is *not* what this entry names
+    default_port = auth_config([{"name": "tool", "url": URL}], auth)
+    run_download(default_port, make_context(config=default_port))
+    assert fake_opener.opened == []
+
+    on_8443 = auth_config([{"name": "tool", "url": "https://example.invalid:8443/tools/tool-2.0.zip"}], auth)
+    run_download(on_8443, make_context(config=on_8443))
+    assert sent_headers(fake_opener)["Authorization"] == "Bearer port"
+
+
+def test_credentials_are_never_baked_into_the_resolved_config(make_context, fake_opener):
+    auth = [{"host": "example.invalid", "username": "${ART_USER}", "password": "${ART_TOKEN}"}]
+    config = auth_config([{"name": "tool", "url": URL}], auth)
+    ctx = make_context(config=config, env={"ART_USER": "ci", "ART_TOKEN": "s3cret"})
+
+    run_download(config, ctx)
+
+    # what --show-config would print: the '${...}' the file was written with
+    assert config["download-auth"] == auth
+
+
+def test_an_unset_credential_variable_dies(make_context, fake_opener):
+    config = auth_config(
+        [{"name": "tool", "url": URL}],
+        [{"host": "example.invalid", "username": "ci", "password": "${ART_TOKEN_NOT_SET}"}],
+    )
+    ctx = make_context(config=config)
+
+    with pytest.raises(SystemExit):
+        run_download(config, ctx)
+
+
+def test_a_401_names_the_auth_section(make_context, fake_urlopen, caplog):
+    fake_urlopen.payloads[URL] = HTTPError(URL, 401, "Unauthorized", {}, None)
+    config = config_for([{"name": "tool", "url": URL}])
+    ctx = make_context(config=config)
+
+    with pytest.raises(SystemExit):
+        run_download(config, ctx)
+
+    assert "download-auth" in caplog.text
+
+
+def test_a_401_on_a_configured_host_says_it_was_rejected(make_context, fake_opener, caplog):
+    fake_opener.payload = HTTPError(URL, 401, "Unauthorized", {}, None)
+    config = auth_config(
+        [{"name": "tool", "url": URL}],
+        [{"host": "example.invalid", "username": "ci", "password": "pw"}],
+    )
+    ctx = make_context(config=config)
+
+    with pytest.raises(SystemExit):
+        run_download(config, ctx)
+
+    assert "was sent and rejected" in caplog.text
+
+
+# ---- '[[download-auth]]' validation -----------------------------------------#
+@pytest.mark.parametrize(
+    "auth",
+    [
+        "artifactory.invalid",  # not a list
+        [["host"]],  # not a mapping
+        [{"host": "h", "user": "ci", "password": "pw"}],  # unknown key
+        [{"username": "ci", "password": "pw"}],  # no host
+        [{"host": "  ", "username": "ci", "password": "pw"}],
+        [{"host": "h", "username": "ci"}],  # password missing
+        [{"host": "h", "password": "pw"}],  # username missing
+        [{"host": "h", "username": 7, "password": "pw"}],
+        [{"host": "h"}],  # sends nothing
+        [{"host": "h", "headers": ["Authorization: Bearer t"]}],
+        [{"host": "h", "headers": {"Authorization": 7}}],
+    ],
+)
+def test_a_broken_auth_entry_dies_while_the_config_resolves(make_context, auth):
+    ctx = make_context()
+    with pytest.raises(SystemExit):
+        DownloadProvider.resolve_defaults(ctx, {"packages": [{"name": "tool", "url": URL}]}, {"download-auth": auth})
+
+
+def test_auth_headers_reach_the_request_only_through_the_opener(make_context, fake_urlopen):
+    """A stage with no matching entry keeps the plain urlopen path (nothing to strip, nothing installed)."""
+    fake_urlopen.payloads["*"] = make_zip()
+    config = config_for([{"name": "tool", "url": URL}])
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    assert fake_urlopen.calls == [URL]
+
+
+# ---- redirects ---------------------------------------------------------------#
+def redirected(handler, from_url, to_url, headers):
+    """The Request ``handler`` would follow a 302 from ``from_url`` to ``to_url`` with."""
+    return handler.redirect_request(Request(from_url, headers=headers), None, 302, "Found", {}, to_url)
+
+
+def test_credentials_do_not_follow_a_redirect_to_another_host():
+    handler = download_provider.AuthStrippingRedirectHandler({"Authorization"})
+
+    new = redirected(
+        handler, "https://example.invalid/a.zip", "https://cdn.other.invalid/a.zip", {"Authorization": "Bearer t"}
+    )
+
+    assert "Authorization" not in new.headers
+
+
+def test_credentials_follow_a_redirect_within_the_same_host():
+    handler = download_provider.AuthStrippingRedirectHandler({"Authorization"})
+
+    new = redirected(
+        handler, "https://example.invalid/a.zip", "https://example.invalid/b.zip", {"Authorization": "Bearer t"}
+    )
+
+    assert new.headers["Authorization"] == "Bearer t"
+
+
+def test_credentials_do_not_follow_a_downgrade_to_http():
+    handler = download_provider.AuthStrippingRedirectHandler({"Authorization"})
+
+    new = redirected(
+        handler, "https://example.invalid/a.zip", "http://example.invalid/a.zip", {"Authorization": "Bearer t"}
+    )
+
+    assert "Authorization" not in new.headers
+
+
+def test_a_non_credential_header_survives_a_cross_host_redirect():
+    handler = download_provider.AuthStrippingRedirectHandler({"Authorization"})
+
+    new = redirected(
+        handler,
+        "https://example.invalid/a.zip",
+        "https://cdn.other.invalid/a.zip",
+        {"Authorization": "Bearer t", "Accept": "application/octet-stream"},
+    )
+
+    assert new.headers["Accept"] == "application/octet-stream"
 
 
 # ---- module-level helpers ---------------------------------------------------#
