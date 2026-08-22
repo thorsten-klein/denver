@@ -717,6 +717,7 @@ denver run envs/firmware-env --skip docker-base          # same stack, directly 
 denver run envs/firmware-env -c uv-packages.python=3.13  # override one specific config value (for this run)
 
 denver run envs/firmware-env --clean                    # run its 'scripts: clean:', then throw the built state away
+denver clean envs/firmware-env                          # remove every directory denver keeps for it and its imports
 ```
 
 **Note on `--skip docker-base`**: worth trying at least once — it builds

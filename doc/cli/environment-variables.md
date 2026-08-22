@@ -65,7 +65,8 @@ denver falls back to `~/.denver/<env>-<hash>` when it cannot write to the
 env directory (a read-only mount, a vendored base env, an env shipped inside
 an image), and `DENVER_STATE_DIR` overrides both.
 
-Wherever it ended up, `denver run <env> --clean` removes it — see
+Wherever it ended up, `denver run <env> --clean` or `denver clean <env>`
+removes it — see
 [Remove an environment's state](arguments.md#remove-an-environments-state).
 
 > **Note**

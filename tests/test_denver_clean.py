@@ -1,6 +1,8 @@
-"""Tests for 'denver run --clean' -- the env's own 'clean' scripts, then its state directory."""
+"""Tests for removing an env's state: 'denver run --clean' and the 'denver clean <env>' subcommand."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import pytest
 
@@ -223,3 +225,98 @@ def test_clean_with_nothing_to_remove_says_so(make_env, caplog):
     denver.clean_env(env_dir, env_dir / "denver.toml")
 
     assert "nothing to remove" in caplog.text
+
+
+# ---- 'denver clean <env>' ---------------------------------------------------#
+def test_clean_subcommand_removes_the_workdir_and_the_spent_denver_parent(make_env):
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+
+    assert denver.main(["clean", str(env_dir)]) == 0
+
+    assert not workdir.exists()
+    assert not (env_dir / ".denver").exists()
+
+
+def test_clean_subcommand_removes_the_shared_state_dir_as_well(make_env, tmp_path, monkeypatch):
+    # both places state can live go, not only the one a run would pick now:
+    # this env was built once under a shared root and once without
+    shared = tmp_path / "shared"
+    monkeypatch.setenv("DENVER_STATE_DIR", str(shared))
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+    statedir = shared / env_state_key(env_dir, env_dir / "denver.toml")
+    statedir.mkdir(parents=True)
+
+    assert denver.main(["clean", str(env_dir)]) == 0
+
+    assert not workdir.exists()
+    assert not statedir.exists()
+    assert shared.is_dir()  # the shared root belongs to every env pointed at it
+
+
+def test_clean_subcommand_cleans_the_envs_it_imports(make_env):
+    base = make_env(name="base", config={"stages": []})
+    base_workdir = build_state(base)
+    leaf = make_env(name="leaf", config={"import": ["../base"], "stages": []})
+    leaf_workdir = build_state(leaf)
+
+    assert denver.main(["clean", str(leaf)]) == 0
+
+    assert not leaf_workdir.exists()
+    assert not base_workdir.exists()
+
+
+def test_clean_subcommand_still_cleans_an_env_whose_config_is_broken(make_env, caplog):
+    env_dir = make_env(config={"stages": []})
+    (env_dir / "denver.toml").write_text('import = ["../base"\n')
+    workdir = build_state(env_dir)
+
+    assert denver.main(["clean", str(env_dir)]) == 0
+
+    assert not workdir.exists()
+    assert "cannot read" in caplog.text
+
+
+def test_clean_subcommand_dry_run_removes_nothing(make_env, caplog):
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+
+    assert denver.main(["clean", str(env_dir), "--dry-run"]) == 0
+
+    assert workdir.is_dir()
+    assert f"would remove {workdir}" in caplog.text
+
+
+def test_clean_subcommand_with_nothing_to_remove_says_so(make_env, caplog):
+    env_dir = make_env(config={"stages": []})
+
+    assert denver.main(["clean", str(env_dir)]) == 0
+
+    assert "nothing to remove" in caplog.text
+
+
+def test_clean_subcommand_warns_about_an_import_pointing_nowhere(make_env, caplog):
+    env_dir = make_env(config={"import": ["../gone"], "stages": []})
+    workdir = build_state(env_dir)
+
+    assert denver.main(["clean", str(env_dir)]) == 0
+
+    assert not workdir.exists()
+    assert "points nowhere" in caplog.text
+
+
+def test_clean_subcommand_is_offered_by_completion(tmp_path):
+    assert "clean" in denver._complete_candidates(["cl"])
+    assert "--dry-run" in denver._complete_candidates(["clean", str(tmp_path), "--d"])
+
+
+def test_clean_subcommand_completes_env_paths_for_its_positional(make_env):
+    # the <env> positional is still open, so paths are what's offered
+    env_dir = make_env(config={"stages": []})
+    assert f"{env_dir}/" in denver._complete_candidates(["clean", f"{env_dir.parent}/"])
+
+
+def test_clean_subcommand_flags_come_with_their_own_help_text(capsys):
+    assert denver.main(["__complete", "--describe", "clean", str(Path.cwd()), "--dry"]) == 0
+    assert capsys.readouterr().out.startswith("--dry-run\t")
