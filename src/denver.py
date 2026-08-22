@@ -261,20 +261,46 @@ def _dev_version(described):
     return f"{DEV_VERSION}-{suffix}"
 
 
+# setuptools-scm's version for a build off an untagged commit -- 1.5.1.dev27+gdecaf35.
+_SCM_DEV_RE = re.compile(r"(\d+(?:\.\d+)*)\.dev(\d+)(?:\+(.+))?")
+
+
+def _dev_metadata_version(version):
+    """Re-base an untagged build's metadata onto DEV_VERSION -- _dev_version's other half.
+
+    setuptools-scm names such a build after the release it heads for, as a
+    *pre*-release of it (1.5.1.dev27+gdecaf35), which ranks below 1.5.1 and
+    so fails a ">=1.5.1" pin the same commit satisfies from its checkout.
+    Re-based, both sources report 1.5.1-27-gdecaf35 -- one commit, one
+    verdict.
+
+    A tagged rc is never re-based (it is deliberately incomplete), nor is
+    metadata already naming a later release than DEV_VERSION -- so this only
+    ever raises an understated version, never lowers an accurate one.
+    """
+    if DEV_VERSION is None:
+        return version
+    match = _SCM_DEV_RE.fullmatch(version)
+    if not match or compare_versions(parse_version(match.group(1)), parse_version(DEV_VERSION)) > 0:
+        return version
+    return "-".join(part for part in (DEV_VERSION, match.group(2), match.group(3)) if part)
+
+
 def package_version():
     """The running denver's version string, or None if it can't be determined.
 
     The checkout's git tags first (see scm_version), then the installed
     distribution's metadata via importlib.metadata -- which is what answers
     for a normally installed wheel, where there's no checkout to describe.
-    setuptools-scm derives that metadata from git tags at build time -- see
-    pyproject.toml's [tool.setuptools_scm].
+    setuptools-scm derives that metadata from git tags at build time (see
+    pyproject.toml's [tool.setuptools_scm]), so it lags behind them just as
+    `git describe` does -- and is re-based for the same reason.
     """
     version = scm_version()
     if version is not None:
         return version
     try:
-        return importlib.metadata.version(DISTRIBUTION_NAME)
+        return _dev_metadata_version(importlib.metadata.version(DISTRIBUTION_NAME))
     except importlib.metadata.PackageNotFoundError:
         return None
 
