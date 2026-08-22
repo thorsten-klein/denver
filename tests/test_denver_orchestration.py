@@ -1396,10 +1396,10 @@ def test_run_stages_stacking_used_by_stage(tmp_path, fake_providers, exec_record
     assert exec_recorder["args"] == ["WRAPPED", "echo", "hi"]
 
 
-# ---- run_named_scripts (--scripts <name>, e.g. 'setup'/'login') ---------------#
+# ---- run_named_scripts (--scripts <name>, e.g. 'setup'/'login'/'clean') ------#
 # parametrized over the name: the mechanism (run_named_scripts) doesn't care
-# what 'name' is, so one suite covers every convention (setup, login, or a
-# project-specific one) instead of a hand-duplicated copy per name.
+# what 'name' is, so one suite covers every convention (setup, login, clean,
+# or a project-specific one) instead of a hand-duplicated copy per name.
 @pytest.mark.parametrize("name", ["setup", "login"])
 def test_run_named_scripts_runs_each_setup_stage_in_order(tmp_path, fake_providers, run_recorder, name):
     # no wrapper stage declared at all -- always the flat, direct-run case
