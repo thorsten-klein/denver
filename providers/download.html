@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>zephyr provider &mdash; denver</title>
+  <title>download provider &mdash; denver</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -24,8 +24,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="download provider" href="download.html" />
-    <link rel="prev" title="docker provider" href="docker.html" /> 
+    <link rel="next" title="custom provider" href="custom.html" />
+    <link rel="prev" title="zephyr provider" href="zephyr.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -210,21 +210,21 @@
 <li class="toctree-l2"><a class="reference internal" href="docker.html#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">zephyr provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#requires">Requires</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#key-reference">Key reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zephyr.html">zephyr provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#design-notes">Design notes</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">download provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#key-reference">Key reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#package-keys">Package keys</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#where-things-go">Where things go</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#unpacking">Unpacking</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#design-notes">Design notes</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="download.html">download provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="download.html#key-reference">Key reference</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="download.html#package-keys">Package keys</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="download.html#where-things-go">Where things go</a></li>
-<li class="toctree-l2"><a class="reference internal" href="download.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
-<li class="toctree-l2"><a class="reference internal" href="download.html#unpacking">Unpacking</a></li>
-<li class="toctree-l2"><a class="reference internal" href="download.html#design-notes">Design notes</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="custom.html">custom provider</a><ul>
@@ -267,9 +267,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">zephyr provider</li>
+      <li class="breadcrumb-item active">download provider</li>
       <li class="wy-breadcrumbs-aside">
-              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/providers/zephyr.md" class="fa fa-github"> Edit on GitHub</a>
+              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/providers/download.md" class="fa fa-github"> Edit on GitHub</a>
       </li>
   </ul>
   <hr/>
@@ -277,71 +277,199 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="zephyr-provider">
-<h1>zephyr provider<a class="headerlink" href="#zephyr-provider" title="Link to this heading"></a></h1>
-<p>A <code class="docutils literal notranslate"><span class="pre">zephyr</span></code> stage manages a <a class="reference external" href="https://docs.zephyrproject.org/latest/develop/west/index.html">West</a>
-workspace (Zephyr RTOS).</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[my-zephyr-stage]</span>
-<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"zephyr"</span>
+  <section id="download-provider">
+<h1>download provider<a class="headerlink" href="#download-provider" title="Link to this heading"></a></h1>
+<p>A <code class="docutils literal notranslate"><span class="pre">download</span></code> stage brings prebuilt release archives into the environment:
+fetch, checksum, unpack, put on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. It is what the “download a release
+tarball by hand” shell script (see the worked example in
+<a class="reference internal" href="custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a>) looks like once it is a provider — the same four
+jobs, but idempotent, checksum-verified and <code class="docutils literal notranslate"><span class="pre">--fast</span></code>-aware without every
+project writing that logic again.</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[ninja-setup]</span>
+<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"download"</span>
+
+<span class="k">[[ninja-setup.packages]]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"ninja"</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"</span>
+<span class="n">sha256sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"</span>
+<span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"."</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
 <p>(<code class="docutils literal notranslate"><span class="pre">provider:</span></code>/<code class="docutils literal notranslate"><span class="pre">description:</span></code>/<code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/<code class="docutils literal notranslate"><span class="pre">scripts:</span></code> are generic keys every stage has —
-see “Generic stage keys” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>. Everything below is specific to <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>.)</p>
-<section id="requires">
-<h2>Requires<a class="headerlink" href="#requires" title="Link to this heading"></a></h2>
-<p><strong><code class="docutils literal notranslate"><span class="pre">west</span></code> must be installed</strong> wherever this stage runs — denver never
-installs it. In practice an earlier <code class="docutils literal notranslate"><span class="pre">uv</span></code> stage provides it, by listing
-<code class="docutils literal notranslate"><span class="pre">west</span></code> in its <code class="docutils literal notranslate"><span class="pre">requirements:</span></code>.</p>
-</section>
+see “Generic stage keys” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>. Everything below is specific to <code class="docutils literal notranslate"><span class="pre">download</span></code>.)</p>
 <section id="key-reference">
 <h2>Key reference<a class="headerlink" href="#key-reference" title="Link to this heading"></a></h2>
+<p>The stage has exactly one key of its own:</p>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">exe</span></code></strong> (default: <code class="docutils literal notranslate"><span class="pre">&quot;west&quot;</span></code>) — the <code class="docutils literal notranslate"><span class="pre">west</span></code> executable, resolved on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">west-yml</span></code></strong> (default: <code class="docutils literal notranslate"><span class="pre">&lt;WEST_TOPDIR&gt;/west.yml</span></code>) — the manifest.
-<code class="docutils literal notranslate"><span class="pre">WEST_TOPDIR</span></code> (a zephyr concept, not a denver built-in) is discovered by
-walking up from the env dir: the nearest enclosing <code class="docutils literal notranslate"><span class="pre">.west</span></code>, or failing
-that, the <em>outermost</em> enclosing <code class="docutils literal notranslate"><span class="pre">.git</span></code>. Already-exported <code class="docutils literal notranslate"><span class="pre">WEST_TOPDIR</span></code>
-(e.g. set by the user, or by an outer denver run before re-invoking
-inside docker) wins over this discovery.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">base</span></code></strong> (default: <code class="docutils literal notranslate"><span class="pre">${WEST_TOPDIR}/zephyr-rtos</span></code>) — <code class="docutils literal notranslate"><span class="pre">ZEPHYR_BASE</span></code>.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">west-config</span></code></strong> — extra/overriding <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">config</span></code> key/value pairs, e.g.
-<code class="docutils literal notranslate"><span class="pre">{zephyr.base-prefer:</span> <span class="pre">env}</span></code>.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">blobs-cache</span></code></strong> — a path to an auto-generated list of west blobs to
-pre-cache.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">blobs-fetch-args</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">[&quot;--auto-accept&quot;]</span></code>) — extra <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">blobs</span> <span class="pre">fetch</span></code> args.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">patch-committer-name</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">patch-committer-email</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">patch-committer-date</span></code></strong>
-— the identity used when applying project patches via <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">patches</span></code>
-(<code class="docutils literal notranslate"><span class="pre">GIT_COMMITTER_NAME</span></code>/<code class="docutils literal notranslate"><span class="pre">_EMAIL</span></code>/<code class="docutils literal notranslate"><span class="pre">_DATE</span></code>), defaulting to
-<code class="docutils literal notranslate"><span class="pre">denver</span></code>/<code class="docutils literal notranslate"><span class="pre">denver&#64;denver</span></code>/<code class="docutils literal notranslate"><span class="pre">2000-01-01T00:00:00</span></code> (a fixed value, so
-applying the same patches twice never produces a different commit).</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">update-args</span></code></strong> — extra <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code> args.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">packages</span></code></strong> — a list of packages, one <code class="docutils literal notranslate"><span class="pre">[[&lt;stage&gt;.packages]]</span></code> table per
+archive. They are processed in the order they are written, each one fully
+(download, unpack, environment) before the next.</p></li>
 </ul>
-<p><code class="docutils literal notranslate"><span class="pre">WEST_CONFIG_SYSTEM</span></code> (west’s own base-config env var, e.g. the
-remotes/defaults denver ships) is <em>not</em> a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> key — set it
-directly via <code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">hooks.env</span></code> like any other real environment variable;
-west reads it itself, no provider-specific handling needed.</p>
+<section id="package-keys">
+<h3>Package keys<a class="headerlink" href="#package-keys" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">name</span></code></strong> (<strong>required</strong>) — this package’s id: it names the default
+unpack dir and prefixes every log line about it. Unique within the stage.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">url</span></code></strong> (<strong>required</strong>) — where to fetch the archive from. Must be
+<code class="docutils literal notranslate"><span class="pre">http(s)</span></code>; <code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation works (e.g. an internal mirror in
+<code class="docutils literal notranslate"><span class="pre">[env]</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">outfile</span></code></strong> — the file name to store the archive under, inside the
+downloads folder (default: the file name the <code class="docutils literal notranslate"><span class="pre">url</span></code> ends in). An absolute
+value puts the archive wherever it names instead.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">sha256sum</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">md5sum</span></code></strong> — the expected checksum of the downloaded
+file. Both optional, both checked when given. Without either, whatever
+the url serves at any given time is trusted — which is exactly what
+pinning a version in the url alone does <em>not</em> protect you from.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">unpack-dir</span></code></strong> — where the archive is unpacked (default:
+<code class="docutils literal notranslate"><span class="pre">&lt;env</span> <span class="pre">workdir&gt;/download/&lt;name&gt;</span></code>). Relative values resolve like every
+other denver path — against the env dir, then imported base envs.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">unpack-cmd</span></code></strong> — a shell command that unpacks the archive itself,
+replacing python’s own archive handling. See “Unpacking” below.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-sep</span></code></strong> — the separator used to split every <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> /
+<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> <em>value</em> into entries, and to join the result onto the
+variable’s current value (default: <code class="docutils literal notranslate"><span class="pre">:</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">env-append</span></code></strong> — what the unpacked package
+contributes to the environment, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">VAR</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code>. Each value is a
+list of paths <em>inside</em> the package, joined by <code class="docutils literal notranslate"><span class="pre">env-sep:</span></code> — <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> is the
+package root, <code class="docutils literal notranslate"><span class="pre">&quot;bin&quot;</span></code> its <code class="docutils literal notranslate"><span class="pre">bin/</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;bin:libexec&quot;</span></code> both. Every relative
+entry is made absolute against <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code> before it lands in the
+variable; absolute entries are left as written. <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> puts them
+in front of whatever the variable already holds, <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> behind it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">description</span></code></strong> — free text about this package, for whoever reads the
+config. denver never acts on it; it only shows up in <code class="docutils literal notranslate"><span class="pre">--show-config</span></code>.</p></li>
+</ul>
+</section>
+</section>
+<section id="where-things-go">
+<h2>Where things go<a class="headerlink" href="#where-things-go" title="Link to this heading"></a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>&lt;env dir&gt;/.denver/&lt;config stem&gt;/     # the env's workdir (DENVER_ENV_WORKDIR)
+├── downloads/                       # the archives -- never deleted by denver
+│   └── ninja-linux.zip
+└── download/                        # the unpacked packages
+    └── ninja/                       # &lt;- unpack-dir:, what env-prepend: points into
+        ├── ninja
+        └── .denver-download         # what this tree was unpacked from
+</pre></div>
+</div>
+<p>The two tiers are deliberately different in kind. An <strong>archive is expensive
+to fetch and cheap to keep</strong>, so nothing in this provider ever deletes one —
+<code class="docutils literal notranslate"><span class="pre">--force</span></code> included. An <strong>unpacked tree is the opposite</strong>, so it is rebuilt
+from the archive next to it whenever it no longer matches the config.</p>
+<p>That is what the <code class="docutils literal notranslate"><span class="pre">.denver-download</span></code> stamp is for: it records the <code class="docutils literal notranslate"><span class="pre">url</span></code>,
+<code class="docutils literal notranslate"><span class="pre">outfile</span></code>, checksums and <code class="docutils literal notranslate"><span class="pre">unpack-cmd</span></code> the tree was built from, and it is
+written <em>last</em>, once unpacking succeeded. A tree whose stamp doesn’t match
+the current config (a bumped <code class="docutils literal notranslate"><span class="pre">url</span></code>, a re-downloaded archive, a changed
+<code class="docutils literal notranslate"><span class="pre">unpack-cmd</span></code>) is stale and gets rebuilt; a tree with no stamp at all was
+never finished and is rebuilt too.</p>
+</section>
+<section id="what-runs-and-what-is-skipped">
+<h2>What runs, and what is skipped<a class="headerlink" href="#what-runs-and-what-is-skipped" title="Link to this heading"></a></h2>
+<p>Per package, in order:</p>
+<ol class="arabic simple">
+<li><p><strong>Download</strong> — skipped when the archive is already there <em>and</em> passes
+its configured checksums. An archive that fails them is deleted and
+fetched again; one that fails them again right after being fetched is a
+hard error, and the bad file is not left behind. The transfer itself
+goes to a <code class="docutils literal notranslate"><span class="pre">.part</span></code> file that is renamed into place only once complete, so
+an interrupted run never leaves a truncated archive that the next run
+would accept.</p></li>
+<li><p><strong>Unpack</strong> — skipped when the stamp above says this exact package is
+already unpacked there. Otherwise the tree is removed and rebuilt: the
+archive is extracted into a staging dir <em>next to</em> <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code> and
+moved into place only once extraction succeeded, so a failure can never
+leave a half-unpacked tree behind.</p></li>
+<li><p><strong>Environment</strong> — <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> are folded into the
+environment. Never skipped: this is the activation half, the thing later
+stages and the final command actually depend on.</p></li>
+</ol>
+</section>
+<section id="unpacking">
+<h2>Unpacking<a class="headerlink" href="#unpacking" title="Link to this heading"></a></h2>
+<p>Without <code class="docutils literal notranslate"><span class="pre">unpack-cmd:</span></code>, the archive is unpacked by python itself
+(<code class="docutils literal notranslate"><span class="pre">shutil.unpack_archive</span></code>), which picks the format from the file name —
+<code class="docutils literal notranslate"><span class="pre">.zip</span></code>, <code class="docutils literal notranslate"><span class="pre">.tar</span></code>, <code class="docutils literal notranslate"><span class="pre">.tar.gz</span></code>/<code class="docutils literal notranslate"><span class="pre">.tgz</span></code>, <code class="docutils literal notranslate"><span class="pre">.tar.bz2</span></code>, <code class="docutils literal notranslate"><span class="pre">.tar.xz</span></code>.</p>
+<p>Two things happen on top of that:</p>
+<ul class="simple">
+<li><p><strong>Executable bits from a zip are restored.</strong> Python’s <code class="docutils literal notranslate"><span class="pre">zipfile</span></code>
+deliberately ignores the unix permissions a zip records, so a release
+like <code class="docutils literal notranslate"><span class="pre">ninja-linux.zip</span></code> — whose whole payload is one executable — would
+otherwise extract as a non-executable file, and the next stage would fail
+with “permission denied”. (tar archives need nothing here; <code class="docutils literal notranslate"><span class="pre">tarfile</span></code>
+restores modes itself.)</p></li>
+<li><p><strong>A download that isn’t an archive at all</strong> — a bare binary, an
+AppImage — becomes the package’s single file, made executable, since that
+is the only thing such a release is ever for. No <code class="docutils literal notranslate"><span class="pre">unpack-cmd:</span></code> needed for
+that case.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">unpack-cmd:</span></code> takes over from all of it when the archive needs something
+python doesn’t do (a self-extracting installer, a nested archive, an
+installer that needs flags). It runs via <code class="docutils literal notranslate"><span class="pre">bash</span> <span class="pre">-c</span></code>, with the <strong>staging dir
+as its working directory</strong> — whatever it leaves there is what gets moved
+into <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code>. Three variables name what it is working on:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>variable</p></th>
+<th class="head"><p>value</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_DOWNLOAD_NAME</span></code></p></td>
+<td><p>the package’s <code class="docutils literal notranslate"><span class="pre">name:</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_DOWNLOAD_ARCHIVE</span></code></p></td>
+<td><p>absolute path of the downloaded file</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_DOWNLOAD_DIR</span></code></p></td>
+<td><p>absolute path of the staging dir (= the cwd)</p></td>
+</tr>
+</tbody>
+</table>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[[toolchain-setup.packages]]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"toolchain"</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://example.invalid/toolchain-1.2.3.tar.gz"</span>
+<span class="n">sha256sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"..."</span>
+<span class="c1"># strip the archive's own top-level directory, so 'bin' below is really its bin/</span>
+<span class="n">unpack-cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'tar -xzf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'</span>
+<span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"bin"</span><span class="p">,</span><span class="w"> </span><span class="n">LD_LIBRARY_PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"lib"</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
 </section>
 <section id="design-notes">
 <h2>Design notes<a class="headerlink" href="#design-notes" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">packages</span> <span class="pre">pip</span></code> is a separate concern.</strong> Installing the Python
-packages a workspace’s own modules declare (<code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">packages</span> <span class="pre">pip</span></code>) isn’t
-this provider’s job — give a <em>separate</em> <code class="docutils literal notranslate"><span class="pre">uv</span></code> stage a <code class="docutils literal notranslate"><span class="pre">requirements:</span> <span class="pre">[$(west</span> <span class="pre">packages</span> <span class="pre">pip)]</span></code> entry instead (see <a class="reference internal" href="uv.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">uv.md</span></code></span></a>), with its own
-<code class="docutils literal notranslate"><span class="pre">overrides:</span></code>/<code class="docutils literal notranslate"><span class="pre">freeze-to:</span></code> for pinning them. It has to run <em>after</em> this
-stage, since until the workspace is updated there’s no way to know what
-those packages even are.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--ci</span></code></strong> always adds a fixed shallow-clone strategy (<code class="docutils literal notranslate"><span class="pre">--narrow</span> <span class="pre">-o=--depth=1</span></code>) to <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code>, on top of whatever <code class="docutils literal notranslate"><span class="pre">update-args:</span></code>
-already configures.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code></strong> only checks the workspace is already configured — dies with
-a clear message if it isn’t, rather than running <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code>.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--force</span></code></strong> always reruns <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code> (even if this stage’s own
-drift check found nothing new) and recreates the workspace setup steps’
-own on-disk state unconditionally.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> prints the <code class="docutils literal notranslate"><span class="pre">west</span></code> commands instead of running them, and
-writes neither <code class="docutils literal notranslate"><span class="pre">.west/config</span></code>, the drift fingerprint, nor <code class="docutils literal notranslate"><span class="pre">blobs-cache:</span></code>.
-The read-only queries this stage branches on (<code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">config</span> <span class="pre">-l</span></code>, <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">manifest</span> <span class="pre">--resolve</span></code>, <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">rev-parse</span></code>) do still run: they are
-what decide which <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">config</span></code> keys differ, whether <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code> would
-be skipped as unchanged, and which projects carry a <code class="docutils literal notranslate"><span class="pre">patches.yml</span></code>.</p></li>
+<li><p><strong>Why a provider and not a <code class="docutils literal notranslate"><span class="pre">custom:</span> <span class="pre">cmd:</span></code> script.</strong> The shell version of
+this (see <a class="reference internal" href="custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a>’s worked example) is ~30 lines that every
+project rewrites, and the parts that are easy to get wrong are the ones
+that only bite later: recognising an already-installed release, never
+accepting a truncated download, never leaving a half-unpacked tree that
+the <em>next</em> run then treats as finished. Here that logic exists once.</p></li>
+<li><p><strong>Downloads are persistent state, not cache.</strong> They live in the env’s own
+workdir (<code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code>, honouring a <code class="docutils literal notranslate"><span class="pre">DENVER_STATE_DIR</span></code> override) —
+next to <code class="docutils literal notranslate"><span class="pre">.logs/</span></code>, deleted with the env and with nothing else. They are
+<em>not</em> in the shared <code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code>, which denver only ever points
+other tools at, never writes itself.</p></li>
+<li><p><strong>Checksums are checked on the file, not on the transfer.</strong> An existing
+archive is verified on every run, not only right after it is fetched — a
+file corrupted on disk months later is caught the same way a bad download
+is. That costs one hash of a local file per start; <code class="docutils literal notranslate"><span class="pre">--fast</span></code> skips it
+along with everything else.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> before <code class="docutils literal notranslate"><span class="pre">env-append:</span></code>.</strong> <code class="docutils literal notranslate"><span class="pre">PATH</span> <span class="pre">=</span> <span class="pre">&quot;.&quot;</span></code> almost always wants
+to be <em>prepended</em>: a package exists to provide a specific version of a
+tool, and appending it would let whatever the OS happens to ship win
+instead. <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> is there for the cases where the opposite is true
+(a fallback <code class="docutils literal notranslate"><span class="pre">MANPATH</span></code>, a low-priority <code class="docutils literal notranslate"><span class="pre">CMAKE_PREFIX_PATH</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code></strong> skips the download and the unpack entirely and only applies
+<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code>; it dies with a clear message if a package
+has never been unpacked — run once without <code class="docutils literal notranslate"><span class="pre">--fast</span></code> first.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--force</span></code></strong> does nothing here, deliberately. This provider has no
+expensive computation to redo and no checksum-based skip to bypass: an
+archive that matches its checksum <em>is</em> the right archive, and an unpacked
+tree whose stamp matches <em>is</em> the right tree. To re-provision a package,
+delete its <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code> (or, to re-fetch, its archive).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> reports the download and the unpack instead of performing
+them, and leaves whatever is already on disk untouched. The environment
+is still applied, for the same reason <code class="docutils literal notranslate"><span class="pre">custom:</span></code>’s <code class="docutils literal notranslate"><span class="pre">source:</span></code> still runs:
+every later stage’s commands are rendered against it.</p></li>
 </ul>
 </section>
 </section>
@@ -350,8 +478,8 @@ be skipped as unchanged, and which projects carry a <code class="docutils litera
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="docker.html" class="btn btn-neutral float-left" title="docker provider" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="download.html" class="btn btn-neutral float-right" title="download provider" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="zephyr.html" class="btn btn-neutral float-left" title="zephyr provider" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="custom.html" class="btn btn-neutral float-right" title="custom provider" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

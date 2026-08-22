@@ -93,14 +93,15 @@
 <li class="toctree-l3"><a class="reference internal" href="../quickstart/30-minutes.html#check-it-nvim-on-path">Check it — nvim on PATH</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#step-5-the-conan-packages-stage">Step 5 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#step-5-the-ninja-setup-stage">Step 5 — the <code class="docutils literal notranslate"><span class="pre">ninja-setup</span></code> stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#step-6-the-conan-packages-stage">Step 6 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../quickstart/30-minutes.html#the-files-the-conan-stage-needs">The files the conan stage needs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../quickstart/30-minutes.html#keeping-conan-s-cache">Keeping conan’s cache</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../quickstart/30-minutes.html#by-hand-or-via-conan">By hand or via conan?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../quickstart/30-minutes.html#by-hand-download-or-conan">By hand, <code class="docutils literal notranslate"><span class="pre">download</span></code> or conan?</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#step-6-the-best-practices-stage">Step 6 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#step-7-the-default-command">Step 7 — the default command</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#step-7-the-best-practices-stage">Step 7 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#step-8-the-default-command">Step 8 — the default command</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#the-finished-denver-toml">The finished <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#prove-it-rather-than-hope">Prove it, rather than hope</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../quickstart/30-minutes.html#everyday-use">Everyday use</a></li>
@@ -215,6 +216,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../providers/zephyr.html#design-notes">Design notes</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../providers/download.html">download provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#key-reference">Key reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../providers/download.html#package-keys">Package keys</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#where-things-go">Where things go</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#unpacking">Unpacking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#design-notes">Design notes</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../providers/custom.html">custom provider</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#key-reference">Key reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
@@ -289,7 +301,7 @@ documented on its own page under <a class="reference internal" href="../provider
 <h2>Core model<a class="headerlink" href="#core-model" title="Link to this heading"></a></h2>
 <p>An <em>environment</em> is a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>; it declares an ordered list of <em>stages</em>
 under <code class="docutils literal notranslate"><span class="pre">stages:</span></code>; each stage names a <code class="docutils literal notranslate"><span class="pre">provider:</span></code> type (<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>,
-<code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>) plus some provider-specific keys in a
+<code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>) plus some provider-specific keys in a
 top-level section of the stage’s own name.</p>
 <p>A provider is a generic, reusable engine — all project specifics come from
 the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> itself, never from the provider’s own code. Most
@@ -340,7 +352,8 @@ right after the <code class="docutils literal notranslate"><span class="pre">env
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">hooks</span></code></strong> — scripts sourced at fixed points in the pipeline. See “Hooks”
 below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">extensions</span></code></strong> — own, project-local <code class="docutils literal notranslate"><span class="pre">Provider</span></code> subclasses to register
-alongside the built-ins (<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>), no
+alongside the built-ins (<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>,
+<code class="docutils literal notranslate"><span class="pre">custom</span></code>), no
 denver fork required. See “Extension providers” below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">denver-custom-args</span></code></strong> — command-line flags of this environment’s own, each one
 forwarded to argparse’s <code class="docutils literal notranslate"><span class="pre">add_argument</span></code>. See “Environment-specific CLI
@@ -395,7 +408,7 @@ same conclusion: that denver is too old for this <code class="docutils literal n
 <p>These keys may appear in <em>any</em> stage’s section, whatever its provider:</p>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">provider</span></code></strong> (<strong>required</strong>) — which provider engine runs this stage:
-<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code> or <code class="docutils literal notranslate"><span class="pre">custom</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code> or <code class="docutils literal notranslate"><span class="pre">custom</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">description</span></code></strong> — free text (a list of strings) with whatever notes are
 useful to whoever reads the config: what this stage is for, why it’s
 configured this way. denver never reads it; it is only surfaced in
@@ -636,7 +649,8 @@ that must not run on every start.
 
 ## Extension providers
 
-The built-in providers (`uv`, `conan`, `zephyr`, `docker`, `custom`) cover
+The built-in providers (`uv`, `conan`, `zephyr`, `docker`, `download`,
+`custom`) cover
 the common cases, but a project may need its own — driving an internal
 build tool or deploy step with the same `resolve_defaults`/`setup`/`wrap`
 lifecycle a built-in provider gets, rather than squeezing it into a single

@@ -93,14 +93,15 @@
 <li class="toctree-l3"><a class="reference internal" href="#check-it-nvim-on-path">Check it — nvim on PATH</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#step-5-the-conan-packages-stage">Step 5 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#step-5-the-ninja-setup-stage">Step 5 — the <code class="docutils literal notranslate"><span class="pre">ninja-setup</span></code> stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-6-the-conan-packages-stage">Step 6 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#the-files-the-conan-stage-needs">The files the conan stage needs</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#keeping-conan-s-cache">Keeping conan’s cache</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#by-hand-or-via-conan">By hand or via conan?</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#by-hand-download-or-conan">By hand, <code class="docutils literal notranslate"><span class="pre">download</span></code> or conan?</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#step-6-the-best-practices-stage">Step 6 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#step-7-the-default-command">Step 7 — the default command</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-7-the-best-practices-stage">Step 7 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-8-the-default-command">Step 8 — the default command</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#the-finished-denver-toml">The finished <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="#prove-it-rather-than-hope">Prove it, rather than hope</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#everyday-use">Everyday use</a></li>
@@ -215,6 +216,17 @@
 <li class="toctree-l2"><a class="reference internal" href="../providers/zephyr.html#design-notes">Design notes</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../providers/download.html">download provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#key-reference">Key reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../providers/download.html#package-keys">Package keys</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#where-things-go">Where things go</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#unpacking">Unpacking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#design-notes">Design notes</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../providers/custom.html">custom provider</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#key-reference">Key reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
@@ -300,11 +312,13 @@ it ships as a prebuilt tarball, just unpack it somewhere and put it on
 (Important: use exactly those specified versions):</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">cmake</span></code> 3.31.9</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ninja</span></code> 1.13.2 (a prebuilt zip, same as neovim)</p></li>
 </ul>
 <p>Make sure uv is installed (install from  <code class="docutils literal notranslate"><span class="pre">PyPi</span></code>).
 Then create a Python 3.12 virtualenv via <code class="docutils literal notranslate"><span class="pre">uv</span></code> and install <code class="docutils literal notranslate"><span class="pre">pytest==9.1.1</span></code>.</p>
-<p>PS: In our team it is a best practice to export environment variable
-<code class="docutils literal notranslate"><span class="pre">PYTEST_ADDOPTS=&quot;-v</span> <span class="pre">-s&quot;</span></code> so pytest always runs verbose and shows live logs.</p>
+<p>PS: In our team it is a best practice to export two environment variables –
+<code class="docutils literal notranslate"><span class="pre">PYTEST_ADDOPTS=&quot;-v</span> <span class="pre">-s&quot;</span></code> so pytest always runs verbose and shows live logs,
+and <code class="docutils literal notranslate"><span class="pre">CMAKE_GENERATOR=&quot;Ninja&quot;</span></code> so cmake uses the ninja above instead of make.</p>
 <p>Finally you should be able to run our <code class="docutils literal notranslate"><span class="pre">pytest</span></code> tests and compile our <code class="docutils literal notranslate"><span class="pre">hello-world</span></code> cmake project.</p>
 </div></blockquote>
 <p>Every step of that is one simple action.
@@ -368,11 +382,15 @@ even the ones you haven’t set.</p>
 <td><p><a class="reference internal" href="../providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code></p></td>
 </tr>
-<tr class="row-odd"><td><p>“cmake 3.31.9”</p></td>
+<tr class="row-odd"><td><p>“ninja 1.13.2” – the same job again, but now using bundled provider</p></td>
+<td><p><a class="reference internal" href="../providers/download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">download</span></code></span></a></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ninja-setup</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>“cmake 3.31.9”</p></td>
 <td><p><a class="reference internal" href="../providers/conan.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">conan</span></code></span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">conan-packages</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p>“export <code class="docutils literal notranslate"><span class="pre">PYTEST_ADDOPTS</span></code>”</p></td>
+<tr class="row-odd"><td><p>“export <code class="docutils literal notranslate"><span class="pre">PYTEST_ADDOPTS</span></code>, <code class="docutils literal notranslate"><span class="pre">CMAKE_GENERATOR</span></code>”</p></td>
 <td><p><a class="reference internal" href="../providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">best-practices</span></code></p></td>
 </tr>
@@ -385,6 +403,7 @@ stage because its section says <code class="docutils literal notranslate"><span 
 <span class="w">  </span><span class="s2">"docker-base"</span><span class="p">,</span>
 <span class="w">  </span><span class="s2">"uv-packages"</span><span class="p">,</span>
 <span class="w">  </span><span class="s2">"nvim-setup"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"ninja-setup"</span><span class="p">,</span>
 <span class="w">  </span><span class="s2">"conan-packages"</span><span class="p">,</span>
 <span class="w">  </span><span class="s2">"best-practices"</span><span class="p">,</span>
 <span class="p">]</span>
@@ -508,7 +527,7 @@ mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">"</span>
 container writes files you can edit back on the host, not files owned by
 root) and a folder for the container’s own <code class="docutils literal notranslate"><span class="pre">$HOME</span></code>, created up front for the
 reason in the comment above. Everything else the container needs —
-<code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_DIR}</span></code>, <code class="docutils literal notranslate"><span class="pre">${DENVER_SRC_DIR}</span></code>, <code class="docutils literal notranslate"><span class="pre">${CONAN_HOME}</span></code> (Step 5) — is
+<code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_DIR}</span></code>, <code class="docutils literal notranslate"><span class="pre">${DENVER_SRC_DIR}</span></code>, <code class="docutils literal notranslate"><span class="pre">${CONAN_HOME}</span></code> (Step 6) — is
 already a denver built-in or a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> <code class="docutils literal notranslate"><span class="pre">[env]</span></code> entry, so it doesn’t
 have to be computed by hand here at all.</p>
 <p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/setup/install_host_tools.sh</span></code> — This script will ensure the host requirements for the docker are installed.
@@ -684,11 +703,52 @@ mv<span class="w"> </span><span class="s2">"</span><span class="nv">$STAGING</sp
 milliseconds as the installation is skipped as <code class="docutils literal notranslate"><span class="pre">nvim</span></code> is already present.</p>
 </section>
 </section>
-<section id="step-5-the-conan-packages-stage">
-<h2>Step 5 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage<a class="headerlink" href="#step-5-the-conan-packages-stage" title="Link to this heading"></a></h2>
-<p>This is the other way to get exact tool versions into an environment: <code class="docutils literal notranslate"><span class="pre">conan</span></code>.</p>
-<p>conan is a package manager, and it does for you what you just did by hand in
-<code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code>: it downloads a pinned archive, verifies its checksum, unpacks
+<section id="step-5-the-ninja-setup-stage">
+<h2>Step 5 — the <code class="docutils literal notranslate"><span class="pre">ninja-setup</span></code> stage<a class="headerlink" href="#step-5-the-ninja-setup-stage" title="Link to this heading"></a></h2>
+<p>Look at what that install script actually does: check whether the tool is
+already there, download it, verify the checksum, unpack it, put it on
+<code class="docutils literal notranslate"><span class="pre">PATH</span></code>. Almost none of that is about neovim. The <code class="docutils literal notranslate"><span class="pre">download</span></code> provider does
+those five things for you, so the next prebuilt tool — ninja 1.13.2 — needs
+no script at all. Instead we use <code class="docutils literal notranslate"><span class="pre">denver</span></code>’s bundled <code class="docutils literal notranslate"><span class="pre">download</span></code> provider:</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[ninja-setup]</span>
+<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"download"</span>
+
+<span class="k">[[ninja-setup.packages]]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"ninja"</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"</span>
+<span class="n">sha256sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"</span>
+<span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"."</span><span class="w"> </span><span class="p">}</span>
+</pre></div>
+</div>
+<p>One <code class="docutils literal notranslate"><span class="pre">[[ninja-setup.packages]]</span></code> table per tool. Three keys carry the whole
+stage:</p>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">url:</span></code></strong> — what to download. The file name at the end of it (here
+<code class="docutils literal notranslate"><span class="pre">ninja-linux.zip</span></code>) is also the name the archive is stored under.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">sha256sum:</span></code></strong> — what the downloaded file must hash to. Leave it out and
+you trust whatever that url serves today.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code></strong> — what the unpacked tool adds to the environment.
+Values are paths <em>inside</em> the package: <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> is its root, <code class="docutils literal notranslate"><span class="pre">&quot;bin&quot;</span></code> its
+<code class="docutils literal notranslate"><span class="pre">bin/</span></code> folder. This zip holds a single <code class="docutils literal notranslate"><span class="pre">ninja</span></code> executable at the root, so
+the root is what goes on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p></li>
+</ul>
+<p>Check it:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--until<span class="w"> </span>ninja-setup<span class="w"> </span>--<span class="w"> </span>ninja<span class="w"> </span>--version
+</pre></div>
+</div>
+<p>Expect <code class="docutils literal notranslate"><span class="pre">1.13.2</span></code>, and a second run in milliseconds — everything is reused
+from the previous run. The careful parts of the hand-written
+script are covered too: an interrupted download or unpack is never mistaken
+for a finished one, and a file whose checksum no longer matches is fetched
+again.</p>
+<p>The full documentation of the <code class="docutils literal notranslate"><span class="pre">download</span></code> provider you can find in
+<a class="reference internal" href="../providers/download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">providers/download.md</span></code></span></a>.</p>
+</section>
+<section id="step-6-the-conan-packages-stage">
+<h2>Step 6 — the <code class="docutils literal notranslate"><span class="pre">conan-packages</span></code> stage<a class="headerlink" href="#step-6-the-conan-packages-stage" title="Link to this heading"></a></h2>
+<p>This is the third way to get exact tool versions into an environment: <code class="docutils literal notranslate"><span class="pre">conan</span></code>.</p>
+<p>conan is a package manager, and it does what the two stages before it did:
+it downloads a pinned archive, verifies its checksum, unpacks
 it into a package of its own and puts that package on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>. No <code class="docutils literal notranslate"><span class="pre">apt</span></code>, no
 version drift, same result on every machine.</p>
 <p>What changes is how much you write yourself: you can write your own recipe
@@ -781,17 +841,18 @@ keeps the cache inside this env’s own directory rather than somewhere
 shared. Since that directory is already bind-mounted into the container
 (Step 2), the conan cache persists too, with no extra mount needed.</p>
 </section>
-<section id="by-hand-or-via-conan">
-<h3>By hand or via conan?<a class="headerlink" href="#by-hand-or-via-conan" title="Link to this heading"></a></h3>
-<p>Both stages solved the same sentence — “this exact prebuilt tool, on
-<code class="docutils literal notranslate"><span class="pre">PATH</span></code>” — just with a different amount of code. Rule of thumb: by hand for
-a single archive nothing else depends on; conan once you have several
-tools, want the cache shared across environments, or need one tool to
-depend on another.</p>
+<section id="by-hand-download-or-conan">
+<h3>By hand, <code class="docutils literal notranslate"><span class="pre">download</span></code> or conan?<a class="headerlink" href="#by-hand-download-or-conan" title="Link to this heading"></a></h3>
+<p>Three stages solved the same sentence — “this exact prebuilt tool, on
+<code class="docutils literal notranslate"><span class="pre">PATH</span></code>” — with a different amount of code each. Rule of thumb: <code class="docutils literal notranslate"><span class="pre">download</span></code>
+for a plain release archive (the normal case); by hand only when the install
+really needs shell logic of its own; conan once you have several tools, want
+the cache shared across environments, or need one tool to depend on
+another.</p>
 </section>
 </section>
-<section id="step-6-the-best-practices-stage">
-<h2>Step 6 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage<a class="headerlink" href="#step-6-the-best-practices-stage" title="Link to this heading"></a></h2>
+<section id="step-7-the-best-practices-stage">
+<h2>Step 7 — the <code class="docutils literal notranslate"><span class="pre">best-practices</span></code> stage<a class="headerlink" href="#step-7-the-best-practices-stage" title="Link to this heading"></a></h2>
 <p>The last line of the use case — applying the team’s best practice — is
 solved with a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage again. This time with no <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>, only
 <code class="docutils literal notranslate"><span class="pre">source:</span></code>, since nothing has to run, only environment variables are set.</p>
@@ -803,21 +864,25 @@ solved with a <code class="docutils literal notranslate"><span class="pre">custo
 <p>This is the sourced script <code class="docutils literal notranslate"><span class="pre">envs/firmware-env/best-practices.sh</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="nb">export</span><span class="w"> </span><span class="nv">PYTEST_ADDOPTS</span><span class="o">=</span><span class="s2">"-v -s"</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CMAKE_GENERATOR</span><span class="o">=</span><span class="s2">"Ninja"</span>
 </pre></div>
 </div>
-<p>The key is <code class="docutils literal notranslate"><span class="pre">source:</span></code>, not <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> — sourcing is what makes the exported variable survive into later commands.</p>
+<p>The key is <code class="docutils literal notranslate"><span class="pre">source:</span></code>, not <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> — sourcing is what makes the exported variables survive into later commands.
+<code class="docutils literal notranslate"><span class="pre">CMAKE_GENERATOR=&quot;Ninja&quot;</span></code> is what makes the cmake of Step 6 build with the
+ninja of Step 5, instead of falling back to <code class="docutils literal notranslate"><span class="pre">make</span></code>.</p>
 <p><strong>Note</strong>: For a plain constant, by the way, a whole stage is more than you
-need — alternatively the <code class="docutils literal notranslate"><span class="pre">[env]</span></code> table (already used for <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span></code> in Step 5)
+need — alternatively the <code class="docutils literal notranslate"><span class="pre">[env]</span></code> table (already used for <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span></code> in Step 6)
 would work as well:</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[env]</span>
 <span class="n">PYTEST_ADDOPTS</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"-v -s"</span>
+<span class="n">CMAKE_GENERATOR</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Ninja"</span>
 </pre></div>
 </div>
 <p>A <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage earns its place as soon as shell logic is necessary — e.g. in case of
 conditions (<code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">...;</span> <span class="pre">then</span> <span class="pre">...;</span> <span class="pre">fi</span></code>) or if paths are computed dynamically.</p>
 </section>
-<section id="step-7-the-default-command">
-<h2>Step 7 — the default command<a class="headerlink" href="#step-7-the-default-command" title="Link to this heading"></a></h2>
+<section id="step-8-the-default-command">
+<h2>Step 8 — the default command<a class="headerlink" href="#step-8-the-default-command" title="Link to this heading"></a></h2>
 <p>Everything so far <em>builds</em> the environment. But when we run denver, we
 usually want a specific command by default — here, an interactive shell:</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">command</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"bash"</span>
