@@ -1,12 +1,18 @@
 name: Examples
 
-# Runs every example env end-to-end. Kept out of ci.yml on purpose. These are
+# Runs the example envs end-to-end. Kept out of ci.yml on purpose. These are
 # the slow, network- and docker-heavy runs (conan remotes, west update, image
-# builds), so they guard the develop branch rather than every push/PR.
+# builds), so the full set guards the develop branch rather than every push/PR.
+# Pull requests get the short matrix only -- see the 'example' matrix below.
 on:
   push:
     branches:
     - develop
+  pull_request:
+    types:
+    - opened
+    - synchronize
+    - reopened
   # on-demand -- 'Run workflow' in the Actions tab, or `gh workflow run examples.yml`
   workflow_dispatch:
 
@@ -34,11 +40,13 @@ jobs:
         # note zephyr-devshell is not startable at all. It declares
         # 'runnable' set to false -- it is the shared base the versioned devshells
         # 'import', and denver rejects starting it directly.
-        example:
-        - simple-env
-        - raspberry-pico
-        - firmware-env
-        - zephyr-devshell-4.3.1
+        #
+        # Pull requests run the two cheap, representative envs only --
+        # simple-env for the plain path and firmware-env for the container one.
+        # The full set (raspberry-pico's west update, the versioned zephyr
+        # devshell) is minutes of network- and docker-heavy work per leg, so it
+        # is left to the develop push and to a manual 'Run workflow'.
+        example: ${{ (github.event_name == 'pull_request' && fromJSON('["simple-env", "firmware-env"]')) || fromJSON('["simple-env", "raspberry-pico", "firmware-env", "zephyr-devshell-4.3.1"]') }}
     steps:
       - uses: actions/checkout@v4
         with:

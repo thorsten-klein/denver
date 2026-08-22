@@ -68,6 +68,48 @@ def test_package_version_installed(monkeypatch):
     assert denver.package_version() == "1.2.3"
 
 
+def test_package_version_installed_dev_build_is_rebased(monkeypatch):
+    monkeypatch.setattr(denver, "scm_version", lambda: None)
+    monkeypatch.setattr(denver, "DEV_VERSION", "8.8.8")
+    monkeypatch.setattr(denver.importlib.metadata, "version", lambda name: "8.8.8.dev27+gabc1234")
+    assert denver.package_version() == "8.8.8-27-gabc1234"
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        # an untagged build, named after the release it heads for
+        ("8.8.8.dev27+gabc1234", "8.8.8-27-gabc1234"),
+        ("8.8.8.dev27", "8.8.8-27"),  # no local segment to carry
+        ("1.0.3.dev18+gabc1234", "8.8.8-18-gabc1234"),  # built before the tag a pin needs
+        # anything somebody actually tagged, and anything already past
+        # DEV_VERSION, is left alone
+        ("8.8.8", "8.8.8"),
+        ("1.0.3", "1.0.3"),
+        ("8.8.8rc1", "8.8.8rc1"),
+        ("9.9.9.dev3+gabc1234", "9.9.9.dev3+gabc1234"),
+    ],
+    ids=[
+        "untagged",
+        "no-local-segment",
+        "behind-dev-version",
+        "on-the-tag",
+        "on-an-older-tag",
+        "rc",
+        "past-dev-version",
+    ],
+)
+def test_dev_metadata_version(monkeypatch, metadata, expected):
+    monkeypatch.setattr(denver, "DEV_VERSION", "8.8.8")
+    assert denver._dev_metadata_version(metadata) == expected
+
+
+def test_dev_metadata_version_without_a_dev_version(monkeypatch):
+    """DEV_VERSION = None switches the re-basing off here too."""
+    monkeypatch.setattr(denver, "DEV_VERSION", None)
+    assert denver._dev_metadata_version("8.8.8.dev27+gabc1234") == "8.8.8.dev27+gabc1234"
+
+
 def test_package_version_not_installed(monkeypatch):
     def raise_not_found(name):
         raise denver.importlib.metadata.PackageNotFoundError(name)
