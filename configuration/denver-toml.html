@@ -140,6 +140,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#inspect-an-environment">Inspect an environment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#hand-the-built-env-to-something-else">Hand the built env to something else</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#remove-an-environment-s-state">Remove an environment’s state</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
@@ -642,8 +643,11 @@ first.</p>
 actions that are <em>not</em> part of the normal pipeline: any stage’s section can
 declare <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span> <span class="pre">[...]</span></code>, and <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code> runs
 every stage’s own <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> entries, then exits without doing anything else.
-Nothing about <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> is fixed — <code class="docutils literal notranslate"><span class="pre">setup</span></code> and <code class="docutils literal notranslate"><span class="pre">login</span></code> are just conventions,
-not flags of their own. Which is why <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span></code>, with no
+Nothing about <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> is fixed — <code class="docutils literal notranslate"><span class="pre">setup</span></code>, <code class="docutils literal notranslate"><span class="pre">login</span></code> and <code class="docutils literal notranslate"><span class="pre">clean</span></code> are only
+conventions, recognised by denver just far enough to get a shorthand flag
+each (<code class="docutils literal notranslate"><span class="pre">--setup</span></code>/<code class="docutils literal notranslate"><span class="pre">--login</span></code>/<code class="docutils literal notranslate"><span class="pre">--clean</span></code>, the last of which also removes the
+env’s state directory afterwards); any other name works exactly as well and
+needs no change to denver. Which is why <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span></code>, with no
 name at all, lists the names that env actually defines: they are unguessable
 by design, and <code class="docutils literal notranslate"><span class="pre">scripts:</span></code> stacks across the whole <code class="docutils literal notranslate"><span class="pre">import:</span></code> chain, so reading
 one file does not answer it either.</p>

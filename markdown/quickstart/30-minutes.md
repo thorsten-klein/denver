@@ -713,6 +713,8 @@ denver run envs/firmware-env --fast                     # activate what is alrea
 denver run envs/firmware-env --force                    # ignore every "nothing changed" shortcut
 denver run envs/firmware-env --skip docker-base          # same stack, directly on the host
 denver run envs/firmware-env -c uv-packages.python=3.13  # override one specific config value (for this run)
+
+denver run envs/firmware-env --clean                    # run its 'scripts: clean:', then throw the built state away
 ```
 
 **Note on `--skip docker-base`**: worth trying at least once — it builds

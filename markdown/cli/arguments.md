@@ -34,9 +34,15 @@ one-line description.
   the order given. With no `<name>` (on any occurrence), it lists the names
   this env defines instead of running anything. If `<name>` isn’t declared
   by any (filtered) stage, denver logs `no '<name>' scripts to run for env '<env>'` at info level rather than exiting silently.
-- **`--setup`**/**`--login`** are shorthand for `--scripts setup`/`--scripts login` — the two conventional names most envs use. They share `--scripts`’
+- **`--setup`**/**`--login`** are shorthand for `--scripts setup`/`--scripts login` — two conventional names most envs use. They share `--scripts`’
   ordering and repeat rules, so `--login --setup` runs `login` then `setup`,
   and either can still be combined with a plain `--scripts <name>`.
+- **`--clean`** is the third such shorthand, plus one step: it runs the
+  env’s own `scripts: clean:` entries **and then removes the env’s state
+  directory** — see
+  [Remove an environment’s state]() below.
+  Use plain **`--scripts clean`** for only the scripts, with the state
+  directory kept.
 
 ## Control the config: Change values for one run
 
@@ -222,6 +228,47 @@ off, and `FORCE_COLOR` forces it on even when piped (e.g. into `less -R`).
   variable already is in the sourcing shell instead of overwriting it
   outright. A value set with `-e`/`--env` is always written, even if it
   happens to match what the process already had.
+
+## Remove an environment’s state
+
+```bash
+denver run <env> --clean              # run 'scripts: clean:', then remove the state
+denver run <env> --clean --dry-run    # only say what would go
+denver run <env> --scripts clean      # only the scripts, state kept
+```
+
+After running the env’s own `scripts: clean:` entries, `--clean` deletes the
+whole state directory denver keeps for that env — its venvs, installed tool
+trees, downloads, logs and the fingerprints that decide what a run can skip
+(see
+[Where an environment’s state lives](environment-variables.md#where-an-environment-s-state-lives)).
+There is nothing to preserve in it: the next `denver run` rebuilds all of it
+from the `denver.toml`, which is the whole point of an environment being
+code. It removes the directory whether or not the env declares any `clean`
+scripts at all.
+
+Four things worth knowing:
+
+- **The scripts run first**, deliberately: they run against the built
+  environment (a venv’s tools, a container) that is about to go.
+- **Like `--setup`/`--login`, it neither builds nor enters the env.** Only
+  the env’s own `clean` scripts run — no stage’s setup work, and no final
+  command afterwards.
+- **It only removes what denver itself wrote.** Anything the env’s own
+  config points somewhere else — a `CONAN_HOME = "${DENVER_ENV_DIR}/.conan2"`,
+  say — is a location the project chose for a tool’s own cache, not denver’s
+  state, and is left alone.
+- **The `.denver` directory goes too**, once nothing but the `.gitignore`
+  denver wrote is left inside it, so the env comes back to exactly the files
+  its author checked in. A `.denver` still holding another config variant’s
+  state (`denver.debug.toml`’s) is kept, along with that state — cleaning
+  one variant never touches its neighbours. A shared state root —
+  `~/.denver`, or a `DENVER_STATE_DIR` — is never removed either way; only
+  this env’s own directory inside it is.
+
+`--clean` is the bigger hammer next to `--force`: `--force` rebuilds what a
+run would otherwise skip, `--clean` removes it so there is nothing to skip
+in the first place.
 
 ## Output and version
 

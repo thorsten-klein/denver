@@ -140,6 +140,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#inspect-an-environment">Inspect an environment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#hand-the-built-env-to-something-else">Hand the built env to something else</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#remove-an-environment-s-state">Remove an environment’s state</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
@@ -925,6 +926,8 @@ denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span 
 denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--force<span class="w">                    </span><span class="c1"># ignore every "nothing changed" shortcut</span>
 denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--skip<span class="w"> </span>docker-base<span class="w">          </span><span class="c1"># same stack, directly on the host</span>
 denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>-c<span class="w"> </span>uv-packages.python<span class="o">=</span><span class="m">3</span>.13<span class="w">  </span><span class="c1"># override one specific config value (for this run)</span>
+
+denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--clean<span class="w">                    </span><span class="c1"># run its 'scripts: clean:', then throw the built state away</span>
 </pre></div>
 </div>
 <p><strong>Note on <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">docker-base</span></code></strong>: worth trying at least once — it builds

@@ -140,6 +140,7 @@
 <li class="toctree-l2"><a class="reference internal" href="#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#inspect-an-environment">Inspect an environment</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#hand-the-built-env-to-something-else">Hand the built env to something else</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#remove-an-environment-s-state">Remove an environment’s state</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#output-and-version">Output and version</a></li>
 </ul>
 </li>
@@ -312,9 +313,15 @@ without denver itself changing. Repeatable — each name’s entries run in
 the order given. With no <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> (on any occurrence), it lists the names
 this env defines instead of running anything. If <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;</span></code> isn’t declared
 by any (filtered) stage, denver logs <code class="docutils literal notranslate"><span class="pre">no</span> <span class="pre">'&lt;name&gt;'</span> <span class="pre">scripts</span> <span class="pre">to</span> <span class="pre">run</span> <span class="pre">for</span> <span class="pre">env</span> <span class="pre">'&lt;env&gt;'</span></code> at info level rather than exiting silently.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--setup</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">--login</span></code></strong> are shorthand for <code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">setup</span></code>/<code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">login</span></code> — the two conventional names most envs use. They share <code class="docutils literal notranslate"><span class="pre">--scripts</span></code>’
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--setup</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">--login</span></code></strong> are shorthand for <code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">setup</span></code>/<code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">login</span></code> — two conventional names most envs use. They share <code class="docutils literal notranslate"><span class="pre">--scripts</span></code>’
 ordering and repeat rules, so <code class="docutils literal notranslate"><span class="pre">--login</span> <span class="pre">--setup</span></code> runs <code class="docutils literal notranslate"><span class="pre">login</span></code> then <code class="docutils literal notranslate"><span class="pre">setup</span></code>,
 and either can still be combined with a plain <code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--clean</span></code></strong> is the third such shorthand, plus one step: it runs the
+env’s own <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">clean:</span></code> entries <strong>and then removes the env’s state
+directory</strong> — see
+<a class="reference internal" href="#remove-an-environment-s-state">Remove an environment’s state</a> below.
+Use plain <strong><code class="docutils literal notranslate"><span class="pre">--scripts</span> <span class="pre">clean</span></code></strong> for only the scripts, with the state
+directory kept.</p></li>
 </ul>
 </section>
 <section id="control-the-config-change-values-for-one-run">
@@ -524,6 +531,45 @@ outright. A value set with <code class="docutils literal notranslate"><span clas
 happens to match what the process already had.</p>
 </li>
 </ul>
+</section>
+<section id="remove-an-environment-s-state">
+<h2>Remove an environment’s state<a class="headerlink" href="#remove-an-environment-s-state" title="Link to this heading"></a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>&lt;env&gt;<span class="w"> </span>--clean<span class="w">              </span><span class="c1"># run 'scripts: clean:', then remove the state</span>
+denver<span class="w"> </span>run<span class="w"> </span>&lt;env&gt;<span class="w"> </span>--clean<span class="w"> </span>--dry-run<span class="w">    </span><span class="c1"># only say what would go</span>
+denver<span class="w"> </span>run<span class="w"> </span>&lt;env&gt;<span class="w"> </span>--scripts<span class="w"> </span>clean<span class="w">      </span><span class="c1"># only the scripts, state kept</span>
+</pre></div>
+</div>
+<p>After running the env’s own <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">clean:</span></code> entries, <code class="docutils literal notranslate"><span class="pre">--clean</span></code> deletes the
+whole state directory denver keeps for that env — its venvs, installed tool
+trees, downloads, logs and the fingerprints that decide what a run can skip
+(see
+<a class="reference internal" href="environment-variables.html#where-an-environment-s-state-lives"><span class="std std-ref">Where an environment’s state lives</span></a>).
+There is nothing to preserve in it: the next <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span></code> rebuilds all of it
+from the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, which is the whole point of an environment being
+code. It removes the directory whether or not the env declares any <code class="docutils literal notranslate"><span class="pre">clean</span></code>
+scripts at all.</p>
+<p>Four things worth knowing:</p>
+<ul class="simple">
+<li><p><strong>The scripts run first</strong>, deliberately: they run against the built
+environment (a venv’s tools, a container) that is about to go.</p></li>
+<li><p><strong>Like <code class="docutils literal notranslate"><span class="pre">--setup</span></code>/<code class="docutils literal notranslate"><span class="pre">--login</span></code>, it neither builds nor enters the env.</strong> Only
+the env’s own <code class="docutils literal notranslate"><span class="pre">clean</span></code> scripts run — no stage’s setup work, and no final
+command afterwards.</p></li>
+<li><p><strong>It only removes what denver itself wrote.</strong> Anything the env’s own
+config points somewhere else — a <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span> <span class="pre">=</span> <span class="pre">&quot;${DENVER_ENV_DIR}/.conan2&quot;</span></code>,
+say — is a location the project chose for a tool’s own cache, not denver’s
+state, and is left alone.</p></li>
+<li><p><strong>The <code class="docutils literal notranslate"><span class="pre">.denver</span></code> directory goes too</strong>, once nothing but the <code class="docutils literal notranslate"><span class="pre">.gitignore</span></code>
+denver wrote is left inside it, so the env comes back to exactly the files
+its author checked in. A <code class="docutils literal notranslate"><span class="pre">.denver</span></code> still holding another config variant’s
+state (<code class="docutils literal notranslate"><span class="pre">denver.debug.toml</span></code>’s) is kept, along with that state — cleaning
+one variant never touches its neighbours. A shared state root —
+<code class="docutils literal notranslate"><span class="pre">~/.denver</span></code>, or a <code class="docutils literal notranslate"><span class="pre">DENVER_STATE_DIR</span></code> — is never removed either way; only
+this env’s own directory inside it is.</p></li>
+</ul>
+<p><code class="docutils literal notranslate"><span class="pre">--clean</span></code> is the bigger hammer next to <code class="docutils literal notranslate"><span class="pre">--force</span></code>: <code class="docutils literal notranslate"><span class="pre">--force</span></code> rebuilds what a
+run would otherwise skip, <code class="docutils literal notranslate"><span class="pre">--clean</span></code> removes it so there is nothing to skip
+in the first place.</p>
 </section>
 <section id="output-and-version">
 <h2>Output and version<a class="headerlink" href="#output-and-version" title="Link to this heading"></a></h2>
