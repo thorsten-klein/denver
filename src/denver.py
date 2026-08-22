@@ -2567,18 +2567,81 @@ def dump_toml(data, *, color=False):
 
 
 def _dump_toml_table(table, path, lines):
-    """Append ``table``'s TOML rendering to ``lines``.
+    """Append the whole document's TOML rendering to ``lines``.
 
     Plain keys (scalars, ``None``, arrays) come first, then nested tables/array-of-tables get their
     own '[section]'/'[[section]]' header -- TOML requires a table's own keys to precede its
     sub-tables, so grouping here (rather than emitting strictly in ``table``'s own key order) is
     unavoidable; each group keeps its own relative order.
+
+    Only this top level hands out '[section]' headers to plain tables; everything below one is
+    rendered inline -- see _dump_toml_section_body.
     """
     plain, nested = _toml_partition_table(table)
     for key, value in plain:
         _dump_toml_plain_key(key, value, lines)
     for key, value in nested:
         _dump_toml_nested_key(value, (*path, key), lines)
+
+
+def _dump_toml_section_body(table, path, lines):
+    """Append one section's own keys: nested tables inline, arrays of tables as '[[...]]' blocks.
+
+    A sub-table could equally get a '[a.b]' header of its own -- valid TOML, and what the document's
+    top level does. Below that, a header buys nothing and costs clarity: it moves the sub-table an
+    arbitrary distance away from the section it belongs to, and under a '[[a.b]]' entry it is
+    outright ambiguous, since such a header attaches to whichever entry precedes it *by position*
+    with nothing on the line saying which one. So a section is rendered self-contained: one line per
+    key, nested tables as inline '{ ... }' tables, the way they are written by hand.
+
+    Two shapes are still given a header of their own at any depth -- see _toml_needs_header.
+    """
+    plain, headed = _toml_partition_section(table)
+    for key, value in plain:
+        _dump_toml_plain_key(key, value, lines)
+    for key, value in headed:
+        _dump_toml_nested_key(value, (*path, key), lines)
+
+
+def _toml_partition_section(table):
+    """``table``'s items split into (inline, still-needs-a-header) -- see _dump_toml_section_body."""
+    plain = [(k, v) for k, v in table.items() if not _toml_needs_header(v)]
+    headed = [(k, v) for k, v in table.items() if _toml_needs_header(v)]
+    return plain, headed
+
+
+def _toml_needs_header(value):
+    """Whether ``value`` still needs a '[section]'/'[[section]]' header below the document's top level.
+
+    Only two shapes do. An **array of tables**, because its entries stay far more readable as blocks
+    of one key per line than as one flattened line each. And a **table holding an unset key**
+    somewhere inside it, because an unset key renders as a ``# key = null`` comment line (see
+    _dump_toml_plain_key) and TOML has no way to put a comment inside an inline table -- so such a
+    table keeps its header rather than losing the key from --show-config-full altogether.
+    """
+    if isinstance(value, dict):
+        return bool(value) and not _toml_inlinable(value)
+    return _toml_is_array_of_tables(value)
+
+
+def _toml_inlinable(value):
+    """Whether ``value`` can be rendered inline at all: nothing unset (``None``) anywhere inside it."""
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if current is None:
+            return False
+        pending.extend(_toml_nested_values(current))
+    return True
+
+
+def _toml_nested_values(value):
+    """The values sitting directly inside ``value``: a table's values, an array's entries, else none."""
+    if isinstance(value, dict):
+        return list(value.values())
+    if isinstance(value, list):
+        return value
+    return []
 
 
 def _toml_partition_table(table):
@@ -2604,7 +2667,7 @@ def _dump_toml_nested_key(value, child_path, lines):
         lines.append("")
     if isinstance(value, dict):
         lines.append(_c(_TOML_HEADER_COLOR, f"[{_toml_path(child_path)}]"))
-        _dump_toml_table(value, child_path, lines)
+        _dump_toml_section_body(value, child_path, lines)
     else:
         _dump_toml_array_of_tables(value, child_path, lines)
 
@@ -2615,7 +2678,7 @@ def _dump_toml_array_of_tables(entries, child_path, lines):
         if i:
             lines.append("")
         lines.append(_c(_TOML_HEADER_COLOR, f"[[{_toml_path(child_path)}]]"))
-        _dump_toml_table(entry, child_path, lines)
+        _dump_toml_section_body(entry, child_path, lines)
 
 
 def _toml_is_table_like(value):
@@ -2627,9 +2690,12 @@ def _toml_is_table_like(value):
     """
     if isinstance(value, dict):
         return bool(value)
-    if isinstance(value, list) and value:
-        return all(isinstance(v, dict) for v in value)
-    return False
+    return _toml_is_array_of_tables(value)
+
+
+def _toml_is_array_of_tables(value):
+    """Whether ``value`` is a non-empty list of dicts -- the one shape still given '[[section]]' headers at any depth."""
+    return isinstance(value, list) and bool(value) and all(isinstance(v, dict) for v in value)
 
 
 _TOML_BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -2650,13 +2716,14 @@ def _toml_path(path):
 
 
 def _toml_value(value):
-    """One TOML value expression for a plain (non-table-like) ``value``.
+    """One TOML value expression: a scalar, an array, or a table rendered inline.
 
-    An empty dict/list, or a scalar -- non-empty dicts/lists-of-dicts are table-like (see
-    _toml_is_table_like) and never reach here.
+    A dict reaches here either because it is empty (never worth a header of its own, see
+    _toml_is_table_like) or because it sits below the document's top level, which is rendered
+    self-contained -- see _dump_toml_section_body.
     """
     if isinstance(value, dict):
-        return "{}"  # only reached for an empty dict; non-empty ones are handled as nested tables
+        return _toml_inline_table(value)
     if isinstance(value, list):
         return _toml_array(value)
     return _toml_scalar(value)
@@ -2694,8 +2761,22 @@ def _toml_inline_table(value):
     """One inline TOML table (``{ k = v, ... }``) for a dict reached outside a '[section]' context."""
     if not value:
         return "{}"
-    items = ", ".join(f"{_c(_TOML_KEY_COLOR, _toml_key(k))} = {_toml_inline_value(v)}" for k, v in value.items())
+    items = ", ".join(f"{_c(_TOML_KEY_COLOR, _toml_key(k))} = {_toml_single_line_value(v)}" for k, v in value.items())
     return "{ " + items + " }"
+
+
+def _toml_single_line_value(value):
+    """One TOML value rendered without a line break, as an inline table's values must be.
+
+    TOML allows an array to span lines (_toml_array's normal rendering) but never an inline table:
+    everything between its braces has to sit on one line, so an array *inside* one is written out
+    flat here rather than one entry per line.
+    """
+    if isinstance(value, dict):
+        return _toml_inline_table(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_single_line_value(v) for v in value) + "]"
+    return _toml_scalar(value)
 
 
 def _toml_scalar(value):

@@ -18,13 +18,9 @@ provider = "docker"
 disabled = false
 skip-on-success = []
 skip-on-failure = []
+scripts = { setup = ["setup/install_host_tools.sh"] }
 exe = "docker"
 # registries = null
-
-[docker.scripts]
-setup = [
-  "setup/install_host_tools.sh",
-]
 
 [docker.compose]
 build = true
