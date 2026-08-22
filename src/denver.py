@@ -46,6 +46,7 @@ import logging
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -3118,6 +3119,72 @@ def _cli_args(cli_args):
 
 
 # --------------------------------------------------------------------------- #
+# 'run --clean': removing an env's own state
+# --------------------------------------------------------------------------- #
+def clean_env(env_dir, config_path, *, dry_run=False):
+    """Remove denver's own state for one env, and report what went.
+
+    Everything denver writes for an env lives under one directory (see
+    denver_providers.context.state_dir_for): every venv, conan's install
+    tree, unpacked downloads, the logs, the fingerprints that decide what
+    can be skipped, the run lock. So removing that directory is the whole
+    job -- the next run rebuilds from the config alone, which is the point
+    of an environment being code.
+
+    What is deliberately *not* touched: anything the env's own config points
+    somewhere else, e.g. ``CONAN_HOME = "${DENVER_ENV_DIR}/.conan2"``. That
+    is a location the project chose for a tool's own cache, not denver's
+    state, and denver has no business deciding it is disposable.
+
+    The conventional ``<env>/.denver`` parent goes too, once nothing but the
+    .gitignore denver itself wrote is left inside it -- so a single-config
+    env comes back to exactly the files its author checked in. A parent
+    still holding another config's state (``denver.debug.toml``'s, say) is
+    kept, along with that state.
+
+    A *shared* state root -- ``DENVER_STATE_DIR``, or the ``~/.denver``
+    fallback used when the env dir isn't writable -- is never removed, not
+    even when this env's state was the last thing in it: it belongs to every
+    env that keeps state there, not to this one. Only that env's own
+    subdirectory inside it goes.
+
+    Reads no config *values*: where the state dir sits depends only on <env>
+    and which config file was picked, so this is the same directory a run
+    would have used, whatever that run's config happens to say.
+    """
+    from denver_providers.context import STATE_DIRNAME, state_dir_for
+
+    state_dir = state_dir_for(env_dir, config_path, DENVER_DIR / ".envs")
+    if not state_dir.exists():
+        info(f"clean: nothing to remove -- no denver state at {state_dir}")
+        return
+    parent = state_dir.parent
+    # compared against this env's own path, not merely by name: a
+    # DENVER_STATE_DIR pointing at '~/.denver' has that name too, and that
+    # root is shared (see the docstring). Asked before the removal, so
+    # --dry-run answers it exactly as a real run would.
+    in_env_dir = parent == Path(env_dir) / STATE_DIRNAME
+    spent_parent = in_env_dir and _only_denver_leftovers(parent, state_dir)
+    _remove_tree(state_dir, dry_run=dry_run)
+    if spent_parent:
+        _remove_tree(parent, dry_run=dry_run)
+
+
+def _only_denver_leftovers(parent, state_dir):
+    """Whether ``parent`` holds nothing besides ``state_dir`` and the .gitignore denver wrote into it."""
+    return not {entry.name for entry in parent.iterdir()} - {state_dir.name, ".gitignore"}
+
+
+def _remove_tree(path, *, dry_run):
+    """Delete the directory ``path`` -- or, under --dry-run, only say that it would be."""
+    if dry_run:
+        info(f"clean: would remove {path}")
+        return
+    shutil.rmtree(path)
+    info(f"clean: removed {path}")
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 def _parsed_env_vars(entries):
@@ -3198,6 +3265,27 @@ def _add_help_flag(parser):
     parser.add_argument("-h", "--help", action="store_true", help="show this help and exit")
 
 
+class _CleanAction(argparse.Action):
+    """'run --clean': '--scripts clean', *plus* removing this env's own state directory.
+
+    Two dests at once, which is why it is an action of its own rather than
+    the plain ``append_const`` its ``--setup``/``--login`` siblings use: the
+    name goes into ``scripts`` (so it keeps --scripts' ordering and mixes
+    with other names the same way), and ``clean_workdir`` records that the
+    state directory itself is to go too -- the part a plain ``--scripts
+    clean`` deliberately does not do (see _handle_scripts_subcommand).
+
+    The state directory is the *env's* own (its venvs, tool trees,
+    downloads, logs); a shared state root holding other envs' state as well
+    -- ``~/.denver``, a DENVER_STATE_DIR -- is never touched, see clean_env.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):  # noqa: ARG002 -- argparse's own Action signature
+        """Append 'clean' to the names --scripts collects, and set clean_workdir."""
+        namespace.scripts = [*(namespace.scripts or []), "clean"]
+        namespace.clean_workdir = True
+
+
 def _add_run_parser(subparsers, config_args):
     """'denver run <env>': the normal pipeline, or (with --scripts) the 'scripts:' mechanism."""
     run_p = subparsers.add_parser(
@@ -3232,6 +3320,15 @@ def _add_run_parser(subparsers, config_args):
         action="append_const",
         const="login",
         help="shorthand for --scripts login",
+    )
+    run_p.add_argument(
+        "--clean",
+        nargs=0,
+        action=_CleanAction,
+        dest="clean_workdir",
+        default=False,
+        help="run this env's 'scripts: clean:' entries, then remove its state directory (--scripts clean "
+        "alone runs only the scripts)",
     )
     run_p.add_argument(
         "--show-config",
@@ -3495,6 +3592,7 @@ _RUN_FLAGS = [
     "--scripts",
     "--setup",
     "--login",
+    "--clean",
     "--show-config",
     "--show-config-full",
     "--fast",
@@ -4577,27 +4675,42 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
         return True
 
     if args.scripts:
-        if LIST_SCRIPTS in args.scripts:
-            list_named_scripts(env_dir, config_path, until_stage=args.until, skip_stages=args.skip)
-            return True
-
-        run_named_scripts(
-            env_dir,
-            config,
-            config_path,
-            args.scripts,
-            until_stage=args.until,
-            skip_stages=args.skip,
-            quiet=args.quiet,
-            verbose=args.verbose,
-            dry_run=args.dry_run,
-            no_wait=args.no_wait,
-            cli_args=cli_args,
-            env_vars=env_vars,
-        )
+        _handle_scripts_subcommand(args, env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars)
         return True
 
     return False
+
+
+def _handle_scripts_subcommand(args, env_dir, config, config_path, *, cli_args, env_vars):
+    """Handle 'run --scripts' and its --setup/--login/--clean shorthands -- nothing is launched.
+
+    A bare '--scripts' (no name at all) lists what the env declares and
+    stops there: listing is a query, so it removes nothing -- --clean's own
+    state-directory removal included.
+    """
+    if LIST_SCRIPTS in args.scripts:
+        list_named_scripts(env_dir, config_path, until_stage=args.until, skip_stages=args.skip)
+        return
+
+    run_named_scripts(
+        env_dir,
+        config,
+        config_path,
+        args.scripts,
+        until_stage=args.until,
+        skip_stages=args.skip,
+        quiet=args.quiet,
+        verbose=args.verbose,
+        dry_run=args.dry_run,
+        no_wait=args.no_wait,
+        cli_args=cli_args,
+        env_vars=env_vars,
+    )
+    # --clean only, and after the env's own 'clean' scripts rather than
+    # before: those scripts run against the built environment (a venv's
+    # tools, a container), which is exactly what is about to be removed.
+    if args.clean_workdir:
+        clean_env(env_dir, config_path, dry_run=args.dry_run)
 
 
 def _require_runnable(env_dir, config, config_path):

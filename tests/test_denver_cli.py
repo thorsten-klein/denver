@@ -609,6 +609,24 @@ def test_main_scripts_flag_runs_named_scripts_and_exits(tmp_path, run_recorder, 
     assert exec_recorder == {}
 
 
+@pytest.mark.parametrize(("flag", "name"), [("--setup", "setup"), ("--login", "login"), ("--clean", "clean")])
+def test_main_scripts_shorthand_flag_runs_its_own_name(tmp_path, run_recorder, which, exec_recorder, flag, name):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "prep.sh").write_text("#!/bin/bash\n")
+    (env_dir / "denver.toml").write_text(
+        f'stages = ["uv"]\n\n[uv]\nprovider = "uv"\n\n[uv.scripts]\n{name} = ["prep.sh"]\n'
+    )
+    assert denver.main(["run", str(env_dir), flag]) == 0
+    assert str((env_dir / "prep.sh").resolve()) in run_recorder.commands()[-1]
+    assert exec_recorder == {}
+
+
+def test_main_scripts_shorthands_share_the_scripts_ordering(tmp_path):
+    args = denver.build_arg_parser().parse_args(["run", "e", "--clean", "--scripts", "migrate", "--setup"])
+    assert args.scripts == ["clean", "migrate", "setup"]
+
+
 def test_main_scripts_flag_is_repeatable_and_runs_each_name_in_order(tmp_path, run_recorder, which, exec_recorder):
     env_dir = tmp_path / "e"
     env_dir.mkdir()

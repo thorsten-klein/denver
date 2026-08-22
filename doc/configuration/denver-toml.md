@@ -356,8 +356,11 @@ Separately, `scripts:` is a generic, open-ended mechanism for one-shot
 actions that are *not* part of the normal pipeline: any stage's section can
 declare `scripts: <name>: [...]`, and `denver run <env> --scripts <name>` runs
 every stage's own `<name>` entries, then exits without doing anything else.
-Nothing about `<name>` is fixed — `setup` and `login` are just conventions,
-not flags of their own. Which is why `denver run <env> --scripts`, with no
+Nothing about `<name>` is fixed — `setup`, `login` and `clean` are only
+conventions, recognised by denver just far enough to get a shorthand flag
+each (`--setup`/`--login`/`--clean`, the last of which also removes the
+env's state directory afterwards); any other name works exactly as well and
+needs no change to denver. Which is why `denver run <env> --scripts`, with no
 name at all, lists the names that env actually defines: they are unguessable
 by design, and `scripts:` stacks across the whole `import:` chain, so reading
 one file does not answer it either.
