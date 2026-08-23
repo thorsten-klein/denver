@@ -181,7 +181,8 @@ name is already exported:
 - **`DENVER_ENV_WORKDIR`** — denver's own working area for this environment
   (`<env dir>/.denver/<config file stem>/` by default): venv, install trees,
   fingerprints, logs, `performance.jsonl`. Per environment and never shared
-  — see "Where an environment's state lives" in the top-level
+  by default — overridable directly (`DENVER_ENV_WORKDIR`) — see "Where an
+  environment's state lives" in the top-level
   [`README.md`](https://github.com/thorsten-klein/denver/blob/develop/README.md).
 - **`DENVER_CACHE_DIR`** — the *shared* cache root (`~/.cache/denver` by
   default), offered for an env to point a tool's own download cache at, e.g.
@@ -194,10 +195,9 @@ name is already exported:
   4.8.0** onwards (see below).
 
 These are exported into the environment too, so scripts, compose files and
-the final command can read them as ordinary variables. `DENVER_ENV_DIR`,
-`DENVER_STATE_DIR` and `DENVER_CACHE_DIR` — the variables denver *reads*
-rather than sets, and where an env's state lives by default — are documented
-in the top-level
+the final command can read them as ordinary variables. `DENVER_ENV_DIR` —
+the one variable here denver *reads* rather than computes — is documented
+alongside them in the top-level
 [`README.md`](https://github.com/thorsten-klein/denver/blob/develop/README.md).
 
 ### The prompt marker

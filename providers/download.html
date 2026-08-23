@@ -10,7 +10,7 @@
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=32bf0092" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=6b2f6ffd" />
 
   
     <link rel="shortcut icon" href="../_static/favicon.svg"/>
@@ -21,6 +21,7 @@
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/custom.js?v=4c2ef8d1"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -60,7 +61,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../introduction/install.html">Install denver</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#run-from-source-no-install">Run from source (no install)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#from-pypi">From PyPI</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#installing-uv">Installing uv</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#prebuilt-binary">Prebuilt binary</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#editable-install">Editable install</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#vendor-with-git-nested">Vendor with git-nested</a></li>
@@ -498,10 +498,10 @@ that only bite later: recognising an already-installed release, never
 accepting a truncated download, never leaving a half-unpacked tree that
 the <em>next</em> run then treats as finished. Here that logic exists once.</p></li>
 <li><p><strong>Downloads are persistent state, not cache.</strong> They live in the env’s own
-workdir (<code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code>, honouring a <code class="docutils literal notranslate"><span class="pre">DENVER_STATE_DIR</span></code> override) —
-next to <code class="docutils literal notranslate"><span class="pre">.logs/</span></code>, deleted with the env and with nothing else. They are
-<em>not</em> in the shared <code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code>, which denver only ever points
-other tools at, never writes itself.</p></li>
+workdir (<code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code>, itself overridable) — next to <code class="docutils literal notranslate"><span class="pre">.logs/</span></code>,
+deleted with the env and with nothing else. They are <em>not</em> in the shared
+<code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code>, which denver only ever points other tools at, never
+writes itself.</p></li>
 <li><p><strong>Checksums are checked on the file, not on the transfer.</strong> An existing
 archive is verified on every run, not only right after it is fetched — a
 file corrupted on disk months later is caught the same way a bad download

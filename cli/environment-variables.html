@@ -10,7 +10,7 @@
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=32bf0092" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=6b2f6ffd" />
 
   
     <link rel="shortcut icon" href="../_static/favicon.svg"/>
@@ -21,6 +21,7 @@
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/custom.js?v=4c2ef8d1"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -60,7 +61,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../introduction/install.html">Install denver</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#run-from-source-no-install">Run from source (no install)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#from-pypi">From PyPI</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#installing-uv">Installing uv</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#prebuilt-binary">Prebuilt binary</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#editable-install">Editable install</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#vendor-with-git-nested">Vendor with git-nested</a></li>
@@ -284,43 +284,73 @@
              
   <section id="environment-variables">
 <h1>Environment variables<a class="headerlink" href="#environment-variables" title="Link to this heading"></a></h1>
-<p>Flags are not the only way denver takes input. Two environment variables
-change where it puts things — and unlike the flags on the previous page,
+<p>Flags are not the only way denver takes input. A handful of environment
+variables change where it puts things — and unlike the flags on the previous page,
 these are read from your shell rather than passed per run.</p>
 <section id="what-denver-reads">
 <h2>What denver reads<a class="headerlink" href="#what-denver-reads" title="Link to this heading"></a></h2>
-<ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_DIR</span></code></strong> — the fallback for the <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> argument itself, when
-you omit it: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span></code> (with no path at all) uses this instead. Handy
-in a shell/CI that always works against the same env — export it once
-(e.g. in <code class="docutils literal notranslate"><span class="pre">.envrc</span></code>) and drop <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> from every <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">...</span></code> after
-that. An <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> actually given on the command line always wins over it.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">DENVER_STATE_DIR</span></code></strong> — an explicit root for denver’s per-env state
-(venv, install trees, fingerprints, logs, <code class="docutils literal notranslate"><span class="pre">performance.jsonl</span></code>), overriding
-the default location described in <a class="reference internal" href="#where-an-environment-s-state-lives">Where an environment’s state lives</a>
-below. Useful to put that state on a larger or faster disk.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code></strong> — the shared <em>cache</em> root denver exports as
-<code class="docutils literal notranslate"><span class="pre">${DENVER_CACHE_DIR}</span></code> for an env to point a tool’s own download cache at
-(e.g. <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span></code>). Defaults to <code class="docutils literal notranslate"><span class="pre">~/.cache/denver</span></code>. denver never creates
-or reads it; it only offers the location, because such caches are
-content-addressed, safe to share between envs and checkouts, and expensive
-to duplicate.</p></li>
-</ul>
-<p><strong>Those three are the whole list.</strong> Every flag from the previous page
-(<code class="docutils literal notranslate"><span class="pre">--force</span></code>, <code class="docutils literal notranslate"><span class="pre">--ci</span></code>, <code class="docutils literal notranslate"><span class="pre">--fast</span></code>, …) is set purely by the flag itself, never
-inherited from a same-named real environment variable — so nothing about a
-run silently changes because of what happens to be exported in the calling
-shell.</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variable</p></th>
+<th class="head"><p>What it does</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_DIR</span></code></p></td>
+<td><p>Fallback for <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span></code> argument, so you can run <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span></code> instead. Handy in a shell/CI that always runs same env. An <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> given on the command line always wins over it. Unset by default — <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> must then be given explicitly.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code></p></td>
+<td><p>Working directory for this environment’s files.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code></p></td>
+<td><p>Directory where tools can persistently store files, e.g. caches.. Defaults to <code class="docutils literal notranslate"><span class="pre">~/.cache/denver</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
 </section>
 <section id="what-denver-exports">
 <h2>What denver exports<a class="headerlink" href="#what-denver-exports" title="Link to this heading"></a></h2>
-<p>Going the other way, denver <em>sets</em> a handful of built-in variables in the
-environment it builds — <code class="docutils literal notranslate"><span class="pre">DENVER_ENV_DIR</span></code>, <code class="docutils literal notranslate"><span class="pre">DENVER_ENV_NAME</span></code>,
-<code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code>, <code class="docutils literal notranslate"><span class="pre">DENVER_SRC_DIR</span></code>, <code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code> — so your
-scripts, compose files and the final command can read them as ordinary
-variables. They are also what <code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation inside a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>
-resolves against. The full list and their exact values are documented under
-“Variable interpolation” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>.</p>
+<p>Going the other way, denver also <em>sets</em> a handful of built-in variables in the
+environment it builds, so your scripts, compose files and the final command
+can read them as ordinary variables. They are also what <code class="docutils literal notranslate"><span class="pre">${...}</span></code>
+interpolation inside a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> resolves against — see “Variable
+interpolation” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>.</p>
+<p>Denver-owned identifiers always reflect the current run, even if a stale
+variable of the same name was already exported in the calling shell:</p>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Variable</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>What it holds</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_DIR</span></code></p></td>
+<td><p>the resolved <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> directory</p></td>
+<td><p>This environment’s own directory — the one holding its <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_NAME</span></code></p></td>
+<td><p>that directory’s name</p></td>
+<td><p>e.g. <code class="docutils literal notranslate"><span class="pre">raspberry-pico</span></code> for an env at <code class="docutils literal notranslate"><span class="pre">.../envs/raspberry-pico/</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&lt;env</span> <span class="pre">dir&gt;/.denver/&lt;config</span> <span class="pre">file</span> <span class="pre">stem&gt;/</span></code></p></td>
+<td><p>denver’s own working area for this environment (e.g. venv, install trees, fingerprints, logs, …). Can be overridden by <code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">~/.cache/denver</span></code></p></td>
+<td><p>Directory where tools can persistently store files, e.g. caches. Can be overwritten by <code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code>.</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_SRC_DIR</span></code></p></td>
+<td><p>wherever denver’s own code is installed</p></td>
+<td><p>Rarely needed directly — mostly for a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage that has to reach into denver’s own package.</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SHELL_PROMPT_PREFIX</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">(&lt;env</span> <span class="pre">name&gt;)</span> </code></p></td>
+<td><p>The marker text a shell’s prompt uses to show when it is running inside this environment, e.g. <code class="docutils literal notranslate"><span class="pre">(firmware-env)</span> </code> — see “The prompt marker” in <a class="reference internal" href="../configuration/denver-toml.html#the-prompt-marker"><span class="std std-ref">Configuration</span></a>.</p></td>
+</tr>
+</tbody>
+</table>
 </section>
 <section id="where-an-environment-s-state-lives">
 <h2>Where an environment’s state lives<a class="headerlink" href="#where-an-environment-s-state-lives" title="Link to this heading"></a></h2>
@@ -341,15 +371,11 @@ for free, since the workspace is already bind-mounted there.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">&lt;config</span> <span class="pre">file</span> <span class="pre">stem&gt;</span></code> level exists because one folder may hold several
 variants (<code class="docutils literal notranslate"><span class="pre">denver.debug.toml</span></code>, <code class="docutils literal notranslate"><span class="pre">denver.release.toml</span></code>) — those are <em>different</em>
 environments sharing a folder, and must not share a venv.</p>
-<p>denver falls back to <code class="docutils literal notranslate"><span class="pre">~/.denver/&lt;env&gt;-&lt;hash&gt;</span></code> when it cannot write to the
-env directory (a read-only mount, a vendored base env, an env shipped inside
-an image), and <code class="docutils literal notranslate"><span class="pre">DENVER_STATE_DIR</span></code> overrides both.</p>
 <p>Wherever it ended up, <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--clean</span></code> or <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span> <span class="pre">&lt;env&gt;</span></code>
-removes it — see
-<a class="reference internal" href="arguments.html#remove-an-environment-s-state"><span class="std std-ref">Remove an environment’s state</span></a>.</p>
+removes it — see <a class="reference internal" href="arguments.html#remove-an-environment-s-state"><span class="std std-ref">Remove an environment’s state</span></a>.</p>
 <blockquote>
-<div><p><strong>Note</strong></p>
-<p><strong>Next:</strong> <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a> — the complete
+<div><p>[!NOTE]
+<strong>Next:</strong> <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a> — the complete
 <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema: every key, how imports merge, and the mechanisms behind
 everything you have used so far.</p>
 </div></blockquote>

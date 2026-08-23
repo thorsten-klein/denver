@@ -10,7 +10,7 @@
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=32bf0092" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=6b2f6ffd" />
 
   
     <link rel="shortcut icon" href="../_static/favicon.svg"/>
@@ -21,6 +21,7 @@
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/custom.js?v=4c2ef8d1"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -60,7 +61,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../introduction/install.html">Install denver</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#run-from-source-no-install">Run from source (no install)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#from-pypi">From PyPI</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#installing-uv">Installing uv</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#prebuilt-binary">Prebuilt binary</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#editable-install">Editable install</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#vendor-with-git-nested">Vendor with git-nested</a></li>
@@ -338,7 +338,7 @@ But in total it is a lot of setup effort for the user.</p>
 <p>If <code class="docutils literal notranslate"><span class="pre">docker</span></code> is used, every stage after it runs inside the container.
 As a result nothing else needs to be installed on the host, but only:</p>
 <ul class="simple">
-<li><p>denver installed — see <a class="reference internal" href="../introduction/install.html"><span class="std std-doc">Install denver</span></a>.</p></li>
+<li><p>denver — see <a class="reference internal" href="../introduction/install.html"><span class="std std-doc">Install denver</span></a>.</p></li>
 <li><p>Docker, with the Compose plugin, on your host — see <a class="reference internal" href="../providers/docker.html#setting-up-docker"><span class="std std-ref">Setting up Docker</span></a>.</p></li>
 </ul>
 </section>
@@ -401,8 +401,11 @@ even the ones you haven’t set.</p>
 </tr>
 </tbody>
 </table>
-<p><strong>Note</strong>: A stage id is a name we freely choose. <code class="docutils literal notranslate"><span class="pre">uv-packages</span></code> is a <code class="docutils literal notranslate"><span class="pre">uv</span></code>
+<blockquote>
+<div><p>[!NOTE]
+A stage id is a name we freely choose. <code class="docutils literal notranslate"><span class="pre">uv-packages</span></code> is a <code class="docutils literal notranslate"><span class="pre">uv</span></code>
 stage because its section says <code class="docutils literal notranslate"><span class="pre">provider:</span> <span class="pre">uv</span></code>, not because of what it is called.</p>
+</div></blockquote>
 <p>Now write the <code class="docutils literal notranslate"><span class="pre">stages:</span></code> list first: it <em>is</em> the core of the environment. Note that the order is significant here.</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">stages</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
 <span class="w">  </span><span class="s2">"docker-base"</span><span class="p">,</span>
@@ -487,7 +490,8 @@ container’s non-root user.</p>
 <span class="w">    </span>curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/0.12.3/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
 </pre></div>
 </div>
-<p><strong>Note</strong>:</p>
+<blockquote>
+<div><p>[!NOTE]</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">uv</span></code> is installed into the docker container as it is required by the uv stage later (which runs in the docker).</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">python3</span></code> is for <strong>denver itself</strong>: a wrapper stage re-invokes denver
@@ -506,6 +510,7 @@ exact versions, and pinning versions through a distro’s package manager is
 a losing game. This is why the two stages below fetch them at pinned
 versions instead — one <code class="docutils literal notranslate"><span class="pre">custom</span></code>, one via <code class="docutils literal notranslate"><span class="pre">conan</span></code>.</p></li>
 </ul>
+</div></blockquote>
 <p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/create-env.sh</span></code> — this script generates a <code class="docutils literal notranslate"><span class="pre">.env</span></code> file with
 user-specific information used by <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code>, and creates any
 mounted folders that need to exist with the right permissions beforehand.
@@ -535,8 +540,11 @@ reason in the comment above. Everything else the container needs —
 <code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_DIR}</span></code>, <code class="docutils literal notranslate"><span class="pre">${DENVER_SRC_DIR}</span></code>, <code class="docutils literal notranslate"><span class="pre">${CONAN_HOME}</span></code> (Step 6) — is
 already a denver built-in or a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> <code class="docutils literal notranslate"><span class="pre">[env]</span></code> entry, so it doesn’t
 have to be computed by hand here at all.</p>
-<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/setup/install_host_tools.sh</span></code> — This script will ensure the host requirements for the docker are installed.
-Note: This setup script will only run when the user invokes <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/firmware-env</span> <span class="pre">--scripts</span> <span class="pre">setup</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">envs/firmware-env/setup/install_host_tools.sh</span></code> — This script will ensure the host requirements for the docker are installed.</p>
+<blockquote>
+<div><p>[!NOTE]
+This setup script will only run when the user invokes <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">envs/firmware-env</span> <span class="pre">--scripts</span> <span class="pre">setup</span></code>.</p>
+</div></blockquote>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="ch">#!/bin/bash</span>
 <span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>docker<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>docker.io
 <span class="nb">command</span><span class="w"> </span>-v<span class="w"> </span>containerd<span class="w"> </span><span class="o">||</span><span class="w"> </span>sudo<span class="w"> </span>apt<span class="w"> </span>install<span class="w"> </span>containerd
@@ -627,7 +635,9 @@ script is <em>sourced</em> into the environment denver is assembling, so whateve
 exports reaches everything after it. Installing and activating are two
 different jobs, so they are two scripts. (More on this pair in
 <a class="reference internal" href="../providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">providers/custom.md</span></code></span></a>)</p>
-<p><strong>Note</strong>: one sourced script would do the whole job just as well — check,
+<blockquote>
+<div><p>[!NOTE]
+one sourced script would do the whole job just as well — check,
 download, unpack, <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">PATH=</span></code>, all in <code class="docutils literal notranslate"><span class="pre">source:</span> <span class="pre">install-nvim.sh</span></code> and no
 <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> at all. It is split into two here to make the two roles visible, and
 the split has small advantages of its own: <code class="docutils literal notranslate"><span class="pre">--fast</span></code>/<code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> skips a <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>
@@ -635,6 +645,7 @@ while they always run a <code class="docutils literal notranslate"><span class="
 sourced script must never call <code class="docutils literal notranslate"><span class="pre">exit</span></code> — it would end denver’s own sourcing
 shell before it reads the environment back, and the <code class="docutils literal notranslate"><span class="pre">PATH</span></code> entry would be
 lost.</p>
+</div></blockquote>
 <p>Note also <code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_DIR}</span></code> in <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>. A <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> inherits denver’s working
 directory — wherever the user happened to be — so a relative path would be a
 coin flip; <code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_DIR}</span></code> is a built-in denver expands to the directory
@@ -821,8 +832,11 @@ stays <code class="docutils literal notranslate"><span class="pre">conandata.yml
         <span class="bp">self</span><span class="o">.</span><span class="n">tool_requires</span><span class="p">(</span><span class="s2">"cmake/3.31.9@denver/snapshot"</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><strong>Note</strong>: The <code class="docutils literal notranslate"><span class="pre">&#64;denver/snapshot</span></code> half is the user/channel denver’s recipes-exporter
+<blockquote>
+<div><p>[!NOTE]
+The <code class="docutils literal notranslate"><span class="pre">&#64;denver/snapshot</span></code> half is the user/channel denver’s recipes-exporter
 stamps onto every recipe it exports. It is the default of <code class="docutils literal notranslate"><span class="pre">user:</span></code>/<code class="docutils literal notranslate"><span class="pre">channel:</span></code>.</p>
+</div></blockquote>
 <p>Now check that it works, by running <code class="docutils literal notranslate"><span class="pre">cmake</span> <span class="pre">--version</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span class="w"> </span>--until<span class="w"> </span>conan-packages<span class="w"> </span>--<span class="w"> </span>cmake<span class="w"> </span>--version
 </pre></div>
@@ -875,7 +889,9 @@ solved with a <code class="docutils literal notranslate"><span class="pre">custo
 <p>The key is <code class="docutils literal notranslate"><span class="pre">source:</span></code>, not <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> — sourcing is what makes the exported variables survive into later commands.
 <code class="docutils literal notranslate"><span class="pre">CMAKE_GENERATOR=&quot;Ninja&quot;</span></code> is what makes the cmake of Step 6 build with the
 ninja of Step 5, instead of falling back to <code class="docutils literal notranslate"><span class="pre">make</span></code>.</p>
-<p><strong>Note</strong>: For a plain constant, by the way, a whole stage is more than you
+<blockquote>
+<div><p>[!NOTE]
+For a plain constant, by the way, a whole stage is more than you
 need — alternatively the <code class="docutils literal notranslate"><span class="pre">[env]</span></code> table (already used for <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span></code> in Step 6)
 would work as well:</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[env]</span>
@@ -883,6 +899,7 @@ would work as well:</p>
 <span class="n">CMAKE_GENERATOR</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"Ninja"</span>
 </pre></div>
 </div>
+</div></blockquote>
 <p>A <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage earns its place as soon as shell logic is necessary — e.g. in case of
 conditions (<code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">...;</span> <span class="pre">then</span> <span class="pre">...;</span> <span class="pre">fi</span></code>) or if paths are computed dynamically.</p>
 </section>
@@ -934,15 +951,18 @@ denver<span class="w"> </span>run<span class="w"> </span>envs/firmware-env<span 
 denver<span class="w"> </span>clean<span class="w"> </span>envs/firmware-env<span class="w">                          </span><span class="c1"># remove every directory denver keeps for it and its imports</span>
 </pre></div>
 </div>
-<p><strong>Note on <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">docker-base</span></code></strong>: worth trying at least once — it builds
+<blockquote>
+<div><p>[!NOTE]
+<strong>On <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">docker-base</span></code>:</strong> worth trying at least once — it builds
 the very same stack directly on the host instead of in the container, so “does
 this work without Docker?” is one flag away rather than a separate code path.
 Whatever the container was providing must then exist on the host itself —
 for this env that’s <code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">curl</span></code>, and a C toolchain (<code class="docutils literal notranslate"><span class="pre">gcc</span></code>,
 <code class="docutils literal notranslate"><span class="pre">libc6-dev</span></code>, <code class="docutils literal notranslate"><span class="pre">make</span></code>).</p>
+</div></blockquote>
 <blockquote>
-<div><p><strong>Note</strong></p>
-<p><strong>Next:</strong> <a class="reference internal" href="examples.html"><span class="std std-doc">Examples</span></a> — the other bundled environments, from a
+<div><p>[!NOTE]
+<strong>Next:</strong> <a class="reference internal" href="examples.html"><span class="std std-doc">Examples</span></a> — the other bundled environments, from a
 three-line one up to a full Zephyr RTOS setup, so you can find the one
 closest to your own project and start from it.</p>
 <p>From here on the documentation is reference rather than narrative: the

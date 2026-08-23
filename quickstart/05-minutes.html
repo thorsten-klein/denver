@@ -10,7 +10,7 @@
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=32bf0092" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=6b2f6ffd" />
 
   
     <link rel="shortcut icon" href="../_static/favicon.svg"/>
@@ -21,6 +21,7 @@
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/custom.js?v=4c2ef8d1"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -60,7 +61,6 @@
 <li class="toctree-l1"><a class="reference internal" href="../introduction/install.html">Install denver</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#run-from-source-no-install">Run from source (no install)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#from-pypi">From PyPI</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#installing-uv">Installing uv</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#prebuilt-binary">Prebuilt binary</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#editable-install">Editable install</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../introduction/install.html#vendor-with-git-nested">Vendor with git-nested</a></li>
@@ -287,15 +287,19 @@
 <p>This page explains the most simple bundled environment: <code class="docutils literal notranslate"><span class="pre">examples/simple-env</span></code>.</p>
 <section id="have-a-look-first">
 <h2>Have a look first<a class="headerlink" href="#have-a-look-first" title="Link to this heading"></a></h2>
-<p>Open <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env/denver.toml"><code class="docutils literal notranslate"><span class="pre">examples/simple-env/denver.toml</span></code></a>
-in a file editor of your choice, or ask <code class="docutils literal notranslate"><span class="pre">denver</span></code> to show the resolved config with <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">examples/simple-env</span> <span class="pre">--show-config</span></code>.</p>
-<p><code class="docutils literal notranslate"><span class="pre">--show-config</span></code> never runs anything — it only resolves the file (imports,
+<p>Open <code class="docutils literal notranslate"><span class="pre">examples/simple-env/denver.toml</span></code> in a file editor of your choice
+(or <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env/denver.toml">in your Browser</a>),
+or ask <code class="docutils literal notranslate"><span class="pre">denver</span></code> to show the resolved config with <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">examples/simple-env</span> <span class="pre">--show-config</span></code>.</p>
+<blockquote>
+<div><p>[!NOTE]
+<code class="docutils literal notranslate"><span class="pre">--show-config</span></code> never runs anything — it only resolves the file (imports,
 defaults, everything) and prints the result. For this env the output looks
 almost the same as the file on disk, because there is nothing to resolve:
 no imports, no provider defaults to fill in. That will not stay true once
 you look at a bigger example, which is exactly why this flag is worth
 knowing early: it is always safe to run, and it always shows <em>exactly</em> what
 a real run would use.</p>
+</div></blockquote>
 <p>You can see that it is a basic environment — consisting of three stages, each one a <code class="docutils literal notranslate"><span class="pre">provider:</span> <span class="pre">custom</span></code> section.
 All stages run a shell command (via <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>), one additionally sources a script (<code class="docutils literal notranslate"><span class="pre">source:</span></code>).</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">stages</span> <span class="o">=</span> <span class="p">[</span>
@@ -320,10 +324,11 @@ All stages run a shell command (via <code class="docutils literal notranslate"><
 </div>
 <p>A closer look shows what each stage does:</p>
 <ul class="simple">
-<li><p>The first stage prints the variables and their current values (most likely empty).</p></li>
-<li><p>The second stage prints some text, then sources <code class="docutils literal notranslate"><span class="pre">custom.sh</span></code> — open that
-script and you’ll see it sets those variables to specific values.</p></li>
-<li><p>The third stage prints the variables again, to check the second stage worked.</p></li>
+<li><p>The first stage prints the variables and their current values (most likely empty because you don’t have set them on your host system).</p></li>
+<li><p>The second stage prints some text, then sources <code class="docutils literal notranslate"><span class="pre">custom.sh</span></code> —
+<a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env/custom.sh">open that script</a>
+and you’ll see it sets those variables to specific values.</p></li>
+<li><p>The third stage prints the variables again, to showcase that the values from second stage are really applied.</p></li>
 </ul>
 </section>
 <section id="run-the-environment">
@@ -355,8 +360,12 @@ currently running and which step.</p></li>
 <code class="docutils literal notranslate"><span class="pre">[set-vars]</span> <span class="pre">sourcing</span> <span class="pre">custom.sh...</span></code>, <code class="docutils literal notranslate"><span class="pre">[print-vars-after]</span> <span class="pre">MYVAR=1</span> <span class="pre">FOO=2</span> <span class="pre">BAR=3</span></code>
 come from the <code class="docutils literal notranslate"><span class="pre">echo</span></code> command run in <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>.</p></li>
 </ul>
-<p>Note: for quieter output, run with <code class="docutils literal notranslate"><span class="pre">-q</span></code> or <code class="docutils literal notranslate"><span class="pre">-qq</span></code>. Try it out!</p>
-<p>To land in an interactive shell, either name it explicitly, or omit the command entirely to fall back to the environment’s default:</p>
+<blockquote>
+<div><p>[!NOTE]
+for quieter output, run with <code class="docutils literal notranslate"><span class="pre">-q</span></code> or <code class="docutils literal notranslate"><span class="pre">-qq</span></code>. Try it out!</p>
+</div></blockquote>
+<p>To land in an interactive shell, either name it explicitly, or omit the command entirely
+to fall back to the environment’s default (which is <code class="docutils literal notranslate"><span class="pre">bash</span></code> by default):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>examples/simple-env<span class="w"> </span>--<span class="w"> </span>bash
 </pre></div>
 </div>
@@ -367,20 +376,23 @@ come from the <code class="docutils literal notranslate"><span class="pre">echo<
 </section>
 <section id="what-just-happened">
 <h2>What just happened<a class="headerlink" href="#what-just-happened" title="Link to this heading"></a></h2>
-<p>Let’s clarify the naming for this specific example:</p>
+<p>Let’s explain the <code class="docutils literal notranslate"><span class="pre">denver</span></code> naming for this specific example:</p>
 <ul class="simple">
 <li><p>The <strong>environment</strong> is the folder <code class="docutils literal notranslate"><span class="pre">examples/simple-env</span></code>, because that is
 where its <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> lives.</p></li>
-<li><p>Each <strong>stage</strong> is one step, and they ran in the order the file lists
+<li><p>Each <strong>stage</strong> is one step, and they run in the order the file lists
 them — <code class="docutils literal notranslate"><span class="pre">print-vars-before</span></code>, then <code class="docutils literal notranslate"><span class="pre">set-vars</span></code>, then <code class="docutils literal notranslate"><span class="pre">print-vars-after</span></code>.</p></li>
 <li><p>The <strong>provider</strong> behind all three is <code class="docutils literal notranslate"><span class="pre">custom</span></code>: run a command, and/or
-source a script. You configured what to run; denver ran it.</p></li>
+source a script. You configured what to run; denver runs it.</p></li>
 </ul>
-<p><code class="docutils literal notranslate"><span class="pre">cmd:</span></code> and <code class="docutils literal notranslate"><span class="pre">source:</span></code> look interchangeable, but they are different:</p>
+<blockquote>
+<div><p>[!NOTE]
+<code class="docutils literal notranslate"><span class="pre">cmd:</span></code> and <code class="docutils literal notranslate"><span class="pre">source:</span></code> look interchangeable, but they are different:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">cmd:</span></code> runs in its own subprocess, so an <code class="docutils literal notranslate"><span class="pre">export</span></code> inside it never leaves that subprocess.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">source:</span></code> folds its exported variables into the environment, so they are set for every later stage too.</p></li>
 </ul>
+</div></blockquote>
 <p>See the <a class="reference internal" href="../providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code> provider</span></a> for the full picture.</p>
 </section>
 <section id="pre-conditions-for-a-real-project">
@@ -389,11 +401,10 @@ source a script. You configured what to run; denver ran it.</p></li>
 <code class="docutils literal notranslate"><span class="pre">echo</span></code> commands.</p>
 <p>Real commands need real tools, and denver itself never installs anything
 automatically — it only runs what a stage’s <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>/<code class="docutils literal notranslate"><span class="pre">source:</span></code> tells it to. A
-stage whose tool is missing fails with a clear message naming what it
-looked for.</p>
-<p>You can still let denver handle that setup, though: something that must be
-installed on the <em>host</em> itself (e.g. <code class="docutils literal notranslate"><span class="pre">docker</span></code>) can be a script wired into
-<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> as <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">setup:</span></code>, then run once with:</p>
+stage whose tool is missing fails when it is run. In this case you can still
+let denver handle that setup, though: something that must be
+installed must be installed beforehand in a previous stage, or in a stage’s
+setup script section in the config, so you can install with:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>&lt;env&gt;<span class="w"> </span>--setup
 </pre></div>
 </div>
@@ -422,8 +433,8 @@ Configuration for how that mechanism works.</p>
 <a class="reference internal" href="../cli/completion.html"><span class="std std-doc">Shell completion</span></a> to tab-complete all of it instead
 of memorizing it.</p>
 <blockquote>
-<div><p><strong>Note</strong></p>
-<p><strong>Next:</strong> <a class="reference internal" href="30-minutes.html"><span class="std std-doc">denver in 30 minutes</span></a> — a bigger,
+<div><p>[!NOTE]
+<strong>Next:</strong> <a class="reference internal" href="30-minutes.html"><span class="std std-doc">denver in 30 minutes</span></a> — a bigger,
 more realistic example: four providers, a container, a real toolchain,
 and you build it yourself from an empty folder instead of just reading it.</p>
 </div></blockquote>

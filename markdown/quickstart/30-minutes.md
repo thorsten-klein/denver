@@ -63,7 +63,7 @@ denver run envs/firmware-env
 If `docker` is used, every stage after it runs inside the container.
 As a result nothing else needs to be installed on the host, but only:
 
-- denver installed — see [Install denver](../introduction/install.md).
+- denver — see [Install denver](../introduction/install.md).
 - Docker, with the Compose plugin, on your host — see [Setting up Docker](../providers/docker.md#setting-up-docker).
 
 ## Step 0 — the skeleton
@@ -107,9 +107,9 @@ Let’s identify the necessary stages. From the use case description we might ne
 | “ninja 1.13.2” – the same job again, but now using bundled provider | [`download`](../providers/download.md) | `ninja-setup`          |
 | “cmake 3.31.9”                                                      | [`conan`](../providers/conan.md)       | `conan-packages`       |
 | “export `PYTEST_ADDOPTS`, `CMAKE_GENERATOR`”                        | [`custom`](../providers/custom.md)     | `best-practices`       |
-
-**Note**: A stage id is a name we freely choose. `uv-packages` is a `uv`
-stage because its section says `provider: uv`, not because of what it is called.
+> [!NOTE]
+> A stage id is a name we freely choose. `uv-packages` is a `uv`
+> stage because its section says `provider: uv`, not because of what it is called.
 
 Now write the `stages:` list first: it *is* the core of the environment. Note that the order is significant here.
 
@@ -205,24 +205,24 @@ RUN export UV_INSTALL_DIR=/usr/local/bin; \
     curl -LsSf https://astral.sh/uv/0.12.3/install.sh | sh
 ```
 
-**Note**:
+> [!NOTE]
 
-- `uv` is installed into the docker container as it is required by the uv stage later (which runs in the docker).
-- `python3` is for **denver itself**: a wrapper stage re-invokes denver
-  *inside* the container, and denver is a Python program that needs nothing
-  installed for its own sake (`denver.toml` is read with the standard
-  library’s `tomllib`) beyond a `>=3.11` interpreter – Ubuntu 24.04’s
-  `python3` is already 3.12.
-- `git` is for the conan stage, whose recipe
-  exporter shells out to it. The rule of thumb for the image: whatever has to
-  exist before denver’s own stages can run in there.
-- `make`, which `cmake`’s default generator drives, is what later compiles
-  the `hello-world` cmake project
-- `curl` is needed to download files, e.g. in the `nvim-setup` stage later
-- `cmake` and `neovim` are **not** installed via apt. The use case requires
-  exact versions, and pinning versions through a distro’s package manager is
-  a losing game. This is why the two stages below fetch them at pinned
-  versions instead — one `custom`, one via `conan`.
+> - `uv` is installed into the docker container as it is required by the uv stage later (which runs in the docker).
+> - `python3` is for **denver itself**: a wrapper stage re-invokes denver
+>   *inside* the container, and denver is a Python program that needs nothing
+>   installed for its own sake (`denver.toml` is read with the standard
+>   library’s `tomllib`) beyond a `>=3.11` interpreter – Ubuntu 24.04’s
+>   `python3` is already 3.12.
+> - `git` is for the conan stage, whose recipe
+>   exporter shells out to it. The rule of thumb for the image: whatever has to
+>   exist before denver’s own stages can run in there.
+> - `make`, which `cmake`’s default generator drives, is what later compiles
+>   the `hello-world` cmake project
+> - `curl` is needed to download files, e.g. in the `nvim-setup` stage later
+> - `cmake` and `neovim` are **not** installed via apt. The use case requires
+>   exact versions, and pinning versions through a distro’s package manager is
+>   a losing game. This is why the two stages below fetch them at pinned
+>   versions instead — one `custom`, one via `conan`.
 
 `envs/firmware-env/create-env.sh` — this script generates a `.env` file with
 user-specific information used by `docker-compose.yml`, and creates any
@@ -258,8 +258,9 @@ already a denver built-in or a `denver.toml` `[env]` entry, so it doesn’t
 have to be computed by hand here at all.
 
 `envs/firmware-env/setup/install_host_tools.sh` — This script will ensure the host requirements for the docker are installed.
-Note: This setup script will only run when the user invokes `denver run envs/firmware-env --scripts setup`.
 
+> [!NOTE]
+> This setup script will only run when the user invokes `denver run envs/firmware-env --scripts setup`.
 ```bash
 #!/bin/bash
 command -v docker || sudo apt install docker.io
@@ -364,14 +365,15 @@ exports reaches everything after it. Installing and activating are two
 different jobs, so they are two scripts. (More on this pair in
 [`providers/custom.md`](../providers/custom.md))
 
-**Note**: one sourced script would do the whole job just as well — check,
-download, unpack, `export PATH=`, all in `source: install-nvim.sh` and no
-`cmd:` at all. It is split into two here to make the two roles visible, and
-the split has small advantages of its own: `--fast`/`--dry-run` skips a `cmd:`
-while they always run a `source:`. If you go with one script, mind that a
-sourced script must never call `exit` — it would end denver’s own sourcing
-shell before it reads the environment back, and the `PATH` entry would be
-lost.
+> [!NOTE]
+> one sourced script would do the whole job just as well — check,
+> download, unpack, `export PATH=`, all in `source: install-nvim.sh` and no
+> `cmd:` at all. It is split into two here to make the two roles visible, and
+> the split has small advantages of its own: `--fast`/`--dry-run` skips a `cmd:`
+> while they always run a `source:`. If you go with one script, mind that a
+> sourced script must never call `exit` — it would end denver’s own sourcing
+> shell before it reads the environment back, and the `PATH` entry would be
+> lost.
 
 Note also `${DENVER_ENV_DIR}` in `cmd:`. A `cmd:` inherits denver’s working
 directory — wherever the user happened to be — so a relative path would be a
@@ -586,8 +588,9 @@ class FirmwareEnv(ConanFile):
         self.tool_requires("cmake/3.31.9@denver/snapshot")
 ```
 
-**Note**: The `@denver/snapshot` half is the user/channel denver’s recipes-exporter
-stamps onto every recipe it exports. It is the default of `user:`/`channel:`.
+> [!NOTE]
+> The `@denver/snapshot` half is the user/channel denver’s recipes-exporter
+> stamps onto every recipe it exports. It is the default of `user:`/`channel:`.
 
 Now check that it works, by running `cmake --version`:
 
@@ -649,15 +652,16 @@ The key is `source:`, not `cmd:` — sourcing is what makes the exported variabl
 `CMAKE_GENERATOR="Ninja"` is what makes the cmake of Step 6 build with the
 ninja of Step 5, instead of falling back to `make`.
 
-**Note**: For a plain constant, by the way, a whole stage is more than you
-need — alternatively the `[env]` table (already used for `CONAN_HOME` in Step 6)
-would work as well:
+> [!NOTE]
+> For a plain constant, by the way, a whole stage is more than you
+> need — alternatively the `[env]` table (already used for `CONAN_HOME` in Step 6)
+> would work as well:
 
-```toml
-[env]
-PYTEST_ADDOPTS = "-v -s"
-CMAKE_GENERATOR = "Ninja"
-```
+> ```toml
+> [env]
+> PYTEST_ADDOPTS = "-v -s"
+> CMAKE_GENERATOR = "Ninja"
+> ```
 
 A `custom` stage earns its place as soon as shell logic is necessary — e.g. in case of
 conditions (`if ...; then ...; fi`) or if paths are computed dynamically.
@@ -718,15 +722,14 @@ denver run envs/firmware-env --clean                    # run its 'scripts: clea
 denver clean envs/firmware-env                          # remove every directory denver keeps for it and its imports
 ```
 
-**Note on `--skip docker-base`**: worth trying at least once — it builds
-the very same stack directly on the host instead of in the container, so “does
-this work without Docker?” is one flag away rather than a separate code path.
-Whatever the container was providing must then exist on the host itself —
-for this env that’s `uv`, `git`, `curl`, and a C toolchain (`gcc`,
-`libc6-dev`, `make`).
-
-> **Note**
-
+> [!NOTE]
+> **On `--skip docker-base`:** worth trying at least once — it builds
+> the very same stack directly on the host instead of in the container, so “does
+> this work without Docker?” is one flag away rather than a separate code path.
+> Whatever the container was providing must then exist on the host itself —
+> for this env that’s `uv`, `git`, `curl`, and a C toolchain (`gcc`,
+> `libc6-dev`, `make`).
+> [!NOTE]
 > **Next:** [Examples](examples.md) — the other bundled environments, from a
 > three-line one up to a full Zephyr RTOS setup, so you can find the one
 > closest to your own project and start from it.

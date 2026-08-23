@@ -140,14 +140,13 @@ directory and ignoring itself via a `.gitignore` denver writes there. Keyed on
 the config file, so two variants in one folder — and two checkouts of one
 project — never share it.
 
-**`DENVER_STATE_DIR` / `DENVER_CACHE_DIR`** — the two environment variables
-denver itself *reads*: an explicit root for the state directory above, and
-the shared cache root denver exports for an env to point a tool’s own
-download cache at. Full explanation in
+**`DENVER_ENV_WORKDIR` / `DENVER_CACHE_DIR`** — the environment variables
+denver itself *reads*: the exact directory to relocate the state directory
+above to, and (separately) the shared cache root denver exports for an env
+to point a tool’s own download cache at. Full explanation in
 [Environment variables](../cli/environment-variables.md).
 
-> **Note**
-
+> [!NOTE]
 > **Next:** [Philosophy](philosophy.md) — the principles these terms were
 > chosen to serve. Or go straight to
 > [denver in 30 minutes](../quickstart/30-minutes.md) and put them

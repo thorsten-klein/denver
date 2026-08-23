@@ -4,54 +4,50 @@
 
 Development Environments as code — reproducible, flexible, simple and fast.
 
-> **Note**
-
+> [!NOTE]
 > This documentation is also published as **plain Markdown**, one file per page
 > mirroring this exact page tree — meant for AI tools/LLMs to ingest directly,
 > without having to scrape rendered HTML. Start at
 > <a href="markdown/index.md">markdown/index.md</a>
 
-## New to denver?
-
-It is recommended to read the following documentation first
-
-|   # | Page                                                                                | What you get out of it                                                    |
-|-----|-------------------------------------------------------------------------------------|---------------------------------------------------------------------------|
-|   1 | [What problem denver solves](introduction/index.md)                                 | Why a `denver.toml` beats a `setup.sh`, built up one step at a time       |
-|   2 | [What is a denver environment?](introduction/index.md#what-is-a-denver-environment) | The model: environments, stages, providers                                |
-|   3 | [Install denver](introduction/install.md)                                           | Getting the `denver` command onto your machine                            |
-|   4 | [denver in 5 minutes](quickstart/05-minutes.md)                                     | Run the smallest possible environment end to end and watch it work        |
-|   5 | [denver in 30 minutes](quickstart/30-minutes.md)                                    | Build a bigger, more realistic environment yourself, from an empty folder |
-
-After that, the rest is reference you dip into as needed: the
-[`denver` command](cli/arguments.md), the
-[`denver.toml` schema](configuration/denver-toml.md), and one page
-[per provider](providers/uv.md).
-
 ## Introduction
 
 Start here if you have never seen a `denver.toml`.
 
+- [About denver](introduction/index.md)
+- [Install denver](introduction/install.md)
+
 ## Quickstart
 
-Run the smallest possible environment, then build a bigger, more realistic
-one yourself from an empty folder — the whole model in action before any
-reference material.
+There are some examples that show denver in action
+
+- [denver in 5 minutes](quickstart/05-minutes.md)
+- [denver in 30 minutes](quickstart/30-minutes.md)
+- [Examples](quickstart/examples.md)
 
 ## Concepts
 
-The vocabulary and the design principles behind it — read these to
-understand *why* denver refuses to guess things other tools guess for you.
+The vocabulary, the philosophy and the design principles behind `denver`
+
+- [Glossary](concepts/glossary.md)
+- [Philosophy](concepts/philosophy.md)
 
 ## `denver` command
 
-Everything you can pass to `denver`, and the environment variables it reads.
+Full reference documentation of the `denver` command line interface and
+environment variables used by `denver`.
+
+- [Arguments](cli/arguments.md)
+- [Shell completion](cli/completion.md)
+- [Environment variables](cli/environment-variables.md)
 
 ## Configuration
 
 The complete `denver.toml` reference: every top-level key, every generic
 stage key, how `import:` chains merge, and the mechanisms behind layering,
 hooks, overrides and fingerprinting.
+
+- [denver.toml](configuration/denver-toml.md)
 
 ## Providers
 
@@ -72,4 +68,13 @@ notes on the patterns it supports and how it behaves under
 A project can also register its own provider, without a denver fork — see
 “Extension providers” in [Configuration](configuration/denver-toml.md).
 
+- [uv](providers/uv.md)
+- [conan](providers/conan.md)
+- [docker](providers/docker.md)
+- [zephyr](providers/zephyr.md)
+- [download](providers/download.md)
+- [custom](providers/custom.md)
+
 ## Contributing
+
+- [Development](contributing/development.md)

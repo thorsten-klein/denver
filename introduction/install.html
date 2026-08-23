@@ -10,7 +10,7 @@
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
-      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=32bf0092" />
+      <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=6b2f6ffd" />
 
   
     <link rel="shortcut icon" href="../_static/favicon.svg"/>
@@ -21,6 +21,7 @@
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
       <script src="../_static/copybutton.js?v=f281be69"></script>
+      <script src="../_static/custom.js?v=4c2ef8d1"></script>
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -60,7 +61,6 @@
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Install denver</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#run-from-source-no-install">Run from source (no install)</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#from-pypi">From PyPI</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#installing-uv">Installing uv</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#prebuilt-binary">Prebuilt binary</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#editable-install">Editable install</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#vendor-with-git-nested">Vendor with git-nested</a></li>
@@ -289,6 +289,10 @@
 <h2>Run from source (no install)<a class="headerlink" href="#run-from-source-no-install" title="Link to this heading"></a></h2>
 <p>The fastest way to try denver, and the one with nothing to install: clone
 the repository and run the script directly.</p>
+<blockquote>
+<div><p>[!NOTE]
+python3 (version <code class="docutils literal notranslate"><span class="pre">&gt;=3.11</span></code>) is required to be installed.</p>
+</div></blockquote>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/thorsten-klein/denver.git
 </pre></div>
 </div>
@@ -296,54 +300,46 @@ the repository and run the script directly.</p>
 </pre></div>
 </div>
 <p>That’s it — <code class="docutils literal notranslate"><span class="pre">src/denver.py</span></code> <em>is</em> the <code class="docutils literal notranslate"><span class="pre">denver</span></code> command, with no packaging
-step in between. Every example in this documentation that says <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code> works exactly the same way as <code class="docutils literal notranslate"><span class="pre">./denver/src/denver.py</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code>. This is also how you’d pin denver to a specific commit, tag or branch
-for a project: <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">checkout</span></code> whatever you need inside that clone.</p>
+step in between. Every example in this documentation that says <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code>
+works exactly the same way as <code class="docutils literal notranslate"><span class="pre">./denver/src/denver.py</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">...</span></code>.
+For easier usage you may want to set <code class="docutils literal notranslate"><span class="pre">alias</span> <span class="pre">denver=$PWD/src/denver.py</span></code>.</p>
 </section>
 <section id="from-pypi">
 <h2>From PyPI<a class="headerlink" href="#from-pypi" title="Link to this heading"></a></h2>
-<p>denver is a small pure-Python package. Install it with <code class="docutils literal notranslate"><span class="pre">pip</span></code>:</p>
+<p>denver is also deployed as pure-Python package to PyPi. Install it with <code class="docutils literal notranslate"><span class="pre">pip</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>denver-tool
 </pre></div>
 </div>
 <p>or straight from GitHub:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/thorsten-klein/denver.git
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/thorsten-klein/denver.git@develop
 </pre></div>
 </div>
-<p>If you use <a class="reference internal" href="#installing-uv"><code class="docutils literal notranslate"><span class="pre">uv</span></code></a> instead of <code class="docutils literal notranslate"><span class="pre">pip</span></code>:</p>
+<p>If you use <code class="docutils literal notranslate"><span class="pre">uv</span></code> instead of <code class="docutils literal notranslate"><span class="pre">pip</span></code>:</p>
+<blockquote>
+<div><p>[!NOTE]
+Please refer to official <a class="reference external" href="https://docs.astral.sh/uv/getting-started/installation/">uv documentation</a>
+how to install <code class="docutils literal notranslate"><span class="pre">uv</span></code>. For example on Linux you can install via
+<code class="docutils literal notranslate"><span class="pre">curl</span> <span class="pre">-LsSf</span> <span class="pre">https://astral.sh/uv/install.sh</span> <span class="pre">|</span> <span class="pre">sh</span></code></p>
+</div></blockquote>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>denver-tool
 </pre></div>
 </div>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>git+https://github.com/thorsten-klein/denver.git
+<p>or straight from GitHub:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>git+https://github.com/thorsten-klein/denver.git@develop
 </pre></div>
 </div>
-<p>Any of the four installs the <code class="docutils literal notranslate"><span class="pre">denver</span></code> script/entry point.</p>
-<p>Tip: once it’s on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>, add this to your shell’s rc file for tab
-completion of subcommands, env paths and flags — see
-<a class="reference internal" href="../cli/completion.html"><span class="std std-doc">Shell completion</span></a>:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">eval</span><span class="w"> </span><span class="s2">"</span><span class="k">$(</span>denver<span class="w"> </span><span class="nb">complete</span><span class="k">)</span><span class="s2">"</span>
-</pre></div>
-</div>
-</section>
-<section id="installing-uv">
-<h2>Installing uv<a class="headerlink" href="#installing-uv" title="Link to this heading"></a></h2>
-<p>Several of denver’s providers (<code class="docutils literal notranslate"><span class="pre">uv</span></code> itself, and anything a <code class="docutils literal notranslate"><span class="pre">uv</span></code> stage sets
-up first, like <code class="docutils literal notranslate"><span class="pre">conan</span></code> or <code class="docutils literal notranslate"><span class="pre">west</span></code>) need <a class="reference external" href="https://docs.astral.sh/uv/"><code class="docutils literal notranslate"><span class="pre">uv</span></code></a> on
-your machine. denver never installs it for you — install it once, the same
-way for any project:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl<span class="w"> </span>-LsSf<span class="w"> </span>https://astral.sh/uv/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
-</pre></div>
-</div>
-<p>(Windows, or other install methods: see uv’s own
-<a class="reference external" href="https://docs.astral.sh/uv/getting-started/installation/">installation guide</a>.)</p>
+<p>Any of those commands installs the <code class="docutils literal notranslate"><span class="pre">denver</span></code> command.</p>
 </section>
 <section id="prebuilt-binary">
 <h2>Prebuilt binary<a class="headerlink" href="#prebuilt-binary" title="Link to this heading"></a></h2>
-<p>On a machine with no Python at all, or one stuck on Python older than 3.11
+<p>On a machine with no Python at all, or if you are stuck on Python older than <code class="docutils literal notranslate"><span class="pre">3.11</span></code>
 (denver needs <code class="docutils literal notranslate"><span class="pre">&gt;=3.11</span></code> for <code class="docutils literal notranslate"><span class="pre">tomllib</span></code>), use the standalone executable
 attached to every <a class="reference external" href="https://github.com/thorsten-klein/denver/releases">release</a>
-instead. It bundles denver, its providers and a Python interpreter into one
-file.</p>
-<p>Find the download link for the latest release:</p>
+instead. It bundles <code class="docutils literal notranslate"><span class="pre">denver</span></code>, its providers and a Python interpreter into one
+executable.</p>
+<p>Find the download link for the latest release
+<a class="reference external" href="https://github.com/thorsten-klein/denver/releases">in your browser</a>
+or download via <code class="docutils literal notranslate"><span class="pre">curl</span></code>:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nv">ASSET</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-sSL<span class="w"> </span>https://api.github.com/repos/thorsten-klein/denver/releases/latest<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>-o<span class="w"> </span><span class="s1">'https://[^"]*\.tar\.xz'</span><span class="k">)</span>
 </pre></div>
 </div>
@@ -357,23 +353,21 @@ file.</p>
 </div>
 <p>Covers x86_64 Linux with glibc 2.28 or newer (Ubuntu 20.04+, Debian 10+,
 Fedora 29+, RHEL/Alma/Rocky 8+, Arch, Mint 20+); musl-based distros such as
-Alpine are not covered. Build it yourself with
-<code class="docutils literal notranslate"><span class="pre">scripts/create-python-exe.sh</span></code> (or, from a dev checkout, <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">poe</span> <span class="pre">pyinstaller</span></code>). Note this only replaces <em>denver’s own</em> installation — the
-tools its providers drive (see
-<a class="reference internal" href="../quickstart/05-minutes.html#pre-conditions-for-a-real-project"><span class="std std-ref">Pre-conditions</span></a>)
-still have to be there.</p>
+Alpine are not covered yet. Build it yourself with
+<code class="docutils literal notranslate"><span class="pre">scripts/create-python-exe.sh</span></code> or <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">poe</span> <span class="pre">pyinstaller</span></code>).</p>
 </section>
 <section id="editable-install">
 <h2>Editable install<a class="headerlink" href="#editable-install" title="Link to this heading"></a></h2>
-<p>To hack on denver itself:</p>
+<p>If you want to install denver and hack on source code yourself, you
+can install it in python’s editable mode:</p>
+<p>First clone the repository</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/thorsten-klein/denver.git
 </pre></div>
 </div>
+<p>Then install in editable mode, e.g. via <code class="docutils literal notranslate"><span class="pre">pip</span></code></p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>./denver
 </pre></div>
 </div>
-<p>This is the same clone as <a class="reference internal" href="#run-from-source-no-install"><span class="std std-ref">“Run from source”</span></a>
-above, plus registering it as an installed package (so e.g. <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">--version</span></code> reports it correctly) while still editing the same checkout.</p>
 </section>
 <section id="vendor-with-git-nested">
 <h2>Vendor with git-nested<a class="headerlink" href="#vendor-with-git-nested" title="Link to this heading"></a></h2>
@@ -383,12 +377,12 @@ as an installed package, add it via
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git-nested<span class="w"> </span>clone<span class="w"> </span>https://github.com/thorsten-klein/denver.git
 </pre></div>
 </div>
-<p>Nothing needs installing here either — same idea as <a class="reference internal" href="#run-from-source-no-install"><span class="std std-ref">“Run from
-source”</span></a>, just vendored into your own
-repository instead of cloned standalone.</p>
+<p>Nothing needs installing here either — same idea as
+<a class="reference internal" href="#run-from-source-no-install"><span class="std std-ref">“Run from source”</span></a>:
+just vendored into your own repository instead of cloned standalone.</p>
 <blockquote>
-<div><p><strong>Note</strong></p>
-<p><strong>Next:</strong> <a class="reference internal" href="../quickstart/05-minutes.html"><span class="std std-doc">denver in 5 minutes</span></a> — run a real
+<div><p>[!NOTE]
+<strong>Next:</strong> <a class="reference internal" href="../quickstart/05-minutes.html"><span class="std std-doc">denver in 5 minutes</span></a> — run a real
 environment end to end. It starts with the handful of host tools you need
 first, which depends on which providers the environment uses.</p>
 </div></blockquote>

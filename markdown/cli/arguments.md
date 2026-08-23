@@ -263,9 +263,9 @@ Four things worth knowing:
   denver wrote is left inside it, so the env comes back to exactly the files
   its author checked in. A `.denver` still holding another config variant’s
   state (`denver.debug.toml`’s) is kept, along with that state — cleaning
-  one variant never touches its neighbours. A shared state root —
-  `~/.denver`, or a `DENVER_STATE_DIR` — is never removed either way; only
-  this env’s own directory inside it is.
+  one variant never touches its neighbours. denver’s own shared-root
+  fallback (`~/.denver`) is never removed either way; only this env’s own
+  directory inside it is.
 
 `--clean` is the bigger hammer next to `--force`: `--force` rebuilds what a
 run would otherwise skip, `--clean` removes it so there is nothing to skip
@@ -276,19 +276,35 @@ in the first place.
 ```bash
 denver clean <env>              # remove every directory denver keeps for it
 denver clean <env> --dry-run    # only say what would go
+denver clean <env> -y           # skip the confirmation prompts
+denver clean <env> --all        # also remove the shared DENVER_CACHE_DIR
 ```
 
 The subcommand is the wider one, and runs no scripts. It removes state in
-*both* places it can live — the workdir inside the env
-(`<env>/.denver/<config stem>`) and the state dir under a shared root
-(`DENVER_STATE_DIR`, or denver’s own `.envs`) — so an env built once each
-way is left with nothing either way. And it does the same for every env
-`<env>` imports, since a base env is built as part of building whatever
-imports it.
+*every* place it can live — an explicit `DENVER_ENV_WORKDIR` (if currently
+set), the workdir inside the env (`<env>/.denver/<config stem>`), and
+denver’s own shared-root fallback (`.envs`) — so an env built under more
+than one of these across different runs is left with nothing anywhere. And
+it does the same for every env `<env>` imports, since a base env is built as
+part of building whatever imports it.
 
 It needs no working config: an env whose `denver.toml` will not parse still
 has its own directories removed, with a warning that the envs it imports
 were left alone.
+
+Before removing anything, it shows the directory and asks to confirm it,
+**one directory at a time** — declining one keeps it and moves on to the
+next rather than stopping the whole clean. **`-y`/`--yes`** skips every one
+of those prompts, for scripts and CI. With no tty to ask on and no `-y`, it
+refuses rather than guessing either way. `--dry-run` never asks (there is
+nothing to confirm: it removes nothing either way).
+
+**`--all`** additionally removes denver’s shared, content-addressed cache
+root (`DENVER_CACHE_DIR`, default `~/.cache/denver` — see
+[Where an environment’s state lives](environment-variables.md#where-an-environment-s-state-lives)).
+Unlike everything else `clean` touches, that directory isn’t this env’s own:
+it’s shared across every env and checkout on the machine, so it’s only ever
+removed when asked for explicitly.
 
 ## Output and version
 
@@ -326,8 +342,7 @@ Each stage’s runtime is also appended to
 Event Format events — concatenate them into a `{"traceEvents": [...]}`
 document to load at chrome://tracing or https://ui.perfetto.dev.
 
-> **Note**
-
+> [!NOTE]
 > **Next:** [Shell completion](completion.md) — tab-complete subcommands, env
 > paths and flags with `denver complete`. Then
 > [Environment variables](environment-variables.md) — the two variables
