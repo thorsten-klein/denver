@@ -96,9 +96,12 @@ html_favicon = "../src/denver_assets/favicon.svg"
 # that don't suit a docs-only site: a fixed 800px content column (leaving
 # most of a normal monitor empty) and `white-space: nowrap` on every inline
 # code span, which stops a table cell containing one from wrapping at all --
-# see that file's own comments for both.
+# see that file's own comments for both. It also boxes plain blockquotes and,
+# together with custom.js, turns GitHub's '> [!NOTE]'-style blockquote
+# alerts into the same colored, labeled boxes GitHub itself renders them as.
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_js_files = ["custom.js"]
 
 html_theme_options = {
     "collapse_navigation": False,
