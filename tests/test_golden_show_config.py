@@ -50,8 +50,7 @@ def _normalize(text):
 
 
 @pytest.mark.parametrize("env_name", _tracked_env_names())
-def test_show_config_matches_golden(env_name, capsys, monkeypatch, which, tmp_path):
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
+def test_show_config_matches_golden(env_name, capsys, monkeypatch, which):
     monkeypatch.setenv("WEST_TOPDIR", FAKE_WEST_TOPDIR)
     # zephyr's 'west-yml:' fallback walks for the outermost enclosing .git
     # independently of WEST_TOPDIR -- real on this machine (this checkout may

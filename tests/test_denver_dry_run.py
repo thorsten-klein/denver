@@ -422,7 +422,6 @@ def _env(tmp_path, config):
 
 
 def test_run_stages_dry_run_prints_legend_and_never_execs(tmp_path, exec_recorder, monkeypatch, capsys):
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     config = {
         "stages": ["hello"],
         "hello": {"provider": "custom", "cmd": "echo hello"},
@@ -443,7 +442,6 @@ def test_run_stages_dry_run_prints_legend_and_never_execs(tmp_path, exec_recorde
 def test_run_stages_dry_run_records_no_performance_trace(tmp_path, exec_recorder, monkeypatch):
     # the durations here are of printing commands, not of running them --
     # recording them would poison the very timings the file exists for.
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     config = {"stages": ["hello"], "hello": {"provider": "custom", "cmd": "echo hello"}}
     env_dir, cfg_path = _env(tmp_path, config)
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(dry_run=True))
@@ -458,7 +456,6 @@ def test_run_stages_dry_run_says_wrapper_relocated_stages_are_not_previewed(tmp_
     # relocating into the wrapper is itself one of the commands not being
     # run, so those stages are never reached -- said out loud rather than
     # left as a silently short pipeline.
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
 
     class Wrap(providers.base.Provider):
         name = "fakewrap"
@@ -487,7 +484,6 @@ def test_run_stages_dry_run_says_wrapper_relocated_stages_are_not_previewed(tmp_
 def test_run_stages_dry_run_wrapper_note_names_the_skip_that_would_show_them(
     tmp_path, exec_recorder, monkeypatch, capsys
 ):
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
 
     class Wrap(providers.base.Provider):
         name = "fakewrap"
@@ -516,7 +512,6 @@ def test_run_stages_dry_run_wrapper_note_names_the_skip_that_would_show_them(
 def test_run_named_scripts_dry_run_prints_scripts_instead_of_running_them(
     tmp_path, run_recorder, exec_recorder, monkeypatch, capsys
 ):
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     config = {
         "stages": ["hello"],
         "hello": {"provider": "custom", "cmd": "echo hello", "scripts": {"setup": ["setup.sh"]}},
@@ -533,7 +528,6 @@ def test_run_named_scripts_dry_run_prints_scripts_instead_of_running_them(
 def test_run_named_scripts_dry_run_says_wrapper_relocated_scripts_are_not_previewed(
     tmp_path, run_recorder, exec_recorder, monkeypatch, capsys
 ):
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
 
     class Wrap(providers.base.Provider):
         name = "fakewrap"

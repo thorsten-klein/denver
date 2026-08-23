@@ -1,45 +1,25 @@
 """Tests for denver.py env resolution & listing."""
 
-from pathlib import Path
-
 import pytest
 
 import denver
 
 
-# ---- _default_denver_dir --------------------------------------------------- #
-def test_default_denver_dir_checkout_layout(monkeypatch, tmp_path):
-    pkg_dir = tmp_path / "checkout" / "src"
-    (pkg_dir / "denver_providers").mkdir(parents=True)
-    monkeypatch.setattr(denver, "DENVER_PKG_DIR", pkg_dir)
-    assert denver._default_denver_dir() == pkg_dir.parent
-
-
-def test_default_denver_dir_installed_layout_defaults_to_home(monkeypatch, tmp_path):
+# ---- checkout_root ----------------------------------------------------------#
+def test_checkout_root_installed_layout_is_none(monkeypatch, tmp_path):
     # e.g. a wheel install: this file's own dir isn't a checkout's src/ at all
     pkg_dir = tmp_path / "site-packages"
     pkg_dir.mkdir()
     monkeypatch.setattr(denver, "DENVER_PKG_DIR", pkg_dir)
-    monkeypatch.delenv("DENVER_STATE_DIR", raising=False)
-    assert denver._default_denver_dir() == Path("~/.denver").expanduser()
+    assert denver.checkout_root() is None
 
 
-def test_default_denver_dir_installed_layout_honours_state_dir_override(monkeypatch, tmp_path):
-    pkg_dir = tmp_path / "site-packages"
-    pkg_dir.mkdir()
-    monkeypatch.setattr(denver, "DENVER_PKG_DIR", pkg_dir)
-    state_dir = tmp_path / "custom-state"
-    monkeypatch.setenv("DENVER_STATE_DIR", str(state_dir))
-    assert denver._default_denver_dir() == state_dir
-
-
-def test_default_denver_dir_src_named_dir_without_providers_sibling(monkeypatch, tmp_path):
+def test_checkout_root_src_named_dir_without_providers_sibling_is_none(monkeypatch, tmp_path):
     # named 'src' but no providers/ alongside it -- not a real denver checkout
     pkg_dir = tmp_path / "checkout" / "src"
     pkg_dir.mkdir(parents=True)
     monkeypatch.setattr(denver, "DENVER_PKG_DIR", pkg_dir)
-    monkeypatch.delenv("DENVER_STATE_DIR", raising=False)
-    assert denver._default_denver_dir() == Path("~/.denver").expanduser()
+    assert denver.checkout_root() is None
 
 
 # ---- resolve_env_dir -------------------------------------------------------#

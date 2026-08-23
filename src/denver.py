@@ -62,13 +62,12 @@ CONFIG_NAME = "denver.toml"
 
 
 # where denver's own code lives (this file's directory, containing denver.py
-# and denver_providers/) -- always correct in both a checkout and an installed
-# package, unlike DENVER_DIR below (per-run state, not code).
+# and denver_providers/) -- always correct in both a checkout and an
+# installed package.
 DENVER_PKG_DIR = Path(__file__).resolve().parent
 
-# conan_scripts ships alongside this module's denver_providers/ package, not
-# DENVER_DIR, so it's still found when denver is installed via pip (no
-# repo-root layout).
+# conan_scripts ships alongside this module's denver_providers/ package, so
+# it's still found when denver is installed via pip (no repo-root layout).
 CONAN_SCRIPTS_DIR = DENVER_PKG_DIR / "denver_providers" / "conan_scripts"
 
 # terminal-friendly rendition of denver_assets/logo.svg (an SVG can't be drawn
@@ -92,27 +91,6 @@ def checkout_root():
         return DENVER_PKG_DIR.parent
     return None
 
-
-def _default_denver_dir():
-    """Where denver stores per-env state (venvs, conan caches, performance.jsonl).
-
-    When running from a source checkout, the checkout root is used, matching
-    every example in README.md: "no install required to run" is a deliberate
-    constraint, not an oversight.
-
-    Installed any other way, there's no checkout at all -- DENVER_PKG_DIR is
-    wherever the package manager put it (site-packages), which is no place
-    to write a venv. DENVER_STATE_DIR (default: ~/.denver) is used instead;
-    set it explicitly to control where denver keeps its state when running
-    installed.
-    """
-    root = checkout_root()
-    if root is not None:
-        return root
-    return Path(os.environ.get("DENVER_STATE_DIR", "~/.denver")).expanduser()
-
-
-DENVER_DIR = _default_denver_dir()
 
 # Not imported from denver_providers.context: denver_providers is only imported lazily
 # (inside run_stages()) so --help/--version/etc. stay light. Same logger name,
@@ -1420,7 +1398,6 @@ def resolve_full_config(
     config, extra_dirs = expand_section_imports(config, env_dir)
     import_dirs = collect_import_dirs(config_path) + extra_dirs
     ctx = Context(
-        DENVER_DIR,
         env_dir,
         config,
         config_path=config_path,
@@ -3174,19 +3151,13 @@ def clean_env(env_dir, config_path, *, dry_run=False):
     still holding another config's state (``denver.debug.toml``'s, say) is
     kept, along with that state.
 
-    A *shared* state root -- ``DENVER_STATE_DIR``, or the ``~/.denver``
-    fallback used when the env dir isn't writable -- is never removed, not
-    even when this env's state was the last thing in it: it belongs to every
-    env that keeps state there, not to this one. Only that env's own
-    subdirectory inside it goes.
-
     Reads no config *values*: where the state dir sits depends only on <env>
     and which config file was picked, so this is the same directory a run
     would have used, whatever that run's config happens to say.
     """
     from denver_providers.context import state_dir_for
 
-    state_dir = state_dir_for(env_dir, config_path, DENVER_DIR / ".envs")
+    state_dir = state_dir_for(env_dir, config_path)
     if not _remove_state_dir(state_dir, env_dir, dry_run=dry_run):
         info(f"clean: nothing to remove -- no denver state at {state_dir}")
 
@@ -3195,11 +3166,11 @@ def clean_env_and_imports(config_path, *, dry_run=False):
     """'denver clean <env>': remove every directory denver keeps for <env> and for the envs it imports.
 
     Both places state can live are removed, not only the one a run would
-    pick right now: the workdir inside the env
-    (``<env>/.denver/<config stem>``) and the state dir under a shared root
-    (``DENVER_STATE_DIR``, or denver's own ``.envs``). An env built once
-    under a shared root and once without has state in both, and state left
-    in the other place would quietly survive every clean.
+    pick right now: an explicit ``DENVER_ENV_WORKDIR`` (if currently set),
+    or the workdir inside the env (``<env>/.denver/<config stem>``). An env
+    built under both across different runs (workdir override set for one
+    run, not another) has state in each, and state left in the other place
+    would quietly survive every clean.
 
     An imported env is cleaned too: it is built as part of building whatever
     imports it, so leaving its state behind leaves the env half-built.
@@ -3249,15 +3220,14 @@ def _readable_imports(config_path):
 
 
 def _state_dirs_for(env_dir, config_path):
-    """Both directories denver may keep this env's state in -- the env's own workdir first, then a shared root's."""
-    from denver_providers.context import STATE_DIR_VAR, STATE_DIRNAME, env_state_key
+    """Every directory denver may keep this env's state in -- an explicit DENVER_ENV_WORKDIR first (if currently set), then the env's own workdir."""
+    from denver_providers.context import ENV_WORKDIR_VAR, STATE_DIRNAME
 
-    key = env_state_key(env_dir, config_path)
-    dirs = [Path(env_dir) / STATE_DIRNAME / Path(config_path).stem]
-    override = os.environ.get(STATE_DIR_VAR)
-    if override:
-        dirs.append(Path(override).expanduser().resolve() / key)
-    dirs.append(DENVER_DIR / ".envs" / key)
+    dirs = []
+    workdir_override = os.environ.get(ENV_WORKDIR_VAR)
+    if workdir_override:
+        dirs.append(Path(workdir_override).expanduser().resolve())
+    dirs.append(Path(env_dir) / STATE_DIRNAME / Path(config_path).stem)
     return list(dict.fromkeys(dirs))
 
 
@@ -3268,10 +3238,11 @@ def _remove_state_dir(state_dir, env_dir, *, dry_run):
     if not state_dir.exists():
         return False
     parent = state_dir.parent
-    # compared against this env's own path, not merely by name: a
-    # DENVER_STATE_DIR pointing at '~/.denver' has that name too, and that
-    # root is shared. Asked before the removal, so --dry-run answers it
-    # exactly as a real run would.
+    # compared against this env's own path, not merely by name -- the only
+    # parent that is ever safe to remove along with its child is the
+    # conventional '<env>/.denver' one; an explicit DENVER_ENV_WORKDIR's
+    # parent never is, however it's named. Asked before the removal, so
+    # --dry-run answers it exactly as a real run would.
     in_env_dir = parent == Path(env_dir) / STATE_DIRNAME
     spent_parent = in_env_dir and _only_denver_leftovers(parent, state_dir)
     _remove_tree(state_dir, dry_run=dry_run)
@@ -3386,8 +3357,7 @@ class _CleanAction(argparse.Action):
     clean`` deliberately does not do (see _handle_scripts_subcommand).
 
     The state directory is the *env's* own (its venvs, tool trees,
-    downloads, logs); a shared state root holding other envs' state as well
-    -- ``~/.denver``, a DENVER_STATE_DIR -- is never touched, see clean_env.
+    downloads, logs) -- see clean_env.
     """
 
     def __call__(self, parser, namespace, values, option_string=None):  # noqa: ARG002 -- argparse's own Action signature
