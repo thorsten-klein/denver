@@ -78,6 +78,7 @@ The same `denver.toml`, run on a fresh clone and on a six-month-old working
 copy, should produce the same environment — not one shaped by whatever
 history happens to be sitting on that particular machine.
 
-Note: For full reproducibility you need to upload the docker container and the
-conan packages to some artifactory, so that denver downloads them prebuilt each
-instead of re-building it again.
+> [!NOTE]
+> For full reproducibility you need to upload the docker container and the
+> conan packages to some artifactory, so that denver downloads them prebuilt each
+> instead of re-building it again.
