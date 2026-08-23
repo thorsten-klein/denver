@@ -36,3 +36,71 @@
 .rst-content table.docutils th {
   white-space: normal;
 }
+
+/* 3. Blockquotes (GFM '>' cites, e.g. doc/quickstart/30-minutes.md's "The
+ *    use case") render with the theme's default of just a left margin and
+ *    no visual boundary -- easy to mistake for a regular indented
+ *    paragraph. A full box makes clear where a quoted passage starts and
+ *    ends, without needing anything beyond plain '>' markup in the source
+ *    (so the same .md still renders sensibly on GitHub). */
+.rst-content blockquote {
+  border: 1px solid #e1e4e5;
+  border-left: 4px solid #999;
+  border-radius: 4px;
+  background: #fafafa;
+  padding: 12px 18px;
+}
+
+/* The theme's own admonitions (.note, .tip, ...) strip the last paragraph's
+ * bottom margin (see theme.css's "p:last-child{margin-bottom:0}") so the box
+ * ends flush with its own padding. A plain blockquote isn't one of those, so
+ * its last paragraph kept that margin on top of the padding above -- a gap
+ * at the bottom of every box that the top never had. Docutils always wraps
+ * a blockquote's content in its own <div> ("<blockquote><div><p>...",
+ * confirmed in the built HTML), so the real last paragraph is a *descendant*
+ * of blockquote, not a direct child -- a plain descendant selector (no '>')
+ * is what actually reaches it. */
+.rst-content blockquote :last-child {
+  margin-bottom: 0;
+}
+
+/* 4. GitHub's blockquote-based alerts ('> [!NOTE]', '> [!TIP]', ...) --
+ * GitHub renders these natively; Sphinx doesn't know about them at all, so
+ * without help they'd just show as a plain blockquote (styled by #3 above)
+ * with the literal "[!NOTE]" text sitting in the first line. custom.js
+ * strips that marker and adds the 'alert'/'alert-<type>' classes below,
+ * mirroring GitHub's own five colors and adding a bold type label in front
+ * of where the marker text was. */
+.rst-content blockquote.alert {
+  border-left-width: 4px;
+}
+
+.rst-content blockquote.alert-note {
+  border-color: #0969da;
+  background: #ddf4ff;
+}
+
+.rst-content blockquote.alert-tip {
+  border-color: #1a7f37;
+  background: #dafbe1;
+}
+
+.rst-content blockquote.alert-important {
+  border-color: #8250df;
+  background: #fbefff;
+}
+
+.rst-content blockquote.alert-warning {
+  border-color: #9a6700;
+  background: #fff8c5;
+}
+
+.rst-content blockquote.alert-caution {
+  border-color: #cf222e;
+  background: #ffebe9;
+}
+
+.rst-content blockquote.alert .alert-title {
+  font-weight: 700;
+  text-transform: capitalize;
+}
