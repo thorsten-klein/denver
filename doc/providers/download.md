@@ -209,10 +209,10 @@ env-prepend = { PATH = "bin", LD_LIBRARY_PATH = "lib" }
   accepting a truncated download, never leaving a half-unpacked tree that
   the *next* run then treats as finished. Here that logic exists once.
 - **Downloads are persistent state, not cache.** They live in the env's own
-  workdir (`DENVER_ENV_WORKDIR`, honouring a `DENVER_STATE_DIR` override) —
-  next to `.logs/`, deleted with the env and with nothing else. They are
-  *not* in the shared `DENVER_CACHE_DIR`, which denver only ever points
-  other tools at, never writes itself.
+  workdir (`DENVER_ENV_WORKDIR`, itself overridable) — next to `.logs/`,
+  deleted with the env and with nothing else. They are *not* in the shared
+  `DENVER_CACHE_DIR`, which denver only ever points other tools at, never
+  writes itself.
 - **Checksums are checked on the file, not on the transfer.** An existing
   archive is verified on every run, not only right after it is fetched — a
   file corrupted on disk months later is caught the same way a bad download

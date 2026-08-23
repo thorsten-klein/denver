@@ -2,21 +2,6 @@
 
 This tree is denver's full reference
 
-## New to denver?
-
-You might want to read this first before you dip into any other areas of the documentation.
-
-1. [`introduction/index.md`](introduction/index.md) — what problem denver
-   solves, what an environment is, and how flexible it is
-2. [`introduction/install.md`](introduction/install.md) — get the `denver`
-   command onto your machine
-3. [`quickstart/05-minutes.md`](quickstart/05-minutes.md) — run the
-   smallest possible environment end to end, in a few minutes
-4. [`quickstart/30-minutes.md`](quickstart/30-minutes.md)
-   — a bigger, more realistic environment, and you build it yourself, from
-   an empty folder
-
-
 ## Introduction
 
 - **[`introduction/index.md`](introduction/index.md)** — Answers some basic
