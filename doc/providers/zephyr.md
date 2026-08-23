@@ -8,7 +8,7 @@ workspace (Zephyr RTOS).
 provider = "zephyr"
 ```
 
-(`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
+(`provider:`/`description:`/`disabled:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
 see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything below is specific to `zephyr`.)
 
 ## Requires

@@ -944,6 +944,40 @@ class Context:
         current = self.env.get(key, "")
         self.env[key] = f"{current}{sep}{value}" if current else str(value)
 
+    def resolve_env_value(self, value):
+        """One generic 'env-prepend:'/'env-append:' *value*, resolved as a path.
+
+        Backs the generic per-stage 'env-prepend:'/'env-append:' keys (see
+        GENERIC_STAGE_KEYS in denver.py): the value resolves exactly the way
+        any other denver.toml path does (Context.resolve_path -- against the
+        env dir, then imported base envs; an already-absolute value is left
+        untouched), so a stage can point at a fixed location (its own
+        checkout, a sibling stage's output) without a provider-specific
+        notion of "this stage's own directory" to resolve it against. A
+        provider wanting *that* (several per-package directories in one
+        stage, say) still uses its own mechanism -- see download's
+        per-package 'env-prepend:'/'env-append:', which resolve_env_value
+        deliberately doesn't replace.
+        """
+        return str(self.resolve_path(value))
+
+    def extend_env_var(self, key, value, *, prepend):
+        """Put ``value`` directly in front of (or behind) whatever ctx.env[key] already holds -- no separator inserted.
+
+        The generic engine behind both the per-stage 'env-prepend:'/
+        'env-append:' keys and download's own per-package ones: 'prepend:'
+        puts ``value`` ahead of the variable's current value (the common
+        case -- a stage exists to provide a specific version of a tool, and
+        appending would let whatever the OS already has on PATH win
+        instead), 'append:' behind it (a fallback MANPATH, a low-priority
+        CMAKE_PREFIX_PATH). Whichever separator the result needs (a
+        trailing ':' baked into this value for 'env-prepend:', a leading one
+        for 'env-append:') is on whoever writes the value -- denver never
+        guesses one.
+        """
+        current = self.env.get(key, "")
+        self.set(key, f"{value}{current}" if prepend else f"{current}{value}")
+
     def apply_env_map(self, mapping):
         """Apply an interpolated {name: value} mapping into the environment."""
         for key, value in cast(dict, interpolate(mapping or {}, self.variables)).items():

@@ -121,7 +121,6 @@ def test_defaults_fill_every_key(make_context):
     pkg = resolved_package(ctx, {"name": "tool", "url": URL})
     assert pkg["outfile"] == str(ctx.env_workdir / "downloads" / "tool-1.0.zip")
     assert pkg["unpack-dir"] == str(ctx.env_workdir / "download" / "tool")
-    assert pkg["env-sep"] == ":"
     assert pkg == {
         **pkg,
         "description": "",
@@ -246,7 +245,9 @@ def test_downloads_unpacks_and_puts_the_package_on_path(make_context, fake_urlop
     assert archive.read_bytes() == payload
     assert (unpacked / "tool").is_file()
     assert (unpacked / download_provider.STAMP_NAME).is_file()
-    assert ctx.env["PATH"].startswith(f"{unpacked}:")
+    # no separator is inserted -- the resolved value is glued directly onto
+    # whatever PATH already held
+    assert ctx.env["PATH"].startswith(str(unpacked))
 
 
 def test_zip_executable_bits_survive_unpacking(make_context, fake_urlopen):
@@ -279,7 +280,7 @@ def test_tar_gz_is_unpacked_too(make_context, fake_urlopen):
 
     unpacked = ctx.env_workdir / "download" / "tool"
     assert (unpacked / "bin" / "tool").is_file()
-    assert ctx.env["PATH"].startswith(f"{unpacked / 'bin'}:")
+    assert ctx.env["PATH"].startswith(str(unpacked / "bin"))
 
 
 def test_a_bare_binary_becomes_the_package_itself(make_context, fake_urlopen):
@@ -448,15 +449,14 @@ def test_unpack_cmd_replaces_the_built_in_unpacking(make_context, fake_urlopen, 
 
 
 # ---- environment ------------------------------------------------------------#
-def test_env_prepend_and_append_use_env_sep(make_context, fake_urlopen):
+def test_env_prepend_and_append_glue_directly_with_no_separator(make_context, fake_urlopen):
     fake_urlopen.payloads["*"] = make_zip()
     config = config_for([
         {
             "name": "tool",
             "url": URL,
-            "env-sep": ";",
-            "env-prepend": {"TOOLPATH": "bin;libexec"},
-            "env-append": {"TOOLPATH": "share"},
+            "env-prepend": {"TOOLPATH": "bin:"},
+            "env-append": {"TOOLPATH": ":share"},
         }
     ])
     ctx = make_context(config=config)
@@ -465,7 +465,10 @@ def test_env_prepend_and_append_use_env_sep(make_context, fake_urlopen):
     run_download(config, ctx)
 
     unpacked = ctx.env_workdir / "download" / "tool"
-    assert ctx.env["TOOLPATH"] == f"{unpacked / 'bin'};{unpacked / 'libexec'};existing;{unpacked / 'share'}"
+    # no separator is inserted by denver -- 'bin:' and ':share' carry their
+    # own, resolved as one path each ('.../bin:' still ends in ':', since
+    # pathlib only collapses a bare '.' component, not one with trailing text)
+    assert ctx.env["TOOLPATH"] == f"{unpacked / 'bin:'}existing{unpacked / ':share'}"
 
 
 def test_absolute_env_entries_are_left_alone(make_context, fake_urlopen):
@@ -508,7 +511,7 @@ def test_fast_only_activates_what_is_already_unpacked(make_context, fake_urlopen
     run_download(config, fast)
 
     assert fake_urlopen.calls == [URL]
-    assert fast.env["PATH"].startswith(f"{fast.env_workdir / 'download' / 'tool'}:")
+    assert fast.env["PATH"].startswith(str(fast.env_workdir / "download" / "tool"))
 
 
 def test_dry_run_fetches_nothing_but_still_applies_the_environment(make_context, fake_urlopen):
@@ -519,7 +522,7 @@ def test_dry_run_fetches_nothing_but_still_applies_the_environment(make_context,
 
     assert fake_urlopen.calls == []
     assert not (ctx.env_workdir / "downloads").exists()
-    assert ctx.env["PATH"].startswith(f"{ctx.env_workdir / 'download' / 'tool'}:")
+    assert ctx.env["PATH"].startswith(str(ctx.env_workdir / "download" / "tool"))
 
 
 # ---- banners ---------------------------------------------------------------#
@@ -783,5 +786,9 @@ def test_restore_exec_bits_ignores_a_non_zip(tmp_path):
     download_provider.restore_exec_bits(archive, tmp_path / "missing")
 
 
-def test_absolute_entries_drops_empty_entries():
-    assert download_provider.absolute_entries("::bin:", Path("/pkg"), ":") == "/pkg/bin"
+def test_absolute_value_resolves_a_relative_value_against_base():
+    assert download_provider.absolute_value("bin", Path("/pkg")) == "/pkg/bin"
+
+
+def test_absolute_value_leaves_an_absolute_value_alone():
+    assert download_provider.absolute_value("/opt/vendor/bin", Path("/pkg")) == "/opt/vendor/bin"

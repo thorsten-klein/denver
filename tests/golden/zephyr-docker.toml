@@ -18,6 +18,9 @@ provider = "docker"
 disabled = false
 skip-on-success = []
 skip-on-failure = []
+env = {}
+env-prepend = {}
+env-append = {}
 scripts = { setup = ["setup/install_host_tools.sh"] }
 exe = "docker"
 # registries = null

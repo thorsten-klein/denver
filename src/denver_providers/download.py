@@ -49,10 +49,6 @@ UNPACK_DIRNAME = "download"
 # re-downloaded archive, a changed unpack-cmd) and gets rebuilt.
 STAMP_NAME = ".denver-download"
 
-# separator for one 'env-prepend:'/'env-append:' value's entries, when the
-# package doesn't set 'env-sep:' itself.
-DEFAULT_ENV_SEP = ":"
-
 # the config key naming each supported checksum, and the hashlib algorithm
 # it pins. Both are optional; giving both checks both.
 CHECKSUM_KEYS = (("sha256sum", "sha256"), ("md5sum", "md5"))
@@ -101,11 +97,16 @@ def checksum_mismatch(expected, path, key, algorithm):
     return None if actual == expected else f"{key} mismatch (expected {expected}, got {actual})"
 
 
-def extend_var(ctx, key, value, sep, *, prepend):
-    """Put ``value`` in front of (or behind) whatever ctx.env[key] already holds, joined by ``sep``."""
-    current = ctx.env.get(key, "")
-    parts = [value, current] if prepend else [current, value]
-    ctx.set(key, sep.join(part for part in parts if part))
+def extend_var(ctx, key, value, *, prepend):
+    """Put ``value`` directly in front of (or behind) whatever ctx.env[key] already holds -- no separator inserted.
+
+    A thin, package-oriented alias for ``ctx.extend_env_var`` (the same
+    engine the generic per-stage 'env-prepend:'/'env-append:' keys use --
+    see GENERIC_STAGE_KEYS in denver.py): kept here so every call site below
+    reads ``extend_var(ctx, ...)`` rather than switching between a free
+    function and a method mid-module.
+    """
+    ctx.extend_env_var(key, value, prepend=prepend)
 
 
 def restore_exec_bits(archive, dest):
@@ -141,17 +142,16 @@ def package_env_map(entry, key):
     return dict(entry.get(key) or {})
 
 
-def absolute_entries(value, base, sep):
-    """One 'env-prepend:'/'env-append:' value, with every relative entry made absolute against ``base``.
+def absolute_value(value, base):
+    """One 'env-prepend:'/'env-append:' value, made absolute against ``base`` if it's relative.
 
-    A value is a ``sep``-joined list of paths *inside* the unpacked package
-    ("." for its root, "bin" for its bin/), because that is the only thing a
-    package can talk about without knowing where denver put it. Absolute
-    entries are left exactly as written, so an author can still point at
-    something outside the package.
+    A value is a path *inside* the unpacked package ("." for its root,
+    "bin" for its bin/), because that is the only thing a package can talk
+    about without knowing where denver put it. An already-absolute value is
+    left exactly as written, so an author can still point at something
+    outside the package.
     """
-    entries = [entry for entry in str(value).split(sep) if entry]
-    return sep.join(entry if Path(entry).is_absolute() else str(Path(base) / entry) for entry in entries)
+    return value if Path(value).is_absolute() else str(Path(base) / value)
 
 
 # ---- authenticated downloads ------------------------------------------------ #
@@ -366,7 +366,6 @@ class DownloadProvider(Provider):
         "md5sum",
         "unpack-dir",
         "unpack-cmd",
-        "env-sep",
         "env-prepend",
         "env-append",
     )
@@ -382,7 +381,6 @@ class DownloadProvider(Provider):
         "md5sum",
         "unpack-dir",
         "unpack-cmd",
-        "env-sep",
     )
 
     # ---- config defaults ------------------------------------------------- #
@@ -424,7 +422,6 @@ class DownloadProvider(Provider):
             "md5sum": package_text(entry, "md5sum").strip().lower(),
             "unpack-dir": str(cls._unpack_path(ctx, package_text(entry, "unpack-dir"), name)),
             "unpack-cmd": package_text(entry, "unpack-cmd"),
-            "env-sep": package_text(entry, "env-sep", DEFAULT_ENV_SEP),
             "env-prepend": package_env_map(entry, "env-prepend"),
             "env-append": package_env_map(entry, "env-append"),
         }
@@ -670,12 +667,11 @@ class DownloadProvider(Provider):
     def _apply_env(self, ctx, pkg):
         """Fold this package's 'env-prepend:'/'env-append:' entries into ctx.env."""
         dest = Path(pkg["unpack-dir"])
-        sep = pkg["env-sep"]
-        self._extend_env(ctx, pkg["env-prepend"], dest, sep, prepend=True)
-        self._extend_env(ctx, pkg["env-append"], dest, sep, prepend=False)
+        self._extend_env(ctx, pkg["env-prepend"], dest, prepend=True)
+        self._extend_env(ctx, pkg["env-append"], dest, prepend=False)
 
     @staticmethod
-    def _extend_env(ctx, mapping, dest, sep, *, prepend):
+    def _extend_env(ctx, mapping, dest, *, prepend):
         """Put every entry of one env map in front of (or behind) whatever that variable already holds."""
         for key, value in mapping.items():
-            extend_var(ctx, key, absolute_entries(value, dest, sep), sep, prepend=prepend)
+            extend_var(ctx, key, absolute_value(value, dest), prepend=prepend)

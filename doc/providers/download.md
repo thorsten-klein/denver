@@ -18,7 +18,7 @@ sha256sum = "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"
 env-prepend = { PATH = "." }
 ```
 
-(`provider:`/`description:`/`disabled:`/`scripts:` are generic keys every stage has —
+(`provider:`/`description:`/`disabled:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
 see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything below is specific to `download`.)
 
 ## Key reference
@@ -48,16 +48,20 @@ The stage has exactly one key of its own:
   other denver path — against the env dir, then imported base envs.
 - **`unpack-cmd`** — a shell command that unpacks the archive itself,
   replacing python's own archive handling. See "Unpacking" below.
-- **`env-sep`** — the separator used to split every `env-prepend:` /
-  `env-append:` *value* into entries, and to join the result onto the
-  variable's current value (default: `:`).
 - **`env-prepend`** / **`env-append`** — what the unpacked package
-  contributes to the environment, as `{ VAR = "value" }`. Each value is a
-  list of paths *inside* the package, joined by `env-sep:` — `"."` is the
-  package root, `"bin"` its `bin/`, `"bin:libexec"` both. Every relative
-  entry is made absolute against `unpack-dir:` before it lands in the
-  variable; absolute entries are left as written. `env-prepend:` puts them
-  in front of whatever the variable already holds, `env-append:` behind it.
+  contributes to the environment, as `{ VAR = "value" }`. A value is a path
+  *inside* the package — `"."` is the package root, `"bin"` its `bin/`.
+  A relative value is made absolute against `unpack-dir:` before it lands in
+  the variable; an absolute one is left as written. `env-prepend:` glues it
+  directly in front of whatever the variable already holds, `env-append:`
+  directly behind it — no separator inserted, so a value that needs one
+  (almost always true for a `:`-joined variable like `PATH`) has to carry it
+  itself: a trailing `:` for `env-prepend:` (`"bin:"`), a leading `:` for
+  `env-append:` (`":share"`). This composes fine with a real subdirectory,
+  but not with a bare `"."` — pathlib collapses a lone `.` component but not
+  `".:"`, so a package whose binaries sit at its own archive root (ninja,
+  above) still glues onto `PATH` without a separator; getting that value
+  right from here is on whoever writes it.
 - **`description`** — free text about this package, for whoever reads the
   config. denver never acts on it; it only shows up in `--show-config`.
 

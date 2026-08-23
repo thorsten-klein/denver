@@ -171,7 +171,7 @@ UNKNOWN_VERSION = "unknown (not installed)"
 # of the newest tag once there are commits past it (a new cycle has started,
 # so it has to name the release those commits are heading for) -- see
 # tests/test_dev_version.py.
-DEV_VERSION = "1.5.1"
+DEV_VERSION = "1.6.0"
 
 
 def scm_version():
@@ -797,13 +797,26 @@ def validate_stage_filters(config, until_stage, skip_stages):
 # --scripts <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
 # opts a stage out of the normal pipeline by default (see run_stages),
 # 'skip-on-success:'/'skip-on-failure:' skip a stage's setup() at run time
-# instead (see _stage_skip_reason) -- none of these are part of any one
-# provider's own KEYS. Order matters: this is also the fixed display order
-# used by _ordered_stage_section for --show-config (provider first -- it
-# picks the class -- then description, disabled, skip-on-success,
-# skip-on-failure, scripts), before every provider-specific key
+# instead (see _stage_skip_reason), 'env:'/'env-prepend:'/'env-append:'
+# adapt the environment once this stage's own setup() is done (see
+# _apply_stage_env) -- none of these are part of any one provider's own
+# KEYS, so every provider gets them for free, uv/conan/zephyr/docker/custom
+# included. Order matters: this is also the fixed display order used by
+# _ordered_stage_section for --show-config (provider first -- it picks the
+# class -- then description, disabled, skip-on-success, skip-on-failure,
+# env, env-prepend, env-append, scripts), before every provider-specific key
 # (alphabetically).
-GENERIC_STAGE_KEYS = ("provider", "description", "disabled", "skip-on-success", "skip-on-failure", "scripts")
+GENERIC_STAGE_KEYS = (
+    "provider",
+    "description",
+    "disabled",
+    "skip-on-success",
+    "skip-on-failure",
+    "env",
+    "env-prepend",
+    "env-append",
+    "scripts",
+)
 
 
 def validate_stage_section_keys(stage, section):
@@ -855,7 +868,25 @@ def resolve_stage_section(stage, raw_section, config, ctx):
         not isinstance(description, list) or not all(isinstance(line, str) for line in description)
     ):
         die(f"stage '{stage.stage}': 'description:' must be a list of strings, got {description!r}")
+    section["env"] = _validated_stage_env_map(raw_section.get("env"), stage.stage, "env")
+    section["env-prepend"] = _validated_stage_env_map(raw_section.get("env-prepend"), stage.stage, "env-prepend")
+    section["env-append"] = _validated_stage_env_map(raw_section.get("env-append"), stage.stage, "env-append")
     return fill_unset(section, ["scripts", "description"])
+
+
+def _validated_stage_env_map(mapping, stage_id, key):
+    """One generic 'env:'/'env-prepend:'/'env-append:' stage key, as a flat {name = "value"} mapping ({} if unset).
+
+    Left uninterpolated here, deliberately: like every other provider's own
+    section, this one is re-interpolated fresh right where it's used
+    (_apply_stage_env, after this stage's own setup() -- see there for why),
+    not baked in once while the config is merely being resolved.
+    """
+    if mapping is None:
+        return {}
+    if not isinstance(mapping, dict) or not all(isinstance(v, str) for v in mapping.values()):
+        die(f"stage '{stage_id}': '{key}:' must be a mapping of environment variable to string value, got {mapping!r}")
+    return dict(mapping)
 
 
 def _resolved_skip_scripts(ctx, stage_id, raw_section, key):
@@ -1860,6 +1891,7 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     run_hook(ctx, config_path, f"pre-{provider.stage}")
     start = time.time()
     provider.setup(ctx)
+    _apply_stage_env(ctx, provider.stage)
     duration = time.time() - start
     ctx.stage_timings.append((provider.stage, f"{duration:.1f}s"))
     # "performance infos in blue" -- --verbose only (and never under -q/-qq,
@@ -1872,6 +1904,36 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
         )
     record_stage_performance(ctx, provider, start, duration)
     run_hook(ctx, config_path, f"post-{provider.stage}")
+
+
+def _apply_stage_env(ctx, stage_id):
+    """Apply one stage's generic 'env:'/'env-prepend:'/'env-append:' keys into ctx.env -- every provider gets this.
+
+    Read via ``ctx.section`` (not the section _run_stage_setup already has),
+    so '${...}' is interpolated fresh, against whatever provider.setup() just
+    put in ctx.env -- these keys exist precisely to let a stage reference
+    that (a checkout's own path, a version a stage's own resolve_defaults
+    pinned), the same way a 'pre-<stage>'/'post-<stage>' hook script could,
+    without a project having to write one.
+
+    Called unconditionally right after provider.setup() (see
+    _run_stage_setup) -- --fast/--dry-run included: this is activation, the
+    same as every provider's own env-prepend:'/'source:'/'env-append:', not
+    a build step to skip. Never called at all for a stage
+    _stage_skip_reason skipped outright -- consistent with 'disabled:'/
+    skip-on-*: meaning "nothing about this stage runs this time", the same
+    way a skipped custom stage's own 'source:' doesn't run either.
+    """
+    section = ctx.section(stage_id)
+    ctx.apply_env_map(section.get("env"))
+    _extend_stage_env(ctx, section.get("env-prepend"), prepend=True)
+    _extend_stage_env(ctx, section.get("env-append"), prepend=False)
+
+
+def _extend_stage_env(ctx, mapping, *, prepend):
+    """Put every entry of one 'env-prepend:'/'env-append:' mapping in front of (or behind) its variable's current value."""
+    for key, value in (mapping or {}).items():
+        ctx.extend_env_var(key, ctx.resolve_env_value(value), prepend=prepend)
 
 
 def _print_stage_summary(ctx):
