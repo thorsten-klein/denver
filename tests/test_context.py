@@ -242,7 +242,7 @@ def test_lock_warns_where_locking_is_unsupported(make_context, monkeypatch, capl
 def test_state_dir_lives_under_the_env_dir(tmp_path):
     env_dir = tmp_path / "myenv"
     env_dir.mkdir()
-    got = ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", tmp_path / "fallback", env={})
+    got = ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", env={})
     assert got == env_dir / ".denver" / "denver"
 
 
@@ -251,41 +251,44 @@ def test_state_dir_separates_variants_in_one_folder(tmp_path):
     # environments, not one -- they must not share a venv.
     env_dir = tmp_path / "myenv"
     env_dir.mkdir()
-    debug = ctxmod.state_dir_for(env_dir, env_dir / "denver.debug.yml", tmp_path / "f", env={})
-    release = ctxmod.state_dir_for(env_dir, env_dir / "denver.release.yml", tmp_path / "f", env={})
+    debug = ctxmod.state_dir_for(env_dir, env_dir / "denver.debug.yml", env={})
+    release = ctxmod.state_dir_for(env_dir, env_dir / "denver.release.yml", env={})
     assert debug != release
 
 
-def test_state_dir_separates_two_checkouts_of_one_project(tmp_path):
-    # the case the old name-keyed layout always collided on
-    dirs = []
-    for checkout in ("coA", "coB"):
-        env_dir = tmp_path / checkout / "myenv"
-        env_dir.mkdir(parents=True)
-        dirs.append(ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", tmp_path / "f", env={}))
-    assert dirs[0] != dirs[1]
-
-
-def test_state_dir_honours_an_explicit_root(tmp_path):
+def test_state_dir_honours_an_explicit_workdir(tmp_path):
+    # DENVER_ENV_WORKDIR names the exact directory to use, taken as-is.
     env_dir = tmp_path / "myenv"
     env_dir.mkdir()
-    got = ctxmod.state_dir_for(
-        env_dir, env_dir / "denver.toml", tmp_path / "f", env={ctxmod.STATE_DIR_VAR: str(tmp_path / "elsewhere")}
-    )
-    assert got.parent == (tmp_path / "elsewhere")
-    assert got.name.startswith("myenv-")
+    exact = tmp_path / "exact-workdir"
+    got = ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", env={ctxmod.ENV_WORKDIR_VAR: str(exact)})
+    assert got == exact
 
 
-def test_state_dir_falls_back_when_the_env_dir_is_read_only(tmp_path):
+def test_state_dir_honours_an_explicit_workdir_even_when_the_env_dir_is_read_only(tmp_path):
+    # an explicit override applies even to an otherwise-unwritable env dir --
+    # it names the exact directory to use, full stop.
+    env_dir = tmp_path / "myenv"
+    env_dir.mkdir()
+    env_dir.chmod(0o500)
+    exact = tmp_path / "exact-workdir"
+    try:
+        got = ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", env={ctxmod.ENV_WORKDIR_VAR: str(exact)})
+    finally:
+        env_dir.chmod(0o700)
+    assert got == exact
+
+
+def test_state_dir_dies_when_the_env_dir_is_read_only_and_not_overridden(tmp_path, caplog):
     env_dir = tmp_path / "myenv"
     env_dir.mkdir()
     env_dir.chmod(0o500)
     try:
-        got = ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", tmp_path / "fallback", env={})
+        with pytest.raises(SystemExit):
+            ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", env={})
     finally:
         env_dir.chmod(0o700)
-    assert got.parent == (tmp_path / "fallback")
-    assert got.name.startswith("myenv-")
+    assert "DENVER_ENV_WORKDIR" in caplog.text
 
 
 def test_ensure_state_dir_makes_the_state_ignore_itself(make_context):
@@ -305,10 +308,17 @@ def test_ensure_state_dir_keeps_an_edited_gitignore(make_context):
 
 
 def test_ensure_state_dir_writes_no_marker_under_a_shared_root(make_context, tmp_path, monkeypatch):
-    monkeypatch.setenv(ctxmod.STATE_DIR_VAR, str(tmp_path / "shared"))
+    monkeypatch.setenv(ctxmod.ENV_WORKDIR_VAR, str(tmp_path / "exact-workdir"))
     ctx = make_context()
     ctx.ensure_state_dir()
     assert not (ctx.env_workdir.parent / ".gitignore").exists()
+
+
+def test_env_workdir_is_overridable_and_exported(make_context, tmp_path):
+    exact = tmp_path / "exact-workdir"
+    ctx = make_context(env={ctxmod.ENV_WORKDIR_VAR: str(exact)})
+    assert ctx.env_workdir == exact
+    assert ctx.env["DENVER_ENV_WORKDIR"] == str(exact)
 
 
 def test_cache_dir_defaults_and_is_overridable(make_context):

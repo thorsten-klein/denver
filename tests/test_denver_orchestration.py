@@ -358,8 +358,9 @@ def test_reinvoke_command(tmp_path):
     config_path = tmp_path / "e" / "denver.toml"
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"])
     assert cmd[0] == "python3"
-    # this file's own path, independent of DENVER_DIR -- correct whether
-    # denver runs from a checkout or an editable install (see docstring)
+    # this file's own path, independent of any per-run state directory --
+    # correct whether denver runs from a checkout or an editable install
+    # (see docstring)
     assert cmd[1] == str(Path(denver.__file__).resolve())
     assert cmd[2] == "run"
     assert cmd[3] == str(config_path)
@@ -1113,7 +1114,6 @@ def test_run_stages_until_and_skip_filters_out_everything_dies(tmp_path, fake_pr
 
 # ---- per-stage performance recording -----------------------------------------#
 def test_run_stages_records_performance_trace(tmp_path, fake_providers, exec_recorder, monkeypatch, capsys):
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup"}}
     # the trace file is written regardless of --verbose (see below); the
@@ -1135,7 +1135,6 @@ def test_run_stages_records_performance_trace(tmp_path, fake_providers, exec_rec
 
 
 def test_run_stages_appends_performance_across_runs(tmp_path, fake_providers, exec_recorder, monkeypatch):
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup"}}
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
@@ -1155,7 +1154,6 @@ def test_run_stages_appends_performance_across_runs(tmp_path, fake_providers, ex
 def test_run_stages_tolerates_pre_existing_garbage_in_performance_file(
     tmp_path, fake_providers, exec_recorder, monkeypatch
 ):
-    monkeypatch.setattr(denver, "DENVER_DIR", tmp_path / "denver")
     env_dir, cfg_path = _env(tmp_path, {})
     perf_path = tmp_path / "env" / ".denver" / "denver" / "performance.jsonl"
     perf_path.parent.mkdir(parents=True)
