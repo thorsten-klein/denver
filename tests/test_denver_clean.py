@@ -240,7 +240,7 @@ def test_clean_subcommand_removes_the_workdir_and_the_spent_denver_parent(make_e
     env_dir = make_env(config={"stages": []})
     workdir = build_state(env_dir)
 
-    assert denver.main(["clean", str(env_dir)]) == 0
+    assert denver.main(["clean", str(env_dir), "-y"]) == 0
 
     assert not workdir.exists()
     assert not (env_dir / ".denver").exists()
@@ -256,7 +256,7 @@ def test_clean_subcommand_removes_an_explicit_env_workdir_override_too(make_env,
     workdir = build_state(env_dir)
     exact.mkdir(parents=True)
 
-    assert denver.main(["clean", str(env_dir)]) == 0
+    assert denver.main(["clean", str(env_dir), "-y"]) == 0
 
     assert not workdir.exists()
     assert not exact.exists()
@@ -268,7 +268,7 @@ def test_clean_subcommand_cleans_the_envs_it_imports(make_env):
     leaf = make_env(name="leaf", config={"import": ["../base"], "stages": []})
     leaf_workdir = build_state(leaf)
 
-    assert denver.main(["clean", str(leaf)]) == 0
+    assert denver.main(["clean", str(leaf), "-y"]) == 0
 
     assert not leaf_workdir.exists()
     assert not base_workdir.exists()
@@ -279,7 +279,7 @@ def test_clean_subcommand_still_cleans_an_env_whose_config_is_broken(make_env, c
     (env_dir / "denver.toml").write_text('import = ["../base"\n')
     workdir = build_state(env_dir)
 
-    assert denver.main(["clean", str(env_dir)]) == 0
+    assert denver.main(["clean", str(env_dir), "-y"]) == 0
 
     assert not workdir.exists()
     assert "cannot read" in caplog.text
@@ -307,15 +307,146 @@ def test_clean_subcommand_warns_about_an_import_pointing_nowhere(make_env, caplo
     env_dir = make_env(config={"import": ["../gone"], "stages": []})
     workdir = build_state(env_dir)
 
-    assert denver.main(["clean", str(env_dir)]) == 0
+    assert denver.main(["clean", str(env_dir), "-y"]) == 0
 
     assert not workdir.exists()
     assert "points nowhere" in caplog.text
 
 
+# ---- confirmation -----------------------------------------------------------#
+def test_clean_subcommand_asks_to_confirm_each_directory_before_removing(make_env, monkeypatch):
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    prompts = []
+
+    def fake_input(prompt=""):
+        prompts.append(prompt)
+        return "y"
+
+    monkeypatch.setattr("builtins.input", fake_input)
+
+    assert denver.main(["clean", str(env_dir)]) == 0
+
+    assert not workdir.exists()
+    assert not (env_dir / ".denver").exists()
+    # both the state dir and its now-spent '.denver' parent are confirmed on their own
+    assert any(str(workdir) in p for p in prompts)
+    assert any(str(env_dir / ".denver") in p for p in prompts)
+
+
+def test_clean_subcommand_declining_a_directory_keeps_it_but_continues_with_the_rest(make_env, caplog, monkeypatch):
+    # declining the state dir keeps its now-not-spent '.denver' parent too,
+    # without even asking about it -- removing the parent would take the
+    # declined state dir with it
+    base = make_env(name="base", config={"stages": []})
+    base_workdir = build_state(base)
+    leaf = make_env(name="leaf", config={"import": ["../base"], "stages": []})
+    leaf_workdir = build_state(leaf)
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    calls = []
+
+    def fake_input(prompt=""):
+        calls.append(prompt)
+        return "n" if len(calls) == 1 else "y"  # decline leaf's own state dir, confirm everything after
+
+    monkeypatch.setattr("builtins.input", fake_input)
+
+    assert denver.main(["clean", str(leaf)]) == 0
+
+    assert leaf_workdir.is_dir()
+    assert (leaf / ".denver").is_dir()  # kept along with the declined state dir, never even asked about
+    assert not base_workdir.exists()  # a later, unrelated chain -- still removed
+    assert f"kept {leaf_workdir}" in caplog.text
+
+
+def test_clean_subcommand_declining_everything_says_nothing_was_removed(make_env, caplog, monkeypatch):
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt="": "n")
+
+    assert denver.main(["clean", str(env_dir)]) == 0
+
+    assert workdir.is_dir()
+    assert "clean: nothing removed" in caplog.text
+
+
+def test_clean_subcommand_without_yes_dies_when_not_interactive(make_env, monkeypatch):
+    # no tty to ask on, and no --yes to answer for it -- refuses rather than
+    # silently doing nothing or silently removing anything
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: False)
+
+    with pytest.raises(SystemExit):
+        denver.main(["clean", str(env_dir)])
+
+    assert workdir.is_dir()
+
+
+def test_clean_subcommand_yes_skips_confirmation_even_when_not_interactive(make_env, monkeypatch):
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: False)
+
+    assert denver.main(["clean", str(env_dir), "-y"]) == 0
+
+    assert not workdir.exists()
+
+
+def test_clean_subcommand_dry_run_never_asks_for_confirmation(make_env, monkeypatch):
+    # --dry-run removes nothing either way, so there is nothing to confirm
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+    monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: False)
+
+    assert denver.main(["clean", str(env_dir), "--dry-run"]) == 0
+
+    assert workdir.is_dir()
+
+
+# ---- --all --------------------------------------------------------------------#
+def test_clean_subcommand_all_also_removes_the_shared_cache_dir(make_env, tmp_path, monkeypatch):
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+    cache_dir = tmp_path / "shared-cache"
+    (cache_dir / "downloads").mkdir(parents=True)
+    monkeypatch.setenv("DENVER_CACHE_DIR", str(cache_dir))
+
+    assert denver.main(["clean", str(env_dir), "-y", "--all"]) == 0
+
+    assert not workdir.exists()
+    assert not cache_dir.exists()
+
+
+def test_clean_subcommand_without_all_leaves_the_shared_cache_dir(make_env, tmp_path, monkeypatch):
+    env_dir = make_env(config={"stages": []})
+    build_state(env_dir)
+    cache_dir = tmp_path / "shared-cache"
+    (cache_dir / "downloads").mkdir(parents=True)
+    monkeypatch.setenv("DENVER_CACHE_DIR", str(cache_dir))
+
+    assert denver.main(["clean", str(env_dir), "-y"]) == 0
+
+    assert cache_dir.is_dir()
+
+
+def test_clean_subcommand_all_with_no_cache_dir_present_removes_only_the_state(make_env, tmp_path, monkeypatch):
+    env_dir = make_env(config={"stages": []})
+    workdir = build_state(env_dir)
+    monkeypatch.setenv("DENVER_CACHE_DIR", str(tmp_path / "never-created"))
+
+    assert denver.main(["clean", str(env_dir), "-y", "--all"]) == 0
+
+    assert not workdir.exists()
+
+
 def test_clean_subcommand_is_offered_by_completion(tmp_path):
     assert "clean" in denver._complete_candidates(["cl"])
     assert "--dry-run" in denver._complete_candidates(["clean", str(tmp_path), "--d"])
+    assert "--yes" in denver._complete_candidates(["clean", str(tmp_path), "--y"])
+    assert "--all" in denver._complete_candidates(["clean", str(tmp_path), "--a"])
 
 
 def test_clean_subcommand_completes_env_paths_for_its_positional(make_env):
