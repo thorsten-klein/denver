@@ -3162,25 +3162,124 @@ def clean_env(env_dir, config_path, *, dry_run=False):
         info(f"clean: nothing to remove -- no denver state at {state_dir}")
 
 
-def clean_env_and_imports(config_path, *, dry_run=False):
+def clean_env_and_imports(config_path, *, dry_run=False, all_dirs=False, assume_yes=False):
     """'denver clean <env>': remove every directory denver keeps for <env> and for the envs it imports.
 
-    Both places state can live are removed, not only the one a run would
-    pick right now: an explicit ``DENVER_ENV_WORKDIR`` (if currently set),
-    or the workdir inside the env (``<env>/.denver/<config stem>``). An env
-    built under both across different runs (workdir override set for one
-    run, not another) has state in each, and state left in the other place
-    would quietly survive every clean.
+    Every place state can live is removed, not only the one a run would pick
+    right now: an explicit ``DENVER_ENV_WORKDIR`` (if currently set), or the
+    workdir inside the env (``<env>/.denver/<config stem>``). An env built
+    under both across different runs (workdir override set for one run, not
+    another) has state in each, and state left in the other would quietly
+    survive every clean.
 
     An imported env is cleaned too: it is built as part of building whatever
     imports it, so leaving its state behind leaves the env half-built.
+
+    ``all_dirs`` (``--all``) additionally removes denver's shared cache root
+    (``DENVER_CACHE_DIR``) -- unlike everything else here, that directory is
+    not this env's own, so it is only ever touched when asked for explicitly.
+
+    Outside ``--dry-run``, each directory is shown and confirmed on its own
+    (``assume_yes`` -- ``-y``/``--yes`` -- standing in for every one of those
+    confirmations) rather than once for the whole batch: declining one
+    directory keeps it and moves on to the next, it does not abort the rest.
+    A state dir's spent ``<env>/.denver`` parent (see _state_dir_plan) is the
+    one exception -- declining the state dir keeps its parent too, without
+    asking, since removing the parent would take the declined state dir with
+    it.
     """
-    removed = False
-    for path in [Path(config_path), *_import_chain(config_path)]:
-        for state_dir in _state_dirs_for(path.parent, path):
-            removed |= _remove_state_dir(state_dir, path.parent, dry_run=dry_run)
-    if not removed:
+    chains = _removal_chains(config_path, all_dirs=all_dirs)
+    if not chains:
         info("clean: nothing to remove -- denver keeps no state for this env")
+        return
+    removed_any = _remove_chains(chains, dry_run=dry_run, assume_yes=assume_yes)
+    if not dry_run and not removed_any:
+        info("clean: nothing removed")
+
+
+def _removal_chains(config_path, *, all_dirs):
+    """Every directory 'denver clean' would consider removing for <config_path> and its imports, plus the shared cache dir if ``all_dirs``.
+
+    Grouped into dependent chains (see _state_dir_plan) -- a chain's later
+    entries only make sense once its earlier ones are actually gone.
+    """
+    chains = []
+    for path in [Path(config_path), *_import_chain(config_path)]:
+        chains += _state_dir_chains_for(path)
+    if all_dirs:
+        chains += _cache_dir_chain()
+    return chains
+
+
+def _state_dir_chains_for(config_path):
+    """Every non-empty removal chain for one env's own state -- one per place it may live (see _state_dirs_for)."""
+    env_dir = config_path.parent
+    plans = (_state_dir_plan(state_dir, env_dir) for state_dir in _state_dirs_for(env_dir, config_path))
+    return [chain for chain in plans if chain]
+
+
+def _cache_dir_chain():
+    """``[[<shared cache dir>]]`` if it exists, else ``[]`` -- denver's own contribution to '--all'."""
+    cache_dir = _shared_cache_dir()
+    return [[cache_dir]] if cache_dir.exists() else []
+
+
+def _remove_chains(chains, *, dry_run, assume_yes):
+    """Remove every chain, confirming each directory on its own outside --dry-run. True if anything was removed.
+
+    Every chain is processed, even once an earlier one has already removed
+    something -- unlike ``any(_remove_chain(...) for chain in chains)``,
+    which would short-circuit on the first True and leave the rest of
+    ``chains`` untouched.
+    """
+    removed_any = False
+    for chain in chains:
+        removed_any |= _remove_chain(chain, dry_run=dry_run, assume_yes=assume_yes)
+    return removed_any
+
+
+def _remove_chain(chain, *, dry_run, assume_yes):
+    """Remove one dependent chain of directories (see _state_dir_plan), stopping at the first declined one.
+
+    True if anything in the chain was actually removed -- a state dir
+    confirmed and removed still counts even if its parent is then declined.
+    Declining a directory keeps it -- and, for a two-entry chain, its
+    dependent parent too -- without aborting the rest of 'denver clean'.
+    """
+    removed_any = False
+    for path in chain:
+        if not dry_run and not _confirm_removal(path, assume_yes=assume_yes):
+            info(f"clean: kept {path}")
+            break  # its parent (if any) would only remove it along the way -- kept too
+        _remove_tree(path, dry_run=dry_run)
+        removed_any = True
+    return removed_any
+
+
+def _confirm_removal(path, *, assume_yes):
+    """Ask to confirm removing one directory -- unless ``assume_yes``. True if it should be removed.
+
+    Non-interactive (no tty) and no ``--yes`` dies rather than silently doing
+    nothing or silently removing anything -- the same tradeoff
+    default_command makes for "no command and can't ask".
+    """
+    if assume_yes:
+        return True
+    if not sys.stdin.isatty():
+        die("clean: refusing to remove without confirmation in a non-interactive session -- pass -y/--yes")
+    return input(f"Remove {path}? [y/N] ").strip().lower() in ("y", "yes")
+
+
+def _shared_cache_dir():
+    """Denver's shared, content-addressed cache root (``DENVER_CACHE_DIR``, default ``~/.cache/denver``).
+
+    Mirrors Context.cache_dir, which is the property every provider actually
+    reads; this is the same computation done here with no Context to hand.
+    """
+    from denver_providers.context import CACHE_DIR_VAR
+
+    configured = os.environ.get(CACHE_DIR_VAR)
+    return Path(configured).expanduser() if configured else Path("~/.cache/denver").expanduser()
 
 
 def _import_chain(config_path):
@@ -3231,24 +3330,37 @@ def _state_dirs_for(env_dir, config_path):
     return list(dict.fromkeys(dirs))
 
 
-def _remove_state_dir(state_dir, env_dir, *, dry_run):
-    """Remove one state directory, and a '<env>/.denver' left spent around it. False if there was nothing there."""
+def _state_dir_plan(state_dir, env_dir):
+    """The paths removing this env's state at ``state_dir`` would delete -- itself, and a '<env>/.denver' left spent around it. [] if there is nothing there.
+
+    Only plans -- nothing is touched here. Used both by _remove_state_dir
+    (removes the plan immediately, for 'run --clean') and by
+    clean_env_and_imports (collects the plan across every env first, to show
+    and confirm once before anything is removed, for 'denver clean').
+    """
     from denver_providers.context import STATE_DIRNAME
 
     if not state_dir.exists():
-        return False
+        return []
     parent = state_dir.parent
     # compared against this env's own path, not merely by name -- the only
     # parent that is ever safe to remove along with its child is the
     # conventional '<env>/.denver' one; an explicit DENVER_ENV_WORKDIR's
-    # parent never is, however it's named. Asked before the removal, so
-    # --dry-run answers it exactly as a real run would.
+    # parent never is, however it's named. Asked before any removal, so
+    # --dry-run (and 'denver clean''s own preview) answers it exactly as a
+    # real run would.
     in_env_dir = parent == Path(env_dir) / STATE_DIRNAME
-    spent_parent = in_env_dir and _only_denver_leftovers(parent, state_dir)
-    _remove_tree(state_dir, dry_run=dry_run)
-    if spent_parent:
-        _remove_tree(parent, dry_run=dry_run)
-    return True
+    if in_env_dir and _only_denver_leftovers(parent, state_dir):
+        return [state_dir, parent]
+    return [state_dir]
+
+
+def _remove_state_dir(state_dir, env_dir, *, dry_run):
+    """Remove one state directory, and a '<env>/.denver' left spent around it. False if there was nothing there."""
+    plan = _state_dir_plan(state_dir, env_dir)
+    for path in plan:
+        _remove_tree(path, dry_run=dry_run)
+    return bool(plan)
 
 
 def _only_denver_leftovers(parent, state_dir):
@@ -3517,10 +3629,18 @@ def _add_clean_parser(subparsers):
         description="Remove denver's workdir and state dir for <env> and for every env it imports -- venvs, "
         "installed tool trees, downloads, logs and the fingerprints deciding what can be skipped. The next "
         "`denver run` rebuilds all of it from the config. Anything the env's own config points elsewhere "
-        "(e.g. a CONAN_HOME under the env dir) is left alone.",
+        "(e.g. a CONAN_HOME under the env dir) is left alone. Shows and asks to confirm each directory before "
+        "removing it, unless -y/--yes is given; declining one keeps it and moves on to the next.",
     )
     _add_env_positional(clean_p)
     clean_p.add_argument("--dry-run", action="store_true", help="only print what would be removed, and remove nothing")
+    clean_p.add_argument("-y", "--yes", action="store_true", help="remove without asking for confirmation")
+    clean_p.add_argument(
+        "--all",
+        action="store_true",
+        help="also remove denver's shared cache dir (DENVER_CACHE_DIR, default ~/.cache/denver) -- shared by "
+        "every env and checkout, so this clears them all too",
+    )
     return clean_p
 
 
@@ -3684,7 +3804,7 @@ def _complete_candidates(words):
 
 
 _TOP_LEVEL_COMPLETIONS = ["run", "clean", "complete", "--help", "--version", "--license"]
-_CLEAN_FLAGS = ["--dry-run", "-h", "--help"]
+_CLEAN_FLAGS = ["--dry-run", "-y", "--yes", "--all", "-h", "--help"]
 _RUN_FLAGS = [
     "--scripts",
     "--setup",
@@ -4616,7 +4736,9 @@ def _run_resolved_cli(argv):
     # has to work for an env whose denver.toml is broken (see clean_env_and_imports).
     if preliminary.subcommand == "clean":
         _, config_path = resolve_env_dir(preliminary.env)
-        clean_env_and_imports(config_path, dry_run=preliminary.dry_run)
+        clean_env_and_imports(
+            config_path, dry_run=preliminary.dry_run, all_dirs=preliminary.all, assume_yes=preliminary.yes
+        )
         return
 
     # Applied to denver's own process environment as early as possible --
