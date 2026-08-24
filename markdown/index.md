@@ -63,6 +63,7 @@ notes on the patterns it supports and how it behaves under
 | [`docker`](providers/docker.md)     | Wrapper: relocate the pipeline into a compose service          |
 | [`zephyr`](providers/zephyr.md)     | Manage a West (Zephyr RTOS) workspace                          |
 | [`download`](providers/download.md) | Fetch, verify and unpack prebuilt release archives             |
+| [`git`](providers/git.md)           | Clone/fetch a git checkout, pinned to one revision             |
 | [`custom`](providers/custom.md)     | Escape hatch: an arbitrary command, sourced script or launcher |
 
 A project can also register its own provider, without a denver fork — see
@@ -73,6 +74,7 @@ A project can also register its own provider, without a denver fork — see
 - [docker](providers/docker.md)
 - [zephyr](providers/zephyr.md)
 - [download](providers/download.md)
+- [git](providers/git.md)
 - [custom](providers/custom.md)
 
 ## Contributing

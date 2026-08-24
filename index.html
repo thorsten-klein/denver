@@ -231,6 +231,14 @@
 <li class="toctree-l2"><a class="reference internal" href="providers/download.html#design-notes">Design notes</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="providers/git.html">git provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="providers/git.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="providers/git.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="providers/git.html#unreachable-commits">Unreachable commits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="providers/git.html#where-things-go">Where things go</a></li>
+<li class="toctree-l2"><a class="reference internal" href="providers/git.html#design-notes">Design notes</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="providers/custom.html">custom provider</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="providers/custom.html#key-reference">Key reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="providers/custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
@@ -374,7 +382,10 @@ notes on the patterns it supports and how it behaves under
 <tr class="row-even"><td><p><a class="reference internal" href="providers/download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">download</span></code></span></a></p></td>
 <td><p>Fetch, verify and unpack prebuilt release archives</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="providers/git.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">git</span></code></span></a></p></td>
+<td><p>Clone/fetch a git checkout, pinned to one revision</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="providers/custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a></p></td>
 <td><p>Escape hatch: an arbitrary command, sourced script or launcher</p></td>
 </tr>
 </tbody>
@@ -387,6 +398,7 @@ notes on the patterns it supports and how it behaves under
 <li><p><a class="reference internal" href="providers/docker.html"><span class="std std-doc">docker</span></a></p></li>
 <li><p><a class="reference internal" href="providers/zephyr.html"><span class="std std-doc">zephyr</span></a></p></li>
 <li><p><a class="reference internal" href="providers/download.html"><span class="std std-doc">download</span></a></p></li>
+<li><p><a class="reference internal" href="providers/git.html"><span class="std std-doc">git</span></a></p></li>
 <li><p><a class="reference internal" href="providers/custom.html"><span class="std std-doc">custom</span></a></p></li>
 </ul>
 <div class="toctree-wrapper compound">

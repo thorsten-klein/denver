@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>custom provider &mdash; denver</title>
+  <title>git provider &mdash; denver</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -25,8 +25,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Development" href="../contributing/development.html" />
-    <link rel="prev" title="git provider" href="git.html" /> 
+    <link rel="next" title="custom provider" href="custom.html" />
+    <link rel="prev" title="download provider" href="download.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -232,18 +232,18 @@
 <li class="toctree-l2"><a class="reference internal" href="download.html#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="git.html">git provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="git.html#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="git.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
-<li class="toctree-l2"><a class="reference internal" href="git.html#unreachable-commits">Unreachable commits</a></li>
-<li class="toctree-l2"><a class="reference internal" href="git.html#where-things-go">Where things go</a></li>
-<li class="toctree-l2"><a class="reference internal" href="git.html#design-notes">Design notes</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">git provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#unreachable-commits">Unreachable commits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#where-things-go">Where things go</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">custom provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#design-notes">Design notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom.html">custom provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#design-notes">Design notes</a></li>
 </ul>
 </li>
 </ul>
@@ -280,9 +280,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">custom provider</li>
+      <li class="breadcrumb-item active">git provider</li>
       <li class="wy-breadcrumbs-aside">
-              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/providers/custom.md" class="fa fa-github"> Edit on GitHub</a>
+              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/providers/git.md" class="fa fa-github"> Edit on GitHub</a>
       </li>
   </ul>
   <hr/>
@@ -290,108 +290,152 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="custom-provider">
-<h1>custom provider<a class="headerlink" href="#custom-provider" title="Link to this heading"></a></h1>
-<p>A <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage is the escape hatch: an arbitrary shell command, for
-whatever a project needs that doesn’t fit <code class="docutils literal notranslate"><span class="pre">uv</span></code>/<code class="docutils literal notranslate"><span class="pre">conan</span></code>/<code class="docutils literal notranslate"><span class="pre">zephyr</span></code>/<code class="docutils literal notranslate"><span class="pre">docker</span></code>.</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[my-stage]</span>
-<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"custom"</span>
-<span class="n">cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"echo hello"</span>
+  <section id="git-provider">
+<h1>git provider<a class="headerlink" href="#git-provider" title="Link to this heading"></a></h1>
+<p>A <code class="docutils literal notranslate"><span class="pre">git</span></code> stage brings one git checkout into the environment, pinned to one
+revision: clone if it isn’t there yet, otherwise fetch and move it — always
+detached, never on a branch — onto whatever <code class="docutils literal notranslate"><span class="pre">revision:</span></code> names now. It is
+what the “git clone, then fetch/checkout a pinned tag by hand” shell script
+(see the worked example in <a class="reference internal" href="custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a>) looks like once it is a
+provider — the same job, but idempotent and <code class="docutils literal notranslate"><span class="pre">--fast</span></code>-aware without every
+project writing that logic again.</p>
+<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[pico-sdk]</span>
+<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"git"</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://github.com/raspberrypi/pico-sdk.git"</span>
+<span class="n">path</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"${DENVER_ENV_WORKDIR}/pico-sdk/2.3.0"</span>
+<span class="n">revision</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"2.3.0"</span>
+<span class="n">submodules</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PICO_SDK_PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"${DENVER_ENV_WORKDIR}/pico-sdk/2.3.0"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
-<p>(<code class="docutils literal notranslate"><span class="pre">provider:</span></code>/<code class="docutils literal notranslate"><span class="pre">description:</span></code>/<code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/<code class="docutils literal notranslate"><span class="pre">depends-on:</span></code>/<code class="docutils literal notranslate"><span class="pre">scripts:</span></code>/<code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> are generic keys every stage has —
-see “Generic stage keys” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>. Everything below is specific to <code class="docutils literal notranslate"><span class="pre">custom</span></code>.)</p>
+<p>(<code class="docutils literal notranslate"><span class="pre">provider:</span></code>/<code class="docutils literal notranslate"><span class="pre">description:</span></code>/<code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/<code class="docutils literal notranslate"><span class="pre">scripts:</span></code>/<code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-sep:</span></code> are generic
+keys every stage has — see “Generic stage keys” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>. Everything
+below is specific to <code class="docutils literal notranslate"><span class="pre">git</span></code>; <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> above is that generic mechanism, not something this provider
+implements itself — see “Where things go” below for why its value is the checkout’s own <code class="docutils literal notranslate"><span class="pre">path:</span></code>, spelled out,
+rather than <code class="docutils literal notranslate"><span class="pre">download</span></code>’s package-relative <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code>.)</p>
 <section id="key-reference">
 <h2>Key reference<a class="headerlink" href="#key-reference" title="Link to this heading"></a></h2>
-<ul>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">cmd</span></code></strong> — run via <code class="docutils literal notranslate"><span class="pre">bash</span> <span class="pre">-c</span></code> in an isolated subprocess, so ordinary
-shell syntax (pipes, <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>, quoting, <code class="docutils literal notranslate"><span class="pre">$VAR</span></code> expansion against the current
-environment) works the same way it would on a command line — but
-anything it exports dies with that subprocess, denver never sees it.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">source</span></code></strong> — different: it names a script <em>sourced</em> (not run) right
-after <code class="docutils literal notranslate"><span class="pre">cmd</span></code>, so its exports fold into the environment and persist into
-every later stage and the final command. This is the way to make a
-<code class="docutils literal notranslate"><span class="pre">custom</span></code> stage hand environment variables forward, scoped to this one
-stage’s section rather than the global <code class="docutils literal notranslate"><span class="pre">hooks:</span></code> mechanism (see
-<a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>).</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">launcher</span></code></strong> — makes this stage a <em>wrapper</em>, the same way <code class="docutils literal notranslate"><span class="pre">docker</span></code> is
-one: instead of (only) doing its own work, it prepends its own script(s)
-ahead of whatever command would otherwise run. Each entry is a string,
-split on whitespace into its own tokens (plain whitespace splitting, no
-shell parsing), and every entry’s tokens land in order, ahead of the
-actual command:</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="n">launcher</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-<span class="w">  </span><span class="s2">"myscript.sh --"</span><span class="p">,</span>
-<span class="w">  </span><span class="s2">"otherscript.sh --"</span><span class="p">,</span>
-<span class="p">]</span>
-</pre></div>
-</div>
-<p>turns a resolved command of <code class="docutils literal notranslate"><span class="pre">&lt;cmd&gt;</span></code> into <code class="docutils literal notranslate"><span class="pre">myscript.sh</span> <span class="pre">--</span> <span class="pre">otherscript.sh</span> <span class="pre">--</span> <span class="pre">&lt;cmd&gt;</span></code>.</p>
-</li>
-</ul>
-<p>At least one of <code class="docutils literal notranslate"><span class="pre">cmd</span></code>/<code class="docutils literal notranslate"><span class="pre">source</span></code>/<code class="docutils literal notranslate"><span class="pre">launcher</span></code> must be given. <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>/<code class="docutils literal notranslate"><span class="pre">source:</span></code>
-(if also given) still run as usual during this stage’s own setup even when
-<code class="docutils literal notranslate"><span class="pre">launcher:</span></code> is set — <code class="docutils literal notranslate"><span class="pre">launcher:</span></code> only changes what happens to the <em>final</em>
-command.</p>
-</section>
-<section id="worked-example-bringing-a-prebuilt-binary-in-by-hand">
-<h2>Worked example: bringing a prebuilt binary in by hand<a class="headerlink" href="#worked-example-bringing-a-prebuilt-binary-in-by-hand" title="Link to this heading"></a></h2>
-<p>The common shape for “download a release tarball and put it on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>” uses
-both keys, because installing and activating are two different jobs
-(<a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env"><code class="docutils literal notranslate"><span class="pre">examples/firmware-env</span></code></a>’s <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> stage):</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[nvim-setup]</span>
-<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"custom"</span>
-<span class="n">cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"bash ${DENVER_ENV_DIR}/nvim/install.sh"</span><span class="w">  </span><span class="c1"># download, checksum, unpack</span>
-<span class="n">source</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"nvim/activate.sh"</span><span class="w">                     </span><span class="c1"># export PATH=...</span>
-</pre></div>
-</div>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">cmd:</span></code></strong> is the build step: an isolated subprocess is exactly right for
-it (it prints its progress, and it is correctly skipped by <code class="docutils literal notranslate"><span class="pre">--fast</span></code>), and
-it needs to export nothing. It must be idempotent by itself — denver
-fingerprints a <code class="docutils literal notranslate"><span class="pre">uv</span></code>/<code class="docutils literal notranslate"><span class="pre">conan</span></code> stage’s inputs, but it cannot know what an
-arbitrary command changed, so the script runs on every start and has to
-recognise its own previous result.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">source:</span></code></strong> is the activation: one <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">PATH=</span></code>, sourced so it reaches
-every later stage and the final command. Keeping it out of <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> is not
-style — an export in <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> dies with that subprocess; and keeping the
-download out of <code class="docutils literal notranslate"><span class="pre">source:</span></code> matters just as much, since a sourced script
-also runs under <code class="docutils literal notranslate"><span class="pre">--fast</span></code> and <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>.</p></li>
-<li><p><strong>One script would work too</strong>: check, download, unpack and <code class="docutils literal notranslate"><span class="pre">export</span> <span class="pre">PATH=</span></code>
-all in a single <code class="docutils literal notranslate"><span class="pre">source:</span></code> script, with no <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> at all. The split buys
-visible download progress (a sourced script’s output is captured, since
-denver reads the resulting environment out of it) and <code class="docutils literal notranslate"><span class="pre">--fast</span></code>/<code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>
-skipping the expensive half. A single sourced script must never <code class="docutils literal notranslate"><span class="pre">exit</span></code>,
-which would end denver’s sourcing shell before it reads the environment
-back.</p></li>
-<li><p>The two scripts share their pin (version, url, checksum, install prefix)
-via a third file both source, so they cannot drift apart. Unpack into
-<code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_WORKDIR}</span></code> (denver’s per-env state dir) rather than
-<code class="docutils literal notranslate"><span class="pre">/usr/local/bin</span></code>: no root needed, no leaking into other environments, and
-deleting the env deletes the tool.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">url</span></code></strong> (<strong>required</strong>) — the repository to clone. Anything <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span></code>
+itself accepts (<code class="docutils literal notranslate"><span class="pre">https://</span></code>, <code class="docutils literal notranslate"><span class="pre">git&#64;host:...</span></code>, a local path).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">path</span></code></strong> (<strong>required</strong>) — where the checkout lives. Resolves like every
+other denver path (against the env dir, then imported base envs), so it is
+almost always written against <code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_WORKDIR}</span></code> (denver’s per-env
+state dir) — a checkout that size has no business inside the project’s own
+working tree, and deleting the env deletes it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">revision</span></code></strong> (<strong>required</strong>) — a tag, a branch, or a raw commit sha. This
+provider always ends up with <code class="docutils literal notranslate"><span class="pre">path:</span></code> in a <strong>detached</strong> state at exactly
+this commit — never on a branch — so a moving branch name is pinned to
+whatever it resolved to <em>this run</em>, the same guarantee a tag gives.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">remote</span></code></strong> — the remote name a fresh clone is created under, and the one
+<code class="docutils literal notranslate"><span class="pre">revision:</span></code> is fetched/resolved against (default: <code class="docutils literal notranslate"><span class="pre">&quot;origin&quot;</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">submodules</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">true</span></code> runs <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">submodule</span> <span class="pre">update</span> <span class="pre">--init</span></code> after
+checkout (default: <code class="docutils literal notranslate"><span class="pre">false</span></code>). Not recursive — a submodule that itself
+declares submodules needs those handled separately (most projects don’t
+need them merely to build against the checkout; see “Submodules” below).</p></li>
 </ul>
-<p>When there are several such tools, or a cache worth sharing between
-environments, this is the point to move the job to
-<a class="reference internal" href="conan.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">conan</span></code></span></a> — which does all of the above, per tool, for a url and a
-checksum.</p>
+<p>This provider has no <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> keys of its own: a
+checkout’s own location is already known in full wherever <code class="docutils literal notranslate"><span class="pre">path:</span></code> is
+written, so the generic per-stage <code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> keys
+(see “Generic stage keys” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>)
+already cover exporting it — spell out <code class="docutils literal notranslate"><span class="pre">path:</span></code>’s own value again (as the
+worked example above does for <code class="docutils literal notranslate"><span class="pre">PICO_SDK_PATH</span></code>), rather than the
+package-relative <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> a <a class="reference internal" href="download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">download</span></code></span></a> package’s own
+<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> can use.</p>
+</section>
+<section id="what-runs-and-what-is-skipped">
+<h2>What runs, and what is skipped<a class="headerlink" href="#what-runs-and-what-is-skipped" title="Link to this heading"></a></h2>
+<p>Per stage, in order:</p>
+<ol class="arabic simple">
+<li><p><strong>Clone</strong> — skipped when <code class="docutils literal notranslate"><span class="pre">path:</span></code> is already a git checkout (<code class="docutils literal notranslate"><span class="pre">path/.git</span></code>
+exists). Never re-clones over one that’s already there, whatever
+<code class="docutils literal notranslate"><span class="pre">url:</span></code>/<code class="docutils literal notranslate"><span class="pre">revision:</span></code> say — a checkout cloned from a different url is a
+config mistake to fix by hand (<code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span></code> the env, or point <code class="docutils literal notranslate"><span class="pre">path:</span></code>
+elsewhere), not something this provider silently redoes.</p></li>
+<li><p><strong>Fetch</strong> — <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">fetch</span> <span class="pre">--tags</span> <span class="pre">--prune</span> <span class="pre">&lt;remote&gt;</span></code>, every run: <code class="docutils literal notranslate"><span class="pre">revision:</span></code>
+may be a branch that has moved, or a tag pushed after the checkout was
+made, and this is how either is seen at all.</p></li>
+<li><p><strong>Checkout</strong> — skipped when <code class="docutils literal notranslate"><span class="pre">path:</span></code> is already detached at exactly the
+commit <code class="docutils literal notranslate"><span class="pre">revision:</span></code> resolves to. Otherwise: <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">checkout</span> <span class="pre">--detach</span> <span class="pre">&lt;sha&gt;</span></code>. A commit sha the fetch above didn’t already have (see
+“Unreachable commits” below) is fetched explicitly first.</p></li>
+<li><p><strong>Submodules</strong> — <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">submodule</span> <span class="pre">sync</span> <span class="pre">&amp;&amp;</span> <span class="pre">git</span> <span class="pre">submodule</span> <span class="pre">update</span> <span class="pre">--init</span></code>,
+only when <code class="docutils literal notranslate"><span class="pre">submodules:</span> <span class="pre">true</span></code>. Runs every time (there is no cheap way to
+tell “already up to date” apart from asking git, and asking is what
+these two commands do).</p></li>
+</ol>
+<p>The generic per-stage <code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> keys run after
+this, for every stage regardless of provider — see “Generic stage keys” in
+<a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>.</p>
+</section>
+<section id="unreachable-commits">
+<h2>Unreachable commits<a class="headerlink" href="#unreachable-commits" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">fetch</span> <span class="pre">--tags</span></code> sees every tag and every branch tip, but not a commit
+pinned by raw sha that sits <em>behind</em> one — most servers refuse to serve an
+object that isn’t the tip of some advertised ref at all
+(<code class="docutils literal notranslate"><span class="pre">uploadpack.allowReachableSHA1InWant</span></code>/<code class="docutils literal notranslate"><span class="pre">allowAnySHA1InWant</span></code>, off by default
+on GitHub and most self-hosted setups). When the generic fetch above didn’t
+leave <code class="docutils literal notranslate"><span class="pre">revision:</span></code> resolvable, this provider tries once more with an
+explicit <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">fetch</span> <span class="pre">&lt;remote&gt;</span> <span class="pre">&lt;revision&gt;</span></code> — which succeeds for a sha the
+remote is willing to serve directly, and fails the same way <code class="docutils literal notranslate"><span class="pre">git</span></code> itself
+would otherwise. There is no third fallback: a revision neither fetch found
+is reported as not found, naming the remote it was fetched from.</p>
+</section>
+<section id="where-things-go">
+<h2>Where things go<a class="headerlink" href="#where-things-go" title="Link to this heading"></a></h2>
+<p>There is no separate “downloads vs. unpacked” split the way <code class="docutils literal notranslate"><span class="pre">download</span></code> has
+one — a git checkout <em>is</em> both, and git’s own object store is what makes an
+unchanged fetch cheap. <code class="docutils literal notranslate"><span class="pre">path:</span></code> is the whole of it:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>&lt;path&gt;/                # exactly what 'git clone &lt;url&gt; &lt;path&gt;' would leave,
+├── .git/               # then moved (detached) onto 'revision:'
+└── ...                  # the checkout itself
+</pre></div>
+</div>
 </section>
 <section id="design-notes">
 <h2>Design notes<a class="headerlink" href="#design-notes" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">cmd:</span></code> vs <code class="docutils literal notranslate"><span class="pre">source:</span></code>.</strong> A <code class="docutils literal notranslate"><span class="pre">provider:</span> <span class="pre">custom</span></code> stage’s own <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> never
-sees its own exports (it’s an isolated subprocess) — <code class="docutils literal notranslate"><span class="pre">source:</span></code> exists
-for exactly the case where a stage needs to hand something forward.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code>.</strong> An arbitrary command has no “already built, just activate”
-state denver can reason about, so <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> is skipped entirely under
-<code class="docutils literal notranslate"><span class="pre">--fast</span></code>. <code class="docutils literal notranslate"><span class="pre">source:</span></code> still runs under <code class="docutils literal notranslate"><span class="pre">--fast</span></code> — it’s what later
-stages’/the final command’s environment depends on, not a build step, so
-skipping it would break the very propagation it exists for. <code class="docutils literal notranslate"><span class="pre">launcher:</span></code>
-is likewise never skipped under <code class="docutils literal notranslate"><span class="pre">--fast</span></code> — relocating the command isn’t
-a build step either.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> prints <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> instead of running it. <code class="docutils literal notranslate"><span class="pre">source:</span></code> is still
-sourced, for the same reason it survives <code class="docutils literal notranslate"><span class="pre">--fast</span></code>: its exports are what
-every later stage’s commands are rendered against, so skipping it would
-make the preview show <code class="docutils literal notranslate"><span class="pre">${...}</span></code> values a real run would never use.</p></li>
+<li><p><strong>Why a provider and not a <code class="docutils literal notranslate"><span class="pre">custom:</span> <span class="pre">cmd:</span></code> script.</strong> The shell version of
+this (see <a class="reference internal" href="custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom</span></code></span></a>’s worked example) is the same ten-odd
+lines every project migrating off a hand-pinned git checkout has to get
+right: recognise an existing clone, never re-clone over it, move a
+<em>moving</em> pin (a branch, a re-tagged release) forward without leaving the
+tree on a branch a later <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">pull</span></code> could then drift. Here that logic
+exists once.</p></li>
+<li><p><strong>Always detached.</strong> A stage’s checkout is denver’s own state, not
+something a person is meant to commit on top of — <code class="docutils literal notranslate"><span class="pre">--detach</span></code> makes that
+the checkout’s actual state, not just a convention, so <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">status</span></code>
+inside it never reads as “on branch main, 40 commits ahead” for a branch
+nobody is developing against.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">submodules:</span></code> is not recursive.</strong> Recursing by default would fetch a
+submodule’s own submodules whether or not anything actually needs them
+(mbedtls’s own test/build tooling submodule, inside pico-sdk, is exactly
+such a case) — every extra clone is bandwidth and time spent on a stage
+every <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span></code> re-checks. A project needing nested submodules reaches
+for <code class="docutils literal notranslate"><span class="pre">custom</span></code> (or asks for it — this provider doesn’t have a
+<code class="docutils literal notranslate"><span class="pre">submodules-recursive:</span></code> key yet).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code></strong> skips clone/fetch/checkout/submodules entirely; it dies with
+a clear message if <code class="docutils literal notranslate"><span class="pre">path:</span></code> was never checked out — run once without
+<code class="docutils literal notranslate"><span class="pre">--fast</span></code> first. The generic <code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> keys still
+apply regardless (see “Generic stage keys” in
+<a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>) — that’s the activation
+half, not a build step to skip.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--force</span></code></strong> runs <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">reset</span> <span class="pre">--hard</span></code> and <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clean</span> <span class="pre">-fdx</span></code> before
+checking out, discarding whatever local state (a hand-edited file, an
+untracked build artifact) would otherwise survive the move onto
+<code class="docutils literal notranslate"><span class="pre">revision:</span></code>. Without it, a checkout already sitting at the right commit is
+left completely alone, local edits included.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> reports the clone/fetch/checkout/submodule commands
+instead of running them, and leaves whatever is already on disk
+untouched. Resolving <code class="docutils literal notranslate"><span class="pre">revision:</span></code> to a commit is still attempted for real
+(it is a read, not a write, the same way <code class="docutils literal notranslate"><span class="pre">download</span></code>’s checksum check is)
+so the preview can say “already there” when that’s true; a checkout this
+preview would have created fresh has nothing to resolve against yet, and
+that limitation is reported rather than silently guessed past.</p></li>
+<li><p><strong>No built-in credentials.</strong> Unlike <code class="docutils literal notranslate"><span class="pre">download</span></code>’s <code class="docutils literal notranslate"><span class="pre">[[download-auth]]</span></code>,
+this provider sends none of its own — a private repository is exactly
+what <code class="docutils literal notranslate"><span class="pre">git</span></code>’s own credential helper, an SSH agent, or a <code class="docutils literal notranslate"><span class="pre">url:</span></code> already
+carrying a token are for, all of which a plain <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">clone</span></code>/<code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">fetch</span></code>
+already honours with no denver-specific configuration at all.</p></li>
 </ul>
 </section>
 </section>
@@ -400,8 +444,8 @@ make the preview show <code class="docutils literal notranslate"><span class="pr
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="git.html" class="btn btn-neutral float-left" title="git provider" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../contributing/development.html" class="btn btn-neutral float-right" title="Development" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="download.html" class="btn btn-neutral float-left" title="download provider" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="custom.html" class="btn btn-neutral float-right" title="custom provider" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

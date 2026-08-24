@@ -23,8 +23,8 @@ section must always declare `provider: <name>` explicitly — which is what
 lets one environment run two `uv` stages (e.g. `uv` and `uv-zephyr`)
 targeting different venvs.
 
-**Provider** — the generic engine behind a stage type. denver ships five:
-`uv`, `conan`, `zephyr`, `docker` and `custom`. A provider holds no
+**Provider** — the generic engine behind a stage type. denver ships seven:
+`uv`, `conan`, `zephyr`, `docker`, `download`, `git` and `custom`. A provider holds no
 project-specific knowledge; everything specific comes from the `denver.toml`
 section it is given. See [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers).
 
@@ -49,8 +49,8 @@ skipped, so the trail reads as the pipeline it describes.
 
 **Setup provider** (`kind: setup`) — a provider that builds part of the
 environment in place: creates a venv, installs tools, updates a workspace.
-`uv`, `conan` and `zephyr` are setup providers; `custom` is one unless it
-declares `launcher:`.
+`uv`, `conan`, `zephyr`, `download` and `git` are setup providers; `custom`
+is one unless it declares `launcher:`.
 
 **Wrapper provider** (`kind: wrapper`) — a provider that builds nothing
 itself and instead relocates the final command somewhere else, e.g. into a

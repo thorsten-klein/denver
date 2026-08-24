@@ -232,6 +232,14 @@
 <li class="toctree-l2"><a class="reference internal" href="../providers/download.html#design-notes">Design notes</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../providers/git.html">git provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#unreachable-commits">Unreachable commits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#where-things-go">Where things go</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#design-notes">Design notes</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../providers/custom.html">custom provider</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#key-reference">Key reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
@@ -303,8 +311,8 @@ of the same name is that stage’s config. A stage id is just a label — the
 section must always declare <code class="docutils literal notranslate"><span class="pre">provider:</span> <span class="pre">&lt;name&gt;</span></code> explicitly — which is what
 lets one environment run two <code class="docutils literal notranslate"><span class="pre">uv</span></code> stages (e.g. <code class="docutils literal notranslate"><span class="pre">uv</span></code> and <code class="docutils literal notranslate"><span class="pre">uv-zephyr</span></code>)
 targeting different venvs.</p>
-<p><strong>Provider</strong> — the generic engine behind a stage type. denver ships five:
-<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code> and <code class="docutils literal notranslate"><span class="pre">custom</span></code>. A provider holds no
+<p><strong>Provider</strong> — the generic engine behind a stage type. denver ships seven:
+<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code> and <code class="docutils literal notranslate"><span class="pre">custom</span></code>. A provider holds no
 project-specific knowledge; everything specific comes from the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>
 section it is given. See <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/doc/providers"><code class="docutils literal notranslate"><span class="pre">providers/</span></code></a>.</p>
 <p><strong>Extension provider</strong> — a project’s own <code class="docutils literal notranslate"><span class="pre">Provider</span></code> subclass, registered via
@@ -325,8 +333,8 @@ bad path) has still said which stage it is, and <code class="docutils literal no
 skipped, so the trail reads as the pipeline it describes.</p>
 <p><strong>Setup provider</strong> (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">setup</span></code>) — a provider that builds part of the
 environment in place: creates a venv, installs tools, updates a workspace.
-<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code> and <code class="docutils literal notranslate"><span class="pre">zephyr</span></code> are setup providers; <code class="docutils literal notranslate"><span class="pre">custom</span></code> is one unless it
-declares <code class="docutils literal notranslate"><span class="pre">launcher:</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code> and <code class="docutils literal notranslate"><span class="pre">git</span></code> are setup providers; <code class="docutils literal notranslate"><span class="pre">custom</span></code>
+is one unless it declares <code class="docutils literal notranslate"><span class="pre">launcher:</span></code>.</p>
 <p><strong>Wrapper provider</strong> (<code class="docutils literal notranslate"><span class="pre">kind:</span> <span class="pre">wrapper</span></code>) — a provider that builds nothing
 itself and instead relocates the final command somewhere else, e.g. into a
 container. <code class="docutils literal notranslate"><span class="pre">docker</span></code> is denver’s wrapper provider; a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage with
