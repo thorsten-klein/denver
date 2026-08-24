@@ -142,18 +142,6 @@ def package_env_map(entry, key):
     return dict(entry.get(key) or {})
 
 
-def absolute_value(value, base):
-    """One 'env-prepend:'/'env-append:' value, made absolute against ``base`` if it's relative.
-
-    A value is a path *inside* the unpacked package ("." for its root,
-    "bin" for its bin/), because that is the only thing a package can talk
-    about without knowing where denver put it. An already-absolute value is
-    left exactly as written, so an author can still point at something
-    outside the package.
-    """
-    return value if Path(value).is_absolute() else str(Path(base) / value)
-
-
 # ---- authenticated downloads ------------------------------------------------ #
 def auth_entries(config):
     """Every '[[download-auth]]' entry of the whole denver.toml, validated -- [] when the config declares none."""
@@ -501,13 +489,14 @@ class DownloadProvider(Provider):
         packages = cfg.get("packages") or []
         if not packages:
             die(f"download[{self.stage}]: needs at least one '[[{self.stage}.packages]]' entry")
+        raw_packages = {p["name"]: p for p in (self.config.get(self.section_name) or {}).get("packages") or []}
         for pkg in packages:
             self._provision(ctx, pkg)
             # always, --fast and --dry-run included: this is the activation
             # half, and a command rendered without it would be missing every
             # tool this stage provides (see custom's 'source:' for the same
             # split between building and activating).
-            self._apply_env(ctx, pkg)
+            self._apply_env(ctx, pkg, raw_packages[pkg["name"]])
 
     def _provision(self, ctx, pkg):
         """Make sure one package's archive is downloaded, verified and unpacked."""
@@ -664,14 +653,30 @@ class DownloadProvider(Provider):
         )
 
     # ---- activation ------------------------------------------------------------ #
-    def _apply_env(self, ctx, pkg):
-        """Fold this package's 'env-prepend:'/'env-append:' entries into ctx.env."""
-        dest = Path(pkg["unpack-dir"])
-        self._extend_env(ctx, pkg["env-prepend"], dest, prepend=True)
-        self._extend_env(ctx, pkg["env-append"], dest, prepend=False)
+    def _apply_env(self, ctx, pkg, raw_pkg):
+        """Fold this package's 'env-prepend:'/'env-append:' entries into ctx.env.
+
+        Interpolated here, against ``raw_pkg`` (this package's own entry out
+        of the *resolved-but-not-yet-interpolated* config, see setup()) --
+        not against ``pkg``, which config_section() already interpolated
+        once, stage-wide, before any package's own 'unpack-dir:' was in
+        scope. That's what lets '${DENVER_UNPACK_DIR}' below resolve to
+        *this* package's own unpack dir rather than every package in the
+        stage sharing whatever one happened to be current first.
+        """
+        variables = {**ctx.variables, "DENVER_UNPACK_DIR": pkg["unpack-dir"]}
+        self._extend_env(ctx, raw_pkg.get("env-prepend") or {}, variables, prepend=True)
+        self._extend_env(ctx, raw_pkg.get("env-append") or {}, variables, prepend=False)
 
     @staticmethod
-    def _extend_env(ctx, mapping, dest, *, prepend):
-        """Put every entry of one env map in front of (or behind) whatever that variable already holds."""
+    def _extend_env(ctx, mapping, variables, *, prepend):
+        """Put every entry of one env map in front of (or behind) whatever that variable already holds.
+
+        A value is used exactly as written, once '${...}' interpolated --
+        the same rule the generic per-stage 'env-prepend:'/'env-append:'
+        keys follow (see GENERIC_STAGE_KEYS in denver.py) -- plus this
+        package's own 'unpack-dir:', as '${DENVER_UNPACK_DIR}' (its default
+        is '<env workdir>/download/<name>', see doc/providers/download.md).
+        """
         for key, value in mapping.items():
-            extend_var(ctx, key, absolute_value(value, dest), prepend=prepend)
+            extend_var(ctx, key, interpolate(value, variables), prepend=prepend)

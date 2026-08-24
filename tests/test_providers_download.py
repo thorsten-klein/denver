@@ -7,7 +7,6 @@ import io
 import subprocess
 import tarfile
 import zipfile
-from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request
 
@@ -235,18 +234,22 @@ def test_stage_without_packages_dies(make_context):
 def test_downloads_unpacks_and_puts_the_package_on_path(make_context, fake_urlopen):
     payload = make_zip()
     fake_urlopen.payloads[URL] = payload
-    config = config_for([{"name": "tool", "url": URL, "sha256sum": sha256(payload), "env-prepend": {"PATH": "."}}])
+    config = config_for([{"name": "tool", "url": URL, "sha256sum": sha256(payload)}])
     ctx = make_context(config=config)
+    # 'env-prepend:' takes a value exactly as written -- no more resolving a
+    # relative one against 'unpack-dir:' (see doc/providers/download.md) --
+    # so an author points it at the real unpack location themselves.
+    unpacked = ctx.env_workdir / "download" / "tool"
+    config["download"]["packages"][0]["env-prepend"] = {"PATH": f"{unpacked}:"}
 
     run_download(config, ctx)
 
     archive = ctx.env_workdir / "downloads" / "tool-1.0.zip"
-    unpacked = ctx.env_workdir / "download" / "tool"
     assert archive.read_bytes() == payload
     assert (unpacked / "tool").is_file()
     assert (unpacked / download_provider.STAMP_NAME).is_file()
-    # no separator is inserted -- the resolved value is glued directly onto
-    # whatever PATH already held
+    # no separator is inserted -- the value is glued directly onto whatever
+    # PATH already held
     assert ctx.env["PATH"].startswith(str(unpacked))
 
 
@@ -273,14 +276,13 @@ def test_zip_without_unix_permissions_is_left_alone(make_context, fake_urlopen):
 def test_tar_gz_is_unpacked_too(make_context, fake_urlopen):
     url = "https://example.invalid/tool-1.0.tar.gz"
     fake_urlopen.payloads[url] = make_tar_gz()
-    config = config_for([{"name": "tool", "url": url, "env-prepend": {"PATH": "bin"}}])
+    config = config_for([{"name": "tool", "url": url}])
     ctx = make_context(config=config)
 
     run_download(config, ctx)
 
     unpacked = ctx.env_workdir / "download" / "tool"
     assert (unpacked / "bin" / "tool").is_file()
-    assert ctx.env["PATH"].startswith(str(unpacked / "bin"))
 
 
 def test_a_bare_binary_becomes_the_package_itself(make_context, fake_urlopen):
@@ -455,8 +457,8 @@ def test_env_prepend_and_append_glue_directly_with_no_separator(make_context, fa
         {
             "name": "tool",
             "url": URL,
-            "env-prepend": {"TOOLPATH": "bin:"},
-            "env-append": {"TOOLPATH": ":share"},
+            "env-prepend": {"TOOLPATH": "/opt/tool/bin:"},
+            "env-append": {"TOOLPATH": ":/opt/tool/share"},
         }
     ])
     ctx = make_context(config=config)
@@ -464,31 +466,38 @@ def test_env_prepend_and_append_glue_directly_with_no_separator(make_context, fa
 
     run_download(config, ctx)
 
-    unpacked = ctx.env_workdir / "download" / "tool"
     # no separator is inserted by denver -- 'bin:' and ':share' carry their
-    # own, resolved as one path each ('.../bin:' still ends in ':', since
-    # pathlib only collapses a bare '.' component, not one with trailing text)
-    assert ctx.env["TOOLPATH"] == f"{unpacked / 'bin:'}existing{unpacked / ':share'}"
+    # own -- and the value is used exactly as written, with no path
+    # resolution of any kind (see doc/providers/download.md)
+    assert ctx.env["TOOLPATH"] == "/opt/tool/bin:existing:/opt/tool/share"
 
 
-def test_absolute_env_entries_are_left_alone(make_context, fake_urlopen):
+def test_a_multi_segment_value_is_used_exactly_as_written(make_context, fake_urlopen):
+    """A ':'-joined value with more than one segment (e.g. "bin:usr/bin:") glues on literally.
+
+    There is no per-value path resolution any more: 'env-prepend:'/
+    'env-append:' take exactly what's written, the same rule the generic
+    per-stage keys follow. The old resolve-relative-to-unpack-dir mechanism
+    could not have handled a value like this correctly either way -- it
+    treated the whole string as a single path.
+    """
     fake_urlopen.payloads["*"] = make_zip()
-    config = config_for([{"name": "tool", "url": URL, "env-prepend": {"TOOLPATH": "/opt/vendor/bin"}}])
+    config = config_for([{"name": "tool", "url": URL, "env-prepend": {"PATH": "bin:usr/bin:"}}])
     ctx = make_context(config=config)
 
     run_download(config, ctx)
 
-    assert ctx.env["TOOLPATH"] == "/opt/vendor/bin"
+    assert ctx.env["PATH"].startswith("bin:usr/bin:")
 
 
 def test_an_unset_variable_gets_only_the_packages_own_entries(make_context, fake_urlopen):
     fake_urlopen.payloads["*"] = make_zip()
-    config = config_for([{"name": "tool", "url": URL, "env-append": {"TOOL_HOME": "."}}])
+    config = config_for([{"name": "tool", "url": URL, "env-append": {"TOOL_HOME": "/opt/tool"}}])
     ctx = make_context(config=config)
 
     run_download(config, ctx)
 
-    assert ctx.env["TOOL_HOME"] == str(ctx.env_workdir / "download" / "tool")
+    assert ctx.env["TOOL_HOME"] == "/opt/tool"
 
 
 # ---- --fast / --dry-run -----------------------------------------------------#
@@ -504,25 +513,25 @@ def test_fast_without_an_unpacked_package_dies(make_context, fake_urlopen):
 
 def test_fast_only_activates_what_is_already_unpacked(make_context, fake_urlopen):
     fake_urlopen.payloads["*"] = make_zip()
-    config = config_for([{"name": "tool", "url": URL, "env-prepend": {"PATH": "."}}])
+    config = config_for([{"name": "tool", "url": URL, "env-prepend": {"PATH": "/opt/tool:"}}])
     run_download(config, make_context(config=config))
 
     fast = make_context(config=config, fast=True)
     run_download(config, fast)
 
     assert fake_urlopen.calls == [URL]
-    assert fast.env["PATH"].startswith(str(fast.env_workdir / "download" / "tool"))
+    assert fast.env["PATH"].startswith("/opt/tool:")
 
 
 def test_dry_run_fetches_nothing_but_still_applies_the_environment(make_context, fake_urlopen):
-    config = config_for([{"name": "tool", "url": URL, "env-prepend": {"PATH": "."}}])
+    config = config_for([{"name": "tool", "url": URL, "env-prepend": {"PATH": "/opt/tool:"}}])
     ctx = make_context(config=config, dry_run=True)
 
     run_download(config, ctx)
 
     assert fake_urlopen.calls == []
     assert not (ctx.env_workdir / "downloads").exists()
-    assert ctx.env["PATH"].startswith(str(ctx.env_workdir / "download" / "tool"))
+    assert ctx.env["PATH"].startswith("/opt/tool:")
 
 
 # ---- banners ---------------------------------------------------------------#
@@ -784,11 +793,3 @@ def test_restore_exec_bits_ignores_a_non_zip(tmp_path):
     archive.write_bytes(b"not a zip")
     # nothing to do, and nothing to fail on: the dest isn't even looked at
     download_provider.restore_exec_bits(archive, tmp_path / "missing")
-
-
-def test_absolute_value_resolves_a_relative_value_against_base():
-    assert download_provider.absolute_value("bin", Path("/pkg")) == "/pkg/bin"
-
-
-def test_absolute_value_leaves_an_absolute_value_alone():
-    assert download_provider.absolute_value("/opt/vendor/bin", Path("/pkg")) == "/opt/vendor/bin"

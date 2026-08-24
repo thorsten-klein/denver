@@ -1,23 +1,46 @@
 version = 1.0
-denver-version = ">=1.5.1"
+denver-version = ">=1.5.2"
 stages = [
-  "uv",
-  "conan",
+  "host-tools",
+  "arm-none-eabi",
+  "pico-sdk",
+  "picotool",
+  "build-picotool",
 ]
-
-[env]
-CONAN_HOME = "${DENVER_ENV_WORKDIR}/.conan2"
 
 [hooks]
 # env = null
-# post-conan = null
-# post-uv = null
+# post-arm-none-eabi = null
+# post-build-picotool = null
+# post-host-tools = null
+# post-pico-sdk = null
+# post-picotool = null
+# pre-arm-none-eabi = null
+# pre-build-picotool = null
 # pre-cmd = null
-# pre-conan = null
-# pre-uv = null
+# pre-host-tools = null
+# pre-pico-sdk = null
+# pre-picotool = null
 
-[uv]
-provider = "uv"
+[host-tools]
+provider = "custom"
+description = [
+  "The apt packages the stages below need (cmake, build-essential, libusb-1.0-0-dev) -- installing them needs sudo, so it never happens as part of a normal 'denver run'; only once, explicitly, via 'denver run examples/raspberry-pico --scripts setup'. This stage's own cmd only checks they are actually there and fails loud, with that command, if not.",
+]
+disabled = false
+depends-on = []
+skip-on-success = []
+skip-on-failure = []
+env = {}
+env-prepend = {}
+env-append = {}
+scripts = { setup = ["setup/install_host_tools.sh"] }
+cmd = "bash ${DENVER_ENV_DIR}/setup/check_host_tools.sh"
+# launcher = null
+# source = null
+
+[arm-none-eabi]
+provider = "download"
 # description = null
 disabled = false
 depends-on = []
@@ -27,23 +50,58 @@ env = {}
 env-prepend = {}
 env-append = {}
 # scripts = null
-exe = "uv"
-# freeze-to = null
-# install-args = null
-# lockfile = null
-no-index = false
-# overrides = null
-# patches-apply = null
-# python = null
-reinstall = false
-requirements = [
-  "requirements.txt",
-]
-# venv = null
 
-[conan]
-provider = "conan"
+[[arm-none-eabi.packages]]
+description = ""
+env-append = {}
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}/bin:" }
+md5sum = "bbe1e4bf65591692ed93cd19706c93af"
+name = "arm-none-eabi"
+outfile = "<REPO>/examples/raspberry-pico/.denver/denver/downloads/arm-gnu-toolchain-15.3.rel1-x86_64-arm-none-eabi.tar.xz"
+sha256sum = ""
+unpack-cmd = "tar -xf \"$DENVER_DOWNLOAD_ARCHIVE\" --strip-components=1"
+unpack-dir = "<REPO>/examples/raspberry-pico/.denver/denver/download/arm-none-eabi"
+url = "https://gitlab.arm.com/api/v4/projects/tooling%2Fgnu-toolchains-for-arm/packages/generic/gnu-toolchain/15.3.rel1/arm-gnu-toolchain-15.3.rel1-x86_64-arm-none-eabi.tar.xz"
+
+[pico-sdk]
+provider = "git"
 # description = null
+disabled = false
+depends-on = []
+skip-on-success = []
+skip-on-failure = []
+env = { PICO_SDK_PATH = "${DENVER_ENV_WORKDIR}/pico-sdk" }
+env-prepend = {}
+env-append = {}
+# scripts = null
+path = "<REPO>/examples/raspberry-pico/.denver/denver/pico-sdk"
+remote = "origin"
+revision = "2.3.0"
+submodules = true
+url = "https://github.com/raspberrypi/pico-sdk.git"
+
+[picotool]
+provider = "git"
+# description = null
+disabled = false
+depends-on = []
+skip-on-success = []
+skip-on-failure = []
+env = { PICOTOOL_SRC = "${DENVER_ENV_WORKDIR}/picotool" }
+env-prepend = {}
+env-append = {}
+# scripts = null
+path = "<REPO>/examples/raspberry-pico/.denver/denver/picotool"
+remote = "origin"
+revision = "2.3.0"
+submodules = false
+url = "https://github.com/raspberrypi/picotool.git"
+
+[build-picotool]
+provider = "custom"
+description = [
+  "Builds picotool from the 'picotool' git checkout against the 'pico-sdk' git checkout, via cmake, and puts it on PATH. Same 'cmd: builds, source: activates' split as 'host-tools' above, just with a build instead of an apt-get check.",
+]
 disabled = false
 depends-on = []
 skip-on-success = []
@@ -52,32 +110,7 @@ env = {}
 env-prepend = {}
 env-append = {}
 # scripts = null
-authentication = true
-base-classes = [
-  "<REPO>/examples/zephyr-devshell/conan/base_classes",
-]
-build = "missing"
-channel = "snapshot"
-conanfile = "<REPO>/examples/raspberry-pico/conan/conanfile.py"
-# config = null
-deployers = [
-  "<REPO>/src/denver_providers/conan_scripts/extensions/symlink.py",
-]
-exe = "conan"
-install-args = [
-  "-c:a=tools.system.package_manager:mode=install",
-  "-c:a=tools.system.package_manager:sudo=True",
-]
-keep-remotes = false
-profiles = { build = [], host = [] }
-remotes = {}
-user = "denver"
-
-[[conan.recipes]]
-catalog = "<REPO>/examples/raspberry-pico/conan/catalog.yml"
-dirs = [
-  "<REPO>/examples/raspberry-pico/conan/recipes",
-  "<REPO>/examples/zephyr-devshell/conan/recipes/cmake",
-]
-export-tool = "<REPO>/src/denver_providers/conan_scripts/recipes.py"
+cmd = "${DENVER_ENV_DIR}/setup/build_picotool.sh"
+# launcher = null
+source = "setup/activate_picotool.sh"
 

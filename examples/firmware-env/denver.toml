@@ -1,5 +1,5 @@
 version = "1.0"
-denver-version = ">=1.5.1"
+denver-version = ">=1.5.2"
 
 # The environment built step by step in doc/quickstart/30-minutes.md.
 # Every stage id here is named after the problem it solves rather than after its
@@ -77,7 +77,7 @@ description = [
 name = "ninja"
 url = "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"
 sha256sum = "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"
-env-prepend = { PATH = "." }
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}:" }
 
 [conan-packages]
 provider = "conan"

@@ -1,6 +1,6 @@
 version = "1.0"
 # minimum denver (the tool) this env needs -- see doc/cli/configuration.md
-denver-version = ">=1.5.1"
+denver-version = ">=1.5.2"
 
 # Builds denver's own doc/ tree (see doc/conf.py) with Sphinx: a uv venv with
 # the tools sphinx-build needs, then a custom stage that runs it against the

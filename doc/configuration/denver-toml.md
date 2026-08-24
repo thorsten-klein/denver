@@ -192,8 +192,9 @@ build step -- and are skipped outright for a stage `disabled:`/
 `skip-on-success:`/`skip-on-failure:`/`depends-on:` skips this run, the same
 as everything else about that stage. Every provider gets them for free; `download`'s own
 per-*package* `env-prepend:`/`env-append:` (see [`download`](../providers/download.md))
-is a different, narrower mechanism for a stage with several packages each
-needing their own directory, not replaced by this one.
+is the same glue-with-no-separator mechanism, just scoped to one package of
+a stage that has several, each needing its own directory named — not
+replaced by this stage-wide one.
 
 Every other key in a stage's section must be one the stage's own provider
 recognises — see that provider's page under [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers). An
