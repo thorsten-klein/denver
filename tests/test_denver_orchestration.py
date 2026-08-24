@@ -564,6 +564,84 @@ def test_run_stages_env_hook_runs_before_declarative_env(tmp_path, fake_provider
     assert exec_recorder["env"]["SOME_VAR"] == "from-declarative"
 
 
+# ---- generic per-stage 'env:'/'env-prepend:'/'env-append:' -----------------#
+def test_run_stages_stage_env_sets_a_variable(tmp_path, fake_providers, exec_recorder):
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "env": {"STAGE_ENV_TEST_VAR": "bar"}},
+    }
+    env_dir, cfg_path = _env(tmp_path, config)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert exec_recorder["env"]["STAGE_ENV_TEST_VAR"] == "bar"
+
+
+def test_run_stages_stage_env_prepend_resolves_path_and_prepends(tmp_path, fake_providers, exec_recorder, monkeypatch):
+    # no separator is inserted by denver -- the trailing ':' has to be part
+    # of the value itself, same as a hand-written 'export PATH="$NEW:$PATH"'
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "env-prepend": {"PATH": "tools/bin:"}},
+    }
+    env_dir, cfg_path = _env(tmp_path, config)
+    monkeypatch.setenv("PATH", "/usr/bin")
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert exec_recorder["env"]["PATH"] == f"{env_dir / 'tools' / 'bin:'}/usr/bin"
+
+
+def test_run_stages_stage_env_prepend_glues_with_no_separator_by_default(
+    tmp_path, fake_providers, exec_recorder, monkeypatch
+):
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "env-prepend": {"CUSTOM_PATH": "tools/bin"}},
+    }
+    env_dir, cfg_path = _env(tmp_path, config)
+    monkeypatch.setenv("CUSTOM_PATH", "/usr/bin")
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert exec_recorder["env"]["CUSTOM_PATH"] == f"{env_dir / 'tools' / 'bin'}/usr/bin"
+
+
+def test_run_stages_stage_env_append_puts_value_last(tmp_path, fake_providers, exec_recorder, monkeypatch):
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "env-append": {"MANPATH": "share/man"}},
+    }
+    env_dir, cfg_path = _env(tmp_path, config)
+    monkeypatch.setenv("MANPATH", "/usr/share/man")
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert exec_recorder["env"]["MANPATH"] == f"/usr/share/man{env_dir / 'share' / 'man'}"
+
+
+def test_run_stages_stage_env_runs_after_setup_and_sees_its_exports(tmp_path, fake_providers, exec_recorder):
+    # RecordingSetup.setup() exports RAN_<STAGE> -- a stage's own 'env:' must
+    # be able to read that back, which only holds if it's applied *after*
+    # provider.setup() (see _apply_stage_env).
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "env": {"DERIVED": "${RAN_FAKESETUP}-derived"}},
+    }
+    env_dir, cfg_path = _env(tmp_path, config)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert exec_recorder["env"]["DERIVED"] == "1-derived"
+
+
+def test_run_stages_disabled_stage_env_never_applies(tmp_path, fake_providers, exec_recorder):
+    config = {
+        "stages": ["fakesetup"],
+        "fakesetup": {"provider": "fakesetup", "disabled": True, "env": {"STAGE_ENV_TEST_VAR": "bar"}},
+    }
+    env_dir, cfg_path = _env(tmp_path, config)
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "STAGE_ENV_TEST_VAR" not in exec_recorder["env"]
+
+
+def test_stage_env_must_be_a_string_mapping(tmp_path, fake_providers):
+    config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "env": ["FOO=bar"]}}
+    env_dir, cfg_path = _env(tmp_path, config)
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+
 def test_run_stages_wrapper_active_relocates_reinvocation(tmp_path, fake_providers, exec_recorder):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {

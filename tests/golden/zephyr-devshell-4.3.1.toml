@@ -32,6 +32,9 @@ provider = "docker"
 disabled = false
 skip-on-success = []
 skip-on-failure = []
+env = {}
+env-prepend = {}
+env-append = {}
 scripts = { setup = ["setup/install_host_tools.sh"] }
 exe = "docker"
 # registries = null
@@ -52,6 +55,9 @@ provider = "conan"
 disabled = false
 skip-on-success = []
 skip-on-failure = []
+env = {}
+env-prepend = {}
+env-append = {}
 # scripts = null
 authentication = true
 base-classes = [
@@ -87,6 +93,9 @@ skip-on-success = [
   "<REPO>/examples/zephyr-devshell-4.3.1/uv/skip-on-success.sh",
 ]
 skip-on-failure = []
+env = {}
+env-prepend = {}
+env-append = {}
 # scripts = null
 exe = "uv"
 # freeze-to = null
@@ -116,6 +125,9 @@ provider = "zephyr"
 disabled = false
 skip-on-success = []
 skip-on-failure = []
+env = {}
+env-prepend = {}
+env-append = {}
 scripts = { setup = ["setup/install_jlink_udev_rules.sh"] }
 base = "/fake-west-topdir/zephyr-rtos"
 blobs-cache = "conan/recipes/west-blobs-cache/denver/blobs.txt"
@@ -138,6 +150,9 @@ skip-on-success = [
   "<REPO>/examples/zephyr-devshell-4.3.1/uv/skip-on-success.sh",
 ]
 skip-on-failure = []
+env = {}
+env-prepend = {}
+env-append = {}
 # scripts = null
 exe = "uv"
 freeze-to = "conan/recipes/python-cache/denver/requirements.final.txt"
