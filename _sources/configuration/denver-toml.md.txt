@@ -157,6 +157,34 @@ These keys may appear in *any* stage's section, whatever its provider:
 - **`scripts`** — the generic one-shot mechanism: `scripts: <name>: [...]`
   declares scripts run by `denver run <env> --scripts <name>` instead of the
   normal pipeline. See "Hooks and scripts" below.
+- **`env`** — a mapping of environment variables to set once this stage's
+  own setup is done, as `{ VAR = "value" }` (values go through `${...}`
+  interpolation, so a value can read what this stage's own setup() just
+  exported). The per-stage counterpart of the top-level `env:` — the same
+  key, one level down, in scope for one stage rather than the whole
+  environment.
+- **`env-prepend`** / **`env-append`** — what a stage contributes to an
+  existing variable, as `{ VAR = "value" }`: each value is resolved like any
+  other denver path (against the env dir, then imported base envs — see
+  "Variable interpolation" below) and glued directly onto `ctx.env[VAR]` --
+  no separator inserted -- in front of its current value for
+  `env-prepend:` (the common case: a stage exists to provide a specific
+  version of a tool, and appending would let whatever the OS already has on
+  `PATH` win instead), behind it for `env-append:` (a fallback `MANPATH`, a
+  low-priority `CMAKE_PREFIX_PATH`). If the result needs a separator (it
+  usually does, for a `:`-joined variable like `PATH`), write it into the
+  value yourself: a trailing `:` for `env-prepend:` (`"tools/bin:"`), a
+  leading `:` for `env-append:` (`":share/man"`) -- denver never guesses
+  one.
+
+All three apply after this stage's own `setup()` (so a value can reference what
+that just exported), --fast/--dry-run included -- this is activation, not a
+build step -- and are skipped outright for a stage `disabled:`/
+`skip-on-success:`/`skip-on-failure:` skips this run, the same as everything
+else about that stage. Every provider gets them for free; `download`'s own
+per-*package* `env-prepend:`/`env-append:` (see [`download`](../providers/download.md))
+is a different, narrower mechanism for a stage with several packages each
+needing their own directory, not replaced by this one.
 
 Every other key in a stage's section must be one the stage's own provider
 recognises — see that provider's page under [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers). An

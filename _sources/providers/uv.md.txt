@@ -10,8 +10,8 @@ python = "3.12.3"
 requirements = ["requirements.txt"]
 ```
 
-(`provider:`/`description:`/`disabled:`/`skip-on-success:`/`skip-on-failure:`/`scripts:` are
-generic keys every stage has —
+(`provider:`/`description:`/`disabled:`/`skip-on-success:`/`skip-on-failure:`/`scripts:`/
+`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
 see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything below is specific to `uv`.)
 
 ## Requires

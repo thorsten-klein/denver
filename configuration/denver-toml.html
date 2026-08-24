@@ -437,7 +437,34 @@ stage), or neither (no skip check at all). <code class="docutils literal notrans
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">scripts</span></code></strong> — the generic one-shot mechanism: <code class="docutils literal notranslate"><span class="pre">scripts:</span> <span class="pre">&lt;name&gt;:</span> <span class="pre">[...]</span></code>
 declares scripts run by <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--scripts</span> <span class="pre">&lt;name&gt;</span></code> instead of the
 normal pipeline. See “Hooks and scripts” below.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env</span></code></strong> — a mapping of environment variables to set once this stage’s
+own setup is done, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">VAR</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code> (values go through <code class="docutils literal notranslate"><span class="pre">${...}</span></code>
+interpolation, so a value can read what this stage’s own setup() just
+exported). The per-stage counterpart of the top-level <code class="docutils literal notranslate"><span class="pre">env:</span></code> — the same
+key, one level down, in scope for one stage rather than the whole
+environment.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">env-append</span></code></strong> — what a stage contributes to an
+existing variable, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">VAR</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code>: each value is resolved like any
+other denver path (against the env dir, then imported base envs — see
+“Variable interpolation” below) and glued directly onto <code class="docutils literal notranslate"><span class="pre">ctx.env[VAR]</span></code> –
+no separator inserted – in front of its current value for
+<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> (the common case: a stage exists to provide a specific
+version of a tool, and appending would let whatever the OS already has on
+<code class="docutils literal notranslate"><span class="pre">PATH</span></code> win instead), behind it for <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> (a fallback <code class="docutils literal notranslate"><span class="pre">MANPATH</span></code>, a
+low-priority <code class="docutils literal notranslate"><span class="pre">CMAKE_PREFIX_PATH</span></code>). If the result needs a separator (it
+usually does, for a <code class="docutils literal notranslate"><span class="pre">:</span></code>-joined variable like <code class="docutils literal notranslate"><span class="pre">PATH</span></code>), write it into the
+value yourself: a trailing <code class="docutils literal notranslate"><span class="pre">:</span></code> for <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;tools/bin:&quot;</span></code>), a
+leading <code class="docutils literal notranslate"><span class="pre">:</span></code> for <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;:share/man&quot;</span></code>) – denver never guesses
+one.</p></li>
 </ul>
+<p>All three apply after this stage’s own <code class="docutils literal notranslate"><span class="pre">setup()</span></code> (so a value can reference what
+that just exported), –fast/–dry-run included – this is activation, not a
+build step – and are skipped outright for a stage <code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/
+<code class="docutils literal notranslate"><span class="pre">skip-on-success:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-on-failure:</span></code> skips this run, the same as everything
+else about that stage. Every provider gets them for free; <code class="docutils literal notranslate"><span class="pre">download</span></code>’s own
+per-<em>package</em> <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> (see <a class="reference internal" href="../providers/download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">download</span></code></span></a>)
+is a different, narrower mechanism for a stage with several packages each
+needing their own directory, not replaced by this one.</p>
 <p>Every other key in a stage’s section must be one the stage’s own provider
 recognises — see that provider’s page under <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/doc/providers"><code class="docutils literal notranslate"><span class="pre">providers/</span></code></a>. An
 unrecognised key is an error, not silently ignored.</p>

@@ -300,7 +300,7 @@ project writing that logic again.</p>
 <span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"."</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
-<p>(<code class="docutils literal notranslate"><span class="pre">provider:</span></code>/<code class="docutils literal notranslate"><span class="pre">description:</span></code>/<code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/<code class="docutils literal notranslate"><span class="pre">scripts:</span></code> are generic keys every stage has —
+<p>(<code class="docutils literal notranslate"><span class="pre">provider:</span></code>/<code class="docutils literal notranslate"><span class="pre">description:</span></code>/<code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/<code class="docutils literal notranslate"><span class="pre">scripts:</span></code>/<code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> are generic keys every stage has —
 see “Generic stage keys” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>. Everything below is specific to <code class="docutils literal notranslate"><span class="pre">download</span></code>.)</p>
 <section id="key-reference">
 <h2>Key reference<a class="headerlink" href="#key-reference" title="Link to this heading"></a></h2>
@@ -330,16 +330,20 @@ pinning a version in the url alone does <em>not</em> protect you from.</p></li>
 other denver path — against the env dir, then imported base envs.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">unpack-cmd</span></code></strong> — a shell command that unpacks the archive itself,
 replacing python’s own archive handling. See “Unpacking” below.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-sep</span></code></strong> — the separator used to split every <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> /
-<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> <em>value</em> into entries, and to join the result onto the
-variable’s current value (default: <code class="docutils literal notranslate"><span class="pre">:</span></code>).</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">env-append</span></code></strong> — what the unpacked package
-contributes to the environment, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">VAR</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code>. Each value is a
-list of paths <em>inside</em> the package, joined by <code class="docutils literal notranslate"><span class="pre">env-sep:</span></code> — <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> is the
-package root, <code class="docutils literal notranslate"><span class="pre">&quot;bin&quot;</span></code> its <code class="docutils literal notranslate"><span class="pre">bin/</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;bin:libexec&quot;</span></code> both. Every relative
-entry is made absolute against <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code> before it lands in the
-variable; absolute entries are left as written. <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> puts them
-in front of whatever the variable already holds, <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> behind it.</p></li>
+contributes to the environment, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">VAR</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code>. A value is a path
+<em>inside</em> the package — <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> is the package root, <code class="docutils literal notranslate"><span class="pre">&quot;bin&quot;</span></code> its <code class="docutils literal notranslate"><span class="pre">bin/</span></code>.
+A relative value is made absolute against <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code> before it lands in
+the variable; an absolute one is left as written. <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> glues it
+directly in front of whatever the variable already holds, <code class="docutils literal notranslate"><span class="pre">env-append:</span></code>
+directly behind it — no separator inserted, so a value that needs one
+(almost always true for a <code class="docutils literal notranslate"><span class="pre">:</span></code>-joined variable like <code class="docutils literal notranslate"><span class="pre">PATH</span></code>) has to carry it
+itself: a trailing <code class="docutils literal notranslate"><span class="pre">:</span></code> for <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;bin:&quot;</span></code>), a leading <code class="docutils literal notranslate"><span class="pre">:</span></code> for
+<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;:share&quot;</span></code>). This composes fine with a real subdirectory,
+but not with a bare <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> — pathlib collapses a lone <code class="docutils literal notranslate"><span class="pre">.</span></code> component but not
+<code class="docutils literal notranslate"><span class="pre">&quot;.:&quot;</span></code>, so a package whose binaries sit at its own archive root (ninja,
+above) still glues onto <code class="docutils literal notranslate"><span class="pre">PATH</span></code> without a separator; getting that value
+right from here is on whoever writes it.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">description</span></code></strong> — free text about this package, for whoever reads the
 config. denver never acts on it; it only shows up in <code class="docutils literal notranslate"><span class="pre">--show-config</span></code>.</p></li>
 </ul>
