@@ -13,7 +13,7 @@ dirs = ["path/to/recipes"]
 catalog = "catalog.yml"  # optional
 ```
 
-(`provider:`/`description:`/`disabled:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
+(`provider:`/`description:`/`disabled:`/`depends-on:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
 see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything else is specific to `conan`.)
 
 ## Requires

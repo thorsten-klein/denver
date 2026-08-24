@@ -9,7 +9,7 @@ provider = "custom"
 cmd = "echo hello"
 ```
 
-(`provider:`/`description:`/`disabled:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
+(`provider:`/`description:`/`disabled:`/`depends-on:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
 see “Generic stage keys” in [Configuration](../configuration/denver-toml.md). Everything below is specific to `custom`.)
 
 ## Key reference

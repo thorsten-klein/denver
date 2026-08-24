@@ -427,6 +427,15 @@ configured this way. denver never reads it; it is only surfaced in
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">disabled</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">true</span></code> opts this stage out of the normal pipeline, as if
 it had been <code class="docutils literal notranslate"><span class="pre">--skip</span></code>ped, without deleting its configuration. Must be a
 real boolean.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">depends-on</span></code></strong> — a list of other stage ids. If any of them is itself
+skipped this run — for <em>any</em> reason: <code class="docutils literal notranslate"><span class="pre">disabled:</span> <span class="pre">true</span></code>, <code class="docutils literal notranslate"><span class="pre">--until</span></code>/<code class="docutils literal notranslate"><span class="pre">--skip</span></code>,
+a <code class="docutils literal notranslate"><span class="pre">skip-on-success:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-on-failure:</span></code> check, or its own <code class="docutils literal notranslate"><span class="pre">depends-on:</span></code>
+cascade — this stage is skipped too, reported as
+<code class="docutils literal notranslate"><span class="pre">skipped</span> <span class="pre">(depends-on</span> <span class="pre">'&lt;id&gt;')</span></code>. This cascades transitively (A depends on B
+depends on C: C skipped skips both B and A). Every named id must be
+declared <em>earlier</em> than this stage in the top-level <code class="docutils literal notranslate"><span class="pre">stages:</span></code> list — a
+forward reference, a self-reference, or an id not declared at all is a
+config error at startup, not a runtime surprise.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-on-success</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">skip-on-failure</span></code></strong> — each a list of scripts; when
 every script in the list exits <code class="docutils literal notranslate"><span class="pre">0</span></code> (<code class="docutils literal notranslate"><span class="pre">skip-on-success</span></code>) or exits exactly
 <code class="docutils literal notranslate"><span class="pre">1</span></code> (<code class="docutils literal notranslate"><span class="pre">skip-on-failure</span></code>), this stage’s whole setup — its <code class="docutils literal notranslate"><span class="pre">pre-&lt;stage&gt;</span></code> hook
@@ -460,8 +469,8 @@ one.</p></li>
 <p>All three apply after this stage’s own <code class="docutils literal notranslate"><span class="pre">setup()</span></code> (so a value can reference what
 that just exported), –fast/–dry-run included – this is activation, not a
 build step – and are skipped outright for a stage <code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/
-<code class="docutils literal notranslate"><span class="pre">skip-on-success:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-on-failure:</span></code> skips this run, the same as everything
-else about that stage. Every provider gets them for free; <code class="docutils literal notranslate"><span class="pre">download</span></code>’s own
+<code class="docutils literal notranslate"><span class="pre">skip-on-success:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-on-failure:</span></code>/<code class="docutils literal notranslate"><span class="pre">depends-on:</span></code> skips this run, the same
+as everything else about that stage. Every provider gets them for free; <code class="docutils literal notranslate"><span class="pre">download</span></code>’s own
 per-<em>package</em> <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> (see <a class="reference internal" href="../providers/download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">download</span></code></span></a>)
 is a different, narrower mechanism for a stage with several packages each
 needing their own directory, not replaced by this one.</p>
@@ -851,6 +860,13 @@ entirely.</p>
 <p>That symmetry is deliberate: the host and container paths run the same
 stages from the same config, so “does it work without Docker?” is one flag
 away rather than a separate code path.</p>
+<p>One consequence for <code class="docutils literal notranslate"><span class="pre">depends-on:</span></code>: a setup stage’s dependency on a wrapper
+stage is checked inside the re-invoked <em>inner</em> process, which always sees
+that wrapper as <code class="docutils literal notranslate"><span class="pre">--skip</span></code>ped (that’s how the relocation works) — so such a
+dependency is always treated as skipped there, regardless of whether the
+wrapper actually ran on the host in the outer process. Depending on a
+wrapper stage is rarely useful in practice; depend on another setup stage
+instead when you need the cascade to reflect what actually happened.</p>
 <section id="how-the-inner-run-knows-where-it-is">
 <h3>How the inner run knows where it is<a class="headerlink" href="#how-the-inner-run-knows-where-it-is" title="Link to this heading"></a></h3>
 <p>Two separate questions, answered separately rather than by one guess:</p>
