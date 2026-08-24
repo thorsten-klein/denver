@@ -37,6 +37,7 @@ description = [
   "Relocates every stage below into an Ubuntu 24.04 container, so the OS and the apt packages are the same for everyone.",
 ]
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -62,6 +63,7 @@ description = [
   "The python 3.12 virtualenv. 'conan' is in requirements.txt because the next stage needs it on PATH -- the conan provider never installs it.",
 ]
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -88,6 +90,7 @@ description = [
   "Brings one prebuilt binary release (neovim 0.12.4) into the environment the manual way -- download, checksum, unpack, PATH -- so the stage below can be read as what conan does with that same job.",
 ]
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -104,6 +107,7 @@ description = [
   "The same job as 'nvim-setup' above, minus the two shell scripts -- the 'download' provider owns the download, the checksum, the unpacking and the PATH entry. One entry per prebuilt release.",
 ]
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -129,6 +133,7 @@ description = [
   "Downloads cmake at exactly the pinned version and puts it on PATH. One conanfile plus the recipe it installs. The same job as 'nvim-setup' above, minus the shell script -- conan owns the download, the checksum, the cache and the PATH.",
 ]
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -164,6 +169,7 @@ description = [
   "Team conventions -- pytest always verbose with live logs, and cmake building with the ninja from 'ninja-setup' rather than make. Declared as 'source:' rather than 'cmd:', so the exports survive into the final command.",
 ]
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}

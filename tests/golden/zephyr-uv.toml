@@ -15,6 +15,7 @@ stages = [
 provider = "uv"
 # description = null
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}

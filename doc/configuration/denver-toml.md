@@ -147,6 +147,15 @@ These keys may appear in *any* stage's section, whatever its provider:
 - **`disabled`** — `true` opts this stage out of the normal pipeline, as if
   it had been `--skip`ped, without deleting its configuration. Must be a
   real boolean.
+- **`depends-on`** — a list of other stage ids. If any of them is itself
+  skipped this run — for *any* reason: `disabled: true`, `--until`/`--skip`,
+  a `skip-on-success:`/`skip-on-failure:` check, or its own `depends-on:`
+  cascade — this stage is skipped too, reported as
+  `skipped (depends-on '<id>')`. This cascades transitively (A depends on B
+  depends on C: C skipped skips both B and A). Every named id must be
+  declared *earlier* than this stage in the top-level `stages:` list — a
+  forward reference, a self-reference, or an id not declared at all is a
+  config error at startup, not a runtime surprise.
 - **`skip-on-success`**/**`skip-on-failure`** — each a list of scripts; when
   every script in the list exits `0` (`skip-on-success`) or exits exactly
   `1` (`skip-on-failure`), this stage's whole setup — its `pre-<stage>` hook
@@ -180,8 +189,8 @@ These keys may appear in *any* stage's section, whatever its provider:
 All three apply after this stage's own `setup()` (so a value can reference what
 that just exported), --fast/--dry-run included -- this is activation, not a
 build step -- and are skipped outright for a stage `disabled:`/
-`skip-on-success:`/`skip-on-failure:` skips this run, the same as everything
-else about that stage. Every provider gets them for free; `download`'s own
+`skip-on-success:`/`skip-on-failure:`/`depends-on:` skips this run, the same
+as everything else about that stage. Every provider gets them for free; `download`'s own
 per-*package* `env-prepend:`/`env-append:` (see [`download`](../providers/download.md))
 is a different, narrower mechanism for a stage with several packages each
 needing their own directory, not replaced by this one.
@@ -573,6 +582,14 @@ entirely.
 That symmetry is deliberate: the host and container paths run the same
 stages from the same config, so "does it work without Docker?" is one flag
 away rather than a separate code path.
+
+One consequence for `depends-on:`: a setup stage's dependency on a wrapper
+stage is checked inside the re-invoked *inner* process, which always sees
+that wrapper as `--skip`ped (that's how the relocation works) — so such a
+dependency is always treated as skipped there, regardless of whether the
+wrapper actually ran on the host in the outer process. Depending on a
+wrapper stage is rarely useful in practice; depend on another setup stage
+instead when you need the cascade to reflect what actually happened.
 
 ### How the inner run knows where it is
 

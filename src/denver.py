@@ -796,6 +796,8 @@ def validate_stage_filters(config, until_stage, skip_stages):
 # picks the class (see providers.make_stage), 'scripts:' is the generic
 # --scripts <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
 # opts a stage out of the normal pipeline by default (see run_stages),
+# 'depends-on:' skips a stage whenever a stage it names is itself skipped,
+# for any reason (see _compute_static_skip_reasons/_blocked_by_dependency),
 # 'skip-on-success:'/'skip-on-failure:' skip a stage's setup() at run time
 # instead (see _stage_skip_reason), 'env:'/'env-prepend:'/'env-append:'
 # adapt the environment once this stage's own setup() is done (see
@@ -803,13 +805,14 @@ def validate_stage_filters(config, until_stage, skip_stages):
 # KEYS, so every provider gets them for free, uv/conan/zephyr/docker/custom
 # included. Order matters: this is also the fixed display order used by
 # _ordered_stage_section for --show-config (provider first -- it picks the
-# class -- then description, disabled, skip-on-success, skip-on-failure,
-# env, env-prepend, env-append, scripts), before every provider-specific key
-# (alphabetically).
+# class -- then description, disabled, depends-on, skip-on-success,
+# skip-on-failure, env, env-prepend, env-append, scripts), before every
+# provider-specific key (alphabetically).
 GENERIC_STAGE_KEYS = (
     "provider",
     "description",
     "disabled",
+    "depends-on",
     "skip-on-success",
     "skip-on-failure",
     "env",
@@ -861,6 +864,7 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     if not isinstance(disabled, bool):
         die(f"stage '{stage.stage}': 'disabled:' must be true or false, got {disabled!r}")
     section["disabled"] = disabled
+    section["depends-on"] = _validated_depends_on(raw_section.get("depends-on"), stage.stage)
     section["skip-on-success"] = _resolved_skip_scripts(ctx, stage.stage, raw_section, "skip-on-success")
     section["skip-on-failure"] = _resolved_skip_scripts(ctx, stage.stage, raw_section, "skip-on-failure")
     description = raw_section.get("description")
@@ -887,6 +891,21 @@ def _validated_stage_env_map(mapping, stage_id, key):
     if not isinstance(mapping, dict) or not all(isinstance(v, str) for v in mapping.values()):
         die(f"stage '{stage_id}': '{key}:' must be a mapping of environment variable to string value, got {mapping!r}")
     return dict(mapping)
+
+
+def _validated_depends_on(value, stage_id):
+    """One generic 'depends-on:' stage key, as a list of stage ids (``[]`` when unset).
+
+    Only shape-checked here; cross-stage validity -- every id declared, and
+    declared strictly *before* this stage in 'stages:' -- is checked once,
+    globally, right after this resolves (see _validate_depends_on, called
+    from resolve_provider_defaults).
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        die(f"stage '{stage_id}': 'depends-on:' must be a list of stage ids, got {value!r}")
+    return value
 
 
 def _resolved_skip_scripts(ctx, stage_id, raw_section, key):
@@ -916,12 +935,36 @@ def resolve_provider_defaults(config, ctx):
     """
     from denver_providers import make_stage
 
-    for stage_id in config.get("stages") or []:
+    all_stage_ids = config.get("stages") or []
+    seen = []
+    for stage_id in all_stage_ids:
         stage = make_stage(stage_id, config)
         raw_section = config.get(stage_id) or {}
         ctx.raw_sections[stage_id] = copy.deepcopy(raw_section)
         config[stage_id] = resolve_stage_section(stage, raw_section, config, ctx)
+        _validate_depends_on(stage_id, config[stage_id]["depends-on"], seen, all_stage_ids)
+        seen.append(stage_id)
     return config
+
+
+def _validate_depends_on(stage_id, depends_on, seen, all_stage_ids):
+    """Die if 'depends-on:' names an id that isn't declared, or isn't declared strictly *before* ``stage_id``.
+
+    Checked eagerly here, in 'stages:' order (``seen`` is every id already
+    walked), the same as validate_stage_filters checks --until/--skip ids --
+    a typo or a forward/self-reference fails at startup rather than
+    surfacing as a wrong skip cascade once _compute_static_skip_reasons
+    walks the list assuming every dependency's reason is already decided.
+    """
+    for dep in depends_on:
+        if dep in seen:
+            continue
+        if dep not in all_stage_ids:
+            die(f"stage '{stage_id}': 'depends-on:' names unknown stage id '{dep}' -- not declared in 'stages:'.")
+        die(
+            f"stage '{stage_id}': 'depends-on:' names '{dep}', declared at or after '{stage_id}' in 'stages:' -- "
+            "a stage may only depend on one declared earlier."
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -1847,15 +1890,28 @@ def _skip_scripts_exit(ctx, label, scripts, expected_code):
     return True
 
 
-def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1, stage_count=1):
+def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1, stage_count=1, skip_state=None):
     """Resolve defaults, then run one stage's provider.setup(), hooks and all.
 
     Shared by run_stages() (every stage) and run_named_scripts() (a wrapper
-    stage only, to relocate a setup stage's scripts into it -- see there).
-    ``stage_index``/``stage_count`` (this stage's position among the stages
-    running in *this* process -- see run_stages()) feed banner()'s '[i/n]'.
+    stage only, to relocate a setup stage's scripts into it -- see there;
+    that caller passes no ``skip_state``, so 'depends-on:' never applies to
+    it -- '--scripts' is a different, narrower mechanism than the normal
+    pipeline). ``stage_index``/``stage_count`` (this stage's position among
+    the stages running in *this* process -- see run_stages()) feed
+    banner()'s '[i/n]'.
+
+    ``skip_state``, when given, is checked *before* anything else: a
+    'depends-on:' target that this same sequential walk already found
+    skipped (statically, or dynamically via 'skip-on-success:'/
+    'skip-on-failure:' below) means this stage does nothing this run either
+    -- announced the same way as any other whole-stage skip, never entering
+    it at all (no stage_banner(), no hooks, no setup()).
     """
     from denver_providers.context import stage_banner
+
+    if skip_state is not None and _skip_for_blocked_dependency(ctx, config, provider, skip_state):
+        return
 
     ctx.stage_index = stage_index
     ctx.stage_count = stage_count
@@ -1884,9 +1940,7 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     raw_section = ctx.raw_sections.get(provider.stage)
     if raw_section is not None:
         config[provider.stage] = resolve_stage_section(provider, copy.deepcopy(raw_section), config, ctx)
-    skip_reason = _stage_skip_reason(ctx, config.get(provider.stage) or {})
-    if skip_reason:
-        info(f"{provider.name}[{provider.stage}]: {skip_reason}; skipping stage")
+    if _skip_for_dynamic_reason(ctx, config, provider, skip_state):
         return
     run_hook(ctx, config_path, f"pre-{provider.stage}")
     start = time.time()
@@ -1894,16 +1948,54 @@ def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1
     _apply_stage_env(ctx, provider.stage)
     duration = time.time() - start
     ctx.stage_timings.append((provider.stage, f"{duration:.1f}s"))
-    # "performance infos in blue" -- --verbose only (and never under -q/-qq,
-    # denver's own output); the trace file below is written regardless, this
-    # is just the printed line.
+    _log_stage_performance(ctx, provider, quiet, duration)
+    record_stage_performance(ctx, provider, start, duration)
+    run_hook(ctx, config_path, f"post-{provider.stage}")
+
+
+def _skip_for_blocked_dependency(ctx, config, provider, skip_state):
+    """True (having already announced the skip) when a 'depends-on:' target of this stage was itself skipped.
+
+    Split out of _run_stage_setup to keep that function's cognitive
+    complexity low; see its docstring for what ``skip_state`` means.
+    """
+    blocking_dep = _blocked_by_dependency(config, provider.stage, skip_state)
+    if not blocking_dep:
+        return False
+    reason = f"skipped (depends-on '{blocking_dep}')"
+    skip_state.reasons[provider.stage] = reason
+    _announce_skip(ctx, provider.stage, reason, skip_state)
+    return True
+
+
+def _skip_for_dynamic_reason(ctx, config, provider, skip_state):
+    """True (having already announced/recorded the skip) when this stage's own section skips it now.
+
+    Covers 'skip-on-success:'/'skip-on-failure:', which -- unlike a
+    'depends-on:' block (_skip_for_blocked_dependency) -- can only be
+    decided once the stage is actually reached; see _stage_skip_reason.
+    """
+    skip_reason = _stage_skip_reason(ctx, config.get(provider.stage) or {})
+    if not skip_reason:
+        return False
+    info(f"{provider.name}[{provider.stage}]: {skip_reason}; skipping stage")
+    if skip_state is not None:
+        skip_state.reasons[provider.stage] = skip_reason
+    return True
+
+
+def _log_stage_performance(ctx, provider, quiet, duration):
+    """Print the '--verbose' performance line for one stage.
+
+    "performance infos in blue" -- --verbose only (and never under -q/-qq,
+    denver's own output); the trace file (record_stage_performance) is
+    written regardless, this is just the printed line.
+    """
     if quiet == 0 and ctx.verbose:
         print(
             f"\033[94mINFO: stage '{provider.stage}' ({provider.name}) finished in {duration:.2f}s\033[39m",
             file=sys.stderr,
         )
-    record_stage_performance(ctx, provider, start, duration)
-    run_hook(ctx, config_path, f"post-{provider.stage}")
 
 
 def _apply_stage_env(ctx, stage_id):
@@ -2031,8 +2123,11 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     # runnable ones) purely to learn each skipped stage's kind (wrapper vs.
     # setup) and declared position -- make_stage() itself does no I/O.
     all_stages = _make_stages(config, all_stage_ids)
+    static_reasons = _compute_static_skip_reasons(
+        config, all_stage_ids, stage_ids, _until_cutoff(all_stage_ids, options.until_stage)
+    )
     wrappers, setups, skipped_wrappers, skipped_setups = _partition_stages(
-        all_stages, _runnable_stage_ids(config, stage_ids)
+        all_stages, _runnable_stage_ids(stage_ids, static_reasons)
     )
 
     # A wrapper (e.g. docker) is active only on the host: skip it yourself
@@ -2040,12 +2135,15 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     # excluded above by stage filtering; also inactive once already inside it.
     active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
+    # ``reasons`` starts as the static verdict (--until/--skip, 'disabled:',
+    # and 'depends-on:' cascaded from either) but is then mutated live as
+    # each run_ids stage is actually reached (see _run_stage_setup): a
+    # 'skip-on-success:'/'skip-on-failure:' skip can only be decided at that
+    # point, and a later stage's own 'depends-on:' needs to see it.
     skip_state = _StageSkipState(
         stage_index=_stage_positions(all_stages),
         total=len(all_stages),
-        stage_ids=stage_ids,
-        cutoff=_until_cutoff(all_stage_ids, options.until_stage),
-        all_stage_ids=all_stage_ids,
+        reasons=static_reasons,
         all_stages=all_stages,
     )
 
@@ -2122,17 +2220,71 @@ def _stage_ids_of(stages):
     return [s.stage for s in stages]
 
 
-def _runnable_stage_ids(config, stage_ids):
-    """Which of the filtered stage ids actually run: all of them, minus any set 'disabled: true'.
+def _runnable_stage_ids(stage_ids, static_reasons):
+    """Which of the filtered stage ids actually run: all of them, minus any with a static skip reason.
 
-    'disabled: true' (a stage's own config, already resolved -- so this
-    reflects import:/-c overrides too) drops a stage from the runnable set
-    the same way --skip does, but -- unlike --skip/--until -- never drops its
-    section from --show-config/filtered_stage_ids: it's a declarative default
-    about the pipeline, not a per-invocation exclusion, so it stays visible
-    and inspectable (and overridable via '-c <stage>.disabled=false').
+    See _compute_static_skip_reasons for what counts as static (disabled,
+    --until/--skip, and 'depends-on:' cascaded from either) -- unlike
+    --skip/--until, none of that drops a stage's section from
+    --show-config/filtered_stage_ids: it's about whether the stage's own
+    setup() runs, not whether it's part of the declared pipeline.
     """
-    return {s for s in stage_ids if not (config.get(s) or {}).get("disabled")}
+    return {s for s in stage_ids if static_reasons[s] is None}
+
+
+def _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff):
+    """Every declared stage's *static* skip reason, in 'stages:' order (``None`` if it would run).
+
+    Static = knowable before any stage's setup() runs: --until/--skip
+    filtering, 'disabled: true', and 'depends-on:' cascaded from either of
+    those (or from another stage's own cascade). Deliberately excludes
+    'skip-on-success:'/'skip-on-failure:', which can only be decided once a
+    stage is actually reached, right before its own setup() -- see
+    _stage_skip_reason and _blocked_by_dependency, which extends this same
+    cascade to that dynamic case once run_stages starts walking the
+    pipeline for real.
+
+    A single forward pass suffices: _validate_depends_on (run from
+    resolve_provider_defaults before this is ever called) already
+    guarantees every 'depends-on:' id is declared strictly earlier in
+    'stages:', so each dependency's reason is already final by the time its
+    dependent is reached.
+    """
+    reasons = {}
+    still_declared = set(stage_ids)
+    for index, stage_id in enumerate(all_stage_ids):
+        reasons[stage_id] = _static_skip_reason(config, stage_id, index, still_declared, cutoff, reasons)
+    return reasons
+
+
+def _static_skip_reason(config, stage_id, index, still_declared, cutoff, reasons):
+    """One stage's static skip reason -- see _compute_static_skip_reasons, which this is split out of.
+
+    ``reasons`` holds every earlier stage's already-decided reason, which is
+    all a 'depends-on:' cascade here ever needs to look at (see
+    _compute_static_skip_reasons's docstring for why one forward pass
+    suffices).
+    """
+    if stage_id not in still_declared:
+        return _cutoff_skip_reason(index, cutoff)
+    if (config.get(stage_id) or {}).get("disabled"):
+        return "skipped (disabled: true)"
+    return _dependency_skip_reason(config, stage_id, reasons)
+
+
+def _cutoff_skip_reason(index, cutoff):
+    """'--until' vs '--skip' wording for a stage that --skip/--until already dropped from 'stage_ids'."""
+    past_cutoff = cutoff is not None and index > cutoff
+    return "skipped by --until" if past_cutoff else "skipped by --skip"
+
+
+def _dependency_skip_reason(config, stage_id, reasons):
+    """This stage's reason cascaded from a 'depends-on:' target already decided skipped, if any."""
+    blocking_dep = next(
+        (dep for dep in (config.get(stage_id) or {}).get("depends-on") or [] if reasons.get(dep)),
+        None,
+    )
+    return f"skipped (depends-on '{blocking_dep}')" if blocking_dep else None
 
 
 def _partition_stages(all_stages, runnable):
@@ -2198,19 +2350,25 @@ def _mark_relocated(ctx, wrappers):
 
 
 class _StageSkipState:
-    """Everything ``_show_skipped`` needs to explain why a stage isn't running -- see run_stages.
+    """Everything ``_show_skipped``/``_run_stage_setup`` need to explain why a stage isn't running -- see run_stages.
 
     ``all_stages`` is every declared stage, in 'stages:' order: it is what
     lets both run paths walk the pipeline once, in order, rather than
     running the stages first and reporting the skipped ones afterwards.
+
+    ``reasons`` starts out holding only the *static* verdict
+    (_compute_static_skip_reasons) but is mutated live as the walk reaches
+    each stage: a 'skip-on-success:'/'skip-on-failure:' skip, or a
+    'depends-on:' cascade from one, is only known at that point -- see
+    _run_stage_setup/_blocked_by_dependency. It is a plain dict, shared (not
+    copied) by every stage's lookup, precisely so a later stage's own
+    'depends-on:' sees an earlier stage's just-decided runtime reason.
     """
 
-    def __init__(self, *, stage_index, total, stage_ids, cutoff, all_stage_ids, all_stages):
+    def __init__(self, *, stage_index, total, reasons, all_stages):
         self.stage_index = stage_index
         self.total = total
-        self.stage_ids = stage_ids
-        self.cutoff = cutoff
-        self.all_stage_ids = all_stage_ids
+        self.reasons = reasons
         self.all_stages = all_stages
 
 
@@ -2269,27 +2427,43 @@ class RunOptions:
 
 
 def _show_skipped(ctx, skipped, skip_state):
-    """Print a "skipped by ..." banner for each stage in ``skipped`` (disabled: true, --until, or --skip)."""
+    """Print a "skipped by ..." banner for each stage in ``skipped`` (disabled: true, --until, --skip, or depends-on)."""
+    for s in skipped:
+        _announce_skip(ctx, s.stage, skip_state.reasons[s.stage], skip_state)
+
+
+def _announce_skip(ctx, stage_id, reason, skip_state):
+    """Print one "[i/n] stage '<id>' <reason>" banner and record it in ``ctx.stage_timings``.
+
+    Shared by _show_skipped (every statically-skipped stage) and
+    _run_stage_setup (a runtime skip-on-*/depends-on skip, discovered only
+    once the pipeline walk actually reaches that stage) -- both are a whole
+    stage doing nothing this run, so both get the same one-line banner
+    rather than stage_banner()'s "entering a stage" line.
+    """
     from denver_providers.context import skip_banner
 
-    for s in skipped:
-        reason = _skip_reason(s, skip_state)
-        ctx.stage_index, ctx.stage_count = skip_state.stage_index[s.stage], skip_state.total
-        ctx.stage_timings.append((s.stage, reason))
-        skip_banner(ctx, s.stage, reason)
+    ctx.stage_index, ctx.stage_count = skip_state.stage_index[stage_id], skip_state.total
+    ctx.stage_timings.append((stage_id, reason))
+    skip_banner(ctx, stage_id, reason)
 
 
-def _skip_reason(stage, skip_state):
-    """Why ``stage`` isn't running: its own 'disabled: true', the --until cut-off, or an explicit --skip.
+def _blocked_by_dependency(config, stage_id, skip_state):
+    """The first 'depends-on:' target of ``stage_id`` already known skipped this run, or ``None``.
 
-    A stage that survived --until/--skip filtering (still in ``stage_ids``)
-    but isn't running was dropped by its own 'disabled: true'; a stage past
-    the cut-off was dropped by --until; anything else was named by --skip.
+    Static reasons (disabled/--until/--skip and their own depends-on
+    cascade) are already final in ``skip_state.reasons`` by construction --
+    see _compute_static_skip_reasons. What this adds is the dynamic case: a
+    dependency that looked runnable when that dict was built, but turned out
+    to be skip-on-success/skip-on-failure skipped once its own setup() was
+    actually reached, earlier in this same sequential walk over
+    'stages:' order (_validate_depends_on guarantees every dependency is
+    declared -- and so walked -- strictly before ``stage_id``).
     """
-    if stage.stage in skip_state.stage_ids:
-        return "skipped (disabled: true)"
-    past_cutoff = skip_state.cutoff is not None and skip_state.all_stage_ids.index(stage.stage) > skip_state.cutoff
-    return "skipped by --until" if past_cutoff else "skipped by --skip"
+    for dep in (config.get(stage_id) or {}).get("depends-on") or []:
+        if skip_state.reasons.get(dep):
+            return dep
+    return None
 
 
 def _run_stages_via_wrapper(
@@ -2351,6 +2525,7 @@ def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, 
             quiet=quiet,
             stage_index=skip_state.stage_index[stage.stage],
             stage_count=skip_state.total,
+            skip_state=skip_state,
         )
     elif stage.stage in report_ids:
         _show_skipped(ctx, [stage], skip_state)
