@@ -16,6 +16,7 @@ pre-docker = [
 provider = "docker"
 # description = null
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}

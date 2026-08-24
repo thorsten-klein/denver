@@ -1760,3 +1760,121 @@ def test_run_named_scripts_relocation_skipped_when_no_name_needs_it(tmp_path, fa
     denver.run_named_scripts(env_dir, config, cfg_path, ["setup", "login"])
     commands = run_recorder.commands()
     assert not any("WRAPPED" in c for c in commands)
+
+
+def test_depends_on_not_a_list_of_strings_dies(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "depends-on": "nope"}}
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+
+def test_depends_on_unknown_stage_id_dies(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "depends-on": ["nope"]}}
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+
+def test_depends_on_forward_reference_dies(tmp_path, fake_providers, exec_recorder):
+    # 'b' is declared after 'a', so 'a' may not depend on it.
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["a", "b"],
+        "a": {"provider": "fakesetup", "depends-on": ["b"]},
+        "b": {"provider": "fakesetup"},
+    }
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+
+def test_depends_on_self_reference_dies(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {"stages": ["a"], "a": {"provider": "fakesetup", "depends-on": ["a"]}}
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+
+def test_depends_on_cascades_through_disabled_stage(tmp_path, fake_providers, exec_recorder, capsys):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["a", "b"],
+        "a": {"provider": "fakesetup", "disabled": True},
+        "b": {"provider": "fakesetup", "depends-on": ["a"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "RAN_A" not in exec_recorder["env"]
+    assert "RAN_B" not in exec_recorder["env"]
+    err = capsys.readouterr().err
+    assert "[2/2] stage 'b' skipped (depends-on 'a')" in err
+
+
+def test_depends_on_cascades_through_skip_flag(tmp_path, fake_providers, exec_recorder, capsys):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["a", "b"],
+        "a": {"provider": "fakesetup"},
+        "b": {"provider": "fakesetup", "depends-on": ["a"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(skip_stages=["a"]))
+    err = capsys.readouterr().err
+    assert "[2/2] stage 'b' skipped (depends-on 'a')" in err
+
+
+def test_depends_on_cascades_transitively(tmp_path, fake_providers, exec_recorder, capsys):
+    # a is disabled -> b (depends-on a) is cascaded -> c (depends-on b) is cascaded too.
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["a", "b", "c"],
+        "a": {"provider": "fakesetup", "disabled": True},
+        "b": {"provider": "fakesetup", "depends-on": ["a"]},
+        "c": {"provider": "fakesetup", "depends-on": ["b"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "RAN_C" not in exec_recorder["env"]
+    err = capsys.readouterr().err
+    assert "[2/3] stage 'b' skipped (depends-on 'a')" in err
+    assert "[3/3] stage 'c' skipped (depends-on 'b')" in err
+
+
+def test_depends_on_does_not_cascade_when_dependency_runs(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["a", "b"],
+        "a": {"provider": "fakesetup"},
+        "b": {"provider": "fakesetup", "depends-on": ["a"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert exec_recorder["env"]["RAN_A"] == "1"
+    assert exec_recorder["env"]["RAN_B"] == "1"
+
+
+def test_depends_on_cascades_through_runtime_skip_on_success(tmp_path, fake_providers, exec_recorder, capsys):
+    # 'a' can only be known skipped once its own setup() is reached (its
+    # skip-on-success check runs then) -- this is the dynamic-cascade case,
+    # distinct from the static disabled/--skip/--until cases above.
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "check.sh", "#!/bin/sh\nexit 0\n")
+    config = {
+        "stages": ["a", "b"],
+        "a": {"provider": "fakesetup", "skip-on-success": ["check.sh"]},
+        "b": {"provider": "fakesetup", "depends-on": ["a"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "RAN_A" not in exec_recorder["env"]
+    assert "RAN_B" not in exec_recorder["env"]
+    err = capsys.readouterr().err
+    assert "[2/2] stage 'b' skipped (depends-on 'a')" in err
+
+
+def test_depends_on_does_not_cascade_when_force_bypasses_skip_on_success(tmp_path, fake_providers, exec_recorder):
+    env_dir, cfg_path = _env(tmp_path, {})
+    _executable_script(env_dir / "check.sh", "#!/bin/sh\nexit 0\n")
+    config = {
+        "stages": ["a", "b"],
+        "a": {"provider": "fakesetup", "skip-on-success": ["check.sh"]},
+        "b": {"provider": "fakesetup", "depends-on": ["a"]},
+    }
+    denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=denver.RunOptions(force=True))
+    assert exec_recorder["env"]["RAN_A"] == "1"
+    assert exec_recorder["env"]["RAN_B"] == "1"

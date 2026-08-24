@@ -30,6 +30,7 @@ pre-docker = [
 provider = "docker"
 # description = null
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -53,6 +54,7 @@ service = "dev"
 provider = "conan"
 # description = null
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -89,6 +91,7 @@ export-tool = "<REPO>/src/denver_providers/conan_scripts/recipes.py"
 provider = "uv"
 # description = null
 disabled = false
+depends-on = []
 skip-on-success = [
   "<REPO>/examples/zephyr-devshell-4.3.1/uv/skip-on-success.sh",
 ]
@@ -123,6 +126,7 @@ requirements = [
 provider = "zephyr"
 # description = null
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -146,6 +150,7 @@ west-yml = "<REPO>/examples/zephyr-devshell-4.3.1/west.yml"
 provider = "uv"
 # description = null
 disabled = false
+depends-on = []
 skip-on-success = [
   "<REPO>/examples/zephyr-devshell-4.3.1/uv/skip-on-success.sh",
 ]

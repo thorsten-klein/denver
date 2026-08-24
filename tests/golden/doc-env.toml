@@ -20,6 +20,7 @@ description = [
   "The Sphinx/MyST/Read-the-Docs-theme venv doc/conf.py needs, pinned in requirements.txt. Deliberately standalone rather than depending on the repo's own uv project -- the top-level project has no 'docs' dependency-group.",
 ]
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
@@ -46,6 +47,7 @@ description = [
   "Runs sphinx-build against the repo's real doc/ tree, right after 'docs-tools' activates the venv that provides it -- once with the html builder, once with the markdown one (AI/LLM-friendly mirror), the latter copied under the former's own output. Not fingerprinted -- like any custom 'cmd:', it reruns every time, which is exactly what a doc build wants.",
 ]
 disabled = false
+depends-on = []
 skip-on-success = []
 skip-on-failure = []
 env = {}
