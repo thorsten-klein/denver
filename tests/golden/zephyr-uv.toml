@@ -1,5 +1,5 @@
 version = 1.0
-denver-version = ">=1.5.1"
+denver-version = ">=1.5.2"
 command = "bash"
 stages = [
   "uv",

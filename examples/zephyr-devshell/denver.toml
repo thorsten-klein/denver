@@ -1,6 +1,6 @@
 version = 1.0
 # minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
-denver-version = ">=1.5.1"
+denver-version = ">=1.5.2"
 
 # Shared base for all zephyr-devshell-<version> environments.
 #
