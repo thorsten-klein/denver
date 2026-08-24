@@ -15,7 +15,7 @@ provider = "download"
 name = "ninja"
 url = "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"
 sha256sum = "5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"
-env-prepend = { PATH = "." }
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}:" }
 ```
 
 (`provider:`/`description:`/`disabled:`/`depends-on:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
@@ -49,19 +49,17 @@ The stage has exactly one key of its own:
 - **`unpack-cmd`** — a shell command that unpacks the archive itself,
   replacing python's own archive handling. See "Unpacking" below.
 - **`env-prepend`** / **`env-append`** — what the unpacked package
-  contributes to the environment, as `{ VAR = "value" }`. A value is a path
-  *inside* the package — `"."` is the package root, `"bin"` its `bin/`.
-  A relative value is made absolute against `unpack-dir:` before it lands in
-  the variable; an absolute one is left as written. `env-prepend:` glues it
+  contributes to the environment, as `{ VAR = "value" }`. A value is used
+  exactly as written, once `${...}`-interpolated — the same rule the
+  generic per-stage `env-prepend:`/`env-append:` keys follow (see "Generic
+  stage keys" in [Configuration](../configuration/denver-toml.md)) — plus
+  one interpolation variable these don't have: `${DENVER_UNPACK_DIR}`, this
+  package's own `unpack-dir:` (above). `env-prepend:` glues the result
   directly in front of whatever the variable already holds, `env-append:`
   directly behind it — no separator inserted, so a value that needs one
-  (almost always true for a `:`-joined variable like `PATH`) has to carry it
-  itself: a trailing `:` for `env-prepend:` (`"bin:"`), a leading `:` for
-  `env-append:` (`":share"`). This composes fine with a real subdirectory,
-  but not with a bare `"."` — pathlib collapses a lone `.` component but not
-  `".:"`, so a package whose binaries sit at its own archive root (ninja,
-  above) still glues onto `PATH` without a separator; getting that value
-  right from here is on whoever writes it.
+  (almost always true for a `:`-joined variable like `PATH`) has to carry
+  it itself: a trailing `:` for `env-prepend:` (`"${DENVER_UNPACK_DIR}/bin:"`),
+  a leading `:` for `env-append:` (`":${DENVER_UNPACK_DIR}/share"`).
 - **`description`** — free text about this package, for whoever reads the
   config. denver never acts on it; it only shows up in `--show-config`.
 
@@ -126,7 +124,7 @@ rejected.
 ├── downloads/                       # the archives -- never deleted by denver
 │   └── ninja-linux.zip
 └── download/                        # the unpacked packages
-    └── ninja/                       # <- unpack-dir:, what env-prepend: points into
+    └── ninja/                       # <- unpack-dir: (default) -- env-prepend: above points at it explicitly
         ├── ninja
         └── .denver-download         # what this tree was unpacked from
 ```
@@ -199,9 +197,9 @@ into `unpack-dir:`. Three variables name what it is working on:
 name = "toolchain"
 url = "https://example.invalid/toolchain-1.2.3.tar.gz"
 sha256sum = "..."
-# strip the archive's own top-level directory, so 'bin' below is really its bin/
+# strip the archive's own top-level directory, so the paths below are correct
 unpack-cmd = 'tar -xzf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'
-env-prepend = { PATH = "bin", LD_LIBRARY_PATH = "lib" }
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}/bin:", LD_LIBRARY_PATH = "${DENVER_UNPACK_DIR}/lib:" }
 ```
 
 ## Design notes
@@ -222,11 +220,12 @@ env-prepend = { PATH = "bin", LD_LIBRARY_PATH = "lib" }
   file corrupted on disk months later is caught the same way a bad download
   is. That costs one hash of a local file per start; `--fast` skips it
   along with everything else.
-- **`env-prepend:` before `env-append:`.** `PATH = "."` almost always wants
-  to be *prepended*: a package exists to provide a specific version of a
-  tool, and appending it would let whatever the OS happens to ship win
-  instead. `env-append:` is there for the cases where the opposite is true
-  (a fallback `MANPATH`, a low-priority `CMAKE_PREFIX_PATH`).
+- **`env-prepend:` before `env-append:`.** A package's own `PATH` entry
+  almost always wants to be *prepended*: a package exists to provide a
+  specific version of a tool, and appending it would let whatever the OS
+  happens to ship win instead. `env-append:` is there for the cases where
+  the opposite is true (a fallback `MANPATH`, a low-priority
+  `CMAKE_PREFIX_PATH`).
 - **Credentials are configured per host, once.** Per-package credentials
   would mean the same token repeated in every entry fetching from the same
   server — and repeated again in the next stage, and in the next env that

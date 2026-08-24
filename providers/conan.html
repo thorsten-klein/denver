@@ -355,8 +355,7 @@ one of its recipes pinned as <code class="docutils literal notranslate"><span cl
 the catalog is built in memory, handed straight to the export step and
 never written — so a run leaves no generated file behind. Set it when the
 pins should be reviewable/committed, or when the conanfile installed via
-<code class="docutils literal notranslate"><span class="pre">conanfile:</span></code> reads them back (see
-<a class="reference download internal" download="" href="../_downloads/ad5b7c72244a869263f500e20a9bf11f/conanfile.py"><span class="xref download myst"><code class="docutils literal notranslate"><span class="pre">../../examples/raspberry-pico/conan/conanfile.py</span></code></span></a>).
+<code class="docutils literal notranslate"><span class="pre">conanfile:</span></code> reads them back.
 Requires <code class="docutils literal notranslate"><span class="pre">dirs:</span></code> — a catalog with nothing to build it from is rejected.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">export-tool</span></code></strong> — optional; overrides the env-wide recipes-exporter for
 this entry only.</p></li>
@@ -412,11 +411,9 @@ generates while exporting recipes (<code class="docutils literal notranslate"><s
 <li><p><strong>When a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage is enough.</strong> For a <em>single</em> prebuilt archive with
 no dependencies, <code class="docutils literal notranslate"><span class="pre">curl</span></code> + <code class="docutils literal notranslate"><span class="pre">sha256sum</span> <span class="pre">-c</span></code> + <code class="docutils literal notranslate"><span class="pre">tar</span></code> in a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage is an
 honest twenty lines and needs no conan on <code class="docutils literal notranslate"><span class="pre">PATH</span></code> — see “Bringing a
-prebuilt binary in by hand” in <a class="reference internal" href="custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom.md</span></code></span></a>, which
-<a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env"><code class="docutils literal notranslate"><span class="pre">examples/firmware-env</span></code></a> deliberately shows right
-next to a conan stage doing the same job. What conan adds is the per-tool
-cost: a url and a checksum instead of a script, plus a cache shared across
-envs and checkouts, and dependencies between tools.</p></li>
+prebuilt binary in by hand” in <a class="reference internal" href="custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom.md</span></code></span></a>. What conan adds is
+the per-tool cost: a url and a checksum instead of a script, plus a cache
+shared across envs and checkouts, and dependencies between tools.</p></li>
 <li><p><strong>Monorepo pattern.</strong> Recipes commonly live in the same repository as the
 project using them, not a separate recipes repo.
 A <code class="docutils literal notranslate"><span class="pre">recipes:</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">dirs:</span></code> just points at wherever they
@@ -426,9 +423,7 @@ relative to the <code class="docutils literal notranslate"><span class="pre">den
 <code class="docutils literal notranslate"><span class="pre">recipes:</span></code> are independent, a shared base env can ship <code class="docutils literal notranslate"><span class="pre">recipes:</span></code> with no
 <code class="docutils literal notranslate"><span class="pre">conanfile:</span></code> of its own; each derived env that wants to actually install
 something sets its own <code class="docutils literal notranslate"><span class="pre">conanfile:</span></code>, and either inherits the base’s
-<code class="docutils literal notranslate"><span class="pre">recipes:</span></code> or adds more of its own (see
-<a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell"><code class="docutils literal notranslate"><span class="pre">examples/zephyr-devshell</span></code></a> and the
-envs that import it).</p></li>
+<code class="docutils literal notranslate"><span class="pre">recipes:</span></code> or adds more of its own.</p></li>
 <li><p><strong>Works with or without remotes.</strong> An env with no <code class="docutils literal notranslate"><span class="pre">remotes:</span></code> and no
 <code class="docutils literal notranslate"><span class="pre">config:</span></code> at all is a fully offline/local-cache setup — nothing gets
 reconciled, conan just uses whatever’s already in its local cache/home.

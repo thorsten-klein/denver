@@ -318,8 +318,8 @@ so an example that drifted out of sync with the code fails the build.</p>
 <td><p>A virtualenv and nothing else — proof that no container or toolchain is required</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/raspberry-pico"><code class="docutils literal notranslate"><span class="pre">raspberry-pico</span></code></a></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">uv</span></code> → <code class="docutils literal notranslate"><span class="pre">conan</span></code></p></td>
-<td><p>A cross-compilation toolchain <strong>without Docker</strong>. Why stage order matters</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">custom</span></code> → <code class="docutils literal notranslate"><span class="pre">download</span></code> → <code class="docutils literal notranslate"><span class="pre">git</span></code> → <code class="docutils literal notranslate"><span class="pre">download</span></code></p></td>
+<td><p>A cross-compilation toolchain <strong>without Docker, and without Conan</strong>. <code class="docutils literal notranslate"><span class="pre">git</span></code>/<code class="docutils literal notranslate"><span class="pre">download</span></code> instead of hand-vendored archives; <code class="docutils literal notranslate"><span class="pre">unpack-cmd:</span></code> that builds, not just unpacks</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-docker"><code class="docutils literal notranslate"><span class="pre">zephyr-docker</span></code></a></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">docker</span></code></p></td>

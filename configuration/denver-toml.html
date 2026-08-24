@@ -480,8 +480,9 @@ build step – and are skipped outright for a stage <code class="docutils litera
 <code class="docutils literal notranslate"><span class="pre">skip-on-success:</span></code>/<code class="docutils literal notranslate"><span class="pre">skip-on-failure:</span></code>/<code class="docutils literal notranslate"><span class="pre">depends-on:</span></code> skips this run, the same
 as everything else about that stage. Every provider gets them for free; <code class="docutils literal notranslate"><span class="pre">download</span></code>’s own
 per-<em>package</em> <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> (see <a class="reference internal" href="../providers/download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">download</span></code></span></a>)
-is a different, narrower mechanism for a stage with several packages each
-needing their own directory, not replaced by this one.</p>
+is the same glue-with-no-separator mechanism, just scoped to one package of
+a stage that has several, each needing its own directory named — not
+replaced by this stage-wide one.</p>
 <p>Every other key in a stage’s section must be one the stage’s own provider
 recognises — see that provider’s page under <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/doc/providers"><code class="docutils literal notranslate"><span class="pre">providers/</span></code></a>. An
 unrecognised key is an error, not silently ignored.</p>

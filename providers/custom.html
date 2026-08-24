@@ -337,8 +337,7 @@ command.</p>
 <section id="worked-example-bringing-a-prebuilt-binary-in-by-hand">
 <h2>Worked example: bringing a prebuilt binary in by hand<a class="headerlink" href="#worked-example-bringing-a-prebuilt-binary-in-by-hand" title="Link to this heading"></a></h2>
 <p>The common shape for “download a release tarball and put it on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>” uses
-both keys, because installing and activating are two different jobs
-(<a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env"><code class="docutils literal notranslate"><span class="pre">examples/firmware-env</span></code></a>’s <code class="docutils literal notranslate"><span class="pre">nvim-setup</span></code> stage):</p>
+both keys, because installing and activating are two different jobs:</p>
 <div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[nvim-setup]</span>
 <span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"custom"</span>
 <span class="n">cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"bash ${DENVER_ENV_DIR}/nvim/install.sh"</span><span class="w">  </span><span class="c1"># download, checksum, unpack</span>

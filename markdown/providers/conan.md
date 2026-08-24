@@ -64,8 +64,7 @@ specific one. A stage with no conan available fails with `conan provider needs '
     the catalog is built in memory, handed straight to the export step and
     never written — so a run leaves no generated file behind. Set it when the
     pins should be reviewable/committed, or when the conanfile installed via
-    `conanfile:` reads them back (see
-    [`../../examples/raspberry-pico/conan/conanfile.py`](../_downloads/ad5b7c72244a869263f500e20a9bf11f/conanfile.py)).
+    `conanfile:` reads them back.
     Requires `dirs:` — a catalog with nothing to build it from is rejected.
   - **`export-tool`** — optional; overrides the env-wide recipes-exporter for
     this entry only.
@@ -118,11 +117,9 @@ specific one. A stage with no conan available fails with `conan provider needs '
 - **When a `custom` stage is enough.** For a *single* prebuilt archive with
   no dependencies, `curl` + `sha256sum -c` + `tar` in a `custom` stage is an
   honest twenty lines and needs no conan on `PATH` — see “Bringing a
-  prebuilt binary in by hand” in [`custom.md`](custom.md), which
-  [`examples/firmware-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env) deliberately shows right
-  next to a conan stage doing the same job. What conan adds is the per-tool
-  cost: a url and a checksum instead of a script, plus a cache shared across
-  envs and checkouts, and dependencies between tools.
+  prebuilt binary in by hand” in [`custom.md`](custom.md). What conan adds is
+  the per-tool cost: a url and a checksum instead of a script, plus a cache
+  shared across envs and checkouts, and dependencies between tools.
 - **Monorepo pattern.** Recipes commonly live in the same repository as the
   project using them, not a separate recipes repo.
   A `recipes:` entry’s `dirs:` just points at wherever they
@@ -132,9 +129,7 @@ specific one. A stage with no conan available fails with `conan provider needs '
   `recipes:` are independent, a shared base env can ship `recipes:` with no
   `conanfile:` of its own; each derived env that wants to actually install
   something sets its own `conanfile:`, and either inherits the base’s
-  `recipes:` or adds more of its own (see
-  [`examples/zephyr-devshell`](https://github.com/thorsten-klein/denver/tree/develop/examples/zephyr-devshell) and the
-  envs that import it).
+  `recipes:` or adds more of its own.
 - **Works with or without remotes.** An env with no `remotes:` and no
   `config:` at all is a fully offline/local-cache setup — nothing gets
   reconciled, conan just uses whatever’s already in its local cache/home.

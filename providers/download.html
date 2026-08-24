@@ -305,7 +305,7 @@ project writing that logic again.</p>
 <span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"ninja"</span>
 <span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"</span>
 <span class="n">sha256sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6"</span>
-<span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"."</span><span class="w"> </span><span class="p">}</span>
+<span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"${DENVER_UNPACK_DIR}:"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
 <p>(<code class="docutils literal notranslate"><span class="pre">provider:</span></code>/<code class="docutils literal notranslate"><span class="pre">description:</span></code>/<code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/<code class="docutils literal notranslate"><span class="pre">depends-on:</span></code>/<code class="docutils literal notranslate"><span class="pre">scripts:</span></code>/<code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> are generic keys every stage has —
@@ -339,19 +339,17 @@ other denver path — against the env dir, then imported base envs.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">unpack-cmd</span></code></strong> — a shell command that unpacks the archive itself,
 replacing python’s own archive handling. See “Unpacking” below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">env-append</span></code></strong> — what the unpacked package
-contributes to the environment, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">VAR</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code>. A value is a path
-<em>inside</em> the package — <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> is the package root, <code class="docutils literal notranslate"><span class="pre">&quot;bin&quot;</span></code> its <code class="docutils literal notranslate"><span class="pre">bin/</span></code>.
-A relative value is made absolute against <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code> before it lands in
-the variable; an absolute one is left as written. <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> glues it
+contributes to the environment, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">VAR</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code>. A value is used
+exactly as written, once <code class="docutils literal notranslate"><span class="pre">${...}</span></code>-interpolated — the same rule the
+generic per-stage <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> keys follow (see “Generic
+stage keys” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>) — plus
+one interpolation variable these don’t have: <code class="docutils literal notranslate"><span class="pre">${DENVER_UNPACK_DIR}</span></code>, this
+package’s own <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code> (above). <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> glues the result
 directly in front of whatever the variable already holds, <code class="docutils literal notranslate"><span class="pre">env-append:</span></code>
 directly behind it — no separator inserted, so a value that needs one
-(almost always true for a <code class="docutils literal notranslate"><span class="pre">:</span></code>-joined variable like <code class="docutils literal notranslate"><span class="pre">PATH</span></code>) has to carry it
-itself: a trailing <code class="docutils literal notranslate"><span class="pre">:</span></code> for <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;bin:&quot;</span></code>), a leading <code class="docutils literal notranslate"><span class="pre">:</span></code> for
-<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;:share&quot;</span></code>). This composes fine with a real subdirectory,
-but not with a bare <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code> — pathlib collapses a lone <code class="docutils literal notranslate"><span class="pre">.</span></code> component but not
-<code class="docutils literal notranslate"><span class="pre">&quot;.:&quot;</span></code>, so a package whose binaries sit at its own archive root (ninja,
-above) still glues onto <code class="docutils literal notranslate"><span class="pre">PATH</span></code> without a separator; getting that value
-right from here is on whoever writes it.</p></li>
+(almost always true for a <code class="docutils literal notranslate"><span class="pre">:</span></code>-joined variable like <code class="docutils literal notranslate"><span class="pre">PATH</span></code>) has to carry
+it itself: a trailing <code class="docutils literal notranslate"><span class="pre">:</span></code> for <code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;${DENVER_UNPACK_DIR}/bin:&quot;</span></code>),
+a leading <code class="docutils literal notranslate"><span class="pre">:</span></code> for <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> (<code class="docutils literal notranslate"><span class="pre">&quot;:${DENVER_UNPACK_DIR}/share&quot;</span></code>).</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">description</span></code></strong> — free text about this package, for whoever reads the
 config. denver never acts on it; it only shows up in <code class="docutils literal notranslate"><span class="pre">--show-config</span></code>.</p></li>
 </ul>
@@ -412,7 +410,7 @@ rejected.</p>
 ├── downloads/                       # the archives -- never deleted by denver
 │   └── ninja-linux.zip
 └── download/                        # the unpacked packages
-    └── ninja/                       # &lt;- unpack-dir:, what env-prepend: points into
+    └── ninja/                       # &lt;- unpack-dir: (default) -- env-prepend: above points at it explicitly
         ├── ninja
         └── .denver-download         # what this tree was unpacked from
 </pre></div>
@@ -494,9 +492,9 @@ into <code class="docutils literal notranslate"><span class="pre">unpack-dir:</s
 <span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"toolchain"</span>
 <span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://example.invalid/toolchain-1.2.3.tar.gz"</span>
 <span class="n">sha256sum</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"..."</span>
-<span class="c1"># strip the archive's own top-level directory, so 'bin' below is really its bin/</span>
+<span class="c1"># strip the archive's own top-level directory, so the paths below are correct</span>
 <span class="n">unpack-cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s1">'tar -xzf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'</span>
-<span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"bin"</span><span class="p">,</span><span class="w"> </span><span class="n">LD_LIBRARY_PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"lib"</span><span class="w"> </span><span class="p">}</span>
+<span class="n">env-prepend</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"${DENVER_UNPACK_DIR}/bin:"</span><span class="p">,</span><span class="w"> </span><span class="n">LD_LIBRARY_PATH</span><span class="w"> </span><span class="p">=</span><span class="w"> </span><span class="s2">"${DENVER_UNPACK_DIR}/lib:"</span><span class="w"> </span><span class="p">}</span>
 </pre></div>
 </div>
 </section>
@@ -519,11 +517,12 @@ archive is verified on every run, not only right after it is fetched — a
 file corrupted on disk months later is caught the same way a bad download
 is. That costs one hash of a local file per start; <code class="docutils literal notranslate"><span class="pre">--fast</span></code> skips it
 along with everything else.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> before <code class="docutils literal notranslate"><span class="pre">env-append:</span></code>.</strong> <code class="docutils literal notranslate"><span class="pre">PATH</span> <span class="pre">=</span> <span class="pre">&quot;.&quot;</span></code> almost always wants
-to be <em>prepended</em>: a package exists to provide a specific version of a
-tool, and appending it would let whatever the OS happens to ship win
-instead. <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> is there for the cases where the opposite is true
-(a fallback <code class="docutils literal notranslate"><span class="pre">MANPATH</span></code>, a low-priority <code class="docutils literal notranslate"><span class="pre">CMAKE_PREFIX_PATH</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code> before <code class="docutils literal notranslate"><span class="pre">env-append:</span></code>.</strong> A package’s own <code class="docutils literal notranslate"><span class="pre">PATH</span></code> entry
+almost always wants to be <em>prepended</em>: a package exists to provide a
+specific version of a tool, and appending it would let whatever the OS
+happens to ship win instead. <code class="docutils literal notranslate"><span class="pre">env-append:</span></code> is there for the cases where
+the opposite is true (a fallback <code class="docutils literal notranslate"><span class="pre">MANPATH</span></code>, a low-priority
+<code class="docutils literal notranslate"><span class="pre">CMAKE_PREFIX_PATH</span></code>).</p></li>
 <li><p><strong>Credentials are configured per host, once.</strong> Per-package credentials
 would mean the same token repeated in every entry fetching from the same
 server — and repeated again in the next stage, and in the next env that
