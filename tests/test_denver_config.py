@@ -366,8 +366,8 @@ def test_apply_config_override_creates_missing_parent_dicts():
 
 
 def test_apply_config_override_overwrites_existing_value():
-    config = denver.apply_config_override({"uv": {"python": "3.9", "reinstall": True}}, "uv.python=3.12.3")
-    assert config == {"uv": {"python": "3.12.3", "reinstall": True}}
+    config = denver.apply_config_override({"uv": {"python": "3.9", "amend": True}}, "uv.python=3.12.3")
+    assert config == {"uv": {"python": "3.12.3", "amend": True}}
 
 
 def test_apply_config_override_parses_json_types():

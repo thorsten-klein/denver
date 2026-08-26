@@ -22,6 +22,7 @@ env = {}
 env-prepend = {}
 env-append = {}
 # scripts = null
+amend = true
 exe = "uv"
 # freeze-to = null
 # install-args = null
@@ -30,7 +31,6 @@ no-index = false
 # overrides = null
 # patches-apply = null
 # python = null
-reinstall = false
 requirements = [
   "requirements.txt",
 ]

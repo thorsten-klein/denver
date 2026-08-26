@@ -70,6 +70,7 @@ env = {}
 env-prepend = {}
 env-append = {}
 # scripts = null
+amend = true
 exe = "uv"
 # freeze-to = null
 # install-args = null
@@ -78,7 +79,6 @@ no-index = false
 # overrides = null
 # patches-apply = null
 python = "3.12.3"
-reinstall = false
 requirements = [
   "requirements.txt",
 ]

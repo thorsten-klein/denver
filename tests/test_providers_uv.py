@@ -498,14 +498,14 @@ def test_install_args_command_entry_output_change_recreates_venv(make_context, r
     assert not (ctx.venv_dir / "marker").exists()  # old venv was removed
 
 
-# ---- reinstall ---------------------------------------------------------------#
-def test_reinstall_default_uses_only_current_run_args(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"]}}
+# ---- amend ---------------------------------------------------------------#
+def test_amend_false_uses_only_current_run_args(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "amend": False}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
 
-    config2 = {"uv": {"requirements": ["r2.txt"]}}
+    config2 = {"uv": {"requirements": ["r2.txt"], "amend": False}}
     (ctx.env_dir / "r2.txt").write_text("packaging\n")
     run_recorder.calls.clear()
     run_uv(config2, ctx)
@@ -515,15 +515,15 @@ def test_reinstall_default_uses_only_current_run_args(make_context, run_recorder
     assert str((ctx.env_dir / "r2.txt").resolve()) in install_cmd
 
 
-def test_reinstall_true_keeps_prior_run_args(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "reinstall": True}}
+def test_amend_default_keeps_prior_run_args(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
 
     # a later run with a *different* set of requirements (as if a dynamic
     # '$(...)' source dropped this one) must still install the old one too
-    config2 = {"uv": {"requirements": ["r2.txt"], "reinstall": True}}
+    config2 = {"uv": {"requirements": ["r2.txt"]}}
     (ctx.env_dir / "r2.txt").write_text("packaging\n")
     run_recorder.calls.clear()
     run_uv(config2, ctx)
@@ -533,15 +533,33 @@ def test_reinstall_true_keeps_prior_run_args(make_context, run_recorder, which):
     assert str((ctx.env_dir / "r2.txt").resolve()) in install_cmd
 
 
-def test_reinstall_persists_across_venv_recreation(make_context, run_recorder, which):
-    # the accumulated arg history lives outside the venv dir, so it survives
-    # a checksum-triggered recreate instead of being wiped along with it
-    config = {"uv": {"requirements": ["r.txt"], "reinstall": True}}
+def test_amend_default_does_not_join_across_different_venv(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"], "venv": "venv-a"}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
 
-    config2 = {"uv": {"requirements": ["r2.txt"], "reinstall": True}}
+    # a later run retargeted at a *different* venv must not inherit the
+    # first venv's accumulated args
+    config2 = {"uv": {"requirements": ["r2.txt"], "venv": "venv-b"}}
+    (ctx.env_dir / "r2.txt").write_text("packaging\n")
+    run_recorder.calls.clear()
+    run_uv(config2, ctx)
+
+    install_cmd = next(c for c in run_recorder.commands() if "uv pip install" in c)
+    assert str((ctx.env_dir / "r.txt").resolve()) not in install_cmd
+    assert str((ctx.env_dir / "r2.txt").resolve()) in install_cmd
+
+
+def test_amend_persists_across_venv_recreation(make_context, run_recorder, which):
+    # the accumulated arg history lives outside the venv dir, so it survives
+    # a checksum-triggered recreate instead of being wiped along with it
+    config = {"uv": {"requirements": ["r.txt"]}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "r.txt").write_text("packaging\n")
+    run_uv(config, ctx)
+
+    config2 = {"uv": {"requirements": ["r2.txt"]}}
     (ctx.env_dir / "r2.txt").write_text("changed\n")  # forces a checksum change -> recreate
     run_recorder.calls.clear()
     run_uv(config2, ctx)
@@ -551,8 +569,8 @@ def test_reinstall_persists_across_venv_recreation(make_context, run_recorder, w
     assert str((ctx.env_dir / "r2.txt").resolve()) in install_cmd
 
 
-def test_reinstall_deduplicates_unchanged_requirement(make_context, run_recorder, which):
-    config = {"uv": {"requirements": ["r.txt"], "reinstall": True}}
+def test_amend_deduplicates_unchanged_requirement(make_context, run_recorder, which):
+    config = {"uv": {"requirements": ["r.txt"]}}
     ctx = make_context(config=config)
     (ctx.env_dir / "r.txt").write_text("packaging\n")
     run_uv(config, ctx)
