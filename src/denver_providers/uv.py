@@ -96,7 +96,7 @@ class UvProvider(Provider):
         "overrides",
         "venv",
         "freeze-to",
-        "reinstall",
+        "amend",
     )
 
     @staticmethod
@@ -124,7 +124,7 @@ class UvProvider(Provider):
         # (see there), same as the docker provider's 'exe:' default.
         resolved["exe"] = cfg.get("exe") or "uv"
         resolved["no-index"] = cls._resolved_no_index(cfg)
-        resolved["reinstall"] = cfg.get("reinstall", False)
+        resolved["amend"] = cfg.get("amend", True)
         resolved["lockfile"] = cls._resolved_lock_path(ctx, "lockfile", cfg.get("lockfile"))
         resolved["patches-apply"] = cls._resolved_patches_apply(ctx, cfg)
 
@@ -216,15 +216,15 @@ class UvProvider(Provider):
         banner(ctx, self.stage, "activate")
         self._activate(ctx, venv_dir)
 
-    def _install_everything(self, ctx, uv, cfg, inputs):
+    def _install_everything(self, ctx, uv, cfg, venv_dir, inputs):
         """Run the `uv sync`/`uv pip install` commands this stage's own inputs call for."""
         self._sync(ctx, uv, cfg, inputs["lockfile"])
         if inputs["requirements"] or inputs["install_args"]:
-            self._install(ctx, uv, cfg, inputs["requirements"], inputs["overrides"], inputs["install_args"])
+            self._install(ctx, uv, cfg, venv_dir, inputs["requirements"], inputs["overrides"], inputs["install_args"])
 
     def _install_and_patch(self, ctx, uv, cfg, venv_dir, inputs):
         """Install requirements/lockfile, apply venv patches, record checksums."""
-        self._install_everything(ctx, uv, cfg, inputs)
+        self._install_everything(ctx, uv, cfg, venv_dir, inputs)
         self._apply_patches(ctx, cfg)
         self._store_checksums(ctx, venv_dir, inputs["checksum_files"], inputs["command_outputs"])
         self._freeze(ctx, cfg, uv)
@@ -491,12 +491,12 @@ class UvProvider(Provider):
         args = ["--project", str(project), "--active", "--frozen", "--inexact"]
         ctx.run([uv, "sync", *args, *self._index_args(ctx, cfg)])
 
-    def _install(self, ctx, uv, cfg, requirements, overrides, install_args):
+    def _install(self, ctx, uv, cfg, venv_dir, requirements, overrides, install_args):
         """Run `uv pip install` with every -r/--override/--no-index/install-args flag the config implies.
 
-        Under 'reinstall:' (default off), the args actually run are every
-        arg any *previous* run of this stage ever resolved, with only this
-        run's new ones appended -- see _merge_install_args.
+        Under 'amend:' (default on), the args actually run are every
+        arg any *previous* run of this stage ever resolved *against this same
+        venv*, with only this run's new ones appended -- see _merge_install_args.
         """
         # build this run's own uv pip install args, in the order uv expects:
         # overrides, then --no-index, then -r's, then every 'install-args:'
@@ -509,18 +509,21 @@ class UvProvider(Provider):
             args += ["-r", str(req)]
         args += install_args
 
-        args = self._merge_install_args(ctx, args, reinstall=cfg["reinstall"])
+        args = self._merge_install_args(ctx, venv_dir, args, amend=cfg["amend"])
 
         ctx.run([uv, "pip", "install", *args])
 
-    def _install_args_path(self, ctx):
-        """Where this stage's accumulated install args (see 'reinstall:') are stored.
+    def _install_args_path(self, ctx, venv_dir):
+        """Where this stage's accumulated install args (see 'amend:') are stored, for ``venv_dir``.
 
         Inside ctx.logs_dir, not the venv itself, so it survives a
         checksum-triggered venv recreation (_ensure_venv) instead of being
-        wiped along with it.
+        wiped along with it. Named after ``venv_dir``'s own leaf too (not
+        just the stage id), so pointing this stage at a *different* venv
+        (a changed 'venv:') starts that venv off with no prior args to
+        amend, rather than joining onto a previous venv's history.
         """
-        return ctx.logs_dir / f"{self.stage}-install-args.json"
+        return ctx.logs_dir / f"{self.stage}-{Path(venv_dir).name}-install-args.json"
 
     def _group_args(self, args):
         """Group a flat uv-pip-install argv into atomic (flag, value) or (token,) units, preserving order.
@@ -541,21 +544,23 @@ class UvProvider(Provider):
                 i += 1
         return units
 
-    def _merge_install_args(self, ctx, args, *, reinstall):
-        """Union this run's args onto every arg a previous run of this stage ever resolved (if 'reinstall:').
+    def _merge_install_args(self, ctx, venv_dir, args, *, amend):
+        """Union this run's args onto every arg a previous run of this stage ever resolved against ``venv_dir`` (if 'amend:').
 
         Comparing/deduplicating whole (flag, value) units (see _group_args)
         -- not raw tokens -- so e.g. two different '--override' entries both
         survive instead of the second losing its '--override' prefix. Stored
         units come first (unchanged order), only genuinely new units are
-        appended; the merged (or, with 'reinstall:' off, just this run's own)
-        units are written back so the *next* run sees them too.
+        appended; the merged (or, with 'amend:' off explicitly, just this run's own)
+        units are written back so the *next* run sees them too. Scoped to
+        ``venv_dir`` (see _install_args_path), so a stage retargeted at a
+        different venv never joins onto the previous venv's args.
         """
         fresh_units = self._group_args(args)
-        path = self._install_args_path(ctx)
+        path = self._install_args_path(ctx, venv_dir)
 
         merged_units = fresh_units
-        if reinstall:
+        if amend:
             merged_units = self._appended(self._stored_install_units(path), fresh_units)
 
         ctx.mkdir(path.parent)

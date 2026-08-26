@@ -100,6 +100,7 @@ env = {}
 env-prepend = {}
 env-append = {}
 # scripts = null
+amend = true
 exe = "uv"
 # freeze-to = null
 # install-args = null
@@ -115,7 +116,6 @@ patches-apply = [
   "<REPO>/examples/zephyr-devshell-4.3.1/uv/venv-patcher/patches.yml",
 ]
 python = "3.12.3"
-reinstall = false
 requirements = [
   "conan/recipes/python-cache/denver/requirements.txt",
   "conan/recipes/python-cache/denver/requirements.final.txt",
@@ -159,6 +159,7 @@ env = {}
 env-prepend = {}
 env-append = {}
 # scripts = null
+amend = true
 exe = "uv"
 freeze-to = "conan/recipes/python-cache/denver/requirements.final.txt"
 install-args = [
@@ -176,7 +177,6 @@ patches-apply = [
   "<REPO>/examples/zephyr-devshell-4.3.1/uv/venv-patcher/patches.yml",
 ]
 # python = null
-reinstall = false
 # requirements = null
 # venv = null
 
