@@ -84,7 +84,7 @@ a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
 - **`freeze-to`** — a path; after a real install, `uv pip freeze`'s full
   output is written there. Useful as a lockfile a later run (or a different
   `uv` stage) can read back via `requirements:`.
-- **`reinstall`** (default `false`) — see "Reproducibility" in
+- **`amend`** (default `true`) — see "Reproducibility" in
   [`../concepts/philosophy.md`](../concepts/philosophy.md) for the full trade-off. When `true`, every `uv pip
   install` invocation reuses every `-r`/`--override`/`--no-index`/literal
   arg any *previous* run of this stage ever resolved, appending only what's
@@ -92,10 +92,12 @@ a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
   dynamic `install-args:` command) never causes `uv` to reconsider a
   package only that source pulled in. The accumulated arg list is kept
   outside the venv itself
-  (`$DENVER_ENV_WORKDIR/.logs/<stage>-install-args.json`), so it
+  (`$DENVER_ENV_WORKDIR/.logs/<stage>-<venv leaf>-install-args.json`), so it
   survives a checksum-triggered venv recreation; delete that file to reset
-  it. Off by default because it makes the resulting venv depend on this
-  machine's run history, not just the current `denver.toml`.
+  it. Scoped to the stage's own venv (see `venv:` above) -- pointing the
+  stage at a different venv starts that venv off with no prior args to
+  amend onto. On by default; set `false` for a venv that must depend only on
+  the current `denver.toml`, not this machine's run history.
 
 `patches-apply` is never guessed from the env's directory layout (see
 "Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) —
