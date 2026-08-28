@@ -1,0 +1,36 @@
+---
+# West manifest for this example env -- an exact copy of
+# ../zephyr-devshell-4.3.1/west.yml, so both envs build from the same pinned
+# workspace and are directly comparable. See that file's comments for why
+# the allowlist and the 'zephyr-rtos' path rename look the way they do; this
+# POC's own devshell.sh clones it via 'west init -l . && west update' instead
+# of denver's 'zephyr' stage.
+manifest:
+  remotes:
+  - name: zephyrproject-rtos
+    url-base: https://github.com/zephyrproject-rtos
+
+  projects:
+  - name: zephyr
+    remote: zephyrproject-rtos
+    revision: v4.3.1
+    path: zephyr-rtos # rename path to avoid collision with zephyr/modules.yml
+    import:
+      name-allowlist:
+      - cmsis
+      - cmsis-dsp
+      - cmsis-nn
+      - cmsis_6
+      - hal_nordic
+      - hal_nxp
+      - hostap
+      - littlefs
+      - mbedtls
+      - mcuboot
+      - nanopb
+      - net-tools
+      - openthread
+      - picolibc
+      - segger
+      - trusted-firmware-m
+      - zcbor

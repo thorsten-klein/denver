@@ -1,0 +1,14 @@
+# direnv's local cache -- not the .envrc itself
+/.direnv/
+
+# west workspace state and clones, created by devshell.sh's bootstrap
+# ('west init -l .' + 'west update') -- same content ../zephyr-devshell-4.3.1
+# gets from denver's 'zephyr' stage, just not denver-managed here
+/.west/
+/zephyr-rtos/
+/modules/
+/bootloader/
+/tools/
+
+# west build output
+/build/

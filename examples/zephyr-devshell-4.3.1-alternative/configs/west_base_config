@@ -1,0 +1,10 @@
+# System-level west config, layered under the per-workspace .west/config via
+# flake.nix's WEST_CONFIG_SYSTEM -- same mechanism as
+# ../zephyr-devshell/configs/west_base_config, trimmed to what this POC needs.
+
+[build]
+# so 'west build zephyr-rtos/samples/hello_world' works with no '-b ...':
+# native_sim is the only board this env's flake ships a compiler for --
+# see flake.nix for how to add a real cross-compiler target instead.
+board = native_sim/native/64
+pristine = auto
