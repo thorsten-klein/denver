@@ -6,17 +6,23 @@
   '';
 
   inputs = {
-    # unstable, not a numbered release: zephyr-nix's own flake.nix tracks
-    # unstable too, and 'zephyr-nix.inputs.nixpkgs.follows' below means our
-    # choice is what it actually builds pythonEnv against. A numbered
-    # release lags Zephyr's own scripts/requirements.txt pins enough to
-    # trip its version-constraint check on nearly every package (verified:
-    # nixos-24.11 fails 5 of them, nixos-25.11 still fails 2) -- unstable
-    # fails only one, 'ruff' (its exact '==0.14.2' pin has no realistic
-    # chance of matching any nixpkgs snapshot by luck; see flake.lock for
-    # what commit this actually resolved to, which is what makes this
-    # reproducible despite tracking a rolling branch).
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # An explicit unstable revision, not a numbered release and not a bare
+    # branch name: zephyr-nix's own flake.nix tracks unstable too, and
+    # 'zephyr-nix.inputs.nixpkgs.follows' below means our choice is what it
+    # actually builds pythonEnv against. A numbered release lags Zephyr's
+    # own scripts/requirements.txt pins enough to trip its version-constraint
+    # check on nearly every package (verified: nixos-24.11 fails 5 of them,
+    # nixos-25.11 still fails 2). Plain 'nixos-unstable' does better -- only
+    # 'ruff' fails, whose exact '==0.14.2' pin has no realistic chance of
+    # matching any nixpkgs snapshot by luck -- but as of 2026-05-09 it also
+    # makes zephyr-nix's own use of the now-deprecated 'stdenv.isLinux'
+    # print an evaluation warning on every fresh eval, which is upstream
+    # code this flake cannot patch. This exact revision (2026-04-14) is the
+    # narrow window that has both: new enough that only 'ruff' fails its
+    # constraint, old enough to predate that deprecation entirely. Moving
+    # this pin forward past 2026-05-09 brings that warning back; there is no
+    # revision where neither warning fires.
+    nixpkgs.url = "github:NixOS/nixpkgs/02d1c9ad58d56732a5ae2412981aca62ac4777fa";
 
     # Pinned to the exact tag ../zephyr-devshell-4.3.1/west.yml builds
     # against. zephyr-nix reads *this* checkout's scripts/requirements.txt to
@@ -43,6 +49,17 @@
         pkgs = nixpkgs.legacyPackages.${system};
         zephyr = zephyr-nix.packages.${system};
 
+        # 'zephyr.pythonEnv' from a plain 'callPackage' supports the usual
+        # '.override', so this reaches python.nix's own 'extraPackages'
+        # argument -- adding 'pip' next to the 'west' it already adds. Not
+        # for us: 'west packages pip --install' (devshell.sh, after 'west
+        # update') runs as 'sys.executable -m pip install ...', i.e. pip has
+        # to be importable from *this exact* interpreter, not just present
+        # somewhere on PATH.
+        pythonEnv = zephyr.pythonEnv.override (old: {
+          extraPackages = ps: (old.extraPackages or (_: [ ])) ps ++ [ ps.pip ];
+        });
+
         # 'sdk-0_17', not the plain 'sdk' (zephyr-nix's latest, currently a
         # 1.x SDK): zephyr-rtos/SDK_VERSION at the v4.3.1 tag pins 0.17.4 --
         # the same version ../zephyr-devshell-4.3.1/conan/catalog.yml pins --
@@ -52,6 +69,19 @@
         # nrf52840dk and frdm_rw612 (Cortex-M33) build with it. Add more
         # targets here for other architectures (riscv64-zephyr-elf, xtensa-*, ...).
         zephyrSdk = zephyr.sdk-0_17.override { targets = [ "arm-zephyr-eabi" ]; };
+
+        # nix/jlink.nix, nix/systemview.nix -- not flake inputs, because
+        # neither is a nix package anywhere: no public nix packaging of
+        # either SEGGER tool exists, so both are hand-written, fetching them
+        # the same license-accepting way their conan recipes
+        # (../zephyr-devshell/conan/recipes/jlink, .../systemview) do. See
+        # those two files.
+        jlink = pkgs.callPackage ./nix/jlink.nix { };
+        # 'inherit jlink': callPackage auto-fills arguments from pkgs' own
+        # attributes by name, which 'jlink' is not -- it is the local
+        # binding just above, and systemview.nix needs it (see its own
+        # comment on why).
+        systemview = pkgs.callPackage ./nix/systemview.nix { inherit jlink; };
       in
       {
         devShells.default = pkgs.mkShell {
@@ -66,7 +96,7 @@
 
             # west + Zephyr's pinned Python requirements, built once and
             # cached in the nix store -- equivalent to the 'uv' stage.
-            zephyr.pythonEnv
+            pythonEnv
             # dtc, bossa, openocd, qemu, ... from nixpkgs rather than the
             # SDK's own prebuilt binaries -- equivalent to the non-toolchain
             # part of the 'conan' stage.
@@ -80,6 +110,16 @@
             pkgs.gperf
             pkgs.ccache
             pkgs.git
+            pkgs.clang_21
+            jlink
+            systemview
+            # plain nixpkgs packages -- unlike jlink/systemview, both of
+            # these are ordinary public nix packages, nothing hand-written
+            # needed. Versions differ from ../zephyr-devshell's pins
+            # (doxygen/1.15.0, protoc/33.2): nixpkgs-unstable's own current
+            # versions instead, same as every other plain nixpkgs package here.
+            pkgs.doxygen
+            pkgs.protobuf
           ];
 
           # Telling Zephyr's build system where the SDK lives is *all* this
@@ -100,6 +140,45 @@
 
           shellHook = ''
             export CCACHE_BASEDIR="$PWD"
+
+            # JLinkExe et al only NEED libc/libdl (nix/jlink.nix), but they
+            # dlopen() libudev.so at runtime to enumerate USB devices --
+            # not a link-time dependency autoPatchelfHook could have wired
+            # in, so it has to be reachable via the loader's search path
+            # instead. Without this: "Failed to load libudev.so". SystemView
+            # dlopen()s libjlinkarm.so the same way, from the *separate*
+            # jlink derivation's own $out/bin, to talk to a probe -- without
+            # this: "Could not open J-Link shared library".
+            #
+            # The rest (freetype, X11, fontconfig) is nix/systemview.nix's
+            # own buildInputs, in principle already RPATH'd into
+            # libQtGui.so.4.8.7 by autoPatchelfHook (verified with 'nix log':
+            # it does find and add them). In practice the standard fixup
+            # phase's own '--shrink-rpath' step, which runs on this prebuilt,
+            # stripped, closed-source Qt4 build, drops freetype's entry
+            # again regardless -- verified with 'ldd': "libfreetype.so.6 =>
+            # not found" despite that log. Rather than fight that heuristic,
+            # this puts the same libraries on LD_LIBRARY_PATH too, which
+            # 'patchelf --shrink-rpath' has no say over.
+            export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath [
+              pkgs.udev
+              pkgs.freetype
+              pkgs.libX11
+              pkgs.libXrender
+              pkgs.libXrandr
+              pkgs.libXfixes
+              pkgs.libXcursor
+              pkgs.libSM
+              pkgs.libICE
+              pkgs.fontconfig
+            ]}:${jlink}/bin''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+            # A visible reminder of which shell this is -- devshell.sh's own
+            # interactive fallback additionally has to reapply this after
+            # ~/.bashrc runs (see its --rcfile), since bashrc commonly
+            # overwrites PS1 outright; direnv (.envrc) does not re-source
+            # bashrc, so this line alone covers that path.
+            export PS1="(zephyr-devshell-4.3.1-nix) ''${PS1-}"
           '';
         };
       });

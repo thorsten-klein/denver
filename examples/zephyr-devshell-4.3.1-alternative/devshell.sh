@@ -39,8 +39,39 @@ exec nix --extra-experimental-features "nix-command flakes" develop \
     west config manifest.file west.yml
   fi
   [ -d zephyr-rtos ] || west update
+
+  # Modules only declare their own pip requirements (in zephyr/module.yml,
+  # package-managers.pip.requirement-files) *after* they are cloned, so this
+  # cannot be baked into flake.nix at eval time -- this is what denver does
+  # in the uv-zephyr stage. pythonEnv is a read-only nix store path, nowhere
+  # to pip-install into, so this installs into a plain --target directory
+  # instead, then PYTHONPATH puts that directory on every later commands
+  # sys.path -- one pip-managed layer on top of the nix-managed base, rather
+  # than uv-zephyrs one shared venv for everything.
+  #
+  # -m only accepts names west packages itself recognizes as zephyr modules
+  # (a project with a zephyr/module.yml) -- passing every west project name
+  # blindly dies on the first one that is not a module (e.g. net-tools).
+  # zephyr itself is skipped too: its own requirements are already in
+  # pythonEnv (flake.nix), and re-running pip for it here would just
+  # re-fetch the same packages into a second location for nothing.
+  PIP_EXTRA_DIR="$PWD/.pip-extra"
+  if [ ! -d "$PIP_EXTRA_DIR" ]; then
+    pip_module_args=()
+    while read -r name path; do
+      [ -f "$path/zephyr/module.yml" ] && pip_module_args+=(-m "$name")
+    done < <(west list -f "{name} {path}")
+    west packages "${pip_module_args[@]}" pip --install --ignore-venv-check -- --target="$PIP_EXTRA_DIR"
+  fi
+  export PYTHONPATH="$PIP_EXTRA_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
   if [ "$#" -eq 0 ]; then
-    exec bash
+    # flake.nix'\''s shellHook already exports a prefixed PS1, but plain
+    # "exec bash" would lose it: an interactive non-login bash sources
+    # ~/.bashrc, which on most distros overwrites PS1 outright. --rcfile
+    # replays that same bashrc first, then reapplies the prefix after it,
+    # same trick nix develop itself uses for its own prompt.
+    exec bash --rcfile <(cat "$HOME/.bashrc" 2>/dev/null; printf "PS1=\"(zephyr-devshell-4.3.1-nix) \$PS1\"\n")
   fi
   exec "$@"
 ' bash "$@"

@@ -2,13 +2,19 @@
 /.direnv/
 
 # west workspace state and clones, created by devshell.sh's bootstrap
-# ('west init -l .' + 'west update') -- same content ../zephyr-devshell-4.3.1
+# ('west config' + 'west update') -- same content ../zephyr-devshell-4.3.1
 # gets from denver's 'zephyr' stage, just not denver-managed here
 /.west/
 /zephyr-rtos/
 /modules/
 /bootloader/
 /tools/
+
+# modules' own pip requirements, installed by devshell.sh's bootstrap after
+# 'west update' (west packages pip --install --target=.pip-extra) -- the
+# nix-store equivalent of denver's 'uv-zephyr' stage installing into the
+# 'uv' stage's venv
+/.pip-extra/
 
 # west build output
 /build/
