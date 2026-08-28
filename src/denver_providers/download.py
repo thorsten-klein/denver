@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from .base import Provider, fill_unset
-from .context import banner, die, info, interpolate, warn
+from .context import banner, die, info, interpolate, interpolate_shell, warn
 
 # where the archives themselves live: one folder per env, under
 # ctx.env_workdir. Deliberately *not* under the unpack root -- an archive is
@@ -491,21 +491,21 @@ class DownloadProvider(Provider):
             die(f"download[{self.stage}]: needs at least one '[[{self.stage}.packages]]' entry")
         raw_packages = {p["name"]: p for p in (self.config.get(self.section_name) or {}).get("packages") or []}
         for pkg in packages:
-            self._provision(ctx, pkg)
+            self._provision(ctx, pkg, raw_packages[pkg["name"]])
             # always, --fast and --dry-run included: this is the activation
             # half, and a command rendered without it would be missing every
             # tool this stage provides (see custom's 'source:' for the same
             # split between building and activating).
             self._apply_env(ctx, pkg, raw_packages[pkg["name"]])
 
-    def _provision(self, ctx, pkg):
+    def _provision(self, ctx, pkg, raw_pkg):
         """Make sure one package's archive is downloaded, verified and unpacked."""
         if ctx.fast:
             self._check_fast(ctx, pkg)
             return
         archive = Path(pkg["outfile"])
         self._ensure_archive(ctx, pkg, archive)
-        self._ensure_unpacked(ctx, pkg, archive)
+        self._ensure_unpacked(ctx, pkg, raw_pkg, archive)
 
     def _check_fast(self, ctx, pkg):
         """Under --fast: skip download and unpack entirely, and die if there is nothing to activate yet."""
@@ -579,7 +579,7 @@ class DownloadProvider(Provider):
         part.replace(archive)
 
     # ---- unpack -------------------------------------------------------------- #
-    def _ensure_unpacked(self, ctx, pkg, archive):
+    def _ensure_unpacked(self, ctx, pkg, raw_pkg, archive):
         """Unpack the archive unless the existing tree was already built from exactly this package."""
         banner(ctx, self.stage, f"{pkg['name']}: unpack")
         dest = Path(pkg["unpack-dir"])
@@ -591,7 +591,7 @@ class DownloadProvider(Provider):
             ctx.dry_note("~", f"unpack {archive} -> {dest}")
             return
         info(f"download[{self.stage}]: {pkg['name']}: unpacking to {dest}")
-        self._unpack(ctx, pkg, archive, dest)
+        self._unpack(ctx, pkg, raw_pkg, archive, dest)
         # written last, so a tree only counts as complete once it is
         # (see STAMP_NAME)
         (dest / STAMP_NAME).write_text(stamp)
@@ -601,7 +601,7 @@ class DownloadProvider(Provider):
         """What the unpacked tree records about its origin -- change any of it and the tree is rebuilt."""
         return "\n".join(f"{key}: {pkg[key]}" for key in ("url", "outfile", "sha256sum", "md5sum", "unpack-cmd"))
 
-    def _unpack(self, ctx, pkg, archive, dest):
+    def _unpack(self, ctx, pkg, raw_pkg, archive, dest):
         """Extract into a staging dir next to ``dest`` and move it into place only once it is complete.
 
         A half-extracted tree at ``dest`` would otherwise be stamped on the
@@ -612,17 +612,17 @@ class DownloadProvider(Provider):
         ctx.mkdir(dest.parent)
         staging = Path(tempfile.mkdtemp(prefix=f".{dest.name}.", dir=dest.parent))
         try:
-            self._extract(ctx, pkg, archive, staging)
+            self._extract(ctx, pkg, raw_pkg, archive, staging)
             staging.replace(dest)
         finally:
             # a no-op once the move succeeded; the cleanup that matters is
             # the failure path, including die()'s SystemExit
             shutil.rmtree(staging, ignore_errors=True)
 
-    def _extract(self, ctx, pkg, archive, staging):
+    def _extract(self, ctx, pkg, raw_pkg, archive, staging):
         """Unpack ``archive`` into ``staging``: 'unpack-cmd:' if given, else python's own format handling."""
         if pkg["unpack-cmd"]:
-            self._run_unpack_cmd(ctx, pkg, archive, staging)
+            self._run_unpack_cmd(ctx, pkg, raw_pkg, archive, staging)
             return
         try:
             shutil.unpack_archive(archive, staging)
@@ -637,11 +637,22 @@ class DownloadProvider(Provider):
             return
         restore_exec_bits(archive, staging)
 
-    def _run_unpack_cmd(self, ctx, pkg, archive, staging):
-        """Run 'unpack-cmd:' via bash -c, with the staging dir as cwd and the archive named in the environment."""
-        info(f"download[{self.stage}]: {pkg['name']}: unpack cmd: {pkg['unpack-cmd']}")
+    def _run_unpack_cmd(self, ctx, pkg, raw_pkg, archive, staging):
+        """Run 'unpack-cmd:' via bash -c, with the staging dir as cwd and the archive named in the environment.
+
+        Shell-interpolated (see interpolate_shell) from ``raw_pkg`` -- this
+        package's own *un*-interpolated entry -- rather than from ``pkg``,
+        which config_section() already plain-interpolated with no
+        shell-quoting. Splicing an unquoted substituted value (e.g. a
+        checksum-derived or CLI-overridden variable) straight into text
+        `bash -c` is about to parse would let its shell metacharacters act
+        as syntax instead of data -- see doc/providers/custom.md's
+        shell-injection note, which the same class of bug applies to here.
+        """
+        shell_cmd = interpolate_shell(raw_pkg.get("unpack-cmd"), ctx.variables)
+        info(f"download[{self.stage}]: {pkg['name']}: unpack cmd: {shell_cmd}")
         ctx.run(
-            ["bash", "-c", pkg["unpack-cmd"]],
+            ["bash", "-c", shell_cmd],
             cwd=staging,
             extra_env={
                 "DENVER_DOWNLOAD_NAME": pkg["name"],

@@ -40,7 +40,13 @@ a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
   token appended as its own arg — the way to pull in a dynamically-computed
   set of packages (e.g. `$(west packages pip)`) without hand-maintaining a
   requirements file for them. This is also where to pass a uv-specific flag
-  denver has no dedicated key for, e.g. `--link-mode=copy`.
+  denver has no dedicated key for, e.g. `--link-mode=copy`. A `$(...)`
+  entry's own `${VAR}`/`${VAR:-fallback}` interpolation (see "Variable
+  interpolation" in [Configuration](../configuration/denver-toml.md)) is
+  shell-quoted before it reaches bash, the same rule `custom`'s `cmd:`
+  follows — see its shell-injection note in [`custom.md`](custom.md). A
+  plain (non-`$(...)`) entry's own interpolation stays unquoted, since it
+  becomes a literal argv token, never re-parsed by a shell.
 - **`lockfile`** — optional; the uv-*project* (`pyproject.toml` + `uv.lock`)
   way of filling the same venv, independent of `requirements:` above
   (either, both or neither may be set). A path to a `uv.lock` (uv only ever

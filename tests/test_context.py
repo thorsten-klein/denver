@@ -17,6 +17,7 @@ from denver_providers.context import (
     find_outermost_in_parents,
     info,
     interpolate,
+    interpolate_shell,
     set_quiet,
     sha256_of_files,
     skip_banner,
@@ -161,6 +162,34 @@ def test_interpolate_variants():
     assert interpolate(["${A}", 1], variables) == ["x", 1]
     assert interpolate({"k": "${A}"}, variables) == {"k": "x"}
     assert interpolate(42, variables) == 42
+
+
+# ---- shell-safe interpolation (interpolate_shell) -------------------------- #
+def test_interpolate_shell_quotes_a_substituted_value():
+    # the whole point: an unquoted substitution would let ';'/backticks/'$('
+    # in the value re-parse as shell syntax once handed to `bash -c`
+    variables = {"VAR": "x; touch /tmp/pwned"}
+    assert interpolate_shell("echo ${VAR}", variables) == "echo 'x; touch /tmp/pwned'"
+
+
+def test_interpolate_shell_default_fallback_also_quoted():
+    assert interpolate_shell("echo ${MISSING:-a b}", {}) == "echo 'a b'"
+
+
+def test_interpolate_shell_leaves_literal_text_alone():
+    # nothing to substitute -- quoting only ever wraps a substituted value,
+    # never the literal text an author wrote around it
+    assert interpolate_shell("echo hello && true", {}) == "echo hello && true"
+
+
+def test_interpolate_shell_non_string_falls_back_to_plain_interpolate():
+    # 'cmd:'/'unpack-cmd:'/a '$(...)' entry's inner text are always single
+    # strings by their own KEYS validation -- lists/dicts never reach here in
+    # practice, but must still behave like plain interpolate() if they did
+    variables = {"A": "x"}
+    assert interpolate_shell(["${A}"], variables) == ["x"]
+    assert interpolate_shell({"k": "${A}"}, variables) == {"k": "x"}
+    assert interpolate_shell(42, variables) == 42
 
 
 # ---- the per-env run lock ------------------------------------------------- #

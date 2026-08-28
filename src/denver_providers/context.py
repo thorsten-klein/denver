@@ -278,14 +278,25 @@ def find_outermost_in_parents(start, name):
 _VAR_RE = re.compile(r"\$\{([A-Za-z_]\w*)(?::-([^}]*))?\}")
 
 
-def _expand_str(value, variables):
-    """Expand every ``${VAR}`` / ``${VAR:-default}`` occurrence in one string."""
+def _resolved_var(match, variables):
+    """One ``${VAR}`` / ``${VAR:-default}`` match's replacement text, unquoted."""
+    name, default = match.group(1), match.group(2)
+    if variables.get(name) is not None:
+        return str(variables[name])
+    return default if default is not None else ""
+
+
+def _expand_str(value, variables, *, quote=False):
+    """Expand every ``${VAR}`` / ``${VAR:-default}`` occurrence in one string.
+
+    ``quote``: shell-quote (``shlex.quote``) each substituted value, so it
+    lands as a single, inert shell word regardless of its content -- see
+    interpolate_shell, the only caller that sets it.
+    """
 
     def repl(match):
-        name, default = match.group(1), match.group(2)
-        if variables.get(name) is not None:
-            return str(variables[name])
-        return default if default is not None else ""
+        resolved = _resolved_var(match, variables)
+        return shlex.quote(resolved) if quote else resolved
 
     return _VAR_RE.sub(repl, value)
 
@@ -309,6 +320,40 @@ def interpolate(value, variables):
     if isinstance(value, dict):
         return _expand_dict(value, variables)
     return value
+
+
+def interpolate_shell(value, variables):
+    """Like interpolate(), but shell-quote every substituted ``${VAR}`` value -- for a string about to be handed to `bash -c` verbatim.
+
+    Plain ``interpolate()`` does textual substitution with no
+    shell-quoting: splicing an attacker-influenced value (a CLI ``-e``
+    override, a value derived from a branch name, a CI-injected secret,
+    ...) straight into a string bash is about to parse lets shell
+    metacharacters in that value (``;``, `` ` ``, ``$()``, ``|``, ...) act
+    as syntax instead of data -- the same bug class as an f-string built
+    into a shell command. Used only where the interpolated result is a
+    literal shell command line (``custom``'s ``cmd:``, ``download``'s
+    ``unpack-cmd:``, ``uv``'s ``$(...)`` install-args entries) -- every
+    other interpolation site (a URL, a path, an env var value, ...) must
+    keep using plain interpolate(), since quoting there would corrupt the
+    value instead of protecting it.
+
+    Only a bare string is meaningfully "shell text" here; a list/dict falls
+    back to plain interpolate() (none of this class's callers ever pass
+    one -- 'cmd:'/'unpack-cmd:' are single strings by their own KEYS
+    validation).
+
+    An author must write ``${VAR}`` bare, not wrapped in their own quotes
+    (``"${VAR}"``): the quoting here already makes it one safe word, so
+    bash would see any additional ``"``/``'`` the author wrote as literal
+    text, not as quoting -- corrupting the value instead of protecting it
+    twice. Bash's own bare ``$VAR`` (no braces) never reaches this
+    function at all -- denver's ``_VAR_RE`` only matches ``${...}`` -- so
+    it keeps quoting exactly as it always has.
+    """
+    if isinstance(value, str):
+        return _expand_str(value, variables, quote=True)
+    return interpolate(value, variables)
 
 
 def _argv(cmd):
