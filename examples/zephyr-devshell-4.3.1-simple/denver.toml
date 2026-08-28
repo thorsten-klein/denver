@@ -1,0 +1,216 @@
+version = 1.0
+# minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
+denver-version = ">=1.5.2"
+
+# A single-file merge of zephyr-devshell + zephyr-devshell-4.3.1's whole
+# import chain (that pair used 'import:' to split shared vs. version-pinned
+# config across three files) -- with docker and conan both thrown away.
+# See README.md for the full "what changed" story.
+
+# 'docker' is gone (this runs straight on the host now); 'conan' is gone
+# (replaced by 'download' for every tool that ships a prebuilt archive, plus
+# one 'custom' stage each for the two that don't -- see below).
+#
+# Was the 'docker:' section's 'compose.default-cmd:' -- with no docker stage
+# left to fall back to, denver's own fallback chain is '$SHELL', then
+# 'bash' (see "Top-level keys" in doc/configuration/denver-toml.md), neither
+# of which is the fish install this env actually provisions, so it has to be
+# said explicitly instead.
+command = "fish"
+
+stages = [
+  "host-tools",
+  "native-tools",
+  "zephyr-sdk-download",
+  "zephyr-sdk",
+  "jlink",
+  "uv",
+  "zephyr",
+  "uv-zephyr",
+]
+
+# Set once, here, rather than each of the stages below hardcoding the same
+# path a second time: 'zephyr-sdk's own cmd: script and env: key both need
+# where the SDK lives, and 'jlink's cmd: script and env-prepend: both need
+# where jlink lives. Applied before any stage runs (see "Top-level keys" in
+# doc/configuration/denver-toml.md), so every stage's cmd:/source:/env*:
+# below can read these like any other variable, real (as $VAR, in a script)
+# or interpolated (as ${VAR}, in this file).
+[env]
+ZEPHYR_SDK_INSTALL_DIR = "${DENVER_ENV_WORKDIR}/download/zephyr-sdk-minimal"
+JLINK_DIR = "${DENVER_ENV_WORKDIR}/jlink"
+
+# Was the 'docker' stage's job (a container built from a Zephyr-ready Ubuntu
+# image); on the host, that image's apt packages become apt packages denver
+# can only *check* for, never silently install -- see setup/check_host_tools.sh.
+[host-tools]
+provider = "custom"
+description = [
+  "The apt packages the stages below need on a bare host (git, gperf, a device tree compiler, ...) -- installing them needs sudo, so it never happens as part of a normal 'denver run'; only once, explicitly, via 'denver run examples/zephyr-devshell-4.3.1-simple --scripts setup'. This stage's own cmd only checks they are actually there and fails loud, with that command, if not.",
+]
+cmd = "bash ${DENVER_ENV_DIR}/setup/check_host_tools.sh"
+
+[host-tools.scripts]
+setup = ["setup/install_host_tools.sh"]
+
+# Was most of the 'conan' stage's job: cmake/ninja/clang/fish/doxygen/protoc/
+# systemview were each a conan recipe whose whole build() was "unpack a
+# prebuilt release archive" -- exactly what 'download' does natively, with
+# checksums and idempotent unpack for free (see doc/providers/download.md).
+[native-tools]
+provider = "download"
+
+[[native-tools.packages]]
+name = "cmake"
+url = "https://github.com/Kitware/CMake/releases/download/v3.31.9/cmake-3.31.9-linux-x86_64.tar.gz"
+md5sum = "7c102bf491091679895362bb8ae3f4bb"
+unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}/bin:" }
+
+[[native-tools.packages]]
+name = "ninja"
+url = "https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip"
+md5sum = "54a25b8d5b5bed15c1bf051a629b42bb"
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}:" }
+
+[[native-tools.packages]]
+name = "clang"
+description = "clang/clang++/lld, plus a 'bin/ld -> ld.lld' symlink so plain '-fuse-ld=lld' finds it -- same as the old conan recipe's build() step."
+url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.4/LLVM-21.1.4-Linux-X64.tar.xz"
+md5sum = "bc42e986dbe585461fb837542769bc7a"
+unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1 && ln -sf ld.lld bin/ld'
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}/bin:" }
+
+[[native-tools.packages]]
+name = "fish"
+description = "The shell the final command hands control to -- see [hooks] below."
+url = "https://github.com/fish-shell/fish-shell/releases/download/4.8.1/fish-4.8.1-linux-x86_64.tar.xz"
+md5sum = "921a8b099fa64d8565b27ffcb588c540"
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}:" }
+
+[[native-tools.packages]]
+name = "doxygen"
+url = "https://github.com/doxygen/doxygen/releases/download/Release_1_15_0/doxygen-1.15.0.linux.bin.tar.gz"
+md5sum = "72f0b4d9b5280f28be54745a815d8a74"
+unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}/bin:" }
+
+[[native-tools.packages]]
+name = "protoc"
+url = "https://github.com/protocolbuffers/protobuf/releases/download/v33.2/protoc-33.2-linux-x86_64.zip"
+md5sum = "6c39e1779a3b830f583214b691b4b7d4"
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}/bin:" }
+
+[[native-tools.packages]]
+name = "systemview"
+url = "https://www.segger.com/downloads/jlink/SystemView_Linux_V362b_x86_64.tgz"
+md5sum = "c4e790c320566ec0bac903edf714af2f"
+unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'
+env-prepend = { PATH = "${DENVER_UNPACK_DIR}:" }
+
+# ccache is deliberately not here: unlike the tools above, the old conan
+# recipe *compiled* it from source (a real dependency graph -- cmake, a
+# native compiler, a carried patch). 'download' only ever unpacks a prebuilt
+# archive, so this env gets ccache from apt instead (see [host-tools]) --
+# unpinned, but with no build step of its own. See README.md.
+
+# The Zephyr SDK ships as four archives: a minimal base plus one per cross
+# toolchain (arm/riscv64/x86_64). Each 'download' package owns exactly one
+# unpack-dir (see doc/providers/download.md) and there's no way to make four
+# of them share one, so they're fetched here as four separate trees and
+# assembled into a real SDK install by the 'zephyr-sdk' custom stage below --
+# what the old conan recipe's build() did in one place, this does in two.
+[zephyr-sdk-download]
+provider = "download"
+
+[[zephyr-sdk-download.packages]]
+name = "zephyr-sdk-minimal"
+url = "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/zephyr-sdk-0.17.4_linux-x86_64_minimal.tar.xz"
+md5sum = "c62ad59d0b92fd2ede022b774c770102"
+unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'
+
+[[zephyr-sdk-download.packages]]
+name = "zephyr-toolchain-arm-zephyr-eabi"
+url = "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_arm-zephyr-eabi.tar.xz"
+md5sum = "68ae71edc0106c3093055b97aaa47017"
+unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE"'
+
+[[zephyr-sdk-download.packages]]
+name = "zephyr-toolchain-riscv64-zephyr-elf"
+url = "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_riscv64-zephyr-elf.tar.xz"
+md5sum = "afc1120b6b3cf0a2e9196aea76b3f734"
+unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE"'
+
+[[zephyr-sdk-download.packages]]
+name = "zephyr-toolchain-x86_64-zephyr-elf"
+url = "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_x86_64-zephyr-elf.tar.xz"
+md5sum = "aee015389a3c4a2ecc23834d1e5601a5"
+unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE"'
+
+# Symlinks the three toolchains above into the minimal SDK's own root, then
+# runs the SDK's own setup.sh to register its cmake package and host tools.
+[zephyr-sdk]
+provider = "custom"
+description = [
+  "Assembles the Zephyr SDK from the archives 'zephyr-sdk-download' fetched. No env:/source: of its own -- ZEPHYR_SDK_INSTALL_DIR is already set above, before this stage even runs. See setup/setup_zephyr_sdk.sh.",
+]
+cmd = "${DENVER_ENV_DIR}/setup/setup_zephyr_sdk.sh"
+depends-on = ["zephyr-sdk-download"]
+
+# SEGGER's JLink download needs a POST that accepts its license agreement --
+# a plain GET returns an HTML page, not the archive -- so it can't be a
+# 'download' package like everything above. This is the one tool in the env
+# using the 'custom' provider's own worked example (see doc/providers/custom.md)
+# instead. 'systemview' above is also a SEGGER download, but its url happens
+# to serve the real file on a plain GET.
+[jlink]
+provider = "custom"
+description = [
+  "SEGGER J-Link software (JLinkExe, JLinkGDBServerCLExe, the udev rule installed via 'setup' below still lets these run without root). See setup/download_jlink.sh.",
+]
+cmd = "${DENVER_ENV_DIR}/setup/download_jlink.sh"
+# libjlinkarm.so lives next to JLinkExe in the same dir, so pyOCD/pylink
+# (which dlopen() it at runtime) need LD_LIBRARY_PATH here too, not just
+# PATH -- the same reason the old conan recipe registered it as a 'libdirs'
+# entry.
+env-prepend = { PATH = "${JLINK_DIR}/bin:", LD_LIBRARY_PATH = "${JLINK_DIR}/bin:" }
+
+# The pinned Python venv -- west, above all. No 'no-index:'/conan wheel
+# cache here: this env is always online (there is no docker stage to be
+# offline *inside*), so a plain install is the honest default. See
+# README.md for why there is no requirements.final.txt lockfile either.
+[uv]
+provider = "uv"
+python = "3.12.3"
+requirements = [
+  "uv/requirements.txt",
+  "uv/requirements-from-git.txt",
+]
+overrides = ["uv/overrides.txt"]
+skip-on-success = ["uv/skip-on-success.sh"]
+patches-apply = ["venv-patcher", "apply", "-f", "uv/venv-patcher/patches.yml"]
+
+[zephyr]
+provider = "zephyr"
+# Declared, not left to the default: 'west-yml:' otherwise resolves to
+# <outermost .git>/west.yml -- the manifest of the super-repo a real project
+# embeds this env in, which a standalone checkout of the denver repo (CI, or
+# anyone cloning it to try the examples) does not have. The env ships its
+# own manifest instead, so it runs anywhere; see the comments in west.yml.
+west-yml = "west.yml"
+
+# JLink debugger udev rule, so it's usable without root on the host --
+# not built/run every time, run via `denver run <env> --scripts setup`.
+[zephyr.scripts]
+setup = ["setup/install_jlink_udev_rules.sh"]
+
+# `west packages pip` supplies its own requirements dynamically; this only
+# needs the same override pins the main uv stage uses (not inherited
+# automatically -- see src/denver_providers/uv.py's module docstring).
+[uv-zephyr]
+provider = "uv"
+install-args = ["$(west packages pip)"]
+overrides = ["uv/overrides.txt"]
+
+[hooks]
+env = ["hooks/env.sh"]

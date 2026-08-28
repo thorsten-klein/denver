@@ -1,0 +1,26 @@
+From 23e55de3a736ae082f29a8d122427fc4a2d2ec85 Mon Sep 17 00:00:00 2001
+Message-Id: <23e55de3a736ae082f29a8d122427fc4a2d2ec85.1783499858.git.thorsten.klein@bshg.com>
+From: Thorsten Klein <thorsten.klein@bshg.com>
+Date: Wed, 8 Jul 2026 10:37:31 +0200
+Subject: [PATCH] handle HEAD as revision
+
+---
+ app/project.py | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/app/project.py b/app/project.py
+index 1cd9aa8..3fe3598 100644
+--- a/app/project.py
++++ b/app/project.py
+@@ -2482,6 +2482,8 @@ def _update_manifest_rev(project, new_manifest_rev):
+ def _maybe_sha(rev):
+     # Return true if and only if the given revision might be a SHA.
+ 
++    if rev == "HEAD":
++        return True
+     try:
+         int(rev, 16)
+     except ValueError:
+-- 
+2.34.1
+
