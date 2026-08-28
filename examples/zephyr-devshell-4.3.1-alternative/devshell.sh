@@ -40,30 +40,11 @@ exec nix --extra-experimental-features "nix-command flakes" develop \
   fi
   [ -d zephyr-rtos ] || west update
 
-  # Modules only declare their own pip requirements (in zephyr/module.yml,
-  # package-managers.pip.requirement-files) *after* they are cloned, so this
-  # cannot be baked into flake.nix at eval time -- this is what denver does
-  # in the uv-zephyr stage. pythonEnv is a read-only nix store path, nowhere
-  # to pip-install into, so this installs into a plain --target directory
-  # instead, then PYTHONPATH puts that directory on every later commands
-  # sys.path -- one pip-managed layer on top of the nix-managed base, rather
-  # than uv-zephyrs one shared venv for everything.
-  #
-  # -m only accepts names west packages itself recognizes as zephyr modules
-  # (a project with a zephyr/module.yml) -- passing every west project name
-  # blindly dies on the first one that is not a module (e.g. net-tools).
-  # zephyr itself is skipped too: its own requirements are already in
-  # pythonEnv (flake.nix), and re-running pip for it here would just
-  # re-fetch the same packages into a second location for nothing.
-  PIP_EXTRA_DIR="$PWD/.pip-extra"
-  if [ ! -d "$PIP_EXTRA_DIR" ]; then
-    pip_module_args=()
-    while read -r name path; do
-      [ -f "$path/zephyr/module.yml" ] && pip_module_args+=(-m "$name")
-    done < <(west list -f "{name} {path}")
-    west packages "${pip_module_args[@]}" pip --install --ignore-venv-check -- --target="$PIP_EXTRA_DIR"
-  fi
-  export PYTHONPATH="$PIP_EXTRA_DIR${PYTHONPATH:+:$PYTHONPATH}"
+  # Modules'\'' own pip requirements (mcuboot, nanopb, ...) do not need a
+  # runtime install here: flake.nix bakes them into pythonEnv itself, from
+  # nix/module-requirements.txt, in the same resolve as Zephyr'\''s own base
+  # requirements. See that file'\''s own comment for what to regenerate, and
+  # when, if ../west.yml'\''s module list ever changes.
 
   if [ "$#" -eq 0 ]; then
     # flake.nix'\''s shellHook already exports a prefixed PS1, but plain

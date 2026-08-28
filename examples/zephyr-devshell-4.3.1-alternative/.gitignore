@@ -10,11 +10,5 @@
 /bootloader/
 /tools/
 
-# modules' own pip requirements, installed by devshell.sh's bootstrap after
-# 'west update' (west packages pip --install --target=.pip-extra) -- the
-# nix-store equivalent of denver's 'uv-zephyr' stage installing into the
-# 'uv' stage's venv
-/.pip-extra/
-
 # west build output
 /build/

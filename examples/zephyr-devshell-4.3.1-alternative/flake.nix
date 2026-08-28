@@ -43,20 +43,71 @@
   };
 
   outputs =
-    { self, nixpkgs, zephyr-nix, flake-utils, ... }:
+    { self, nixpkgs, zephyr-src, zephyr-nix, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         zephyr = zephyr-nix.packages.${system};
 
-        # 'zephyr.pythonEnv' from a plain 'callPackage' supports the usual
-        # '.override', so this reaches python.nix's own 'extraPackages'
-        # argument -- adding 'pip' next to the 'west' it already adds. Not
-        # for us: 'west packages pip --install' (devshell.sh, after 'west
-        # update') runs as 'sys.executable -m pip install ...', i.e. pip has
-        # to be importable from *this exact* interpreter, not just present
-        # somewhere on PATH.
-        pythonEnv = zephyr.pythonEnv.override (old: {
+        # A copy of zephyr-src whose scripts/requirements.txt gains one
+        # extra '-r' line, pointing at nix/module-requirements.txt --
+        # everything else is a symlink back to the original, so this costs
+        # one small file, not a copy of the whole multi-hundred-MB checkout.
+        #
+        # This -- not a separate 'pip install --target' pass after 'west
+        # update' -- is how the module-declared pip deps
+        # (mcuboot/nanopb/...) get in: feeding them into the *same*
+        # 'loadRequirementsTxt' call zephyr-nix's own python.nix makes for
+        # the base requirements means they go through one resolve together,
+        # through the exact same 'zephyrPackageOverrides' fixups (imgtool
+        # among them -- nixpkgs only has it as 'mcuboot-imgtool', a rename
+        # python.nix already patches around) and the same
+        # 'validateVersionConstraints' check -- so a real conflict between
+        # the base and a module's requirements surfaces as a build-time
+        # warning against the *combined* set, not silently, the way it
+        # would with two disconnected resolves. See
+        # nix/module-requirements.txt for what has to be kept in sync and
+        # why this is a checked-in lockfile rather than something
+        # discovered live: the modules that declare pip requirements are
+        # only known *after* 'west update' clones them, and evaluating this
+        # flake happens before that.
+        zephyrSrcWithModuleReqs = pkgs.runCommand "zephyr-src-with-module-reqs" { } ''
+          mkdir -p "$out/scripts"
+          for f in ${zephyr-src}/*; do
+            [ "$(basename "$f")" = scripts ] || ln -s "$f" "$out/$(basename "$f")"
+          done
+          for f in ${zephyr-src}/scripts/*; do
+            [ "$(basename "$f")" = requirements.txt ] || ln -s "$f" "$out/scripts/$(basename "$f")"
+          done
+          cp ${zephyr-src}/scripts/requirements.txt "$out/scripts/requirements.txt"
+          chmod u+w "$out/scripts/requirements.txt"
+          # A same-directory relative '-r', like the lines already in this
+          # file (requirements-base.txt, ...) -- not the absolute nix store
+          # path '${./nix/module-requirements.txt}' would interpolate to
+          # directly: pyproject-nix's requirements.txt parser concatenates a
+          # '-r' target onto its own directory unconditionally, so an
+          # absolute target ends up doubled (scripts/nix/store/... instead
+          # of /nix/store/...) and fails to open. Symlinking it in here
+          # sidesteps that rather than working around it.
+          ln -s ${./nix/module-requirements.txt} "$out/scripts/module-requirements.txt"
+          echo "-r module-requirements.txt" >> "$out/scripts/requirements.txt"
+        '';
+
+        # zephyr-nix's own composition root ('lib.mkZephyr'), called again
+        # with that patched source -- reuses every fixup its python.nix
+        # applies rather than reimplementing them. 'zephyr' above (the
+        # flake's own 'packages' output) is still what sdk-0_17/hosttools-nix
+        # come from: those never read scripts/requirements.txt, so there is
+        # nothing to gain from rebuilding them against the patched source too.
+        zephyrForPython = zephyr-nix.lib.mkZephyr { inherit pkgs; zephyr-src = zephyrSrcWithModuleReqs; };
+
+        # '.override' reaches python.nix's own 'extraPackages' argument --
+        # adding 'pip' next to the 'west' it already adds, needed only for
+        # denver-parity debugging (a plain 'pip install' inside this
+        # devShell, mirroring `west packages pip --install`'s own
+        # 'sys.executable -m pip' invocation) since every actual dependency
+        # this env needs is in the combined resolve above already.
+        pythonEnv = zephyrForPython.pythonEnv.override (old: {
           extraPackages = ps: (old.extraPackages or (_: [ ])) ps ++ [ ps.pip ];
         });
 

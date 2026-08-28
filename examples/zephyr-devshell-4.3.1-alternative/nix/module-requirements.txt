@@ -1,0 +1,33 @@
+# Lockfile, not hand-maintained: the pip requirements every cloned module in
+# ../west.yml declares in its own zephyr/module.yml
+# (package-managers.pip.requirement-files), collected together so
+# ../flake.nix can feed them into the *same* pythonEnv build as Zephyr's own
+# scripts/requirements.txt -- one resolve, not two, so a version conflict
+# between the base env and a module is caught the same way it would be in
+# ../../zephyr-devshell-4.3.1's uv-zephyr stage: at build time, not as a
+# runtime import error.
+#
+# denver's own equivalent is conan/recipes/python-cache/denver/requirements.final.txt
+# in that same example -- also generated, also committed, also documented as
+# "regenerate by running the pipeline once and committing the diff". Same
+# rule here: regenerate this file by running (after a fresh 'west update')
+#
+#   west packages pip -m mcuboot -m nanopb
+#
+# -- every module in ../west.yml's name-allowlist that has a
+# package-managers.pip section, listed explicitly with '-m' (zephyr and
+# 'manifest' itself excluded: their own requirements are already covered by
+# scripts/requirements.txt) -- and paste the '-r <path>' targets' *contents*
+# in below, not the '-r' lines themselves: this file gets read from the nix
+# store, where those modules' own working-tree paths do not exist. Re-run
+# that same 'west packages pip' command any time ../west.yml's
+# name-allowlist changes, to check whether a newly-included module added a
+# package-managers.pip section this file needs to pick up.
+
+# from bootloader/mcuboot/zephyr/requirements.txt (module: mcuboot)
+cbor>=1.0.0
+imgtool>=2.2.0
+
+# from modules/lib/nanopb/extra/requirements.txt (module: nanopb)
+grpcio-tools==1.68.0
+setuptools>=66.1.0
