@@ -450,6 +450,38 @@ def test_unpack_cmd_replaces_the_built_in_unpacking(make_context, fake_urlopen, 
     assert not (unpacked / "tool").exists()  # the zip was never extracted
 
 
+def test_unpack_cmd_var_interpolation_is_shell_quoted_not_reinjected(
+    make_context, fake_urlopen, run_recorder, tmp_path
+):
+    # a '${VAR}' value from outside the denver.toml's own control must not
+    # be able to inject extra shell syntax through the substitution -- it
+    # must land as inert text, even when it contains ';'/'#'/backticks. The
+    # literal ';' the author wrote between the two real commands still
+    # works as shell syntax -- only the substituted value is quoted.
+    fake_urlopen.payloads["*"] = make_zip()
+    pwned = tmp_path / "pwned"
+    injected_value = f"a; touch {pwned} #b"
+    config = config_for([
+        {
+            "name": "tool",
+            "url": URL,
+            # '${INJECT}' written bare, per doc/providers/custom.md's
+            # shell-injection note: denver's own quoting supersedes bash's,
+            # so it must not be wrapped in the author's own quotes too
+            # (that would double-quote it -- see interpolate_shell)
+            "unpack-cmd": ('printf %s ${INJECT} > injected; cp "$DENVER_DOWNLOAD_ARCHIVE" "$DENVER_DOWNLOAD_DIR/tool"'),
+        }
+    ])
+    ctx = make_context(config=config, env={"INJECT": injected_value})
+
+    run_download(config, ctx)
+
+    assert not pwned.exists()
+    unpacked = ctx.env_workdir / "download" / "tool"
+    assert (unpacked / "injected").read_text() == injected_value
+    assert (unpacked / "tool").is_file()  # the literal ';'-separated second command still ran
+
+
 # ---- environment ------------------------------------------------------------#
 def test_env_prepend_and_append_glue_directly_with_no_separator(make_context, fake_urlopen):
     fake_urlopen.payloads["*"] = make_zip()

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 from .base import Provider, fill_unset
-from .context import banner, die, info, sha256_of_files
+from .context import banner, die, info, interpolate_shell, sha256_of_files
 
 # uv pip install flags that take exactly one following value -- used to keep
 # a flag and its value together as one atomic unit when accumulating args
@@ -241,22 +241,41 @@ class UvProvider(Provider):
         (_ensure_venv/_store_checksums) can detect the command's *output*
         changing even when no requirements *file* did (e.g. `west packages
         pip` reacting to a workspace/manifest change).
+
+        Paired with this stage's own *raw* (pre-plain-interpolation)
+        'install-args:' list -- same order/length as ``cfg``'s, since
+        interpolate() never adds, drops or reorders list entries -- so a
+        '$(...)' entry's inner text can be re-interpolated shell-safely
+        (see _expand_install_arg) instead of using ``cfg``'s already
+        plain-interpolated (unquoted) copy.
         """
+        raw_args = (self.config.get(self.section_name) or {}).get("install-args") or []
         args = []
         command_outputs = []
-        for entry in cfg.get("install-args") or []:
-            entry_args, output = self._expand_install_arg(ctx, entry)
+        for raw_entry, entry in zip(raw_args, cfg.get("install-args") or [], strict=True):
+            entry_args, output = self._expand_install_arg(ctx, raw_entry, entry)
             args += entry_args
             if output is not None:
                 command_outputs.append(output)
         return args, command_outputs
 
     @staticmethod
-    def _expand_install_arg(ctx, entry):
-        """One 'install-args:' entry as ``(args, output)``: a '$(cmd)' entry is run and split, anything else is literal."""
-        if not (entry.startswith("$(") and entry.endswith(")")):
+    def _expand_install_arg(ctx, raw_entry, entry):
+        """One 'install-args:' entry as ``(args, output)``: a '$(cmd)' entry is run and split, anything else is the plain-interpolated literal.
+
+        The shape check and the command that actually runs both come from
+        ``raw_entry`` (this entry as denver.toml wrote it, before plain
+        interpolate()) -- shell-interpolated (see interpolate_shell) rather
+        than plain, since it is handed to `bash -c` verbatim. A substituted
+        ``${VAR}`` value in a non-'$(...)' entry stays plain-interpolated
+        (``entry``): it becomes one literal `uv pip install` argv token,
+        never reparsed by a shell, so quoting it would corrupt it instead
+        of protecting it.
+        """
+        if not (raw_entry.startswith("$(") and raw_entry.endswith(")")):
             return [entry], None
-        output = ctx.run(["bash", "-c", entry[2:-1]], capture=True, echo=False).stdout
+        shell_cmd = interpolate_shell(raw_entry[2:-1], ctx.variables)
+        output = ctx.run(["bash", "-c", shell_cmd], capture=True, echo=False).stdout
         return output.split(), output
 
     def _requirements_checksum(self, ctx, files, command_outputs):

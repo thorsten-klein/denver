@@ -498,6 +498,44 @@ def test_install_args_command_entry_output_change_recreates_venv(make_context, r
     assert not (ctx.venv_dir / "marker").exists()  # old venv was removed
 
 
+def test_install_args_command_entry_var_interpolation_is_shell_quoted_not_reinjected(
+    make_context, run_recorder, which, tmp_path
+):
+    # a '${VAR}' value from outside the denver.toml's own control must not
+    # be able to inject extra shell syntax into a '$(...)' entry's command
+    # -- it must land as inert text, even when it contains ';'.
+    pwned = tmp_path / "pwned"
+    config = {"uv": {"install-args": ["$(echo hi ${INJECT})"]}}
+    ctx = make_context(config=config, env={"INJECT": f"; touch {pwned}"})
+
+    run_uv(config, ctx)
+
+    assert not pwned.exists()
+
+
+def test_install_args_command_entry_var_interpolation_substitutes_value_verbatim(make_context, run_recorder, which):
+    # quoting must not corrupt or truncate the substituted value itself
+    config = {"uv": {"install-args": ["$(printf %s ${VAL})"]}}
+    ctx = make_context(config=config, env={"VAL": "foo==1.0;bar"})
+
+    run_uv(config, ctx)
+
+    argv = next(a for a in run_recorder.argvs() if "uv pip install" in " ".join(a))
+    assert "foo==1.0;bar" in argv
+
+
+def test_install_args_plain_entry_var_interpolation_stays_unquoted(make_context, run_recorder, which):
+    # a plain (non-'$(...)') entry's '${VAR}' becomes one literal argv
+    # token, never reparsed by a shell -- quoting it would corrupt it
+    config = {"uv": {"install-args": ["${EXTRA}"]}}
+    ctx = make_context(config=config, env={"EXTRA": "--index-url=https://example.invalid"})
+
+    run_uv(config, ctx)
+
+    argv = next(a for a in run_recorder.argvs() if "uv pip install" in " ".join(a))
+    assert "--index-url=https://example.invalid" in argv
+
+
 # ---- amend ---------------------------------------------------------------#
 def test_amend_false_uses_only_current_run_args(make_context, run_recorder, which):
     config = {"uv": {"requirements": ["r.txt"], "amend": False}}

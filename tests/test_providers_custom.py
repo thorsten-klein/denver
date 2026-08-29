@@ -144,6 +144,27 @@ def test_cmd_supports_shell_syntax(make_context, tmp_path):
     assert marker.read_text() == "two\n"
 
 
+def test_cmd_var_interpolation_is_shell_quoted_not_reinjected(make_context, tmp_path):
+    # a '${VAR}' value from outside the denver.toml's own control (a CLI
+    # '-e' override, a branch name, a CI secret, ...) must not be able to
+    # inject extra shell syntax through the substitution -- it must land as
+    # inert text, even when it contains ';'/backticks/'$(...)'.
+    pwned = tmp_path / "pwned"
+    config = {"custom": {"cmd": "echo hi ${INJECT}"}}
+    ctx = make_context(config=config, env={"INJECT": f"; touch {pwned}"})
+    run_custom(config, ctx)
+    assert not pwned.exists()
+
+
+def test_cmd_var_interpolation_substitutes_the_value_verbatim(make_context, tmp_path):
+    # quoting must not corrupt or truncate the substituted value itself
+    marker = tmp_path / "marker"
+    config = {"custom": {"cmd": f"printf %s ${{VAL}} > {marker}"}}
+    ctx = make_context(config=config, env={"VAL": "a b; c `d`"})
+    run_custom(config, ctx)
+    assert marker.read_text() == "a b; c `d`"
+
+
 def test_cmd_failure_propagates(make_context):
     config = {"custom": {"cmd": "exit 3"}}
     ctx = make_context(config=config)

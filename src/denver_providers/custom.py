@@ -9,7 +9,7 @@ Full key reference, worked examples and design notes: ``doc/providers/custom.md`
 import shlex
 
 from .base import Provider
-from .context import banner, die, info
+from .context import banner, die, info, interpolate_shell
 
 
 class CustomProvider(Provider):
@@ -95,10 +95,22 @@ class CustomProvider(Provider):
         info(f"custom[{self.stage}]: source {path}")
         ctx.source(path)
 
+    def _shell_cmd(self, ctx):
+        """'cmd:', shell-interpolated (see interpolate_shell) rather than plain -- it is handed to `bash -c` verbatim.
+
+        Read from this stage's own *raw* section (bypassing config_section(),
+        which plain-interpolates the whole section with no shell-quoting)
+        so a substituted ``${VAR}`` value lands as inert shell text instead
+        of being re-parsed -- see doc/providers/custom.md's shell-injection
+        note and interpolate_shell's own docstring.
+        """
+        raw = self.config.get(self.section_name) or {}
+        return interpolate_shell(raw.get("cmd"), ctx.variables)
+
     def setup(self, ctx):
         """Run 'cmd:' via bash -c (unless --fast) and/or source 'source:' (always)."""
         cfg = self.config_section(ctx)
-        cmd = cfg.get("cmd")
+        cmd = self._shell_cmd(ctx)
         source = cfg.get("source")
         launcher = cfg.get("launcher")
         self._validate_cfg(cmd, source, launcher)
