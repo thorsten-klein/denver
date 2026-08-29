@@ -429,11 +429,21 @@ something sets its own <code class="docutils literal notranslate"><span class="p
 reconciled, conan just uses whatever’s already in its local cache/home.
 Add <code class="docutils literal notranslate"><span class="pre">remotes:</span></code> (or a <code class="docutils literal notranslate"><span class="pre">config:</span></code> that installs its own remote config) only
 once real remote access is actually needed.</p></li>
+<li><p><strong>Skips <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">install</span></code> when the dependency graph is unchanged.</strong> Before
+wiping and reinstalling, the install step runs a fast <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">graph</span> <span class="pre">info</span></code>
+query (no downloads/builds) and hashes its output; if that hash matches
+the one stored by the last successful install here, the existing install
+tree is left alone entirely. A failed query (conan not on <code class="docutils literal notranslate"><span class="pre">PATH</span></code> yet
+under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code>, a broken recipe, …) is treated as “changed”, so
+<code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">install</span></code> runs and reports the real problem itself. Only the
+install step is gated this way — <code class="docutils literal notranslate"><span class="pre">config</span></code>/<code class="docutils literal notranslate"><span class="pre">prepare</span></code>/<code class="docutils literal notranslate"><span class="pre">export</span></code> above it
+always run.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--fast</span></code></strong> activates the already-generated <code class="docutils literal notranslate"><span class="pre">conanbuildenv.sh</span></code> instead
-of re-running <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">install</span></code>; dies with a clear message if it doesn’t
-exist yet.</p></li>
+of re-running <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">install</span></code> (or the <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">graph</span> <span class="pre">info</span></code> check);
+dies with a clear message if it doesn’t exist yet.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--force</span></code></strong> recreates the conan/workspace setup steps’ own on-disk
-state unconditionally.</p></li>
+state unconditionally, including a fresh <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">install</span></code> regardless of
+the graph-info check above.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> prints the <code class="docutils literal notranslate"><span class="pre">conan</span></code>/recipes-exporter commands instead of
 running them, and leaves the install tree (which a real run wipes first)
 untouched. <code class="docutils literal notranslate"><span class="pre">conan</span> <span class="pre">config</span> <span class="pre">home</span></code> still runs — it is a read-only query whose
