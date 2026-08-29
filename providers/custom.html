@@ -307,7 +307,22 @@ see “Generic stage keys” in <a class="reference internal" href="../configura
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">cmd</span></code></strong> — run via <code class="docutils literal notranslate"><span class="pre">bash</span> <span class="pre">-c</span></code> in an isolated subprocess, so ordinary
 shell syntax (pipes, <code class="docutils literal notranslate"><span class="pre">&amp;&amp;</span></code>, quoting, <code class="docutils literal notranslate"><span class="pre">$VAR</span></code> expansion against the current
 environment) works the same way it would on a command line — but
-anything it exports dies with that subprocess, denver never sees it.</p></li>
+anything it exports dies with that subprocess, denver never sees it.
+Denver’s own <code class="docutils literal notranslate"><span class="pre">${VAR}</span></code>/<code class="docutils literal notranslate"><span class="pre">${VAR:-fallback}</span></code> interpolation (see “Variable
+interpolation” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>) is
+shell-quoted here before <code class="docutils literal notranslate"><span class="pre">cmd:</span></code> ever reaches bash — a substituted
+value lands as one literal argument/word, whatever characters it
+contains, rather than being re-parsed as shell syntax. This is what
+makes <code class="docutils literal notranslate"><span class="pre">cmd</span> <span class="pre">=</span> <span class="pre">&quot;echo</span> <span class="pre">${SOME_VAR}&quot;</span></code> safe even when <code class="docutils literal notranslate"><span class="pre">SOME_VAR</span></code> comes from
+somewhere outside this file’s own control (a <code class="docutils literal notranslate"><span class="pre">-e</span></code>/<code class="docutils literal notranslate"><span class="pre">--env</span></code> override, a
+branch name, a CI-injected secret). Write <code class="docutils literal notranslate"><span class="pre">${VAR}</span></code> bare, the way that
+example does — <strong>don’t</strong> additionally wrap it in your own quotes
+(<code class="docutils literal notranslate"><span class="pre">&quot;${VAR}&quot;</span></code>): denver’s quoting already makes it one safe word, and
+bash would then see your literal <code class="docutils literal notranslate"><span class="pre">&quot;</span></code>/<code class="docutils literal notranslate"><span class="pre">'</span></code> characters as part of the
+text, not as quoting, corrupting the value. Bash’s own bare <code class="docutils literal notranslate"><span class="pre">$VAR</span></code>
+(no braces, e.g. <code class="docutils literal notranslate"><span class="pre">&quot;$DENVER_DOWNLOAD_ARCHIVE&quot;</span></code> — see
+<a class="reference internal" href="download.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">download.md</span></code></span></a>) is untouched by denver and quotes
+exactly as it always has.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">source</span></code></strong> — different: it names a script <em>sourced</em> (not run) right
 after <code class="docutils literal notranslate"><span class="pre">cmd</span></code>, so its exports fold into the environment and persist into
 every later stage and the final command. This is the way to make a

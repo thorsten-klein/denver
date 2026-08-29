@@ -330,7 +330,13 @@ command right before install; its stdout is split on whitespace and each
 token appended as its own arg — the way to pull in a dynamically-computed
 set of packages (e.g. <code class="docutils literal notranslate"><span class="pre">$(west</span> <span class="pre">packages</span> <span class="pre">pip)</span></code>) without hand-maintaining a
 requirements file for them. This is also where to pass a uv-specific flag
-denver has no dedicated key for, e.g. <code class="docutils literal notranslate"><span class="pre">--link-mode=copy</span></code>.</p></li>
+denver has no dedicated key for, e.g. <code class="docutils literal notranslate"><span class="pre">--link-mode=copy</span></code>. A <code class="docutils literal notranslate"><span class="pre">$(...)</span></code>
+entry’s own <code class="docutils literal notranslate"><span class="pre">${VAR}</span></code>/<code class="docutils literal notranslate"><span class="pre">${VAR:-fallback}</span></code> interpolation (see “Variable
+interpolation” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>) is
+shell-quoted before it reaches bash, the same rule <code class="docutils literal notranslate"><span class="pre">custom</span></code>’s <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>
+follows — see its shell-injection note in <a class="reference internal" href="custom.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">custom.md</span></code></span></a>. A
+plain (non-<code class="docutils literal notranslate"><span class="pre">$(...)</span></code>) entry’s own interpolation stays unquoted, since it
+becomes a literal argv token, never re-parsed by a shell.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">lockfile</span></code></strong> — optional; the uv-<em>project</em> (<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> + <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code>)
 way of filling the same venv, independent of <code class="docutils literal notranslate"><span class="pre">requirements:</span></code> above
 (either, both or neither may be set). A path to a <code class="docutils literal notranslate"><span class="pre">uv.lock</span></code> (uv only ever

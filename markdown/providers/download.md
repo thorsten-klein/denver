@@ -190,6 +190,15 @@ into `unpack-dir:`. Three variables name what it is working on:
 | `DENVER_DOWNLOAD_NAME`    | the package’s `name:`                        |
 | `DENVER_DOWNLOAD_ARCHIVE` | absolute path of the downloaded file         |
 | `DENVER_DOWNLOAD_DIR`     | absolute path of the staging dir (= the cwd) |
+
+Denver’s own `${VAR}`/`${VAR:-fallback}` interpolation (see “Variable
+interpolation” in [Configuration](../configuration/denver-toml.md)) is
+shell-quoted here before `unpack-cmd:` ever reaches bash — a substituted
+value lands as one literal argument/word, whatever characters it contains,
+rather than being re-parsed as shell syntax (the same rule `custom`’s
+`cmd:` follows — see its own shell-injection note in
+[`custom.md`](custom.md)).
+
 ```toml
 [[toolchain-setup.packages]]
 name = "toolchain"

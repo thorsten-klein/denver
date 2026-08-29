@@ -18,6 +18,22 @@ see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Ev
   shell syntax (pipes, `&&`, quoting, `$VAR` expansion against the current
   environment) works the same way it would on a command line — but
   anything it exports dies with that subprocess, denver never sees it.
+  Denver's own `${VAR}`/`${VAR:-fallback}` interpolation (see "Variable
+  interpolation" in [Configuration](../configuration/denver-toml.md)) is
+  shell-quoted here before `cmd:` ever reaches bash — a substituted
+  value lands as one literal argument/word, whatever characters it
+  contains, rather than being re-parsed as shell syntax. This is what
+  makes `cmd = "echo ${SOME_VAR}"` safe even when `SOME_VAR` comes from
+  somewhere outside this file's own control (a `-e`/`--env` override, a
+  branch name, a CI-injected secret). Write `${VAR}` bare, the way that
+  example does — **don't** additionally wrap it in your own quotes
+  (`"${VAR}"`): denver's quoting already makes it one safe word, and
+  bash would then see your literal `"`/`'` characters as part of the
+  text, not as quoting, corrupting the value. Bash's own bare `$VAR`
+  (no braces, e.g. `"$DENVER_DOWNLOAD_ARCHIVE"` — see
+  [`download.md`](download.md)) is untouched by denver and quotes
+  exactly as it always has.
+
 - **`source`** — different: it names a script *sourced* (not run) right
   after `cmd`, so its exports fold into the environment and persist into
   every later stage and the final command. This is the way to make a
