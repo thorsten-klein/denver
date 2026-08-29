@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 from .base import Provider, fill_unset
-from .context import banner, die, info, warn
+from .context import banner, die, die_on_unknown_keys, info, warn
 
 # ships alongside this module, so it's found regardless of whether denver
 # runs from a checkout or an installed package (see providers/conan_scripts).
@@ -67,9 +67,9 @@ class ConanProvider(Provider):
         which is an *output*), so setup() only ever handles absolute paths
         that are known to be there. See doc/providers/conan.md for the shape.
         """
-        cls._validate_recipe_entry(entry)
+        cls._validate_recipe_entry(entry, index)
 
-        dirs = cls._resolve_recipe_dirs(ctx, entry)
+        dirs = cls._resolve_path_list(ctx, entry.get("dirs"), what="recipe dir", checker=Path.is_dir)
         catalog = cls._resolve_catalog(entry, dirs, index)
 
         return {
@@ -79,13 +79,11 @@ class ConanProvider(Provider):
         }
 
     @classmethod
-    def _validate_recipe_entry(cls, entry):
+    def _validate_recipe_entry(cls, entry, index):
         """Die unless a 'recipes:' entry is a mapping with no keys this provider doesn't know."""
         if not isinstance(entry, dict):
             die(f"conan: each 'recipes:' entry must be a mapping (got {entry!r})")
-        unknown = sorted(set(entry) - set(cls.RECIPE_KEYS))
-        if unknown:
-            die(f"conan: unknown key(s) in a 'recipes:' entry: {', '.join(unknown)}")
+        die_on_unknown_keys(entry, cls.RECIPE_KEYS, f"conan: recipes[{index}]")
 
     @classmethod
     def _resolve_export_tool(cls, ctx, entry, default_exporter):
@@ -96,17 +94,6 @@ class ConanProvider(Provider):
         if not exporter.is_file():
             die(f"conan: export-tool not found: {exporter}")
         return str(exporter)
-
-    @classmethod
-    def _resolve_recipe_dirs(cls, ctx, entry):
-        """Validate and resolve one recipe's 'dirs:' entries."""
-        dirs = []
-        for name in entry.get("dirs") or []:
-            d = ctx.resolve_path(name)
-            if not d.is_dir():
-                die(f"conan: recipe dir not found: {d}")
-            dirs.append(str(d))
-        return dirs
 
     @classmethod
     def _resolve_catalog(cls, entry, dirs, index):
@@ -172,18 +159,10 @@ class ConanProvider(Provider):
     def _resolve_deployers(cls, ctx, cfg):
         """Validate and resolve 'deployers:' scripts (default: just the built-in symlink deployer)."""
         configured_deployers = cfg.get("deployers")
-        if isinstance(configured_deployers, str):
-            die(
-                "conan: 'deployers:' must be a list of scripts, not a single string "
-                f"(got {configured_deployers!r} -- write it as a one-entry list)"
-            )
-        deployers = []
-        for entry in configured_deployers or [DEFAULT_DEPLOYER]:
-            p = ctx.resolve_path(entry)
-            if not p.is_file():
-                die(f"conan: deployer script not found: {p}")
-            deployers.append(str(p))
-        return deployers
+        cls._die_if_bare_string(configured_deployers, "deployers", "scripts")
+        return cls._resolve_path_list(
+            ctx, configured_deployers or [DEFAULT_DEPLOYER], what="deployer script", checker=Path.is_file
+        )
 
     @staticmethod
     def _resolve_profiles(cfg):
@@ -206,18 +185,8 @@ class ConanProvider(Provider):
     def _resolve_base_classes(cls, ctx, cfg):
         """Validate and resolve 'base-classes:' dirs."""
         configured_base_classes = cfg.get("base-classes")
-        if isinstance(configured_base_classes, str):
-            die(
-                "conan: 'base-classes:' must be a list of directories, not a single string "
-                f"(got {configured_base_classes!r} -- write it as a one-entry list)"
-            )
-        base_classes = []
-        for entry in configured_base_classes or []:
-            d = ctx.resolve_path(entry)
-            if not d.is_dir():
-                die(f"conan: base-classes dir not found: {d}")
-            base_classes.append(str(d))
-        return base_classes
+        cls._die_if_bare_string(configured_base_classes, "base-classes", "directories")
+        return cls._resolve_path_list(ctx, configured_base_classes, what="base-classes dir", checker=Path.is_dir)
 
     @classmethod
     def _resolve_config_dirs(cls, ctx, cfg):
@@ -225,13 +194,32 @@ class ConanProvider(Provider):
         configured_config_dirs = cfg.get("config")
         if not configured_config_dirs:
             return None
-        config_dirs = []
-        for entry in configured_config_dirs:
+        return cls._resolve_path_list(ctx, configured_config_dirs, what="config dir", checker=Path.is_dir)
+
+    @staticmethod
+    def _die_if_bare_string(value, key, noun):
+        """Die if 'key:' was written as a single string instead of a list -- a common shape mistake across list-valued keys."""
+        if isinstance(value, str):
+            die(
+                f"conan: '{key}:' must be a list of {noun}, not a single string (got {value!r} -- write it as a one-entry list)"
+            )
+
+    @staticmethod
+    def _resolve_path_list(ctx, entries, *, what, checker):
+        """Every entry of ``entries``, resolved via ctx.resolve_path and checked with ``checker`` (Path.is_file/is_dir).
+
+        Shared by every 'conan:' key that names a list of scripts/dirs
+        (deployers/base-classes/config/a recipe's own dirs) -- each used to
+        spell this loop out by hand, identical but for what it resolves and
+        which existence check it wants.
+        """
+        resolved = []
+        for entry in entries or []:
             p = ctx.resolve_path(entry)
-            if not p.is_dir():
-                die(f"conan: config dir not found: {p}")
-            config_dirs.append(str(p))
-        return config_dirs
+            if not checker(p):
+                die(f"conan: {what} not found: {p}")
+            resolved.append(str(p))
+        return resolved
 
     def setup(self, ctx):
         """Detect a conan profile, export/install every recipe, then activate the resulting conanbuildenv.sh."""

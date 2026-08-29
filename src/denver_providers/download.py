@@ -30,7 +30,18 @@ from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from .base import Provider, fill_unset
-from .context import banner, die, info, interpolate, interpolate_shell, warn
+from .context import (
+    banner,
+    die,
+    die_on_unknown_keys,
+    die_unless_flat_str_map,
+    die_unless_paired,
+    die_unless_required_strings,
+    info,
+    interpolate,
+    interpolate_shell,
+    warn,
+)
 
 # where the archives themselves live: one folder per env, under
 # ctx.env_workdir. Deliberately *not* under the unpack root -- an archive is
@@ -159,12 +170,8 @@ def _validate_auth_entry(entry, where):
     """Die unless one '[[download-auth]]' entry is a mapping this provider fully understands."""
     if not isinstance(entry, dict):
         die(f"{where}: each entry must be a mapping (got {entry!r})")
-    unknown = sorted(set(entry) - set(AUTH_KEYS))
-    if unknown:
-        die(f"{where}: unknown key(s) {', '.join(unknown)} -- known: {', '.join(AUTH_KEYS)}.")
-    host = entry.get("host")
-    if not isinstance(host, str) or not host.strip():
-        die(f"{where}: 'host:' is required and must be a non-empty string (got {host!r})")
+    die_on_unknown_keys(entry, AUTH_KEYS, where)
+    die_unless_required_strings(entry, ("host",), where)
     _validate_auth_credentials(entry, where)
     _validate_auth_headers(entry.get("headers"), where)
 
@@ -175,8 +182,7 @@ def _validate_auth_credentials(entry, where):
         _validate_auth_string(entry.get(key), f"{where}: '{key}:'")
     # one without the other is a mistake, never a half-configured login --
     # the docker provider's 'registries:' rejects the same shape
-    if bool(entry.get("username")) != bool(entry.get("password")):
-        die(f"{where} ('{entry['host']}'): needs both 'username:' and 'password:', or neither")
+    die_unless_paired(entry, "username", "password", f"{where} ('{entry['host']}')")
     _validate_auth_sends_something(entry, where)
 
 
@@ -198,13 +204,8 @@ def _validate_auth_sends_something(entry, where):
 
 def _validate_auth_headers(headers, where):
     """Die unless an entry's 'headers:' is a flat {name = "value"} mapping."""
-    if headers is None:
-        return
-    if not isinstance(headers, dict):
-        die(f"{where}: 'headers:' must be a mapping of header name to value (got {headers!r})")
-    for name, value in headers.items():
-        if not isinstance(value, str):
-            die(f"{where}: 'headers:' '{name}:' must be a string (got {value!r})")
+    if headers is not None:
+        die_unless_flat_str_map(headers, f"{where}: 'headers:'")
 
 
 def auth_headers_for(config, url, variables):
@@ -447,21 +448,12 @@ class DownloadProvider(Provider):
         where = f"download: packages[{index}]"
         if not isinstance(entry, dict):
             die(f"{where}: each entry must be a mapping (got {entry!r})")
-        unknown = sorted(set(entry) - set(cls.PACKAGE_KEYS))
-        if unknown:
-            die(f"{where}: unknown key(s) {', '.join(unknown)} -- known: {', '.join(cls.PACKAGE_KEYS)}.")
-        cls._validate_required_strings(entry, where)
+        die_on_unknown_keys(entry, cls.PACKAGE_KEYS, where)
+        die_unless_required_strings(entry, cls.REQUIRED_PACKAGE_KEYS, where)
         cls._validate_optional_strings(entry, where)
         for key in ("env-prepend", "env-append"):
-            cls._validate_env_map(entry.get(key), f"{where}: '{key}:'")
-
-    @classmethod
-    def _validate_required_strings(cls, entry, where):
-        """Die unless every required key is there, as a non-empty string."""
-        for key in cls.REQUIRED_PACKAGE_KEYS:
-            value = entry.get(key)
-            if not isinstance(value, str) or not value.strip():
-                die(f"{where}: '{key}:' is required and must be a non-empty string (got {value!r})")
+            if entry.get(key) is not None:
+                die_unless_flat_str_map(entry[key], f"{where}: '{key}:'")
 
     @classmethod
     def _validate_optional_strings(cls, entry, where):
@@ -470,17 +462,6 @@ class DownloadProvider(Provider):
             value = entry.get(key)
             if value is not None and not isinstance(value, str):
                 die(f"{where}: '{key}:' must be a string (got {value!r})")
-
-    @staticmethod
-    def _validate_env_map(mapping, where):
-        """Die unless an 'env-prepend:'/'env-append:' section is a flat {name = "value"} mapping."""
-        if mapping is None:
-            return
-        if not isinstance(mapping, dict):
-            die(f"{where} must be a mapping of environment variable to value (got {mapping!r})")
-        for key, value in mapping.items():
-            if not isinstance(value, str):
-                die(f"{where} '{key}:' must be a string (got {value!r})")
 
     # ---- lifecycle --------------------------------------------------------- #
     def setup(self, ctx):

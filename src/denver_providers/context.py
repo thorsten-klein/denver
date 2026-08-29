@@ -256,6 +256,46 @@ def die(message) -> NoReturn:
 
 
 # --------------------------------------------------------------------------- #
+# Shared config-validation helpers
+#
+# Every provider (and denver.py itself, for a stage's generic keys) rejects
+# the same handful of config shapes -- an unrecognised key, a required
+# string missing, a mapping that isn't flat {str: str}, a pair of keys that
+# must come together -- each used to spell its own die() out by hand, with
+# wording that had already drifted between call sites. One phrasing each,
+# here, used everywhere that shape is checked.
+# --------------------------------------------------------------------------- #
+def die_on_unknown_keys(present, allowed, where):
+    """Die if ``present`` (any iterable of keys) has a key ``allowed`` doesn't."""
+    unknown = sorted(set(present) - set(allowed))
+    if unknown:
+        die(f"{where}: unknown key(s) {', '.join(unknown)} -- known: {', '.join(sorted(allowed)) or '(none)'}.")
+
+
+def die_unless_required_strings(entry, keys, where):
+    """Die unless every one of ``keys`` is present on ``entry`` as a non-empty string."""
+    for key in keys:
+        value = entry.get(key)
+        if not isinstance(value, str) or not value.strip():
+            die(f"{where}: '{key}:' is required and must be a non-empty string (got {value!r})")
+
+
+def die_unless_paired(entry, key_a, key_b, where):
+    """Die if exactly one of ``key_a``/``key_b`` is set on ``entry`` -- both or neither is required."""
+    if bool(entry.get(key_a)) != bool(entry.get(key_b)):
+        die(f"{where} needs both '{key_a}:' and '{key_b}:', or neither")
+
+
+def die_unless_flat_str_map(mapping, where):
+    """Die unless ``mapping`` is a flat {str: str} mapping. ``None`` (unset) is the caller's own job to allow first."""
+    if not isinstance(mapping, dict):
+        die(f"{where} must be a mapping of environment variable to string value (got {mapping!r})")
+    for key, value in mapping.items():
+        if not isinstance(value, str):
+            die(f"{where} '{key}:' must be a string (got {value!r})")
+
+
+# --------------------------------------------------------------------------- #
 # Parent-directory search helpers
 # --------------------------------------------------------------------------- #
 def find_in_parents(start, name):
