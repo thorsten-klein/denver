@@ -11,7 +11,7 @@ from typing import cast
 
 from .base import Provider
 from .conan import ConanProvider
-from .context import Context, banner, die, info
+from .context import Context, banner, die, die_on_unknown_keys, info
 from .custom import CustomProvider
 from .docker import DockerProvider
 from .download import DownloadProvider
@@ -114,11 +114,11 @@ def _extension_provider_dirs(extensions_cfg):
     cfg = extensions_cfg or {}
     if not isinstance(cfg, dict):
         die(f"'extensions:' must be a mapping, got {type(cfg).__name__}")
-    _validate_keys(cfg, _EXTENSION_KEYS, "extensions")
+    die_on_unknown_keys(cfg, _EXTENSION_KEYS, "'extensions'")
     providers_cfg = cfg.get("providers") or {}
     if not isinstance(providers_cfg, dict):
         die(f"'extensions.providers:' must be a mapping, got {type(providers_cfg).__name__}")
-    _validate_keys(providers_cfg, _EXTENSION_PROVIDER_KEYS, "extensions.providers")
+    die_on_unknown_keys(providers_cfg, _EXTENSION_PROVIDER_KEYS, "'extensions.providers'")
     return _validated_dirs(providers_cfg.get("dirs"))
 
 
@@ -132,13 +132,6 @@ def _validated_dirs(dirs):
             f"(got {dirs!r} -- a single directory is written as a one-entry list)"
         )
     return dirs
-
-
-def _validate_keys(cfg, allowed, where):
-    """Die on any key in ``cfg`` that ``where``'s sub-schema doesn't recognise."""
-    unknown = sorted(set(cfg) - allowed)
-    if unknown:
-        die(f"'{where}:': unknown key(s) {', '.join(unknown)} -- known: {', '.join(sorted(allowed))}.")
 
 
 def _register_extension_provider(py_file):

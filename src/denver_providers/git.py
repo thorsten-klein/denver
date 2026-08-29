@@ -27,7 +27,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .base import Provider, fill_unset
-from .context import banner, die, info, interpolate
+from .context import banner, die, die_unless_required_strings, info, interpolate
 
 # the remote name a fresh clone is created under, and the one 'revision:' is
 # resolved against -- 'origin', same as a plain 'git clone' with no
@@ -75,16 +75,8 @@ class GitProvider(Provider):
         one of cls.KEYS, before resolve_defaults() ever runs (the same
         division download.py's own resolve_defaults relies on).
         """
-        cls._validate_required_keys(cfg)
+        die_unless_required_strings(cfg, cls.REQUIRED_KEYS, "git")
         cls._validate_optional_keys(cfg)
-
-    @classmethod
-    def _validate_required_keys(cls, cfg):
-        """Die unless every REQUIRED_KEYS entry is a non-empty string."""
-        for key in cls.REQUIRED_KEYS:
-            value = cfg.get(key)
-            if not isinstance(value, str) or not value.strip():
-                die(f"git: '{key}:' is required and must be a non-empty string (got {value!r})")
 
     @staticmethod
     def _validate_optional_keys(cfg):

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import cast
 
 from .base import Provider, fill_unset
-from .context import banner, die
+from .context import banner, die, die_on_unknown_keys, die_unless_paired
 
 
 def _relocation_env(ctx):
@@ -103,9 +103,7 @@ class DockerProvider(Provider):
     @classmethod
     def _resolve_compose(cls, compose):
         """Resolve one 'compose:' subtable's own defaults, after checking it for unknown keys."""
-        unknown = sorted(set(compose) - set(cls.COMPOSE_KEYS))
-        if unknown:
-            die(f"docker: unknown key(s) in 'compose:': {', '.join(unknown)}")
+        die_on_unknown_keys(compose, cls.COMPOSE_KEYS, "docker: 'compose:'")
         if not compose.get("file"):
             die("docker: 'compose.file:' is required -- denver never guesses a docker-compose.yml")
         resolved = dict(compose)
@@ -256,8 +254,7 @@ class DockerProvider(Provider):
         for i, registry in enumerate(registries):
             if not registry.get("url"):
                 die(f"docker: registries[{i}] needs a 'url:'")
-            if bool(registry.get("username")) != bool(registry.get("password")):
-                die(f"docker: registries[{i}] ('{registry['url']}') needs both 'username:' and 'password:', or neither")
+            die_unless_paired(registry, "username", "password", f"docker: registries[{i}] ('{registry['url']}')")
 
     def _build_or_skip(self, ctx, exe, image, compose, registries, remote_ref, found_locally):
         """Banner a registry/local hit, run 'compose build', die if nowhere found, or banner a skipped build.
