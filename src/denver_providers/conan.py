@@ -12,6 +12,7 @@ conanfile itself requires.
 Full key reference, worked examples and design notes: ``doc/providers/conan.md``.
 """
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -475,18 +476,29 @@ class ConanProvider(Provider):
             ctx.run([conan, "profile", "detect"])
 
     def _install(self, ctx, conan, cfg, deployers, conanfile):
-        """`conan install` the configured conanfile, deploying it (via every 'deployers:' script) into a fresh tree."""
+        """`conan install` the configured conanfile, deploying it (via every 'deployers:' script) into a fresh tree.
+
+        Skipped -- leaving the existing install tree untouched -- when a
+        fast `conan graph info` query hashes to the same value the last
+        successful install here stored, unless --force (which always
+        reinstalls). See doc/providers/conan.md.
+        """
         banner(ctx, self.stage, "install")
         install_root = ctx.env_workdir / CONAN_INSTALL_DIRNAME
         symlinks_dir = install_root / "symlinks"
+        build_args = self._build_args(cfg)
+        profile_args = self._profile_args(cfg)
+        extra_args = self._extra_install_args(cfg)
+        install_args = (build_args, profile_args, extra_args)
+
+        skip, graph_hash = self._graph_unchanged(ctx, conan, install_root, conanfile, install_args)
+        if skip:
+            info(f"conan[{self.stage}]: dependency graph unchanged -- skipping `conan install`")
+            return
 
         # start from a clean install tree
         ctx.rmtree(install_root)
         ctx.mkdir(install_root)
-
-        build_args = self._build_args(cfg)
-        profile_args = self._profile_args(cfg)
-        extra_args = self._extra_install_args(cfg)
 
         deployer_args = [f"--deployer={d}" for d in deployers]
 
@@ -509,6 +521,57 @@ class ConanProvider(Provider):
             # conan packages must be standalone: don't leak host PYTHONPATH
             extra_env={"PYTHONPATH": ""},
         )
+
+        self._store_graph_hash(ctx, conan, install_root, conanfile, install_args, graph_hash)
+
+    def _graph_unchanged(self, ctx, conan, install_root, conanfile, install_args):
+        """Whether `_install` can skip entirely, plus the graph hash computed along the way (None if not queried).
+
+        False/None whenever there's nothing to compare against yet --
+        --force, no prior successful install here, or no stored hash from
+        one -- without spending a `conan graph info` call to find out.
+        """
+        buildenv = install_root / CONANBUILDENV_NAME
+        hash_path = install_root / f"{self.stage}-graph.sha256"
+        if ctx.force or not buildenv.is_file() or not hash_path.is_file():
+            return False, None
+        graph_hash = self._graph_info_hash(ctx, conan, conanfile, *install_args)
+        return graph_hash is not None and graph_hash == hash_path.read_text(), graph_hash
+
+    def _store_graph_hash(self, ctx, conan, install_root, conanfile, install_args, graph_hash):
+        """Record `conan graph info`'s hash for this install, reusing ``graph_hash`` if `_graph_unchanged` already computed it.
+
+        `conan install` itself never changes what `conan graph info`
+        reports (conanfile/profiles/recipe cache -- all fixed before this
+        runs), so a hash from right before the install is still accurate
+        to store after it -- avoiding a second query on every changed run.
+        """
+        if graph_hash is None:
+            graph_hash = self._graph_info_hash(ctx, conan, conanfile, *install_args)
+        if graph_hash is not None:
+            ctx.write_text(install_root / f"{self.stage}-graph.sha256", graph_hash)
+
+    @staticmethod
+    def _graph_info_hash(ctx, conan, conanfile, build_args, profile_args, extra_args):
+        """sha256 of `conan graph info`'s stdout for conanfile at the given args, or None if the query failed.
+
+        No downloads/builds, so it's cheap enough to run on every non-fast,
+        non-force setup -- comparing its hash against what the last
+        successful install stored is what lets _install skip the rmtree/
+        mkdir and the (often slow) `conan install` for an unchanged
+        dependency graph. A failed query (conan not on PATH yet under
+        --dry-run, a broken recipe, ...) is treated as "changed": the real
+        `conan install` reports the actual problem itself.
+        """
+        result = ctx.run(
+            [conan, "graph", "info", str(conanfile), *build_args, *profile_args, *extra_args, "--format=json"],
+            capture=True,
+            echo=False,
+            check=False,
+        )
+        if result.returncode != 0:
+            return None
+        return hashlib.sha256(result.stdout.encode()).hexdigest()
 
     @staticmethod
     def _build_args(cfg):

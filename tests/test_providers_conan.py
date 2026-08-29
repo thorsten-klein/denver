@@ -1,5 +1,7 @@
 """Tests for providers.conan.ConanProvider."""
 
+import hashlib
+
 import pytest
 
 from denver_providers.conan import ConanProvider
@@ -49,6 +51,20 @@ def _argv_with(run_recorder, word):
 def default_profile_ok(run_recorder, home="/home/dev/.conan2"):
     """conan config home + a pre-existing default profile: no 'profile detect'."""
     run_recorder.responses["config home"] = lambda cmd: type("R", (), {"stdout": f"{home}\n", "returncode": 0})()
+
+
+def graph_info_ok(run_recorder, stdout="{}"):
+    """`conan graph info` succeeding with fixed ``stdout`` -- returns it, for hashing against the stored state."""
+    run_recorder.responses["graph info"] = lambda cmd: type("R", (), {"stdout": stdout, "returncode": 0})()
+    return stdout
+
+
+def _seed_install_tree(ctx, stdout):
+    """A pre-existing install tree + stored graph hash, as the last successful install would have left behind."""
+    install_root = ctx.env_workdir / ".conan"
+    install_root.mkdir(parents=True)
+    (install_root / "conanbuildenv.sh").write_text("export FROM_CONAN=yes\n")
+    (install_root / "conan-graph.sha256").write_text(hashlib.sha256(stdout.encode()).hexdigest())
 
 
 # ---- --fast --------------------------------------------------------------- #
@@ -647,6 +663,109 @@ def test_install_success_activates_the_buildenv_it_wrote(make_context, run_recor
     run_conan(config, ctx)
 
     assert ctx.env["FROM_CONAN_INSTALL"] == "yes"
+
+
+# ---- install: skip-if-unchanged (conan graph info) -----------------------------#
+def test_install_skipped_when_graph_hash_unchanged(make_context, run_recorder, which):
+    default_profile_ok(run_recorder)
+    stdout = graph_info_ok(run_recorder, stdout='{"graph": "same"}')
+    config = {"conan": {"conanfile": "conan/conanfile.py"}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conan").mkdir(parents=True)
+    (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
+    _seed_install_tree(ctx, stdout)
+
+    run_conan(config, ctx)
+
+    assert not any("conan install" in c for c in run_recorder.commands())
+    assert any("graph info" in c for c in run_recorder.commands())
+    # the existing tree (never wiped) is still activated
+    assert ctx.env["FROM_CONAN"] == "yes"
+
+
+def test_install_runs_when_graph_hash_changed(make_context, run_recorder, which):
+    default_profile_ok(run_recorder)
+    graph_info_ok(run_recorder, stdout='{"graph": "new"}')
+    config = {"conan": {"conanfile": "conan/conanfile.py"}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conan").mkdir(parents=True)
+    (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
+    _seed_install_tree(ctx, stdout='{"graph": "old"}')  # stored hash for different output
+
+    run_conan(config, ctx)
+
+    assert any("conan install" in c for c in run_recorder.commands())
+
+
+def test_install_runs_when_graph_info_query_fails(make_context, run_recorder, which):
+    # a failed query (conan not fully set up, a broken recipe, ...) is
+    # treated as "changed" -- conan install runs and reports the real error.
+    default_profile_ok(run_recorder)
+    run_recorder.responses["graph info"] = lambda cmd: type("R", (), {"stdout": "", "returncode": 1})()
+    config = {"conan": {"conanfile": "conan/conanfile.py"}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conan").mkdir(parents=True)
+    (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
+    _seed_install_tree(ctx, stdout="irrelevant")
+
+    run_conan(config, ctx)
+
+    assert any("conan install" in c for c in run_recorder.commands())
+
+
+def test_install_first_run_stores_graph_hash(make_context, run_recorder, which):
+    default_profile_ok(run_recorder)
+    stdout = graph_info_ok(run_recorder, stdout='{"graph": "x"}')
+    config = {"conan": {"conanfile": "conan/conanfile.py"}}
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conan").mkdir(parents=True)
+    (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
+
+    run_conan(config, ctx)
+
+    assert any("conan install" in c for c in run_recorder.commands())
+    hash_path = ctx.env_workdir / ".conan" / "conan-graph.sha256"
+    assert hash_path.read_text() == hashlib.sha256(stdout.encode()).hexdigest()
+
+
+def test_force_reinstalls_even_when_graph_hash_unchanged(make_context, run_recorder, which):
+    default_profile_ok(run_recorder)
+    stdout = graph_info_ok(run_recorder, stdout='{"graph": "same"}')
+    config = {"conan": {"conanfile": "conan/conanfile.py"}}
+    ctx = make_context(config=config, force=True)
+    (ctx.env_dir / "conan").mkdir(parents=True)
+    (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
+    _seed_install_tree(ctx, stdout)
+
+    run_conan(config, ctx)
+
+    assert any("conan install" in c for c in run_recorder.commands())
+
+
+def test_graph_info_reuses_install_args(make_context, run_recorder, which):
+    # the fast check must reflect the same recipe/profile state 'conan
+    # install' itself would resolve against -- otherwise it could OK a
+    # graph that install would have resolved differently.
+    default_profile_ok(run_recorder)
+    graph_info_ok(run_recorder)
+    config = {
+        "conan": {
+            "conanfile": "conan/conanfile.py",
+            "build": ["missing"],
+            "profiles": {"host": ["linux-x86_64"]},
+            "install-args": ["--update"],
+        }
+    }
+    ctx = make_context(config=config)
+    (ctx.env_dir / "conan").mkdir(parents=True)
+    (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
+
+    run_conan(config, ctx)
+
+    graph_cmd = next(c for c in run_recorder.commands() if "graph info" in c)
+    assert "--build=missing" in graph_cmd
+    assert "-pr:h=linux-x86_64" in graph_cmd
+    assert "--update" in graph_cmd
 
 
 # ---- config (conan config install) -------------------------------------------#

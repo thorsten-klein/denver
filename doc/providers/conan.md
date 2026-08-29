@@ -139,11 +139,21 @@ needs 'conan' on PATH`.
   reconciled, conan just uses whatever's already in its local cache/home.
   Add `remotes:` (or a `config:` that installs its own remote config) only
   once real remote access is actually needed.
+- **Skips `conan install` when the dependency graph is unchanged.** Before
+  wiping and reinstalling, the install step runs a fast `conan graph info`
+  query (no downloads/builds) and hashes its output; if that hash matches
+  the one stored by the last successful install here, the existing install
+  tree is left alone entirely. A failed query (conan not on `PATH` yet
+  under `--dry-run`, a broken recipe, ...) is treated as "changed", so
+  `conan install` runs and reports the real problem itself. Only the
+  install step is gated this way — `config`/`prepare`/`export` above it
+  always run.
 - **`--fast`** activates the already-generated `conanbuildenv.sh` instead
-  of re-running `conan install`; dies with a clear message if it doesn't
-  exist yet.
+  of re-running `conan install` (or the `conan graph info` check);
+  dies with a clear message if it doesn't exist yet.
 - **`--force`** recreates the conan/workspace setup steps' own on-disk
-  state unconditionally.
+  state unconditionally, including a fresh `conan install` regardless of
+  the graph-info check above.
 - **`--dry-run`** prints the `conan`/recipes-exporter commands instead of
   running them, and leaves the install tree (which a real run wipes first)
   untouched. `conan config home` still runs — it is a read-only query whose
