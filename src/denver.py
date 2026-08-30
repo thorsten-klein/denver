@@ -40,6 +40,7 @@ Run `denver run --help` to see more details about the run-specific flags.
 
 import argparse
 import copy
+import difflib
 import importlib.metadata
 import json
 import logging
@@ -112,6 +113,24 @@ def die(message) -> NoReturn:
 def info(message):
     """Log ``message`` at info level (suppressed under --quiet)."""
     logger.info(message)
+
+
+def _with_hint(name, candidates):
+    """``'name'``, plus `` (did you mean 'x'?)`` if a close match is in ``candidates``.
+
+    Used to turn a typo (a misspelled key, id, or name) into a helpful
+    hint instead of just a plain "unknown" error.
+    """
+    # difflib's default cutoff (0.6) misses short swaps like 'vu' vs 'uv'
+    # (ratio 0.5) -- 0.5 still catches those without matching unrelated words.
+    match = difflib.get_close_matches(name, candidates, n=1, cutoff=0.5)
+    hint = f" (did you mean '{match[0]}'?)" if match else ""
+    return f"'{name}'{hint}"
+
+
+def _list_with_hints(names, candidates):
+    """``names``, comma-joined, each with its own _with_hint() suggestion."""
+    return ", ".join(_with_hint(name, candidates) for name in names)
 
 
 def print_logo():
@@ -603,7 +622,7 @@ def validate_top_level_keys(config):
     unknown = sorted(set(config) - allowed)
     if unknown:
         die(
-            f"denver.toml: unknown top-level key(s) {', '.join(unknown)} -- "
+            f"denver.toml: unknown top-level key(s) {_list_with_hints(unknown, allowed)} -- "
             f"not a recognised key and not a stage id in 'stages:'"
         )
 
@@ -774,8 +793,30 @@ def validate_stage_filters(config, until_stage, skip_stages):
         # stages actually run in, which is exactly what --until relies on.
         available = "\n".join(f"  - {s}" for s in declared) or "  (none)"
         die(
-            f"--until/--skip: unknown stage id(s) {', '.join(unknown)} -- "
+            f"--until/--skip: unknown stage id(s) {_list_with_hints(unknown, declared)} -- "
             f"not declared in 'stages:'. Available stages:\n{available}"
+        )
+
+
+def validate_hooks_keys(config):
+    """Die on a 'hooks:' key that isn't a recognised hook name.
+
+    Without this, a typo'd hook name (e.g. 'per-uv' for 'pre-uv') is just
+    silently ignored -- run_hook() only ever looks up an exact known name
+    (see hook_names_for_stages), so the hook never runs and nothing says why.
+    Mirrors validate_top_level_keys, one level down.
+    """
+    hooks = config.get("hooks")
+    if hooks is None:
+        return
+    if not isinstance(hooks, dict):
+        die(f"denver.toml: 'hooks:' must be a mapping of hook name to script(s), got {hooks!r}")
+    allowed = set(hook_names_for_stages(_declared_stage_ids(config)))
+    unknown = sorted(set(hooks) - allowed)
+    if unknown:
+        die(
+            f"denver.toml: unknown hooks key(s) {_list_with_hints(unknown, allowed)} -- "
+            f"known: {', '.join(sorted(allowed))}."
         )
 
 
@@ -833,8 +874,8 @@ def validate_stage_section_keys(stage, section):
     unknown = sorted(set(section) - allowed)
     if unknown:
         die(
-            f"stage '{stage.stage}': unknown key(s) {', '.join(unknown)} for provider '{stage.name}' -- "
-            f"known: {', '.join(sorted(type(stage).KEYS)) or '(none)'}."
+            f"stage '{stage.stage}': unknown key(s) {_list_with_hints(unknown, allowed)} for provider "
+            f"'{stage.name}' -- known: {', '.join(sorted(type(stage).KEYS)) or '(none)'}."
         )
 
 
@@ -960,7 +1001,10 @@ def _validate_depends_on(stage_id, depends_on, seen, all_stage_ids):
         if dep in seen:
             continue
         if dep not in all_stage_ids:
-            die(f"stage '{stage_id}': 'depends-on:' names unknown stage id '{dep}' -- not declared in 'stages:'.")
+            die(
+                f"stage '{stage_id}': 'depends-on:' names unknown stage id {_with_hint(dep, all_stage_ids)} -- "
+                f"not declared in 'stages:'."
+            )
         die(
             f"stage '{stage_id}': 'depends-on:' names '{dep}', declared at or after '{stage_id}' in 'stages:' -- "
             "a stage may only depend on one declared earlier."
@@ -5120,6 +5164,7 @@ def _load_cli_config(args, config_path) -> dict:
     validate_denver_version(config)
     validate_top_level_keys(config)
     validate_stage_filters(config, args.until, args.skip)
+    validate_hooks_keys(config)
     # deep_merge/apply_config_overrides are typed for config *values* (a
     # mapping, a list, a scalar); a whole denver.toml is always the mapping.
     return cast(dict, config)

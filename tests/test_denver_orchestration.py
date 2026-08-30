@@ -642,6 +642,14 @@ def test_stage_env_must_be_a_string_mapping(tmp_path, fake_providers):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
 
+def test_unknown_stage_key_typo_hints_at_the_close_key(tmp_path, fake_providers, caplog):
+    config = {"stages": ["fakewrap"], "fakewrap": {"provider": "fakewrap", "marer": "x"}}  # 'marker' misspelled
+    env_dir, cfg_path = _env(tmp_path, config)
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "did you mean 'marker'?" in caplog.text
+
+
 def test_run_stages_wrapper_active_relocates_reinvocation(tmp_path, fake_providers, exec_recorder):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {
@@ -1774,6 +1782,18 @@ def test_depends_on_unknown_stage_id_dies(tmp_path, fake_providers, exec_recorde
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "depends-on": ["nope"]}}
     with pytest.raises(SystemExit):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+
+
+def test_depends_on_unknown_stage_id_typo_hints_at_the_close_stage_id(tmp_path, fake_providers, caplog):
+    env_dir, cfg_path = _env(tmp_path, {})
+    config = {
+        "stages": ["setuop", "fakesetup"],  # 'setuop' misspelled -- 'setup' below should still hint at it
+        "setuop": {"provider": "fakesetup"},
+        "fakesetup": {"provider": "fakesetup", "depends-on": ["setup"]},
+    }
+    with pytest.raises(SystemExit):
+        denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
+    assert "did you mean 'setuop'?" in caplog.text
 
 
 def test_depends_on_forward_reference_dies(tmp_path, fake_providers, exec_recorder):

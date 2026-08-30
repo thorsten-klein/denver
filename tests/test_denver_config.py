@@ -220,6 +220,20 @@ def test_load_config_circular_import_dies(tmp_path):
         denver.load_config(a_dir / "denver.toml")
 
 
+# ---- typo hints ("did you mean") --------------------------------------------#
+def test_with_hint_close_match():
+    assert denver._with_hint("stagse", ["stages", "version"]) == "'stagse' (did you mean 'stages'?)"
+
+
+def test_with_hint_no_close_match():
+    assert denver._with_hint("xyz", ["stages", "version"]) == "'xyz'"
+
+
+def test_list_with_hints_joins_multiple():
+    result = denver._list_with_hints(["stagse", "xyz"], ["stages", "version"])
+    assert result == "'stagse' (did you mean 'stages'?), 'xyz'"
+
+
 def test_validate_top_level_keys_known_keys_ok():
     config = {"version": 1.0, "stages": ["uv"], "uv": {}, "command": "fish"}
     denver.validate_top_level_keys(config)  # no error
@@ -239,6 +253,23 @@ def test_validate_top_level_keys_no_stages_only_known_keys_ok():
 def test_validate_top_level_keys_extensions_ok():
     config = {"extensions": {"providers": {"dirs": ["my_providers"]}}}
     denver.validate_top_level_keys(config)  # no error
+
+
+def test_validate_top_level_keys_typo_hints_at_the_close_key(caplog):
+    # 'stages' itself misspelled
+    config = {"stagse": ["uv"], "uv": {}}
+    with pytest.raises(SystemExit):
+        denver.validate_top_level_keys(config)
+    assert "did you mean 'stages'?" in caplog.text
+
+
+def test_validate_top_level_keys_typo_hints_at_the_close_stage_id(caplog):
+    # 'uv' declared correctly in 'stages:', but its own section is misspelled
+    # as 'vu' -- a stray top-level key with nowhere else to belong.
+    config = {"stages": ["uv"], "vu": {}}
+    with pytest.raises(SystemExit):
+        denver.validate_top_level_keys(config)
+    assert "did you mean 'uv'?" in caplog.text
 
 
 # ---- 'denver-version:' requirement -------------------------------------------#
@@ -454,3 +485,48 @@ def test_validate_stage_filters_unknown_lists_available_as_ordered_bullets(caplo
     with pytest.raises(SystemExit):
         denver.validate_stage_filters(config, None, ["typo"])
     assert "  - zephyr\n  - conan\n  - uv" in caplog.text
+
+
+def test_validate_stage_filters_unknown_typo_hints_at_the_close_stage_id(caplog):
+    config = {"stages": ["uv", "conan"]}
+    with pytest.raises(SystemExit):
+        denver.validate_stage_filters(config, "conna", [])  # 'conan' misspelled
+    assert "did you mean 'conan'?" in caplog.text
+
+
+# ---- 'hooks:' key validation -------------------------------------------------#
+def test_validate_hooks_keys_known_names_ok():
+    config = {"stages": ["uv"], "hooks": {"env": "e.sh", "pre-uv": "a.sh", "post-uv": "b.sh", "pre-cmd": "c.sh"}}
+    denver.validate_hooks_keys(config)  # no error
+
+
+def test_validate_hooks_keys_unset_ok():
+    denver.validate_hooks_keys({"stages": ["uv"]})  # no error
+
+
+def test_validate_hooks_keys_not_a_mapping_dies():
+    config = {"stages": ["uv"], "hooks": ["pre-uv"]}
+    with pytest.raises(SystemExit):
+        denver.validate_hooks_keys(config)
+
+
+def test_validate_hooks_keys_unknown_name_dies():
+    config = {"stages": ["uv"], "hooks": {"typo": "a.sh"}}
+    with pytest.raises(SystemExit):
+        denver.validate_hooks_keys(config)
+
+
+def test_validate_hooks_keys_typo_hints_at_the_close_name(caplog):
+    # 'pre-uv' misspelled -- this is exactly what run_hook() silently
+    # skipped before validate_hooks_keys existed.
+    config = {"stages": ["uv"], "hooks": {"per-uv": "a.sh"}}
+    with pytest.raises(SystemExit):
+        denver.validate_hooks_keys(config)
+    assert "did you mean 'pre-uv'?" in caplog.text
+
+
+def test_validate_hooks_keys_checks_against_every_declared_stage():
+    # 'pre-conan' is a real hook name once 'conan' is declared, even though
+    # 'conan' itself isn't the stage the typo happens to be near.
+    config = {"stages": ["uv", "conan"], "hooks": {"pre-conan": "a.sh"}}
+    denver.validate_hooks_keys(config)  # no error
