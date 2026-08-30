@@ -1,0 +1,26 @@
+patches:
+  ########################################################
+  # west
+  ########################################################
+  - package: west
+    path: west/869.patch
+    sha256sum: 579c5fd46b7ba3a7733331151ea7cff140498314cbe676d2838f71bbe04924a0
+    author: Thorsten Klein
+    email: thorsten.klein@bshg.com
+    apply-command: git am -p3
+    comments: |
+      Allow remapping urls. Ref: https://github.com/zephyrproject-rtos/west/pull/869
+  - package: west
+    path: west/0001-handle-HEAD-as-revision.patch
+    sha256sum: 19a940b2591c9211d23425179bac5aae5c9633b643bfff642f74c5e0cf7b789c
+    author: Thorsten Klein
+    email: thorsten.klein@bshg.com
+    comments: |
+      Handle HEAD as a special revision in manifest
+  - package: west
+    path: west/0001-support-anchor-path.patch
+    sha256sum: 1040a76a90a064c30365938c03696c7f39bf5fe8fb6e37939d497f3987e91773
+    author: Thorsten Klein
+    email: thorsten.klein@bshg.com
+    comments: |
+      support anchor in manifest to support cloning project to relative path

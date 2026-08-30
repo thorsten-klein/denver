@@ -1,0 +1,12 @@
+[build]
+pristine = auto
+dir-fmt = {west_topdir}/builds/{board}/{source_dir_workspace}
+
+[update]
+auto-cache = /var/tmp/west/auto-cache
+
+[blobs]
+auto-cache = /var/tmp/west/blobs-auto-cache
+
+[alias]
+build-llvm =             build --cmake-opt=-DZEPHYR_TOOLCHAIN_VARIANT=llvm

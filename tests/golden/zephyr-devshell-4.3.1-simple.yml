@@ -1,0 +1,318 @@
+version: 1.0
+denver-version: '>=1.6.0'
+command: fish
+env:
+  JLINK_DIR: ${DENVER_ENV_WORKDIR}/jlink
+  ZEPHYR_SDK_INSTALL_DIR: ${DENVER_ENV_WORKDIR}/download/zephyr-sdk-minimal
+hooks:
+  env:
+  - <REPO>/examples/zephyr-devshell-4.3.1-simple/hooks/env.sh
+  post-host-tools: null
+  post-jlink: null
+  post-native-tools: null
+  post-uv: null
+  post-uv-zephyr: null
+  post-zephyr: null
+  post-zephyr-sdk: null
+  post-zephyr-sdk-download: null
+  pre-cmd: null
+  pre-host-tools: null
+  pre-jlink: null
+  pre-native-tools: null
+  pre-uv: null
+  pre-uv-zephyr: null
+  pre-zephyr: null
+  pre-zephyr-sdk: null
+  pre-zephyr-sdk-download: null
+stages:
+- host-tools
+- native-tools
+- zephyr-sdk-download
+- zephyr-sdk
+- jlink
+- uv
+- zephyr
+- uv-zephyr
+host-tools:
+  provider: custom
+  description:
+  - Checks the required apt packages are installed.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts:
+    setup:
+    - setup/install_host_tools.sh
+  cmd: bash ${DENVER_ENV_DIR}/setup/check_host_tools.sh
+  launcher: null
+  source: null
+native-tools:
+  provider: download
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  packages:
+  - description: ''
+    env-append: {}
+    env-prepend:
+      PATH: '${DENVER_UNPACK_DIR}/bin:'
+    md5sum: 7c102bf491091679895362bb8ae3f4bb
+    mirrors: []
+    name: cmake
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/cmake-3.31.9-linux-x86_64.tar.gz
+    sha256sum: ''
+    unpack-cmd: tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/cmake
+    url: https://github.com/Kitware/CMake/releases/download/v3.31.9/cmake-3.31.9-linux-x86_64.tar.gz
+  - description: ''
+    env-append: {}
+    env-prepend:
+      PATH: '${DENVER_UNPACK_DIR}:'
+    md5sum: 54a25b8d5b5bed15c1bf051a629b42bb
+    mirrors: []
+    name: ninja
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/ninja-linux.zip
+    sha256sum: ''
+    unpack-cmd: ''
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/ninja
+    url: https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip
+  - description: clang, clang++, lld, plus a ld -> ld.lld symlink.
+    env-append: {}
+    env-prepend:
+      PATH: '${DENVER_UNPACK_DIR}/bin:'
+    md5sum: bc42e986dbe585461fb837542769bc7a
+    mirrors: []
+    name: clang
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/LLVM-21.1.4-Linux-X64.tar.xz
+    sha256sum: ''
+    unpack-cmd: tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1 && ln -sf
+      ld.lld bin/ld
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/clang
+    url: https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.4/LLVM-21.1.4-Linux-X64.tar.xz
+  - description: The shell the final command hands off to.
+    env-append: {}
+    env-prepend:
+      PATH: '${DENVER_UNPACK_DIR}:'
+    md5sum: 921a8b099fa64d8565b27ffcb588c540
+    mirrors: []
+    name: fish
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/fish-4.8.1-linux-x86_64.tar.xz
+    sha256sum: ''
+    unpack-cmd: ''
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/fish
+    url: https://github.com/fish-shell/fish-shell/releases/download/4.8.1/fish-4.8.1-linux-x86_64.tar.xz
+  - description: ''
+    env-append: {}
+    env-prepend:
+      PATH: '${DENVER_UNPACK_DIR}/bin:'
+    md5sum: 72f0b4d9b5280f28be54745a815d8a74
+    mirrors: []
+    name: doxygen
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/doxygen-1.15.0.linux.bin.tar.gz
+    sha256sum: ''
+    unpack-cmd: tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/doxygen
+    url: https://github.com/doxygen/doxygen/releases/download/Release_1_15_0/doxygen-1.15.0.linux.bin.tar.gz
+  - description: ''
+    env-append: {}
+    env-prepend:
+      PATH: '${DENVER_UNPACK_DIR}/bin:'
+    md5sum: 6c39e1779a3b830f583214b691b4b7d4
+    mirrors: []
+    name: protoc
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/protoc-33.2-linux-x86_64.zip
+    sha256sum: ''
+    unpack-cmd: ''
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/protoc
+    url: https://github.com/protocolbuffers/protobuf/releases/download/v33.2/protoc-33.2-linux-x86_64.zip
+  - description: ''
+    env-append: {}
+    env-prepend:
+      PATH: '${DENVER_UNPACK_DIR}:'
+    md5sum: c4e790c320566ec0bac903edf714af2f
+    mirrors: []
+    name: systemview
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/SystemView_Linux_V362b_x86_64.tgz
+    sha256sum: ''
+    unpack-cmd: tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/systemview
+    url: https://www.segger.com/downloads/jlink/SystemView_Linux_V362b_x86_64.tgz
+zephyr-sdk-download:
+  provider: download
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  packages:
+  - description: ''
+    env-append: {}
+    env-prepend: {}
+    md5sum: c62ad59d0b92fd2ede022b774c770102
+    mirrors: []
+    name: zephyr-sdk-minimal
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/zephyr-sdk-0.17.4_linux-x86_64_minimal.tar.xz
+    sha256sum: ''
+    unpack-cmd: tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/zephyr-sdk-minimal
+    url: https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/zephyr-sdk-0.17.4_linux-x86_64_minimal.tar.xz
+  - description: ''
+    env-append: {}
+    env-prepend: {}
+    md5sum: 68ae71edc0106c3093055b97aaa47017
+    mirrors: []
+    name: zephyr-toolchain-arm-zephyr-eabi
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/toolchain_linux-x86_64_arm-zephyr-eabi.tar.xz
+    sha256sum: ''
+    unpack-cmd: tar -xf "$DENVER_DOWNLOAD_ARCHIVE"
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/zephyr-toolchain-arm-zephyr-eabi
+    url: https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_arm-zephyr-eabi.tar.xz
+  - description: ''
+    env-append: {}
+    env-prepend: {}
+    md5sum: afc1120b6b3cf0a2e9196aea76b3f734
+    mirrors: []
+    name: zephyr-toolchain-riscv64-zephyr-elf
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/toolchain_linux-x86_64_riscv64-zephyr-elf.tar.xz
+    sha256sum: ''
+    unpack-cmd: tar -xf "$DENVER_DOWNLOAD_ARCHIVE"
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/zephyr-toolchain-riscv64-zephyr-elf
+    url: https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_riscv64-zephyr-elf.tar.xz
+  - description: ''
+    env-append: {}
+    env-prepend: {}
+    md5sum: aee015389a3c4a2ecc23834d1e5601a5
+    mirrors: []
+    name: zephyr-toolchain-x86_64-zephyr-elf
+    outfile: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/downloads/toolchain_linux-x86_64_x86_64-zephyr-elf.tar.xz
+    sha256sum: ''
+    unpack-cmd: tar -xf "$DENVER_DOWNLOAD_ARCHIVE"
+    unpack-dir: <REPO>/examples/zephyr-devshell-4.3.1-simple/.denver/denver/download/zephyr-toolchain-x86_64-zephyr-elf
+    url: https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.4/toolchain_linux-x86_64_x86_64-zephyr-elf.tar.xz
+zephyr-sdk:
+  provider: custom
+  description:
+  - Assembles the Zephyr SDK from the archives fetched above.
+  disabled: false
+  depends-on:
+  - zephyr-sdk-download
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  cmd: ${DENVER_ENV_DIR}/setup/setup_zephyr_sdk.sh
+  launcher: null
+  source: null
+jlink:
+  provider: custom
+  description:
+  - Downloads SEGGER J-Link (JLinkExe, JLinkGDBServerCLExe).
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend:
+    LD_LIBRARY_PATH: '${JLINK_DIR}/bin:'
+    PATH: '${JLINK_DIR}/bin:'
+  env-append: {}
+  scripts: null
+  cmd: ${DENVER_ENV_DIR}/setup/download_jlink.sh
+  launcher: null
+  source: null
+uv:
+  provider: uv
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success:
+  - <REPO>/examples/zephyr-devshell-4.3.1-simple/uv/skip-on-success.sh
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  amend: true
+  exe: uv
+  freeze-to: null
+  install-args: null
+  lockfile: null
+  no-index: false
+  overrides:
+  - uv/overrides.txt
+  patches-apply:
+  - venv-patcher
+  - apply
+  - -f
+  - <REPO>/examples/zephyr-devshell-4.3.1-simple/uv/venv-patcher/patches.yml
+  python: 3.12.3
+  requirements:
+  - uv/requirements.txt
+  - uv/requirements-from-git.txt
+  venv: null
+zephyr:
+  provider: zephyr
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts:
+    setup:
+    - setup/install_jlink_udev_rules.sh
+  base: /fake-west-topdir/zephyr-rtos
+  blobs-cache: null
+  blobs-fetch-args:
+  - --auto-accept
+  exe: west
+  patch-committer-date: '2000-01-01T00:00:00'
+  patch-committer-email: denver@denver
+  patch-committer-name: denver
+  topdir: /fake-west-topdir
+  update-args: null
+  west-config: null
+  west-yml: <REPO>/examples/zephyr-devshell-4.3.1-simple/west.yml
+uv-zephyr:
+  provider: uv
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  amend: true
+  exe: uv
+  freeze-to: null
+  install-args:
+  - $(west packages pip)
+  lockfile: null
+  no-index: false
+  overrides:
+  - uv/overrides.txt
+  patches-apply: null
+  python: null
+  requirements: null
+  venv: null
+

@@ -1,0 +1,28 @@
+From 864d9f8f4356b44d22160f7c0f9cbe7d9d87552c Mon Sep 17 00:00:00 2001
+Message-Id: <864d9f8f4356b44d22160f7c0f9cbe7d9d87552c.1780908713.git.thorsten.klein@bshg.com>
+From: Thorsten Klein <thorsten.klein@bshg.com>
+Date: Mon, 8 Jun 2026 10:51:49 +0200
+Subject: [PATCH] west blobs cache env var
+
+Support setting west blobs cache dirs via env variable
+WEST_BLOBS_CACHE_DIRS
+---
+ scripts/west_commands/blobs.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/west_commands/blobs.py b/scripts/west_commands/blobs.py
+index 81eb1cc11c3..0773d11b9f2 100644
+--- a/scripts/west_commands/blobs.py
++++ b/scripts/west_commands/blobs.py
+@@ -213,7 +213,7 @@ class Blobs(WestCommand):
+         path = Path(blob['abspath'])
+ 
+         # collect existing cache dirs specified as args, otherwise from west config
+-        cache_dirs = args.cache_dirs
++        cache_dirs = args.cache_dirs or os.getenv("WEST_BLOBS_CACHE_DIRS")
+         auto_cache_dir = args.auto_cache
+         if self.has_config:
+             if cache_dirs is None:
+-- 
+2.34.1
+

@@ -1,0 +1,177 @@
+From 6e2db59a003c63203794ffc4270559148335a9b6 Mon Sep 17 00:00:00 2001
+Message-Id: <6e2db59a003c63203794ffc4270559148335a9b6.1780924054.git.thorsten.klein@bshg.com>
+From: Thorsten Klein <thorsten.klein@bshg.com>
+Date: Thu, 26 Mar 2026 14:58:29 +0100
+Subject: [PATCH] twister live log
+
+Capture twister log and show live log the same time.
+---
+ scripts/pylib/twister/twisterlib/handlers.py |  4 ++
+ scripts/pylib/twister/twisterlib/runner.py   | 60 ++++++++++++++++----
+ 2 files changed, 54 insertions(+), 10 deletions(-)
+
+diff --git a/scripts/pylib/twister/twisterlib/handlers.py b/scripts/pylib/twister/twisterlib/handlers.py
+index 695888cc695..584554d2934 100755
+--- a/scripts/pylib/twister/twisterlib/handlers.py
++++ b/scripts/pylib/twister/twisterlib/handlers.py
+@@ -270,6 +270,8 @@ class BinaryHandler(Handler):
+                     if stripped_line.endswith(suffix):
+                         stripped_line = stripped_line[:-len(suffix)].rstrip()
+                     logger.debug(f"OUTPUT: {stripped_line}")
++                    if getattr(self.options, 'inline_logs', False):
++                        print(stripped_line, flush=True)
+                     log_out_fp.write(strip_ansi_sequences(line_decoded))
+                     log_out_fp.flush()
+                     harness.handle(stripped_line)
+@@ -1051,6 +1053,8 @@ class QEMUHandler(Handler):
+                 log_out_fp.flush()
+                 line = line.rstrip()
+                 logger.debug(f"QEMU ({pid}): {line}")
++                if getattr(handler.options, 'inline_logs', False):
++                    print(line, flush=True)
+ 
+                 harness.handle(line)
+                 if harness.status != TwisterStatus.NONE:
+diff --git a/scripts/pylib/twister/twisterlib/runner.py b/scripts/pylib/twister/twisterlib/runner.py
+index f366c1029df..a99ffc8d5a4 100644
+--- a/scripts/pylib/twister/twisterlib/runner.py
++++ b/scripts/pylib/twister/twisterlib/runner.py
+@@ -11,6 +11,7 @@ import os
+ import pathlib
+ import pickle
+ import re
++import shlex
+ import shutil
+ import subprocess
+ import sys
+@@ -552,6 +553,9 @@ class CMake:
+             kwargs['stdout'] = subprocess.PIPE
+             # CMake sends the output of message() to stderr unless it's STATUS
+             kwargs['stderr'] = subprocess.STDOUT
++            kwargs['bufsize'] = 1
++            kwargs['text'] = True
++            kwargs['encoding'] = self.default_encoding
+ 
+         if self.cwd:
+             kwargs['cwd'] = self.cwd
+@@ -563,7 +567,8 @@ class CMake:
+             p = subprocess.Popen(cmd, **kwargs)
+         logger.debug(f'Running {" ".join(cmd)}')
+ 
+-        out, _ = p.communicate()
++        log_msg = self.live_log(p)
++        p.wait()
+ 
+         ret = {}
+         duration = time.time() - start_time
+@@ -582,8 +587,7 @@ class CMake:
+                 self.instance.status = TwisterStatus.PASS
+             ret = {"returncode": p.returncode}
+ 
+-            if out:
+-                log_msg = out.decode(self.default_encoding)
++            if log_msg:
+                 with open(
+                     os.path.join(self.build_dir, self.log),
+                     "a",
+@@ -594,9 +598,7 @@ class CMake:
+                 return None
+         else:
+             # A real error occurred, raise an exception
+-            log_msg = ""
+-            if out:
+-                log_msg = out.decode(self.default_encoding)
++            if log_msg:
+                 with open(
+                     os.path.join(self.build_dir, self.log),
+                     "a",
+@@ -604,7 +606,6 @@ class CMake:
+                 ) as log:
+                     log.write(log_msg)
+ 
+-            if log_msg:
+                 pattern = (
+                     r"region `(FLASH|ROM|RAM|ICCM|DCCM|SRAM|"
+                     r"dram\d_\d_seg|iram\d_\d_seg)' "
+@@ -635,6 +636,35 @@ class CMake:
+ 
+         return ret
+ 
++    def is_already_configured(self, cmd):
++        build_dir = pathlib.Path(self.build_dir)
++        marker_file = build_dir / "cmd.info"
++
++        configured = True
++        if not (build_dir / 'CMakeCache.txt' ).exists():
++            configured = False
++
++        content = [shlex.join(cmd)]
++        content += [f"{k}={v}" for k, v in os.environ.items()]
++        content_str = "\n".join(content)
++
++        if not marker_file.exists() or marker_file.read_text() != content_str:
++            configured = False
++
++        marker_file.parent.mkdir(parents=True, exist_ok=True)
++        marker_file.write_text(content_str)
++
++        return configured
++
++    def live_log(self, process):
++        inline_logs = getattr(getattr(self, 'options', None), 'inline_logs', False)
++        out = ""
++        for line in process.stdout:
++            if inline_logs:
++                print(line.rstrip())
++            out += line
++        return out
++
+     def run_cmake(self, args="", filter_stages=None):
+         if filter_stages is None:
+             filter_stages = []
+@@ -712,12 +742,21 @@ class CMake:
+ 
+         kwargs = dict()
+ 
++        if self.is_already_configured(cmd):
++            return {
++                'returncode': 0,
++                'filter': []
++            }
++
+         log_command(logger, "Calling cmake", cmd)
+ 
+         if self.capture_output:
+             kwargs['stdout'] = subprocess.PIPE
+             # CMake sends the output of message() to stderr unless it's STATUS
+             kwargs['stderr'] = subprocess.STDOUT
++            kwargs['bufsize'] = 1
++            kwargs['text'] = True
++            kwargs['encoding'] = self.default_encoding
+ 
+         if self.cwd:
+             kwargs['cwd'] = self.cwd
+@@ -727,7 +766,9 @@ class CMake:
+             p = self.jobserver.popen(cmd, **kwargs)
+         else:
+             p = subprocess.Popen(cmd, **kwargs)
+-        out, _ = p.communicate()
++
++        out = self.live_log(p)
++        p.wait()
+ 
+         duration = time.time() - start_time
+         self.instance.build_time += duration
+@@ -760,8 +801,7 @@ class CMake:
+                 "a",
+                 encoding=self.default_encoding
+             ) as log:
+-                log_msg = out.decode(self.default_encoding)
+-                log.write(log_msg)
++                log.write(out)
+ 
+         return ret
+ 
+-- 
+2.34.1
+
