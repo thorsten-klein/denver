@@ -1,0 +1,27 @@
+From 9a9e9f53d3491aeccacb9325f131a2d3e6b5190e Mon Sep 17 00:00:00 2001
+Message-Id: <9a9e9f53d3491aeccacb9325f131a2d3e6b5190e.1776939491.git.thorsten.klein@bshg.com>
+From: Thorsten Klein <thorsten.klein@bshg.com>
+Date: Wed, 8 Apr 2026 11:39:01 +0200
+Subject: [PATCH] twister avoid Re-running cmake
+
+---
+ scripts/pylib/twister/twisterlib/runner.py | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/scripts/pylib/twister/twisterlib/runner.py b/scripts/pylib/twister/twisterlib/runner.py
+index 2cdaf40ffc4..ee6d580db02 100644
+--- a/scripts/pylib/twister/twisterlib/runner.py
++++ b/scripts/pylib/twister/twisterlib/runner.py
+@@ -654,6 +654,9 @@ class CMake:
+         if self.instance.sysbuild:
+             warning_command = 'SB_' + warning_command
+ 
++        if (pathlib.Path(self.build_dir) / "CMakeCache.txt").exists():
++            return {"returncode": 0, "filter": []}
++
+         logger.debug(f"Running cmake on {self.source_dir} for {self.platform.name}")
+         cmake_args = [
+             f'-B{self.build_dir}',
+-- 
+2.34.1
+

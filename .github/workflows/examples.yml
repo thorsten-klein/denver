@@ -46,7 +46,9 @@ jobs:
         # The full set (raspberry-pico's west update, the versioned zephyr
         # devshell) is minutes of network- and docker-heavy work per leg, so it
         # is left to the develop push and to a manual 'Run workflow'.
-        example: ${{ (github.event_name == 'pull_request' && fromJSON('["simple-env", "firmware-env"]')) || fromJSON('["simple-env", "raspberry-pico", "firmware-env", "zephyr-devshell-4.3.1"]') }}
+        example: >-
+          ${{ (github.event_name == 'pull_request' && fromJSON('["simple-env", "firmware-env"]')) ||
+          fromJSON('["simple-env", "raspberry-pico", "firmware-env", "zephyr-devshell-4.3.1", "zephyr-devshell-4.3.1-simple"]') }}
     steps:
       - uses: actions/checkout@v4
         with:

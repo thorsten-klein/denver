@@ -1,0 +1,5 @@
+name: denver-zephyr-4.3.1
+package-managers:
+  pip:
+    requirement-files:
+      - uv/requirements.txt

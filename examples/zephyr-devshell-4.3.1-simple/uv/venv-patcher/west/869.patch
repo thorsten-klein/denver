@@ -1,0 +1,153 @@
+From 157c7af0b5b6f0e0f41164f7976d081af385007a Mon Sep 17 00:00:00 2001
+From: "Klein, Thorsten" <Thorsten.Klein@bshg.com>
+Date: Thu, 16 Oct 2025 14:37:51 +0200
+Subject: [PATCH 1/2] manifest: support URL modification in downstream
+ manifests
+
+Add support for a new 'import-modifications' section in the manifest.
+
+Under the 'url-replace' key, users can define search-and-replace
+patterns that are applied to project URLs during manifest import.
+This allows downstream projects to modify remote URLs, e.g. when using
+mirrored repositories.
+---
+ src/west/manifest-schema.yml | 19 +++++++++++++++
+ src/west/manifest.py         | 46 ++++++++++++++++++++++++++++++++++++
+ 2 files changed, 65 insertions(+)
+
+diff --git a/src/west/manifest-schema.yml b/src/west/manifest-schema.yml
+index ebf82b53d..8fc024927 100644
+--- a/src/west/manifest-schema.yml
++++ b/src/west/manifest-schema.yml
+@@ -66,6 +66,25 @@ mapping:
+             required: true
+             type: str
+ 
++  # allow some remapping of values by downstream projects
++  remapping:
++    required: false
++    type: map
++    mapping:
++      # search-replace within URLs (e.g. to use mirror URLs)
++      url:
++        required: false
++        type: seq
++        sequence:
++          - type: map
++            mapping:
++              old:
++                required: true
++                type: str
++              new:
++                required: true
++                type: str
++
+   # The "projects" key specifies a sequence of "projects", each of which has a
+   # remote, and may specify additional configuration.
+   #
+diff --git a/src/west/manifest.py b/src/west/manifest.py
+index 95afac72b..5cc2e4792 100644
+--- a/src/west/manifest.py
++++ b/src/west/manifest.py
+@@ -7,6 +7,7 @@
+ Parser and abstract data types for west manifests.
+ '''
+ 
++import copy
+ import enum
+ import errno
+ import logging
+@@ -182,6 +183,34 @@ def _err(message):
+ _logger = logging.getLogger(__name__)
+ 
+ 
++# Representation of remapping
++
++
++class ImportRemapping:
++    """Represents `remapping` within a manifest."""
++
++    def __init__(self, manifest_data: dict | None = None):
++        """Initialize a new ImportRemapping instance."""
++        self.url_replaces: list[tuple[str, str]] = []
++        self.append(manifest_data or {})
++
++    def append(self, manifest_data: dict):
++        """Append values from a manifest data (dictionary) to this instance."""
++        for kind, values in manifest_data.get('remapping', {}).items():
++            if kind == 'url':
++                self.url_replaces += [(v['old'], v['new']) for v in values]
++
++    def merge(self, other):
++        """Merge another ImportRemapping instance into this one."""
++        if not isinstance(other, ImportRemapping):
++            raise TypeError(f"Unsupported type'{type(other).__name__}'")
++        self.url_replaces += other.url_replaces
++
++    def copy(self):
++        """Return a deep copy of this instance."""
++        return copy.deepcopy(self)
++
++
+ # Type for the submodule value passed through the manifest file.
+ class Submodule(NamedTuple):
+     '''Represents a Git submodule within a project.'''
+@@ -456,6 +485,9 @@ class _import_ctx(NamedTuple):
+     # Bit vector of flags that modify import behavior.
+     import_flags: 'ImportFlag'
+ 
++    # remapping
++    remapping: ImportRemapping
++
+ 
+ def _imap_filter_allows(imap_filter: ImapFilterFnType, project: 'Project') -> bool:
+     # imap_filter(project) if imap_filter is not None; True otherwise.
+@@ -2052,6 +2084,7 @@ def get_option(option, default=None):
+             current_repo_abspath=current_repo_abspath,
+             project_importer=project_importer,
+             import_flags=import_flags,
++            remapping=ImportRemapping(),
+         )
+ 
+     def _recursive_init(self, ctx: _import_ctx):
+@@ -2074,6 +2107,10 @@ def _load_validated(self) -> None:
+ 
+         manifest_data = self._ctx.current_data['manifest']
+ 
++        # append values from resolved manifest_data to current context
++        new_remapping = ImportRemapping(manifest_data)
++        self._ctx.remapping.merge(new_remapping)
++
+         schema_version = str(manifest_data.get('version', SCHEMA_VERSION))
+ 
+         # We want to make an ordered map from project names to
+@@ -2322,6 +2359,7 @@ def _import_pathobj_from_self(self, pathobj_abs: Path, pathobj: Path) -> None:
+             current_abspath=pathobj_abs,
+             current_relpath=pathobj,
+             current_data=pathobj_abs.read_text(encoding=Manifest.encoding),
++            remapping=self._ctx.remapping.copy(),
+         )
+         try:
+             Manifest(topdir=self.topdir, internal_import_ctx=child_ctx)
+@@ -2452,6 +2490,13 @@ def _load_project(self, pd: dict, url_bases: dict[str, str], defaults: _defaults
+         else:
+             self._malformed(f'project {name} has no remote or url and no default remote is set')
+ 
++        # modify the url
++        if url:
++            url_replaces = self._ctx.remapping.url_replaces
++            for url_replace in reversed(url_replaces):
++                old, new = url_replace
++                url = url.replace(old, new)
++
+         # The project's path needs to respect any import: path-prefix,
+         # regardless of self._ctx.import_flags. The 'ignore' type flags
+         # just mean ignore the imported data. The path-prefix in this
+@@ -2672,6 +2717,7 @@ def _import_data_from_project(
+             # We therefore use a separate list for tracking them
+             # from our current list.
+             manifest_west_commands=[],
++            remapping=self._ctx.remapping.copy(),
+         )
+         try:
+             submanifest = Manifest(topdir=self.topdir, internal_import_ctx=child_ctx)

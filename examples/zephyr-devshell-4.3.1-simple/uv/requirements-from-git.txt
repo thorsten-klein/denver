@@ -1,0 +1,13 @@
+# Packages pinned to a git commit rather than a PyPI release. Fed to the
+# 'uv' stage directly (see denver.toml) -- unlike the full env, this one has
+# no offline wheel cache to pre-resolve these into, so they are installed
+# straight from git on every run instead of via a generated lockfile.
+
+# west: latest commit from 'main' branch
+west @ git+https://github.com/zephyrproject-rtos/west.git@11302e1ee5af96c9a0cf8c7436992936b1bbd848
+
+# clang-tidy cache
+ctcache @ git+https://github.com/matus-chochlik/ctcache.git@0c7fee26e09ae8a393ed7d56164102da118ab23a
+
+# for including vendor repositories
+git-nested @ git+https://github.com/thorsten-klein/git-nested@1.0.2
