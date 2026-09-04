@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """denver -- Development Environment Launcher.
 
-Launch a reproducible development environment described by a ``denver.toml``
+Launch a reproducible development environment described by a ``denver.yml``
 file: denver resolves it (following ``import:`` inheritance), then runs the
 generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker,
 ...) to build/enter the environment purely from config.
@@ -19,11 +19,14 @@ hi`) is forwarded as-is instead. ``--scripts <name>`` runs one of the env's
 own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
 ``login``; with no name, lists the names this env defines). ``--setup`` and
 ``--login`` are shorthand for ``--scripts setup`` and ``--scripts login``.
-``--show-config`` prints the fully resolved, deep-merged denver.toml and
+``--show-config`` prints the fully resolved, deep-merged config as YAML and
 exits, dropping every key left unset so only keys with an actual value
-remain. ``--show-config-full`` does the same but keeps every key left unset
-too, each shown as a commented-out ``# key = null`` line (TOML has no
-``null``).
+remain -- YAML by default regardless of whether the env itself is a
+denver.yml or a denver.toml, or TOML with ``--format toml`` (``--format
+yml`` is the explicit spelling of the default). ``--show-config-full``
+does the same but keeps every key left unset too, each shown as an
+explicit ``key: null`` line (YAML) or a commented-out ``# key = null``
+line (TOML has no ``null``).
 
 ``complete`` prints a script wiring up completion for the installed
 ``denver`` command, for the given shell (bash/fish/zsh) or, if omitted,
@@ -31,12 +34,16 @@ the one it's run from (auto-detected); wire it up with e.g. ``eval
 "$(denver complete)"`` in your shell rc file (fish: ``denver complete |
 source``).
 
-<env> is a path to a directory containing a denver.toml, or a path
-directly to a TOML config file (any name, e.g. denver.debug.toml). If
-omitted, it falls back to the DENVER_ENV_DIR environment variable.
+<env> is a path to a directory containing a denver.yml/denver.yaml (or
+denver.toml, if there's no denver.yml/denver.yaml -- requires Python
+3.11+, since tomllib is stdlib only from there), or a path directly to a
+config file (any name, e.g. denver.debug.yml). If omitted, it falls back
+to the DENVER_ENV_DIR environment variable.
 
 Run `denver run --help` to see more details about the run-specific flags.
 """
+
+from __future__ import annotations
 
 import argparse
 import copy
@@ -51,15 +58,44 @@ import shutil
 import subprocess
 import sys
 import time
-import tomllib
+import types
 from pathlib import Path
 from typing import NoReturn, cast
+
+import yaml
+
+# denver.toml support is optional: tomllib is stdlib only from Python 3.11,
+# so on an older interpreter it just isn't there. denver.yml/denver.yaml is
+# the default format -- PyYAML is a required dependency (denver's floor,
+# ">=3.9", is set by what PyYAML itself supports, not by tomllib). The
+# sys.version_info guard (rather than try/except ImportError) is what lets
+# mypy -- itself running on 3.11+ -- statically know the else branch is the
+# live one whenever it type-checks against an older target.
+#
+# Both branches below are pragma'd: CI's test matrix runs both a <3.11 and a
+# >=3.11 leg (see .github/workflows/ci.yml), so exactly one of these two
+# lines is genuinely unreachable on any single interpreter -- there's no
+# single run where both could ever be exercised together. What each branch
+# actually does (tomllib.load() dispatch, or the "no tomllib" error) is
+# covered directly -- see test_load_config_file_toml_dispatches_to_tomllib
+# and test_load_config_file_toml_without_tomllib in test_denver_config.py.
+tomllib: types.ModuleType | None
+if sys.version_info >= (3, 11):
+    import tomllib  # pragma: no cover -- see the module-level comment above
+else:
+    tomllib = None  # pragma: no cover -- see the module-level comment above
 
 # Make the bundled ``providers`` package importable both when run as
 # ``src/denver.py`` and when installed as the ``denver`` module.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 CONFIG_NAME = "denver.toml"
+CONFIG_NAME_YAML = ("denver.yml", "denver.yaml")
+
+
+def _config_names_text():
+    """Every name a config file may go by, joined for error messages -- 'denver.yml/denver.yaml/denver.toml'."""
+    return "/".join((*CONFIG_NAME_YAML, CONFIG_NAME))
 
 
 # where denver's own code lives (this file's directory, containing denver.py
@@ -326,15 +362,71 @@ def license_text():
 # --------------------------------------------------------------------------- #
 # Config loading & merging
 # --------------------------------------------------------------------------- #
-def load_config_file(path):
-    """Load a TOML file, returning a dict ({} for empty files).
+class ConfigReadError(Exception):
+    """A denver.yml/denver.toml exists but can't be turned into a config mapping.
 
-    No "is this a mapping?" check here -- TOML's grammar makes that structurally impossible to get
-    wrong: a document is always a table (dict) at the top level, never a bare array or scalar (unlike
-    JSON/YAML), so tomllib.load() already guarantees this.
+    Raised, not die()'d, from load_config_file itself: that function is also
+    called from clean's best-effort import-chain walk (_readable_imports),
+    where a config that can't be read costs only the part of the chain below
+    it, not the whole command (see _import_chain's docstring). main() turns
+    it into a die() message for every other, non-best-effort caller.
     """
-    with Path(path).open("rb") as f:
+
+
+def load_config_file(path):
+    """Load a denver.yml/denver.yaml or denver.toml file, returning a dict ({} for empty files).
+
+    Dispatches on suffix: '.toml' is read as TOML -- only if tomllib is
+    importable (stdlib only from Python 3.11), else a ConfigReadError
+    explains that only denver.yml/denver.yaml is supported on this
+    interpreter -- anything else ('.yml'/'.yaml', or no recognised suffix)
+    is read as YAML, denver's default format (PyYAML is a required
+    dependency, so it's always there).
+
+    TOML needs no "is this a mapping?" check -- its grammar makes that
+    structurally impossible to get wrong: a document is always a table
+    (dict) at the top level, never a bare array or scalar (unlike
+    JSON/YAML), so tomllib.load() already guarantees this. YAML makes no
+    such guarantee, so a non-mapping top-level YAML document is rejected
+    explicitly below.
+    """
+    path = Path(path)
+    if path.suffix == ".toml":
+        return _load_toml_config_file(path)
+    return _load_yaml_config_file(path)
+
+
+def _load_toml_config_file(path):
+    """load_config_file's '.toml' branch."""
+    if tomllib is None:
+        raise ConfigReadError(
+            f"{path}: reading a denver.toml config needs tomllib, which is stdlib only from Python 3.11 -- "
+            f"this interpreter is older. Without it, only denver.yml/denver.yaml is supported."
+        )
+    with path.open("rb") as f:
         return tomllib.load(f)
+
+
+def _load_yaml_config_file(path):
+    """load_config_file's YAML branch -- denver's default format ('.yml'/'.yaml', or any other name)."""
+    with path.open("rb") as f:
+        data = yaml.safe_load(f)
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        raise ConfigReadError(f"{path}: a denver.yml's top level must be a mapping, got {type(data).__name__}")
+    return data
+
+
+# Every exception load_config_file() can raise for a config that just plain
+# won't parse -- used by _readable_imports (clean's best-effort import-chain
+# walk) to tell "unreadable, skip it" apart from a real bug. tomllib.TOMLDecodeError
+# only exists to catch when this interpreter has tomllib at all (Python 3.11+).
+_CONFIG_READ_ERRORS = (
+    (OSError, yaml.YAMLError, ConfigReadError)
+    if tomllib is None
+    else (OSError, yaml.YAMLError, ConfigReadError, tomllib.TOMLDecodeError)
+)
 
 
 _UNSET = object()  # marks "this key has no value from a lower layer yet"
@@ -436,23 +528,37 @@ def _merge_scalar(base, override, path):
     return override
 
 
+def _config_file_in_dir(dir_path):
+    """The config file ``dir_path`` holds: ``denver.yml``, else ``denver.yaml``, else ``denver.toml``.
+
+    Falls back to the (nonexistent) ``denver.yml`` path when none is
+    present, so callers get a stable path to report as "not found".
+    """
+    for name in (*CONFIG_NAME_YAML, CONFIG_NAME):
+        candidate = dir_path / name
+        if candidate.is_file():
+            return candidate
+    return dir_path / CONFIG_NAME_YAML[0]
+
+
 def _import_target(entry, base_dir):
-    """Where an ``import:`` entry points -- a directory means its ``denver.toml`` -- or None if no file is there."""
+    """Where an ``import:`` entry points -- a directory means its ``denver.yml``/``denver.toml`` -- or None if no file is there."""
     target = (base_dir / entry).resolve()
     if target.is_dir():
-        target = target / CONFIG_NAME
+        target = _config_file_in_dir(target)
     return target if target.is_file() else None
 
 
 def resolve_import(entry, base_dir):
-    """Resolve an ``import:`` entry to the denver.toml path it refers to.
+    """Resolve an ``import:`` entry to the denver.yml/denver.yaml/denver.toml path it refers to.
 
-    An entry may point at a directory (its ``denver.toml`` is used) or directly
-    at a TOML file, relative to the importing config's directory.
+    An entry may point at a directory (its ``denver.yml``/``denver.yaml``, or ``denver.toml``
+    if there's neither, is used -- see _config_file_in_dir) or directly at a config
+    file, relative to the importing config's directory.
     """
     target = _import_target(entry, base_dir)
     if target is None:
-        die(f"import '{entry}' in {base_dir} does not resolve to a {CONFIG_NAME}")
+        die(f"import '{entry}' in {base_dir} does not resolve to a {_config_names_text()} file")
     return target
 
 
@@ -1017,20 +1123,22 @@ def _validate_depends_on(stage_id, depends_on, seen, all_stage_ids):
 def resolve_env_dir(env_arg):
     """Resolve the <env> argument to (env_dir, config_path).
 
-    Accepts a path to an env directory (its denver.toml is used) or a path
-    directly to a TOML config file (any name, e.g. denver.debug.toml -- lets
-    a folder hold several denver.xxx.toml variants side by side). Mirrors
-    resolve_import()'s own directory-or-file convention for 'import:'
-    entries, so both the top-level <env> and imports resolve the same way.
+    Accepts a path to an env directory (its denver.yml/denver.yaml, or
+    denver.toml if there's neither, is used -- see _config_file_in_dir) or a
+    path directly to a config file (any name, e.g. denver.debug.yml -- lets
+    a folder hold several denver.xxx.yml/denver.xxx.toml variants side by
+    side). Mirrors resolve_import()'s own directory-or-file convention for
+    'import:' entries, so both the top-level <env> and imports resolve the
+    same way.
     """
     candidate = Path(env_arg).expanduser()
 
     if not candidate.exists():
-        die(f"environment '{env_arg}' not found. Give a path to an env directory or a denver.toml file.")
+        die(f"environment '{env_arg}' not found. Give a path to an env directory or a {_config_names_text()} file.")
     if candidate.is_file():
         return candidate.parent.resolve(), candidate.resolve()
     env_dir = candidate.resolve()
-    return env_dir, env_dir / CONFIG_NAME
+    return env_dir, _config_file_in_dir(env_dir)
 
 
 def is_runnable_env(config_path):
@@ -3110,9 +3218,20 @@ def _toml_string(value):
 
 
 def show_config(
-    env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None, env_vars=None, minimal=False
+    env_dir,
+    config,
+    config_path,
+    until_stage=None,
+    skip_stages=(),
+    *,
+    cli_args=None,
+    env_vars=None,
+    minimal=False,
+    format="yml",
 ):
-    """Print the fully resolved config as TOML -- exactly what the real run would use.
+    """Print the fully resolved config -- exactly what the real run would use.
+
+    Rendered as YAML, or TOML with ``format="toml"`` (see --format).
 
     Whole-file 'import:' stacking, section-level 'import:' stacking, and
     every provider's defaults are all baked in. 'stages:' is narrowed by
@@ -3156,7 +3275,10 @@ def show_config(
             ordered[stage_id] = _drop_defaulted_stage_keys(ordered[stage_id], ctx.raw_sections.get(stage_id, {}))
         ordered = _drop_null_values(ordered)
 
-    print(dump_toml(ordered, color=supports_color()))
+    if format == "toml":
+        print(dump_toml(ordered, color=supports_color()))
+    else:
+        print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
 
 
 def _drop_defaulted_stage_keys(section, raw_section):
@@ -3585,7 +3707,7 @@ def _readable_imports(config_path):
     """The configs one layer's 'import:' entries name -- warning about, and skipping, whatever cannot be read."""
     try:
         raw = load_config_file(config_path)
-    except (OSError, tomllib.TOMLDecodeError):
+    except _CONFIG_READ_ERRORS:
         logger.warning(f"clean: cannot read {config_path} -- the envs it imports are left alone")
         return []
 
@@ -3685,7 +3807,7 @@ def _add_env_positional(parser):
     parser.add_argument(
         "env",
         nargs="?",
-        help="path to an env directory or a denver.toml file (falls back to $DENVER_ENV_DIR if omitted)",
+        help="path to an env directory or a denver.yml/denver.yaml/denver.toml file (falls back to $DENVER_ENV_DIR if omitted)",
     )
 
 
@@ -3812,7 +3934,14 @@ def _add_run_parser(subparsers, config_args):
     run_p.add_argument(
         "--show-config-full",
         action="store_true",
-        help="like --show-config, but keeps every key left unset too (shown as a commented-out '# key = null' line)",
+        help="like --show-config, but keeps every key left unset too (shown as an explicit 'key: null' line, "
+        "or a commented-out '# key = null' line with --format toml)",
+    )
+    run_p.add_argument(
+        "--format",
+        choices=["yml", "toml"],
+        default="yml",
+        help="with --show-config/--show-config-full: render the output as this format instead of the default yml",
     )
     run_p.add_argument(
         "-q",
@@ -4063,6 +4192,8 @@ def main(argv=None):
         _run_cli(argv)
     except subprocess.CalledProcessError as exc:
         die(_command_failure_message(exc))
+    except ConfigReadError as exc:
+        die(str(exc))
     return 0
 
 
@@ -4093,6 +4224,7 @@ _RUN_FLAGS = [
     "--clean",
     "--show-config",
     "--show-config-full",
+    "--format",
     "--fast",
     "--force",
     "--ci",
@@ -4125,6 +4257,7 @@ _VALUE_FLAGS = {
     "--skip",
     "--scripts",
     "--export-env",
+    "--format",
 }
 _PATH_VALUE_FLAGS = ("-c", "--config", "-cf", "--config-file")  # see _pending_flag_value_candidates
 
@@ -4217,7 +4350,9 @@ def _run_completion_state(rest):
 
 def _first_positional(rest, consumed_as_value):
     """The first token in 'rest' that's neither a flag nor already consumed as one's value, or None."""
-    for tok, consumed in zip(rest, consumed_as_value, strict=True):
+    # zip(strict=True) is Python 3.10+ only (denver's floor is 3.9); plain zip() is fine
+    # here since consumed_as_value is built as [False] * len(rest) right above, in the caller.
+    for tok, consumed in zip(rest, consumed_as_value):
         if not consumed and not tok.startswith("-"):
             return tok
     return None
@@ -4235,6 +4370,8 @@ def _pending_flag_value_candidates(pending_flag, env_value, cur):
         return _matching(_completion_script_names(env_value), cur)
     if pending_flag in ("-e", "--env"):
         return _matching(list(os.environ), cur)
+    if pending_flag == "--format":
+        return _matching(["yml", "toml"], cur)
     if pending_flag is not None:
         return []  # _PATH_VALUE_FLAGS: no sensible dynamic completion; shell filename fallback takes over
     return None
@@ -4249,7 +4386,7 @@ def _completion_env_paths(env_value):
         return None, None
     if candidate.is_file():
         return candidate.parent, candidate
-    return candidate, candidate / CONFIG_NAME
+    return candidate, _config_file_in_dir(candidate)
 
 
 def _completion_config(env_value):
@@ -4500,14 +4637,24 @@ def _listdir_or_empty(base):
         return []
 
 
+def _is_denver_config_name(name):
+    """Whether ``name`` names a denver.*.<ext> config file completion should offer.
+
+    A '.yml'/'.yaml' always qualifies (denver's default format, PyYAML is a
+    required dependency); '.toml' only if tomllib is importable (Python
+    3.11+ -- see the module-level 'tomllib' import at the top of this file).
+    """
+    if not name.startswith("denver."):
+        return False
+    return name.endswith((".yml", ".yaml")) or (tomllib is not None and name.endswith(".toml"))
+
+
 def _completion_path_candidate(base, name):
     """One dir entry as a completion candidate -- a subdirectory (trailing '/') or a denver config file, else None."""
     full = str(Path(base) / name) if base != "." else name
     if (Path(base) / name).is_dir():
         return full + "/"
-    if name == CONFIG_NAME or (name.startswith("denver.") and name.endswith(".toml")):
-        return full
-    return None
+    return full if _is_denver_config_name(name) else None
 
 
 _COMPLETION_SHELLS = ("bash", "zsh", "fish")
@@ -4774,7 +4921,9 @@ def _completion_script_fish(names, quoted):
         f"    contains -- $prev {path_value_flags};",
         "end;",
     ]
-    for name, quoted_name in zip(names, quoted, strict=True):
+    # zip(strict=True) is Python 3.10+ only (denver's floor is 3.9); plain zip() is fine
+    # here since 'quoted' is built 1:1 from 'names' in the caller, _completion_script.
+    for name, quoted_name in zip(names, quoted):
         flag = "-p" if "/" in name else "-c"
         lines.append(f"complete {flag} {quoted_name} -f -a '(__denver_complete)';")
         lines.append(f"complete {flag} {quoted_name} -n __denver_expects_path -F -a '(__denver_complete)';")
@@ -5171,7 +5320,7 @@ def _load_cli_config(args, config_path) -> dict:
 
 
 def _require_config_source(config_path, config_files):
-    """Die if <env> resolved to a directory with no denver.toml of its own, and no -f/--config-file either.
+    """Die if <env> resolved to a directory with no config file of its own, and no -f/--config-file either.
 
     Checked once ``--help``/``--version``/``--license`` are ruled out (see
     _load_cli_config, which tolerates the same situation so those can still
@@ -5180,8 +5329,8 @@ def _require_config_source(config_path, config_files):
     """
     if not config_path.is_file() and not config_files:
         die(
-            f"no {CONFIG_NAME} in '{config_path.parent}' -- give a path to an env directory that has one, "
-            f"a path directly to a denver.xxx.toml file, or supply --config-file."
+            f"no {_config_names_text()} in '{config_path.parent}' -- give a path to an env directory that has one, "
+            f"a path directly to a config file, or supply --config-file."
         )
 
 
@@ -5199,6 +5348,7 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
             # --show-config-full wins if both are given -- more keys is the
             # more inclusive ask, so it's the natural tiebreaker.
             minimal=not args.show_config_full,
+            format=args.format,
         )
         return True
 
@@ -5254,7 +5404,7 @@ def _require_runnable(env_dir, config, config_path):
         die(f"env '{env_dir.name}' sets 'runnable: false' -- it's meant to be imported, not started directly.")
 
     if not config.get("stages"):
-        die(f"env '{env_dir.name}' declares no 'stages:' in its {CONFIG_NAME}")
+        die(f"env '{env_dir.name}' declares no 'stages:' in its {config_path.name}")
 
 
 def _run_main_or_die_quietly_on_broken_pipe():

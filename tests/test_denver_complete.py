@@ -20,11 +20,14 @@ import shlex
 import shutil
 import subprocess
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
 
 import denver
+
+requires_tomllib = pytest.mark.skipif(denver.tomllib is None, reason="tomllib is stdlib only from Python 3.11")
 
 
 # ---- 'denver complete <shell>' -- the wiring scripts ------------------------ #
@@ -569,12 +572,48 @@ def test_dunder_complete_completes_env_paths_from_the_current_directory(tmp_path
     assert "myenv/" in out
 
 
+def test_dunder_complete_offers_a_denver_yml_file(tmp_path, monkeypatch, capsys):
+    (tmp_path / "denver.yml").write_text("stages: []\n")
+    monkeypatch.chdir(tmp_path)
+
+    assert denver.main(["__complete", "run", ""]) == 0
+    assert "denver.yml" in capsys.readouterr().out
+
+
+@requires_tomllib
+def test_dunder_complete_offers_a_denver_toml_file_when_tomllib_is_available(tmp_path, monkeypatch, capsys):
+    (tmp_path / "denver.toml").write_text("stages = []\n")
+    monkeypatch.chdir(tmp_path)
+
+    assert denver.main(["__complete", "run", ""]) == 0
+    assert "denver.toml" in capsys.readouterr().out
+
+
+def test_dunder_complete_hides_a_denver_toml_file_without_tomllib(tmp_path, monkeypatch, capsys):
+    (tmp_path / "denver.toml").write_text("stages = []\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(denver, "tomllib", None)
+
+    assert denver.main(["__complete", "run", ""]) == 0
+    assert "denver.toml" not in capsys.readouterr().out
+
+
 # ---- 'denver __complete run <env> --scripts <partial>' -- action names ------ #
 def test_dunder_complete_completes_script_names_from_the_envs_own_scripts(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text(
-        'stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n\n[fakesetup.scripts]\nsetup = [\n  "a.sh",\n]\nlogin = [\n  "b.sh",\n]\n'
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - fakesetup
+        fakesetup:
+          provider: fakesetup
+          scripts:
+            setup:
+            - a.sh
+            login:
+            - b.sh
+        """)
     )
 
     assert denver.main(["__complete", "run", str(env_dir), "--scripts", ""]) == 0
@@ -642,8 +681,14 @@ def test_dunder_complete_offers_nothing_for_an_unrecognised_subcommand(capsys):
 def test_dunder_complete_completes_stage_ids_for_until_and_skip(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text(
-        'stages = [\n  "fakesetup",\n  "docker",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n'
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - fakesetup
+        - docker
+        fakesetup:
+          provider: fakesetup
+        """)
     )
 
     assert denver.main(["__complete", "run", str(env_dir), "--until", ""]) == 0
@@ -651,6 +696,14 @@ def test_dunder_complete_completes_stage_ids_for_until_and_skip(tmp_path, capsys
 
     assert denver.main(["__complete", "run", str(env_dir), "--skip", "d"]) == 0
     assert capsys.readouterr().out.splitlines() == ["docker"]
+
+
+def test_dunder_complete_completes_format_values(capsys):
+    assert denver.main(["__complete", "run", "e", "--format", ""]) == 0
+    assert set(capsys.readouterr().out.splitlines()) == {"yml", "toml"}
+
+    assert denver.main(["__complete", "run", "e", "--format", "to"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["toml"]
 
 
 def test_dunder_complete_stage_ids_empty_without_an_env_yet(capsys):
@@ -685,8 +738,10 @@ def test_dunder_complete_offers_nothing_for_a_flag_with_no_dynamic_completion(tm
 def test_dunder_complete_completes_flags_including_the_envs_own_declared_ones(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text(
-        'stages = []\ndenver-custom-args = [\n  { flags = "--board", default = "x" },\n  { flags = [\n  "--release",\n  "-r",\n], action = "store_true" },\n  "justastring",\n  { help = "no \'flags:\' key at all" },\n]\n'  # malformed (no 'flags:') -- ignored too
+    # 'justastring' and the 'help'-only entry are malformed (no 'flags:') -- ignored too
+    (env_dir / "denver.yml").write_text(
+        "stages: []\ndenver-custom-args:\n- flags: --board\n  default: x\n- flags:\n  - --release\n  - -r\n"
+        "  action: store_true\n- justastring\n- help: no 'flags:' key at all\n"
     )
 
     assert denver.main(["__complete", "run", str(env_dir), "--b"]) == 0
@@ -700,7 +755,7 @@ def test_dunder_complete_completes_flags_including_the_envs_own_declared_ones(tm
 def test_dunder_complete_flags_without_any_declared_args_are_just_denvers_own(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('stages = []\n')  # no 'denver-custom-args:' key at all
+    (env_dir / "denver.yml").write_text('stages: []\n')  # no 'denver-custom-args:' key at all
 
     assert denver.main(["__complete", "run", str(env_dir), "--sh"]) == 0
     assert capsys.readouterr().out.splitlines() == ["--show-config", "--show-config-full"]
@@ -769,7 +824,12 @@ def test_dunder_complete_describe_stays_undescribed_mid_flag_value(tmp_path, cap
     # _run_description_lookup -- so whatever stage ids come back are never tab-decorated.
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('stages = ["build"]\n')
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - build
+        """)
+    )
     assert denver.main(["__complete", "--describe", "run", str(env_dir), "--until", ""]) == 0
     assert capsys.readouterr().out == "build\n"
 
@@ -777,12 +837,11 @@ def test_dunder_complete_describe_stays_undescribed_mid_flag_value(tmp_path, cap
 def test_dunder_complete_describe_declared_flags_pair_with_their_own_help(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text(
-        'stages = []\ndenver-custom-args = [\n'
-        '  { flags = "--target", help = "which board to build for" },\n'
-        '  { flags = "--release" },\n'  # no 'help:' -- stays undescribed
-        '  "justastring",\n'  # malformed (not a mapping at all) -- ignored, not raised on
-        "]\n"
+    # '--release' has no 'help:' -- stays undescribed. 'justastring' is malformed
+    # (not a mapping at all) -- ignored, not raised on.
+    (env_dir / "denver.yml").write_text(
+        "stages: []\ndenver-custom-args:\n- flags: --target\n  help: which board to build for\n"
+        "- flags: --release\n- justastring\n"
     )
     assert denver.main(["__complete", "--describe", "run", str(env_dir), "--tar"]) == 0
     assert capsys.readouterr().out == "--target\twhich board to build for\n"
@@ -813,7 +872,7 @@ def test_dunder_complete_describe_swallows_a_lookup_exception_and_still_returns_
 def test_dunder_complete_offers_flags_right_after_env_even_before_a_dash(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('stages = []\n')
+    (env_dir / "denver.yml").write_text('stages: []\n')
 
     assert denver.main(["__complete", "run", str(env_dir), ""]) == 0
     out = set(capsys.readouterr().out.splitlines())
@@ -834,9 +893,16 @@ def test_dunder_complete_offers_nothing_for_a_second_plain_positional(tmp_path, 
 def test_dunder_complete_accepts_env_given_as_a_direct_config_file_path(tmp_path, capsys):
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n')
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - fakesetup
+        fakesetup:
+          provider: fakesetup
+        """)
+    )
 
-    assert denver.main(["__complete", "run", str(env_dir / "denver.toml"), "--until", ""]) == 0
+    assert denver.main(["__complete", "run", str(env_dir / "denver.yml"), "--until", ""]) == 0
     assert capsys.readouterr().out.splitlines() == ["fakesetup"]
 
 
@@ -844,13 +910,13 @@ def test_dunder_complete_accepts_env_given_as_a_direct_config_file_path(tmp_path
 def test_dunder_complete_completes_paths_inside_an_already_typed_directory(tmp_path, monkeypatch, capsys):
     sub = tmp_path / "sub"
     sub.mkdir()
-    (sub / "denver.toml").write_text('stages = []\n')
+    (sub / "denver.yml").write_text('stages: []\n')
     (sub / "readme.txt").write_text("not a denver config or a directory\n")
     monkeypatch.chdir(tmp_path)
 
     assert denver.main(["__complete", "run", "sub/"]) == 0
     out = capsys.readouterr().out.splitlines()
-    assert out == ["sub/denver.toml"]  # readme.txt is neither a dir nor a denver config -- excluded
+    assert out == ["sub/denver.yml"]  # readme.txt is neither a dir nor a denver config -- excluded
 
 
 def test_dunder_complete_path_candidates_empty_for_a_nonexistent_directory(tmp_path, monkeypatch, capsys):

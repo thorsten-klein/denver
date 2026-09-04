@@ -187,7 +187,11 @@ def test_ensure_workspace_leaves_existing_without_force(make_context, run_record
     assert west_config.exists()
 
 
-def test_ensure_workspace_force_recreates(make_context, run_recorder, which):
+def test_ensure_workspace_force_does_not_wipe_existing(make_context, run_recorder, which):
+    # --force re-runs west update/configure, but must not wipe an existing
+    # .west/config -- it may hold settings (e.g. zephyr.base-prefer) a user
+    # set by hand, and _configure already reconciles every denver.toml key
+    # individually.
     config = {"zephyr": {"west-yml": "west.yml"}}
     ctx = make_ctx(make_context, config)
     west_config = west_topdir(ctx.env_dir) / ".west" / "config"
@@ -196,7 +200,7 @@ def test_ensure_workspace_force_recreates(make_context, run_recorder, which):
     ctx.force = True
     run_zephyr(config, ctx)
     assert west_config.is_file()
-    assert west_config.read_text() == ""  # recreated empty by touch()
+    assert west_config.read_text() == "stale\n"
 
 
 # ---- _configure -----------------------------------------------------------------#
@@ -268,6 +272,34 @@ def test_update_when_info_unchanged(make_context, run_recorder, which, force):
     run_zephyr(config, ctx)
     ran_update = any(c.endswith(" update") or "west update" in c for c in run_recorder.commands())
     assert ran_update == force
+
+
+def test_update_reruns_when_patches_yml_changes(make_context, run_recorder, which, tmp_path):
+    # patches.yml isn't part of the manifest, so 'west manifest --resolve'
+    # never sees it -- it has to be fingerprinted separately, or editing it
+    # alone would never trigger a rerun of west update / patch apply.
+    zephyr_cfg = {"west-yml": "west.yml"}
+    config = {"zephyr": zephyr_cfg}
+    ctx = make_ctx(make_context, config)
+    proj = tmp_path / "proj"
+    (proj / "zephyr").mkdir(parents=True)
+    (proj / "zephyr" / "patches.yml").write_text("v1\n")
+    run_recorder.responses["list -f {abspath}"] = resp(stdout=f"{proj}\n")
+
+    n = ZephyrProvider(config)
+    n.stage = "zephyr"
+    west = ctx.which("west")
+    west_yml = Path(ctx.resolve_path(zephyr_cfg["west-yml"]))
+    zephyr_base = ctx.resolve_path("${WEST_TOPDIR}/zephyr-rtos")
+    info_file = ctx.logs_dir / "west-update.info"
+    info_file.parent.mkdir(parents=True, exist_ok=True)
+    info_file.write_text(n._west_info(ctx, west, west_topdir(ctx.env_dir), west_yml, zephyr_base))
+
+    (proj / "zephyr" / "patches.yml").write_text("v2\n")
+    run_recorder.calls.clear()
+
+    run_zephyr(config, ctx)
+    assert any(c.endswith(" update") or "west update" in c for c in run_recorder.commands())
 
 
 def test_update_ci_uses_ci_update_args(make_context, run_recorder, which):

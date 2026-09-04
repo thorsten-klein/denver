@@ -252,7 +252,9 @@ class UvProvider(Provider):
         raw_args = (self.config.get(self.section_name) or {}).get("install-args") or []
         args = []
         command_outputs = []
-        for raw_entry, entry in zip(raw_args, cfg.get("install-args") or [], strict=True):
+        # zip(strict=True) is Python 3.10+ only (denver's floor is 3.9); plain zip() is
+        # fine here since the two lists are already guaranteed the same length above.
+        for raw_entry, entry in zip(raw_args, cfg.get("install-args") or []):
             entry_args, output = self._expand_install_arg(ctx, raw_entry, entry)
             args += entry_args
             if output is not None:

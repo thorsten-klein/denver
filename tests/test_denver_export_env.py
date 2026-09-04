@@ -5,6 +5,8 @@ denver.main() end to end (see --env's own tests, test_denver_env_flag.py,
 for the analogous pattern) and check the file it leaves behind.
 """
 
+import textwrap
+
 import pytest
 
 import denver
@@ -29,8 +31,13 @@ def echo_env(tmp_path):
         def _run(argv=()):
             env_dir = tmp_path / "e"
             env_dir.mkdir(exist_ok=True)
-            (env_dir / "denver.toml").write_text(
-                'stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n'
+            (env_dir / "denver.yml").write_text(
+                textwrap.dedent("""\
+                stages:
+                - fakesetup
+                fakesetup:
+                  provider: fakesetup
+                """)
             )
             out = tmp_path / "denver.env"
             denver.main(["run", str(env_dir), "--export-env", str(out), *argv, "--", "echo", "hi"])
@@ -64,7 +71,14 @@ def test_not_written_when_flag_omitted(tmp_path, exec_recorder):
     try:
         env_dir = tmp_path / "e"
         env_dir.mkdir()
-        (env_dir / "denver.toml").write_text('stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n')
+        (env_dir / "denver.yml").write_text(
+            textwrap.dedent("""\
+            stages:
+            - fakesetup
+            fakesetup:
+              provider: fakesetup
+            """)
+        )
         out = tmp_path / "denver.env"
         denver.main(["run", str(env_dir), "--", "echo", "hi"])
         assert not out.exists()
@@ -132,9 +146,16 @@ def test_flags_are_carried_into_the_wrapper(tmp_path, monkeypatch, exec_recorder
 
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text(
-        'stages = [\n  "fakewrap",\n  "fakesetup",\n]\n\n[fakewrap]\nprovider = "fakewrap"\n\n'
-        '[fakesetup]\nprovider = "fakesetup"\n'
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - fakewrap
+        - fakesetup
+        fakewrap:
+          provider: fakewrap
+        fakesetup:
+          provider: fakesetup
+        """)
     )
     denver.main(["run", str(env_dir), "--export-env", "/tmp/denver.env", "--", "echo", "hi"])
 

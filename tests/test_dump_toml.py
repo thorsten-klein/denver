@@ -1,11 +1,18 @@
-"""Tests for denver.py's hand-written --show-config renderer (dump_toml)."""
+"""Tests for denver.py's hand-written --format toml renderer (dump_toml).
+
+dump_toml() itself is pure string-building -- no tomllib needed to run it,
+on any Python version. Only the one test that round-trips its output back
+through a real TOML parser (to verify it's actually valid TOML, not just
+plausible-looking text) needs tomllib, stdlib only from Python 3.11.
+"""
 
 import io
-import tomllib
 
 import pytest
 
 import denver
+
+requires_tomllib = pytest.mark.skipif(denver.tomllib is None, reason="tomllib is stdlib only from Python 3.11")
 
 
 # ---- dump_toml: scalars, None, empty containers -----------------------------#
@@ -116,9 +123,10 @@ def test_dump_toml_entry_inline_table_stays_on_one_line():
     assert out == '[[packages]]\nenv = { PATH = ["bin", "sbin"], deep = { a = 1 } }\n'
 
 
+@requires_tomllib
 def test_dump_toml_entry_with_a_nested_table_parses_back_unchanged():
     data = {"packages": [{"name": "ninja", "env": {"PATH": "."}}, {"name": "gcc", "env": {"PATH": "bin"}}]}
-    assert tomllib.loads(denver.dump_toml(data)) == data
+    assert denver.tomllib.loads(denver.dump_toml(data)) == data
 
 
 # ---- dump_toml: keys needing quoting -----------------------------------------#

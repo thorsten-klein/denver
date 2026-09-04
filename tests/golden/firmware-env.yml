@@ -1,0 +1,174 @@
+version: '1.0'
+denver-version: '>=1.5.2'
+command: bash
+env:
+  CONAN_HOME: ${DENVER_ENV_DIR}/.conan2
+hooks:
+  env: null
+  post-best-practices: null
+  post-conan-packages: null
+  post-docker-base: null
+  post-ninja-setup: null
+  post-nvim-setup: null
+  post-uv-packages: null
+  pre-best-practices: null
+  pre-cmd: null
+  pre-conan-packages: null
+  pre-docker-base:
+  - <REPO>/examples/firmware-env/create-env.sh
+  pre-ninja-setup: null
+  pre-nvim-setup: null
+  pre-uv-packages: null
+stages:
+- docker-base
+- uv-packages
+- nvim-setup
+- ninja-setup
+- conan-packages
+- best-practices
+docker-base:
+  provider: docker
+  description:
+  - Relocates every stage below into an Ubuntu 24.04 container, so the OS and the
+    apt packages are the same for everyone.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts:
+    setup:
+    - setup/install_host_tools.sh
+  compose:
+    build: true
+    default-cmd: null
+    file: docker-compose.yml
+    image: null
+    run-args:
+    - --rm
+    service: dev
+  exe: docker
+  registries: null
+uv-packages:
+  provider: uv
+  description:
+  - The python 3.12 virtualenv. 'conan' is in requirements.txt because the next stage
+    needs it on PATH -- the conan provider never installs it.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  amend: true
+  exe: uv
+  freeze-to: null
+  install-args: null
+  lockfile: null
+  no-index: false
+  overrides: null
+  patches-apply: null
+  python: 3.12.3
+  requirements:
+  - requirements.txt
+  venv: null
+nvim-setup:
+  provider: custom
+  description:
+  - Brings one prebuilt binary release (neovim 0.12.4) into the environment the manual
+    way -- download, checksum, unpack, PATH -- so the stage below can be read as what
+    conan does with that same job.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  cmd: bash ${DENVER_ENV_DIR}/nvim/install.sh
+  launcher: null
+  source: nvim/activate.sh
+ninja-setup:
+  provider: download
+  description:
+  - The same job as 'nvim-setup' above, minus the two shell scripts -- the 'download'
+    provider owns the download, the checksum, the unpacking and the PATH entry. One
+    entry per prebuilt release.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  packages:
+  - description: ''
+    env-append: {}
+    env-prepend:
+      PATH: '${DENVER_UNPACK_DIR}:'
+    md5sum: ''
+    name: ninja
+    outfile: <REPO>/examples/firmware-env/.denver/denver/downloads/ninja-linux.zip
+    sha256sum: 5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6
+    unpack-cmd: ''
+    unpack-dir: <REPO>/examples/firmware-env/.denver/denver/download/ninja
+    url: https://github.com/ninja-build/ninja/releases/download/v1.13.2/ninja-linux.zip
+conan-packages:
+  provider: conan
+  description:
+  - Downloads cmake at exactly the pinned version and puts it on PATH. One conanfile
+    plus the recipe it installs. The same job as 'nvim-setup' above, minus the shell
+    script -- conan owns the download, the checksum, the cache and the PATH.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  authentication: true
+  base-classes: []
+  build: missing
+  channel: snapshot
+  conanfile: <REPO>/examples/firmware-env/conan/conanfile.py
+  config: null
+  deployers:
+  - <REPO>/src/denver_providers/conan_scripts/extensions/symlink.py
+  exe: conan
+  install-args: null
+  keep-remotes: false
+  profiles:
+    build: []
+    host: []
+  recipes:
+  - catalog: ''
+    dirs:
+    - <REPO>/examples/firmware-env/conan/recipes
+    export-tool: <REPO>/src/denver_providers/conan_scripts/recipes.py
+  remotes: {}
+  user: denver
+best-practices:
+  provider: custom
+  description:
+  - Team conventions -- pytest always verbose with live logs, and cmake building with
+    the ninja from 'ninja-setup' rather than make. Declared as 'source:' rather than
+    'cmd:', so the exports survive into the final command.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  cmd: null
+  launcher: null
+  source: best-practices.sh
+

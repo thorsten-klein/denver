@@ -131,7 +131,7 @@ def test_clean_removes_the_state_dir_and_the_spent_denver_parent(make_env, run_r
     assert not workdir.exists()
     # the env is back to exactly what its author checked in
     assert not (env_dir / ".denver").exists()
-    assert (env_dir / "denver.toml").is_file()
+    assert (env_dir / "denver.yml").is_file()
 
 
 def test_clean_keeps_a_denver_dir_still_holding_another_configs_state(make_env, run_recorder, which):
@@ -148,11 +148,9 @@ def test_clean_keeps_a_denver_dir_still_holding_another_configs_state(make_env, 
 def test_clean_of_one_config_variant_leaves_the_others_alone(make_env, run_recorder, which):
     env_dir, workdir = _scripted_env(make_env)
     debug = build_state(env_dir, "denver.debug")
-    (env_dir / "denver.debug.toml").write_text(
-        f'stages = ["tools"]\n\n[tools]\nprovider = "custom"\ncmd = "{STAGE_CMD}"\n'
-    )
+    (env_dir / "denver.debug.yml").write_text(f'stages:\n- tools\ntools:\n  provider: custom\n  cmd: {STAGE_CMD}\n')
 
-    assert denver.main(["run", str(env_dir / "denver.debug.toml"), "--clean"]) == 0
+    assert denver.main(["run", str(env_dir / "denver.debug.yml"), "--clean"]) == 0
 
     assert not debug.exists()
     assert workdir.is_dir()
@@ -276,7 +274,7 @@ def test_clean_subcommand_cleans_the_envs_it_imports(make_env):
 
 def test_clean_subcommand_still_cleans_an_env_whose_config_is_broken(make_env, caplog):
     env_dir = make_env(config={"stages": []})
-    (env_dir / "denver.toml").write_text('import = ["../base"\n')
+    (env_dir / "denver.yml").write_text('import: ["../base"\n')
     workdir = build_state(env_dir)
 
     assert denver.main(["clean", str(env_dir), "-y"]) == 0

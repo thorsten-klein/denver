@@ -12,7 +12,8 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/thorsten-klein/denver/blob/develop/LICENSE)
 
 **D**evelopment **Env**ironment Launch**er** — declares dev environments in a
-`denver.toml`: reproducible and layerable to fit your project's needs.
+`denver.yml` (or `denver.toml`): reproducible and layerable to fit your
+project's needs.
 
 ## What problem does this solve?
 
@@ -22,7 +23,7 @@ pattern is the same: you run a pile of one-off steps to get a working build
 the first time.
 
 `denver` gives you a declarative way to setup your environment. You describe the steps a
-project needs in a `denver.toml`, and `denver` runs them -- the same way every
+project needs in a `denver.yml`, and `denver` runs them -- the same way every
 time on any machine — for you, for teammates, and in CI. `denver` is optimized to run
 only necessary stages, so it stays fast.
 
@@ -54,11 +55,14 @@ alias denver="$PWD/src/denver.py"
 denver --version
 ```
 
-> **Note:** stuck on Python < 3.11 (missing tomllib)?
-> You have to run the script with `uv run src/denver.py`, e.g by setting `alias denver="uv run $PWD/src/denver.py"`.
+> **Note:** denver needs Python `>=3.9`. Stuck below that? Run the script
+> with `uv run src/denver.py`, e.g by setting `alias denver="uv run $PWD/src/denver.py"`.
 > Alternatively grab a prebuilt executable from a
 > [release](https://github.com/thorsten-klein/denver/releases), or build one
 > yourself with `uv run poe pyinstaller`.
+> (Between `3.9` and `3.11`? Regular installs work fine -- only `denver.toml`
+> configs need `>=3.11`, for `tomllib`; `denver.yml`/`denver.yaml` works
+> everywhere `denver` itself does.)
 
 For more details about how to install or run `denver` see
 **[Install denver →](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/install.md)**.
@@ -137,10 +141,13 @@ You want to see some even more advanced example? Have a look at **[denver in 30 
 
 ## Known limitations
 
-**denver has zero runtime dependencies.** Its config format is TOML
-(`denver.toml`), parsed with the standard library's `tomllib` — hence it
-requires python `>=3.11`. You are stuck on Python < 3.11 (e.g. Ubuntu 22)?
-Have a look at [install or run denver](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/install.md).
+**denver has exactly one runtime dependency: PyYAML.** Its default config
+format is YAML (`denver.yml`/`denver.yaml`), parsed with PyYAML — that's
+what lets the floor be as low as python `>=3.9`. `denver.toml` is supported
+too, but only where `tomllib` is importable (stdlib only from python
+`>=3.11`) — on an older interpreter it's rejected with a clear error instead
+of a silent misread. See
+[install or run denver](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/install.md).
 
 ## Contributing
 

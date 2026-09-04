@@ -26,10 +26,10 @@ the constant is only ever wrong *relative to this repo*.
 from __future__ import annotations
 
 import subprocess
-import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
 import denver
 
@@ -79,7 +79,7 @@ def test_examples_run_from_a_checkout(env_name, monkeypatch):
     The pin is read from the golden file, i.e. the *merged* config, so a pin
     an env only inherits through 'import:' is covered too.
     """
-    config = tomllib.loads((GOLDEN_DIR / f"{env_name}.toml").read_text())
+    config = yaml.safe_load((GOLDEN_DIR / f"{env_name}.yml").read_text())
     if config.get("denver-version") is None:
         pytest.skip(f"examples/{env_name} pins no 'denver-version:'")
 
