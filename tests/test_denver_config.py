@@ -23,6 +23,40 @@ def test_load_config_file_nested_value(tmp_path):
     assert denver.load_config_file(p) == {"a": [1, 2]}
 
 
+# ---- denver.yml (optional PyYAML support) ----------------------------------#
+def test_load_config_file_empty_yaml(tmp_path):
+    p = tmp_path / "denver.yml"
+    p.write_text("")
+    assert denver.load_config_file(p) == {}
+
+
+def test_load_config_file_yaml_mapping(tmp_path):
+    p = tmp_path / "denver.yml"
+    p.write_text("a: 1\n")
+    assert denver.load_config_file(p) == {"a": 1}
+
+
+def test_load_config_file_yaml_dot_yaml_extension(tmp_path):
+    p = tmp_path / "denver.yaml"
+    p.write_text("a: 1\n")
+    assert denver.load_config_file(p) == {"a": 1}
+
+
+def test_load_config_file_yaml_non_mapping_top_level_dies(tmp_path):
+    p = tmp_path / "denver.yml"
+    p.write_text("- 1\n- 2\n")
+    with pytest.raises(denver.ConfigReadError, match="must be a mapping"):
+        denver.load_config_file(p)
+
+
+def test_load_config_file_yaml_without_pyyaml_installed(tmp_path, monkeypatch):
+    monkeypatch.setattr(denver, "yaml", None)
+    p = tmp_path / "denver.yml"
+    p.write_text("a: 1\n")
+    with pytest.raises(denver.ConfigReadError, match="denver-tool\\[yml\\]"):
+        denver.load_config_file(p)
+
+
 def test_deep_merge_dicts():
     base = {"a": {"x": 1, "y": 2}, "b": 1}
     override = {"a": {"y": 3, "z": 4}, "c": 5}
@@ -106,6 +140,27 @@ def test_resolve_import_directory(tmp_path):
     target_dir = tmp_path / "base"
     target_dir.mkdir()
     (target_dir / "denver.toml").write_text('a = 1\n')
+    resolved = denver.resolve_import("../base", base_dir)
+    assert resolved == target_dir / "denver.toml"
+
+
+def test_resolve_import_directory_falls_back_to_yml_without_a_toml(tmp_path):
+    base_dir = tmp_path / "env"
+    base_dir.mkdir()
+    target_dir = tmp_path / "base"
+    target_dir.mkdir()
+    (target_dir / "denver.yml").write_text("a: 1\n")
+    resolved = denver.resolve_import("../base", base_dir)
+    assert resolved == target_dir / "denver.yml"
+
+
+def test_resolve_import_directory_prefers_toml_over_yml(tmp_path):
+    base_dir = tmp_path / "env"
+    base_dir.mkdir()
+    target_dir = tmp_path / "base"
+    target_dir.mkdir()
+    (target_dir / "denver.toml").write_text('a = 1\n')
+    (target_dir / "denver.yml").write_text("a: 1\n")
     resolved = denver.resolve_import("../base", base_dir)
     assert resolved == target_dir / "denver.toml"
 

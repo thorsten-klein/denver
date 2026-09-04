@@ -479,6 +479,11 @@ wheels = [
 name = "denver-tool"
 source = { editable = "." }
 
+[package.optional-dependencies]
+yml = [
+    { name = "pyyaml" },
+]
+
 [package.dev-dependencies]
 conan-tools = [
     { name = "conan" },
@@ -523,6 +528,8 @@ test = [
 ]
 
 [package.metadata]
+requires-dist = [{ name = "pyyaml", marker = "extra == 'yml'", specifier = ">=6" }]
+provides-extras = ["yml"]
 
 [package.metadata.requires-dev]
 conan-tools = [{ name = "conan", specifier = ">=2.31.1,<3" }]

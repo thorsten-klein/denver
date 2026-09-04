@@ -569,6 +569,23 @@ def test_dunder_complete_completes_env_paths_from_the_current_directory(tmp_path
     assert "myenv/" in out
 
 
+def test_dunder_complete_offers_a_denver_yml_file_when_pyyaml_is_installed(tmp_path, monkeypatch, capsys):
+    (tmp_path / "denver.yml").write_text("stages: []\n")
+    monkeypatch.chdir(tmp_path)
+
+    assert denver.main(["__complete", "run", ""]) == 0
+    assert "denver.yml" in capsys.readouterr().out
+
+
+def test_dunder_complete_hides_a_denver_yml_file_without_pyyaml_installed(tmp_path, monkeypatch, capsys):
+    (tmp_path / "denver.yml").write_text("stages: []\n")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(denver, "yaml", None)
+
+    assert denver.main(["__complete", "run", ""]) == 0
+    assert "denver.yml" not in capsys.readouterr().out
+
+
 # ---- 'denver __complete run <env> --scripts <partial>' -- action names ------ #
 def test_dunder_complete_completes_script_names_from_the_envs_own_scripts(tmp_path, capsys):
     env_dir = tmp_path / "e"

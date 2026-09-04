@@ -20,6 +20,18 @@ config*, ...) are defined once in the
 [Glossary](../concepts/glossary.md); each provider's own config keys are
 documented on its own page under [Providers](../providers/uv.md).
 
+### denver.yml
+
+TOML is denver's preferred format as it is supported by standard library, no
+extra install. If you'd rather write YAML, install `PyYAML` manually or install
+denver with `pip install denver-tool[yml]`.
+If `import yaml` is available, denver also accepts `denver.yml` (or `denver.yaml`).
+When a directory holds more than one, denver picks in this order:
+`denver.toml`, then `denver.yml`, then `denver.yaml`.
+Without the extra installed, a `denver.yml` is rejected with an error
+explaining that only `denver.toml` is supported. Every example on this page
+is TOML, but the schema is the same either way -- only the syntax differs.
+
 ## Core model
 
 An *environment* is a `denver.toml`; it declares an ordered list of *stages*

@@ -730,6 +730,35 @@ def test_main_show_config_flag(tmp_path, capsys, which):
     assert "hooks" not in printed
 
 
+def test_main_show_config_flag_from_a_denver_yml(tmp_path, capsys, which):
+    # denver.yml works exactly like denver.toml when PyYAML is installed --
+    # its content just resolves through a different loader on the way in.
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        "stages:\n  - uv\nuv:\n  provider: uv\n  python: 3.12.3\n  requirements:\n    - r.txt\n"
+    )
+
+    assert denver.main(["run", str(env_dir), "--show-config"]) == 0
+    printed = tomllib.loads(capsys.readouterr().out)
+    assert printed["uv"]["python"] == "3.12.3"
+    assert printed["uv"]["requirements"] == ["r.txt"]
+
+
+def test_main_denver_yml_without_pyyaml_installed_dies_with_a_clear_message(tmp_path, monkeypatch, caplog):
+    monkeypatch.setattr(denver, "yaml", None)
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text("stages:\n  - uv\n")
+
+    with pytest.raises(SystemExit) as exc:
+        denver.main(["run", str(env_dir), "--show-config"])
+
+    assert exc.value.code == 1
+    assert "denver-tool[yml]" in caplog.text
+    assert "Traceback" not in caplog.text
+
+
 def test_main_show_config_full_flag(tmp_path, capsys, which):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
@@ -1046,7 +1075,7 @@ def test_main_show_config_no_denver_toml_dies_cleanly(tmp_path, caplog):
     env_dir.mkdir()
     with pytest.raises(SystemExit):
         denver.main(["run", str(env_dir), "--show-config"])
-    assert f"no denver.toml in '{env_dir}'" in caplog.text
+    assert f"no denver.toml/denver.yml/denver.yaml in '{env_dir}'" in caplog.text
 
 
 def test_main_no_denver_toml_dies_cleanly_without_show_config(tmp_path, caplog):
@@ -1057,7 +1086,7 @@ def test_main_no_denver_toml_dies_cleanly_without_show_config(tmp_path, caplog):
     env_dir.mkdir()
     with pytest.raises(SystemExit):
         denver.main(["run", str(env_dir)])
-    assert f"no denver.toml in '{env_dir}'" in caplog.text
+    assert f"no denver.toml/denver.yml/denver.yaml in '{env_dir}'" in caplog.text
 
 
 def test_main_help_still_works_for_a_dir_with_no_denver_toml(tmp_path, capsys):

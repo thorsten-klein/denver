@@ -53,6 +53,36 @@ def test_resolve_env_dir_not_found_dies(tmp_path):
         denver.resolve_env_dir(str(tmp_path / "does-not-exist"))
 
 
+def test_resolve_env_dir_falls_back_to_yml_without_a_toml(tmp_path):
+    envd = tmp_path / "myenv"
+    envd.mkdir()
+    (envd / "denver.yml").write_text("stages: [uv]\n")
+    assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.yml")
+
+
+def test_resolve_env_dir_prefers_toml_over_yml(tmp_path):
+    envd = tmp_path / "myenv"
+    envd.mkdir()
+    (envd / "denver.toml").write_text('stages = ["uv"]\n')
+    (envd / "denver.yml").write_text("stages: [uv]\n")
+    assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.toml")
+
+
+def test_resolve_env_dir_falls_back_to_yaml_without_a_toml_or_yml(tmp_path):
+    envd = tmp_path / "myenv"
+    envd.mkdir()
+    (envd / "denver.yaml").write_text("stages: [uv]\n")
+    assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.yaml")
+
+
+def test_resolve_env_dir_prefers_yml_over_yaml(tmp_path):
+    envd = tmp_path / "myenv"
+    envd.mkdir()
+    (envd / "denver.yml").write_text("stages: [uv]\n")
+    (envd / "denver.yaml").write_text("stages: [uv]\n")
+    assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.yml")
+
+
 # ---- is_runnable_env -------------------------------------------------------#
 def test_is_runnable_env_true_by_default(tmp_path):
     toml_path = tmp_path / "denver.toml"

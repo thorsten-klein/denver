@@ -10,9 +10,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-# denver's own config is TOML, read with the standard library (tomllib) --
-# nothing to install for that. requires-python is bumped to 3.11 precisely so
-# tomllib (stdlib since 3.11) can be relied on instead of a dependency.
+# denver's own required config format is TOML, read with the standard
+# library (tomllib) -- nothing to install for that. requires-python is
+# bumped to 3.11 precisely so tomllib (stdlib since 3.11) can be relied on
+# instead of a dependency. denver.yml is optional (see the 'yml' extra
+# below): PyYAML is never a hard dependency.
 dependencies = []
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -26,6 +28,12 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Build Tools",
 ]
+
+[project.optional-dependencies]
+# 'pip install denver-tool[yml]' -- lets denver read denver.yml configs
+# (parsed with PyYAML) alongside denver.toml. Without it, denver.yml is
+# rejected with an error pointing at this extra; denver.toml always works.
+yml = ["pyyaml>=6"]
 
 [project.urls]
 Homepage = "https://github.com/thorsten-klein/denver"
