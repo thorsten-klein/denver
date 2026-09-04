@@ -421,7 +421,7 @@ shared across envs and checkouts, and dependencies between tools.</p></li>
 project using them, not a separate recipes repo.
 A <code class="docutils literal notranslate"><span class="pre">recipes:</span></code> entry’s <code class="docutils literal notranslate"><span class="pre">dirs:</span></code> just points at wherever they
 actually are; there’s no requirement they live in any particular place
-relative to the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>. This simplifies the integration as there is no deployment necessary.</p></li>
+relative to the <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>. This simplifies the integration as there is no deployment necessary.</p></li>
 <li><p><strong>A base env with recipes but no conanfile.</strong> Since <code class="docutils literal notranslate"><span class="pre">conanfile:</span></code> and
 <code class="docutils literal notranslate"><span class="pre">recipes:</span></code> are independent, a shared base env can ship <code class="docutils literal notranslate"><span class="pre">recipes:</span></code> with no
 <code class="docutils literal notranslate"><span class="pre">conanfile:</span></code> of its own; each derived env that wants to actually install

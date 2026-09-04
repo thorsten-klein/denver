@@ -304,21 +304,21 @@ else.</p>
 <h2>Genericity<a class="headerlink" href="#genericity" title="Link to this heading"></a></h2>
 <p>denver itself holds no per-provider knowledge — it only calls whichever
 provider type a stage’s <code class="docutils literal notranslate"><span class="pre">provider:</span></code> key names. A provider is a generic,
-reusable engine; every project-specific detail comes from <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>,
+reusable engine; every project-specific detail comes from <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>,
 never from the provider’s own code.</p>
 <p>The test this principle has to pass: could this provider be dropped into a
-completely unrelated project’s <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, with zero code changes, and
+completely unrelated project’s <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, with zero code changes, and
 just work off that project’s own config? If a provider ever needs an <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">project</span> <span class="pre">==</span> <span class="pre">&quot;x&quot;</span></code> branch, genericity has already failed.</p>
 </section>
 <section id="explicit-over-implicit">
 <h2>Explicit over implicit<a class="headerlink" href="#explicit-over-implicit" title="Link to this heading"></a></h2>
 <p>denver never guesses that a file exists because it happens to sit in a
 conventional place. There’s no “if there’s a <code class="docutils literal notranslate"><span class="pre">docker-compose.yml</span></code> next to
-the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, use it,” no “if there’s a <code class="docutils literal notranslate"><span class="pre">conan/recipes</span></code> directory,
+the <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, use it,” no “if there’s a <code class="docutils literal notranslate"><span class="pre">conan/recipes</span></code> directory,
 scan it.” Every path an env needs — a compose file, a recipe dir, a
 skip-on-success/skip-on-failure script — is named explicitly, and a venv patch step is
 run only if <code class="docutils literal notranslate"><span class="pre">patches-apply:</span></code> names the exact command for it.</p>
-<p>What this buys: an env’s <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> is a complete, honest description of
+<p>What this buys: an env’s <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> is a complete, honest description of
 what it does. Reading it (or running <code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code>, which — unlike
 the minimal-by-default <code class="docutils literal notranslate"><span class="pre">--show-config</span></code> — shows every key a stage’s own
 provider understands, unset ones included) tells you everything; nothing is
@@ -362,7 +362,7 @@ explicit escape hatch for the rare case a fingerprint gets it wrong.</p>
 </section>
 <section id="reproducibility-as-a-first-class-goal">
 <h2>Reproducibility as a first-class goal<a class="headerlink" href="#reproducibility-as-a-first-class-goal" title="Link to this heading"></a></h2>
-<p>The same <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, run on a fresh clone and on a six-month-old working
+<p>The same <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, run on a fresh clone and on a six-month-old working
 copy, should produce the same environment — not one shaped by whatever
 history happens to be sitting on that particular machine.</p>
 <blockquote>

@@ -4,7 +4,7 @@ You can find some working denver environments under
 [`examples/`](https://github.com/thorsten-klein/denver/tree/develop/examples/)
 in the repository. Each has its own README
 explaining what it does, why it exists and what it is meant to teach. They
-are not illustrative snippets — every `examples/*/denver.toml` has its
+are not illustrative snippets — every `examples/*/denver.yml` has its
 `--show-config-full` output pinned as a golden-file fixture under `tests/golden/`,
 so an example that drifted out of sync with the code fails the build.
 

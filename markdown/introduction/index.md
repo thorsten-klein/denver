@@ -3,7 +3,7 @@
 <img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="denver logo" width="500"/>
 
 **D**evelopment **Env**ironment Launch**er** — describe your environment as
-code in a `denver.toml`: it consists of stages that build on top of each other.
+code in a `denver.yml`: it consists of stages that build on top of each other.
 That layering is what makes it flexible and adjustable to fit to your project’s needs.
 
 ## What problem does denver solve?
@@ -28,7 +28,7 @@ The common thread is that **the setup is an initial suggestion, not a definition
 Nothing enforces it, nothing checks it, and nothing tells you when your
 machine has drifted away from it.
 
-denver replaces that suggestion with a file — `denver.toml` — that *defines*
+denver replaces that suggestion with a file — `denver.yml` — that *defines*
 the environment: `denver` creates the environment exactly as you declare it in
 this file. You then run:
 
@@ -41,7 +41,7 @@ on your machine and your colleague’s.
 
 Few things follow from that, and they are most of why denver exists:
 
-- **It is declarative, not a script.** Reading the `denver.toml` tells you
+- **It is declarative, not a script.** Reading the `denver.yml` tells you
   the facts what the environment is - without scripting language overhead.
 - **It is fast on repeat.** A second run checks what can be reused and skips
   the rest, so starting an environment you already built costs milliseconds,
@@ -62,14 +62,14 @@ the better choice — no config file format to learn, no extra tool dependency.
 
 - **Reuse.** A `custom` stage is a script too — just one denver can run
   from more than one environment, instead of copy-pasting it around.
-- **Composable.** `import:` lets a `denver.toml` inherit another one’s
+- **Composable.** `import:` lets a `denver.yml` inherit another one’s
   entire stage stack as a base, then override or adapt just the sections
   that need to differ — a project-specific environment on top of a shared
   one, instead of forking the whole file.
 - **Selective runs.** `--until <stage>` and `--skip <stage>` run *part* of
   the environment — without you hand-rolling flags for that in your own script.
 - **A shared shape.** Once more than one project uses denver, every
-  `denver.toml` looks the same — a teammate who has read one environment
+  `denver.yml` looks the same — a teammate who has read one environment
   already knows how to read the next.
 
 If none of that matters — the project is small, one person maintains it,
@@ -78,15 +78,17 @@ for when it stops being one.
 
 ## What is a denver environment?
 
-An **environment** is simply a directory containing a `denver.toml`, and it is
+An **environment** is simply a directory containing a `denver.yml`, and it is
 the thing denver launches: `denver run <env>`. The file describes it completely —
 read the file and you know what the environment does. (`<env>` can also point
-straight at a TOML file, so one directory can hold several variants side by
-side, e.g. `denver.debug.toml` and `denver.release.toml`.)
+straight at a config file, so one directory can hold several variants side by
+side, e.g. `denver.debug.yml` and `denver.release.yml`. `denver.toml` works
+too — see “denver.yml vs. denver.toml” in
+[Configuration](../configuration/denver-toml.md#denver-yml-vs-denver-toml).)
 
-`denver.toml` is the recipe; denver is the cook that follows it.
+`denver.yml` is the recipe; denver is the cook that follows it.
 
-A **stage** is one step of that recipe. A `denver.toml` lists its stages in
+A **stage** is one step of that recipe. A `denver.yml` lists its stages in
 order, and order matters: each stage leaves behind `PATH` entries,
 environment variables and files that the *next* stage — and finally your
 shell — can use. Think of getting dressed: underwear before trousers before
@@ -95,7 +97,7 @@ shoes.
 Each stage names a **provider**, which is the code that knows *how* to run
 that kind of step — creating a virtualenv, fetching a toolchain, entering a
 container. You never write provider code; you configure it from
-`denver.toml`.
+`denver.yml`.
 
 That is the whole model: an environment is stages, in order, each run by a
 provider. Everything else in this documentation is a detail of those three

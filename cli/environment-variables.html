@@ -324,7 +324,7 @@ these are read from your shell rather than passed per run.</p>
 <p>Going the other way, denver also <em>sets</em> a handful of built-in variables in the
 environment it builds, so your scripts, compose files and the final command
 can read them as ordinary variables. They are also what <code class="docutils literal notranslate"><span class="pre">${...}</span></code>
-interpolation inside a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> resolves against — see “Variable
+interpolation inside a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> resolves against — see “Variable
 interpolation” in <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>.</p>
 <p>Denver-owned identifiers always reflect the current run, even if a stale
 variable of the same name was already exported in the calling shell:</p>
@@ -338,7 +338,7 @@ variable of the same name was already exported in the calling shell:</p>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_DIR</span></code></p></td>
 <td><p>the resolved <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> directory</p></td>
-<td><p>This environment’s own directory — the one holding its <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>.</p></td>
+<td><p>This environment’s own directory — the one holding its <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_NAME</span></code></p></td>
 <td><p>that directory’s name</p></td>
@@ -367,7 +367,7 @@ variable of the same name was already exported in the calling shell:</p>
 <h2>Where an environment’s state lives<a class="headerlink" href="#where-an-environment-s-state-lives" title="Link to this heading"></a></h2>
 <p>By default, <strong>inside the environment’s own directory</strong>:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span>my-project/env/
-├── denver.toml
+├── denver.yml
 └── .denver/            # denver's state, ignores itself via its own .gitignore
     └── denver/         # one subdirectory per denver.*.&lt;ext&gt; config in this folder
         ├── .venv.host
@@ -380,14 +380,14 @@ exactly its own state, two checkouts of one project can never share (or
 destroy) each other’s, and a <code class="docutils literal notranslate"><span class="pre">docker</span></code> stage carries it into the container
 for free, since the workspace is already bind-mounted there.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">&lt;config</span> <span class="pre">file</span> <span class="pre">stem&gt;</span></code> level exists because one folder may hold several
-variants (<code class="docutils literal notranslate"><span class="pre">denver.debug.toml</span></code>, <code class="docutils literal notranslate"><span class="pre">denver.release.toml</span></code>) — those are <em>different</em>
+variants (<code class="docutils literal notranslate"><span class="pre">denver.debug.yml</span></code>, <code class="docutils literal notranslate"><span class="pre">denver.release.yml</span></code>) — those are <em>different</em>
 environments sharing a folder, and must not share a venv.</p>
 <p>Wherever it ended up, <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--clean</span></code> or <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span> <span class="pre">&lt;env&gt;</span></code>
 removes it — see <a class="reference internal" href="arguments.html#remove-an-environment-s-state"><span class="std std-ref">Remove an environment’s state</span></a>.</p>
 <blockquote>
 <div><p>[!NOTE]
 <strong>Next:</strong> <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a> — the complete
-<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema: every key, how imports merge, and the mechanisms behind
+config schema: every key, how imports merge, and the mechanisms behind
 everything you have used so far.</p>
 </div></blockquote>
 </section>

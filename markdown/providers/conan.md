@@ -124,7 +124,7 @@ specific one. A stage with no conan available fails with `conan provider needs '
   project using them, not a separate recipes repo.
   A `recipes:` entry’s `dirs:` just points at wherever they
   actually are; there’s no requirement they live in any particular place
-  relative to the `denver.toml`. This simplifies the integration as there is no deployment necessary.
+  relative to the `denver.yml`. This simplifies the integration as there is no deployment necessary.
 - **A base env with recipes but no conanfile.** Since `conanfile:` and
   `recipes:` are independent, a shared base env can ship `recipes:` with no
   `conanfile:` of its own; each derived env that wants to actually install

@@ -298,8 +298,8 @@
 <p>This page explains the most simple bundled environment: <code class="docutils literal notranslate"><span class="pre">examples/simple-env</span></code>.</p>
 <section id="have-a-look-first">
 <h2>Have a look first<a class="headerlink" href="#have-a-look-first" title="Link to this heading"></a></h2>
-<p>Open <code class="docutils literal notranslate"><span class="pre">examples/simple-env/denver.toml</span></code> in a file editor of your choice
-(or <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env/denver.toml">in your Browser</a>),
+<p>Open <code class="docutils literal notranslate"><span class="pre">examples/simple-env/denver.yml</span></code> in a file editor of your choice
+(or <a class="reference external" href="https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env/denver.yml">in your Browser</a>),
 or ask <code class="docutils literal notranslate"><span class="pre">denver</span></code> to show the resolved config with <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">examples/simple-env</span> <span class="pre">--show-config</span></code>.</p>
 <blockquote>
 <div><p>[!NOTE]
@@ -313,24 +313,23 @@ a real run would use.</p>
 </div></blockquote>
 <p>You can see that it is a basic environment — consisting of three stages, each one a <code class="docutils literal notranslate"><span class="pre">provider:</span> <span class="pre">custom</span></code> section.
 All stages run a shell command (via <code class="docutils literal notranslate"><span class="pre">cmd:</span></code>), one additionally sources a script (<code class="docutils literal notranslate"><span class="pre">source:</span></code>).</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">stages</span> <span class="o">=</span> <span class="p">[</span>
-  <span class="s2">"print-vars-before"</span><span class="p">,</span>
-  <span class="s2">"set-vars"</span><span class="p">,</span>
-  <span class="s2">"print-vars-after"</span><span class="p">,</span>
-<span class="p">]</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stages</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">print-vars-before</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">set-vars</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">print-vars-after</span>
 
-<span class="p">[</span><span class="nb">print</span><span class="o">-</span><span class="nb">vars</span><span class="o">-</span><span class="n">before</span><span class="p">]</span>
-<span class="n">provider</span> <span class="o">=</span> <span class="s2">"custom"</span>
-<span class="n">cmd</span> <span class="o">=</span> <span class="s1">'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'</span>
+<span class="nt">print-vars-before</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">custom</span>
+<span class="w">  </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">'echo</span><span class="nv"> </span><span class="s">"[print-vars-before]</span><span class="nv"> </span><span class="s">MYVAR=$MYVAR</span><span class="nv"> </span><span class="s">FOO=$FOO</span><span class="nv"> </span><span class="s">BAR=$BAR"'</span>
 
-<span class="p">[</span><span class="nb">set</span><span class="o">-</span><span class="nb">vars</span><span class="p">]</span>
-<span class="n">provider</span> <span class="o">=</span> <span class="s2">"custom"</span>
-<span class="n">cmd</span> <span class="o">=</span> <span class="s1">'echo "[set-vars] sourcing custom.sh..."'</span>
-<span class="n">source</span> <span class="o">=</span> <span class="s2">"custom.sh"</span>
+<span class="nt">set-vars</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">custom</span>
+<span class="w">  </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">'echo</span><span class="nv"> </span><span class="s">"[set-vars]</span><span class="nv"> </span><span class="s">sourcing</span><span class="nv"> </span><span class="s">custom.sh..."'</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">custom.sh</span>
 
-<span class="p">[</span><span class="nb">print</span><span class="o">-</span><span class="nb">vars</span><span class="o">-</span><span class="n">after</span><span class="p">]</span>
-<span class="n">provider</span> <span class="o">=</span> <span class="s2">"custom"</span>
-<span class="n">cmd</span> <span class="o">=</span> <span class="s1">'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'</span>
+<span class="nt">print-vars-after</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">custom</span>
+<span class="w">  </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="s">'echo</span><span class="nv"> </span><span class="s">"[print-vars-after]</span><span class="nv"> </span><span class="s">MYVAR=$MYVAR</span><span class="nv"> </span><span class="s">FOO=$FOO</span><span class="nv"> </span><span class="s">BAR=$BAR"'</span>
 </pre></div>
 </div>
 <p>A closer look shows what each stage does:</p>
@@ -390,7 +389,7 @@ to fall back to the environment’s default (which is <code class="docutils lite
 <p>Let’s explain the <code class="docutils literal notranslate"><span class="pre">denver</span></code> naming for this specific example:</p>
 <ul class="simple">
 <li><p>The <strong>environment</strong> is the folder <code class="docutils literal notranslate"><span class="pre">examples/simple-env</span></code>, because that is
-where its <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> lives.</p></li>
+where its <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> lives.</p></li>
 <li><p>Each <strong>stage</strong> is one step, and they run in the order the file lists
 them — <code class="docutils literal notranslate"><span class="pre">print-vars-before</span></code>, then <code class="docutils literal notranslate"><span class="pre">set-vars</span></code>, then <code class="docutils literal notranslate"><span class="pre">print-vars-after</span></code>.</p></li>
 <li><p>The <strong>provider</strong> behind all three is <code class="docutils literal notranslate"><span class="pre">custom</span></code>: run a command, and/or

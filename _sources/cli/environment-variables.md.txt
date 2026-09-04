@@ -17,7 +17,7 @@ these are read from your shell rather than passed per run.
 Going the other way, denver also *sets* a handful of built-in variables in the
 environment it builds, so your scripts, compose files and the final command
 can read them as ordinary variables. They are also what `${...}`
-interpolation inside a `denver.toml` resolves against — see "Variable
+interpolation inside a `denver.yml` resolves against — see "Variable
 interpolation" in [Configuration](../configuration/denver-toml.md).
 
 Denver-owned identifiers always reflect the current run, even if a stale
@@ -25,7 +25,7 @@ variable of the same name was already exported in the calling shell:
 
 | Variable | Default | What it holds |
 |---|---|---|
-| `DENVER_ENV_DIR` | the resolved `<env>` directory | This environment's own directory — the one holding its `denver.toml`. |
+| `DENVER_ENV_DIR` | the resolved `<env>` directory | This environment's own directory — the one holding its `denver.yml`. |
 | `DENVER_ENV_NAME` | that directory's name | e.g. `raspberry-pico` for an env at `.../envs/raspberry-pico/`. |
 | `DENVER_ENV_WORKDIR` | `<env dir>/.denver/<config file stem>/` | denver's own working area for this environment (e.g. venv, install trees, fingerprints, logs, ...). Can be overridden by `DENVER_ENV_WORKDIR`. |
 | `DENVER_CACHE_DIR` | `~/.cache/denver` | Directory where tools can persistently store files, e.g. caches. Can be overwritten by `DENVER_CACHE_DIR`. |
@@ -38,7 +38,7 @@ By default, **inside the environment's own directory**:
 
 ```
 my-project/env/
-├── denver.toml
+├── denver.yml
 └── .denver/            # denver's state, ignores itself via its own .gitignore
     └── denver/         # one subdirectory per denver.*.<ext> config in this folder
         ├── .venv.host
@@ -52,7 +52,7 @@ destroy) each other's, and a `docker` stage carries it into the container
 for free, since the workspace is already bind-mounted there.
 
 The `<config file stem>` level exists because one folder may hold several
-variants (`denver.debug.toml`, `denver.release.toml`) — those are *different*
+variants (`denver.debug.yml`, `denver.release.yml`) — those are *different*
 environments sharing a folder, and must not share a venv.
 
 Wherever it ended up, `denver run <env> --clean` or `denver clean <env>`
@@ -60,5 +60,5 @@ removes it — see [Remove an environment's state](arguments.md#remove-an-enviro
 
 > [!NOTE]
 > **Next:** [Configuration](../configuration/denver-toml.md) — the complete
-> `denver.toml` schema: every key, how imports merge, and the mechanisms behind
+> config schema: every key, how imports merge, and the mechanisms behind
 > everything you have used so far.

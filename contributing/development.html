@@ -351,7 +351,7 @@ actually replacing the process.</p></li>
 </ul>
 <p><strong>Golden-file tests</strong> (<code class="docutils literal notranslate"><span class="pre">tests/test_golden_show_config.py</span></code>) are the one place
 that <em>is</em> end-to-end: for every env under <code class="docutils literal notranslate"><span class="pre">examples/</span></code> tracked in git, it runs
-the real <code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code> resolution against the real <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> and
+the real <code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code> resolution against the real <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> and
 compares the output to a checked-in snapshot in <code class="docutils literal notranslate"><span class="pre">tests/golden/</span></code>, with this
 checkout’s own absolute path normalized to <code class="docutils literal notranslate"><span class="pre">&lt;REPO&gt;</span></code> and the zephyr
 provider’s workspace-root lookups faked (both documented in that test
@@ -401,7 +401,7 @@ this or a fork: see “Extension providers” in
 <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a> instead.</p>
 <ol class="arabic simple">
 <li><p>Subclass <code class="docutils literal notranslate"><span class="pre">Provider</span></code> (<code class="docutils literal notranslate"><span class="pre">src/denver_providers/base.py</span></code>): set <code class="docutils literal notranslate"><span class="pre">name</span></code>, <code class="docutils literal notranslate"><span class="pre">KEYS</span></code> (every
-<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> key your section understands), and <code class="docutils literal notranslate"><span class="pre">kind</span></code> if it’s a wrapper
+<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> key your section understands), and <code class="docutils literal notranslate"><span class="pre">kind</span></code> if it’s a wrapper
 (default: <code class="docutils literal notranslate"><span class="pre">setup</span></code>).</p></li>
 <li><p>Implement <code class="docutils literal notranslate"><span class="pre">resolve_defaults(cls,</span> <span class="pre">ctx,</span> <span class="pre">cfg,</span> <span class="pre">config)</span></code> — a classmethod, and
 the <em>only</em> place your provider computes a default (a PATH lookup, a
@@ -463,10 +463,10 @@ distribution with <code class="docutils literal notranslate"><span class="pre">u
 no API token stored in the repo), through the <code class="docutils literal notranslate"><span class="pre">pypi</span></code> GitHub environment.</p>
 <p>Before tagging: make sure CI is green on the commit being tagged, that
 <code class="docutils literal notranslate"><span class="pre">README.md</span></code>/<code class="docutils literal notranslate"><span class="pre">doc/</span></code> describe what actually ships, and that
-<code class="docutils literal notranslate"><span class="pre">SUPPORTED_CONFIG_VERSION</span></code> in <code class="docutils literal notranslate"><span class="pre">src/denver.py</span></code> still matches the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>
+<code class="docutils literal notranslate"><span class="pre">SUPPORTED_CONFIG_VERSION</span></code> in <code class="docutils literal notranslate"><span class="pre">src/denver.py</span></code> still matches the <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>
 schema — it must be bumped together with any breaking schema change, so an
 older denver rejects a newer file instead of misreading it.</p>
-<p>A <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> states which denver <em>tool</em> version it needs with
+<p>A <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> states which denver <em>tool</em> version it needs with
 <code class="docutils literal notranslate"><span class="pre">denver-version:</span></code> (see <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>), so a file
 using a brand-new feature names the release that first shipped it. When an
 example under <code class="docutils literal notranslate"><span class="pre">examples/</span></code> is changed to rely on something unreleased, its

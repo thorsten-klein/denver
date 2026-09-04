@@ -5,15 +5,16 @@ these definitions.
 
 ## The core model
 
-**Environment** — a directory containing a `denver.toml`, and the unit denver
+**Environment** — a directory containing a `denver.yml`, and the unit denver
 launches: `denver run <env>`. An environment is fully described by its
-`denver.toml` (plus whatever that file explicitly points at); reading the file
+`denver.yml` (plus whatever that file explicitly points at); reading the file
 tells you everything the environment does. `<env>` may also be a path
-directly to a TOML file, so one directory can hold several variants side by
-side (`denver.debug.toml`, `denver.release.toml`).
+directly to a config file, so one directory can hold several variants side by
+side (`denver.debug.yml`, `denver.release.yml`).
 
-**`denver.toml`** — the config file describing one environment: which stages
-run, in what order, and how each is configured. Its schema is documented in
+**`denver.yml`** — the config file describing one environment: which stages
+run, in what order, and how each is configured. denver’s default format;
+`denver.toml` works too. Its schema is documented in
 [Configuration](../configuration/denver-toml.md).
 
 **Stage** — one entry in `stages:`: a provider type plus its own config
@@ -25,7 +26,7 @@ targeting different venvs.
 
 **Provider** — the generic engine behind a stage type. denver ships seven:
 `uv`, `conan`, `zephyr`, `docker`, `download`, `git` and `custom`. A provider holds no
-project-specific knowledge; everything specific comes from the `denver.toml`
+project-specific knowledge; everything specific comes from the `denver.yml`
 section it is given. See [`providers/`](https://github.com/thorsten-klein/denver/tree/develop/doc/providers).
 
 **Extension provider** — a project’s own `Provider` subclass, registered via
@@ -71,7 +72,7 @@ filled in centrally, before any stage runs. This is exactly what
 `--show-config` prints, and exactly what a real run uses — the two can never
 disagree, because a provider’s `setup()` never computes a default of its own.
 
-**Whole-file `import:`** — one `denver.toml` inheriting another environment’s
+**Whole-file `import:`** — one `denver.yml` inheriting another environment’s
 entire stack as a base, then adding or overriding only what differs. This is
 how a version-specific environment reuses a shared base without copy-pasting
 its `stages:`/`docker:`/`conan:`/`uv:` config.
@@ -87,7 +88,7 @@ the same string key to different values is a hard error unless the override
 is prefixed with `!`. See [Configuration](../configuration/denver-toml.md) for the
 details, including the `<overwrite>` marker.
 
-**Interpolation** — `${VAR}` / `${VAR:-default}` expansion inside `denver.toml`
+**Interpolation** — `${VAR}` / `${VAR:-default}` expansion inside `denver.yml`
 values, resolved against the environment denver is building (including its
 own built-ins such as `DENVER_ENV_DIR`).
 
@@ -135,7 +136,7 @@ denver runs. `-q`/`-qq` always win over it.
 
 **State directory** — where denver keeps everything it builds for one
 environment (venv, install trees, fingerprints, logs, `performance.jsonl`):
-`<env dir>/.denver/<denver.toml stem>/`, inside the environment’s own
+`<env dir>/.denver/<config file stem>/`, inside the environment’s own
 directory and ignoring itself via a `.gitignore` denver writes there. Keyed on
 the config file, so two variants in one folder — and two checkouts of one
 project — never share it.

@@ -297,7 +297,7 @@
 <h1>About denver<a class="headerlink" href="#about-denver" title="Link to this heading"></a></h1>
 <img src="https://raw.githubusercontent.com/thorsten-klein/denver/develop/src/denver_assets/logo.svg" alt="denver logo" width="500"/>
 <p><strong>D</strong>evelopment <strong>Env</strong>ironment Launch<strong>er</strong> — describe your environment as
-code in a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>: it consists of stages that build on top of each other.
+code in a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>: it consists of stages that build on top of each other.
 That layering is what makes it flexible and adjustable to fit to your project’s needs.</p>
 <section id="what-problem-does-denver-solve">
 <h2>What problem does denver solve?<a class="headerlink" href="#what-problem-does-denver-solve" title="Link to this heading"></a></h2>
@@ -319,7 +319,7 @@ config file, so nobody dares remove it.</p></li>
 <p>The common thread is that <strong>the setup is an initial suggestion, not a definition.</strong>
 Nothing enforces it, nothing checks it, and nothing tells you when your
 machine has drifted away from it.</p>
-<p>denver replaces that suggestion with a file — <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> — that <em>defines</em>
+<p>denver replaces that suggestion with a file — <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> — that <em>defines</em>
 the environment: <code class="docutils literal notranslate"><span class="pre">denver</span></code> creates the environment exactly as you declare it in
 this file. You then run:</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>my-project
@@ -329,7 +329,7 @@ this file. You then run:</p>
 on your machine and your colleague’s.</p>
 <p>Few things follow from that, and they are most of why denver exists:</p>
 <ul class="simple">
-<li><p><strong>It is declarative, not a script.</strong> Reading the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> tells you
+<li><p><strong>It is declarative, not a script.</strong> Reading the <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> tells you
 the facts what the environment is - without scripting language overhead.</p></li>
 <li><p><strong>It is fast on repeat.</strong> A second run checks what can be reused and skips
 the rest, so starting an environment you already built costs milliseconds,
@@ -349,14 +349,14 @@ the better choice — no config file format to learn, no extra tool dependency.<
 <ul class="simple">
 <li><p><strong>Reuse.</strong> A <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage is a script too — just one denver can run
 from more than one environment, instead of copy-pasting it around.</p></li>
-<li><p><strong>Composable.</strong> <code class="docutils literal notranslate"><span class="pre">import:</span></code> lets a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> inherit another one’s
+<li><p><strong>Composable.</strong> <code class="docutils literal notranslate"><span class="pre">import:</span></code> lets a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> inherit another one’s
 entire stage stack as a base, then override or adapt just the sections
 that need to differ — a project-specific environment on top of a shared
 one, instead of forking the whole file.</p></li>
 <li><p><strong>Selective runs.</strong> <code class="docutils literal notranslate"><span class="pre">--until</span> <span class="pre">&lt;stage&gt;</span></code> and <code class="docutils literal notranslate"><span class="pre">--skip</span> <span class="pre">&lt;stage&gt;</span></code> run <em>part</em> of
 the environment — without you hand-rolling flags for that in your own script.</p></li>
 <li><p><strong>A shared shape.</strong> Once more than one project uses denver, every
-<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> looks the same — a teammate who has read one environment
+<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> looks the same — a teammate who has read one environment
 already knows how to read the next.</p></li>
 </ul>
 <p>If none of that matters — the project is small, one person maintains it,
@@ -365,13 +365,15 @@ for when it stops being one.</p>
 </section>
 <section id="what-is-a-denver-environment">
 <h2>What is a denver environment?<a class="headerlink" href="#what-is-a-denver-environment" title="Link to this heading"></a></h2>
-<p>An <strong>environment</strong> is simply a directory containing a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, and it is
+<p>An <strong>environment</strong> is simply a directory containing a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, and it is
 the thing denver launches: <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span></code>. The file describes it completely —
 read the file and you know what the environment does. (<code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> can also point
-straight at a TOML file, so one directory can hold several variants side by
-side, e.g. <code class="docutils literal notranslate"><span class="pre">denver.debug.toml</span></code> and <code class="docutils literal notranslate"><span class="pre">denver.release.toml</span></code>.)</p>
-<p><code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> is the recipe; denver is the cook that follows it.</p>
-<p>A <strong>stage</strong> is one step of that recipe. A <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> lists its stages in
+straight at a config file, so one directory can hold several variants side by
+side, e.g. <code class="docutils literal notranslate"><span class="pre">denver.debug.yml</span></code> and <code class="docutils literal notranslate"><span class="pre">denver.release.yml</span></code>. <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> works
+too — see “denver.yml vs. denver.toml” in
+<a class="reference internal" href="../configuration/denver-toml.html#denver-yml-vs-denver-toml"><span class="std std-ref">Configuration</span></a>.)</p>
+<p><code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> is the recipe; denver is the cook that follows it.</p>
+<p>A <strong>stage</strong> is one step of that recipe. A <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> lists its stages in
 order, and order matters: each stage leaves behind <code class="docutils literal notranslate"><span class="pre">PATH</span></code> entries,
 environment variables and files that the <em>next</em> stage — and finally your
 shell — can use. Think of getting dressed: underwear before trousers before
@@ -379,7 +381,7 @@ shoes.</p>
 <p>Each stage names a <strong>provider</strong>, which is the code that knows <em>how</em> to run
 that kind of step — creating a virtualenv, fetching a toolchain, entering a
 container. You never write provider code; you configure it from
-<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>.</p>
+<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>.</p>
 <p>That is the whole model: an environment is stages, in order, each run by a
 provider. Everything else in this documentation is a detail of those three
 words.</p>

@@ -40,7 +40,7 @@ installs it. In practice an earlier `uv` stage provides it, by listing
 - **`update-args`** — extra `west update` args.
 
 `WEST_CONFIG_SYSTEM` (west’s own base-config env var, e.g. the
-remotes/defaults denver ships) is *not* a `denver.toml` key — set it
+remotes/defaults denver ships) is *not* a `denver.yml` key — set it
 directly via `env:`/`hooks.env` like any other real environment variable;
 west reads it itself, no provider-specific handling needed.
 

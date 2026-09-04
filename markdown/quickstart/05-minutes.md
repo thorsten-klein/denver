@@ -4,8 +4,8 @@ This page explains the most simple bundled environment: `examples/simple-env`.
 
 ## Have a look first
 
-Open `examples/simple-env/denver.toml` in a file editor of your choice
-(or [in your Browser](https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env/denver.toml)),
+Open `examples/simple-env/denver.yml` in a file editor of your choice
+(or [in your Browser](https://github.com/thorsten-klein/denver/tree/develop/examples/simple-env/denver.yml)),
 or ask `denver` to show the resolved config with `denver run examples/simple-env --show-config`.
 
 > [!NOTE]
@@ -20,25 +20,24 @@ or ask `denver` to show the resolved config with `denver run examples/simple-env
 You can see that it is a basic environment — consisting of three stages, each one a `provider: custom` section.
 All stages run a shell command (via `cmd:`), one additionally sources a script (`source:`).
 
-```default
-stages = [
-  "print-vars-before",
-  "set-vars",
-  "print-vars-after",
-]
+```yaml
+stages:
+- print-vars-before
+- set-vars
+- print-vars-after
 
-[print-vars-before]
-provider = "custom"
-cmd = 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
+print-vars-before:
+  provider: custom
+  cmd: 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
 
-[set-vars]
-provider = "custom"
-cmd = 'echo "[set-vars] sourcing custom.sh..."'
-source = "custom.sh"
+set-vars:
+  provider: custom
+  cmd: 'echo "[set-vars] sourcing custom.sh..."'
+  source: custom.sh
 
-[print-vars-after]
-provider = "custom"
-cmd = 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
+print-vars-after:
+  provider: custom
+  cmd: 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
 ```
 
 A closer look shows what each stage does:
@@ -102,7 +101,7 @@ denver run examples/simple-env
 Let’s explain the `denver` naming for this specific example:
 
 - The **environment** is the folder `examples/simple-env`, because that is
-  where its `denver.toml` lives.
+  where its `denver.yml` lives.
 - Each **stage** is one step, and they run in the order the file lists
   them — `print-vars-before`, then `set-vars`, then `print-vars-after`.
 - The **provider** behind all three is `custom`: run a command, and/or

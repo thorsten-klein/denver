@@ -63,7 +63,7 @@ fakes, requested as fixtures:
 
 **Golden-file tests** (`tests/test_golden_show_config.py`) are the one place
 that *is* end-to-end: for every env under `examples/` tracked in git, it runs
-the real `--show-config-full` resolution against the real `denver.toml` and
+the real `--show-config-full` resolution against the real `denver.yml` and
 compares the output to a checked-in snapshot in `tests/golden/`, with this
 checkout’s own absolute path normalized to `<REPO>` and the zephyr
 provider’s workspace-root lookups faked (both documented in that test
@@ -112,7 +112,7 @@ this or a fork: see “Extension providers” in
 [Configuration](../configuration/denver-toml.md) instead.
 
 1. Subclass `Provider` (`src/denver_providers/base.py`): set `name`, `KEYS` (every
-   `denver.toml` key your section understands), and `kind` if it’s a wrapper
+   `denver.yml` key your section understands), and `kind` if it’s a wrapper
    (default: `setup`).
 2. Implement `resolve_defaults(cls, ctx, cfg, config)` — a classmethod, and
    the *only* place your provider computes a default (a PATH lookup, a
@@ -175,11 +175,11 @@ no API token stored in the repo), through the `pypi` GitHub environment.
 
 Before tagging: make sure CI is green on the commit being tagged, that
 `README.md`/`doc/` describe what actually ships, and that
-`SUPPORTED_CONFIG_VERSION` in `src/denver.py` still matches the `denver.toml`
+`SUPPORTED_CONFIG_VERSION` in `src/denver.py` still matches the `denver.yml`
 schema — it must be bumped together with any breaking schema change, so an
 older denver rejects a newer file instead of misreading it.
 
-A `denver.toml` states which denver *tool* version it needs with
+A `denver.yml` states which denver *tool* version it needs with
 `denver-version:` (see [Configuration](../configuration/denver-toml.md)), so a file
 using a brand-new feature names the release that first shipped it. When an
 example under `examples/` is changed to rely on something unreleased, its

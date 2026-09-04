@@ -48,7 +48,7 @@ one-line description.
 ## Control the config: Change values for one run
 
 - **`-c`/`--config KEY.PATH=VALUE`** overrides a single value in the merged
-  `denver.toml` (e.g. `-c uv.python=3.13`); any missing parent section is
+  `denver.yml` (e.g. `-c uv.python=3.13`); any missing parent section is
   created as an empty mapping. `KEY.PATH+=VALUE` appends to an existing
   list/string/number instead of replacing it (behaves like `=` if the path
   doesn’t exist yet). `VALUE` is parsed as JSON when that succeeds, so
@@ -56,8 +56,9 @@ one-line description.
   valid JSON on its own (a bare word, an unquoted version string like
   `3.12.3`) is kept as a plain string. Repeatable; later `-c`s win when they
   target the same path.
-- **`-cf`/`--config-file FILE`** overlays a whole TOML file on top of the
-  env’s `denver.toml`, using the same merge rules as `import:`. Repeatable,
+- **`-cf`/`--config-file FILE`** overlays a whole config file (`denver.yml`
+  or `denver.toml`, dispatched the same way `<env>` itself is) on top of the
+  env’s own config, using the same merge rules as `import:`. Repeatable,
   applied in the order given; `-c` overrides are applied last, on top of
   every `-cf` file.
 
@@ -71,7 +72,7 @@ or two knobs an env actually wants to offer (“which board?”, “debug or
 release?”): its users have to know the dotted path, nothing shows up in
 `--help`, and a typo just becomes a new config key instead of an error.
 
-`denver-custom-args:`, in the env’s own `denver.toml`, declares those knobs
+`denver-custom-args:`, in the env’s own `denver.yml`, declares those knobs
 as real flags instead. Each entry is one `parser.add_argument()` call:
 `flags:` names the flag (a string, or a list to give it aliases), and
 **every other key is forwarded verbatim as a keyword argument** — so an env
@@ -79,16 +80,14 @@ gets argparse’s whole vocabulary (`help:`, `default:`, `action:`, `nargs:`,
 `choices:`, `required:`, `metavar:`, `dest:`, …) without denver
 re-inventing, or restricting, any of it:
 
-```toml
-[[denver-custom-args]]
-flags = ["--board", "-b"]
-default = "nrf52840dk"
-help = "which board to build for"
-
-[[denver-custom-args]]
-flags = ["--release"]
-action = "store_true"
-help = "build with optimisations"
+```yaml
+denver-custom-args:
+- flags: ["--board", "-b"]
+  default: nrf52840dk
+  help: which board to build for
+- flags: ["--release"]
+  action: store_true
+  help: build with optimisations
 ```
 
 ```bash
@@ -100,13 +99,13 @@ is argparse’s own destination name uppercased (`--board` → `DENVER_ARG_BOARD
 `--build-type` → `DENVER_ARG_BUILD_TYPE`, or whatever an explicit `dest:`
 says). That is one variable in the environment denver is building, so it
 reaches everything through the same mechanisms as any other variable —
-`${...}` interpolation in the same `denver.toml`, hooks, `scripts:`, and the
+`${...}` interpolation in the same `denver.yml`, hooks, `scripts:`, and the
 final command:
 
-```toml
-[zephyr-build]
-provider = "custom"
-cmd = "west build -b ${DENVER_ARG_BOARD}"
+```yaml
+zephyr-build:
+  provider: custom
+  cmd: west build -b ${DENVER_ARG_BOARD}
 ```
 
 The value is always a string, since an environment variable is:
@@ -252,7 +251,7 @@ trees, downloads, logs and the fingerprints that decide what a run can skip
 (see
 [Where an environment’s state lives](environment-variables.md#where-an-environment-s-state-lives)).
 There is nothing to preserve in it: the next `denver run` rebuilds all of it
-from the `denver.toml`, which is the whole point of an environment being
+from the `denver.yml`, which is the whole point of an environment being
 code. It removes the directory whether or not the env declares any `clean`
 scripts at all.
 
@@ -264,13 +263,13 @@ Four things worth knowing:
   the env’s own `clean` scripts run — no stage’s setup work, and no final
   command afterwards.
 - **It only removes what denver itself wrote.** Anything the env’s own
-  config points somewhere else — a `CONAN_HOME = "${DENVER_ENV_DIR}/.conan2"`,
+  config points somewhere else — a `CONAN_HOME: "${DENVER_ENV_DIR}/.conan2"`,
   say — is a location the project chose for a tool’s own cache, not denver’s
   state, and is left alone.
 - **The `.denver` directory goes too**, once nothing but the `.gitignore`
   denver wrote is left inside it, so the env comes back to exactly the files
   its author checked in. A `.denver` still holding another config variant’s
-  state (`denver.debug.toml`’s) is kept, along with that state — cleaning
+  state (`denver.debug.yml`’s) is kept, along with that state — cleaning
   one variant never touches its neighbours. denver’s own shared-root
   fallback (`~/.denver`) is never removed either way; only this env’s own
   directory inside it is.
@@ -296,7 +295,7 @@ than one of these across different runs is left with nothing anywhere. And
 it does the same for every env `<env>` imports, since a base env is built as
 part of building whatever imports it.
 
-It needs no working config: an env whose `denver.toml` will not parse still
+It needs no working config: an env whose `denver.yml` will not parse still
 has its own directories removed, with a warning that the envs it imports
 were left alone.
 
@@ -340,7 +339,7 @@ every command it runs) is off unless asked for with `-v`/`--verbose`.
   from the checkout’s git tags when denver runs from a checkout (script or
   editable install), otherwise from the installed package’s metadata. A
   checkout ahead of its last tag reports as a development build of the
-  release it is heading for (`1.1.0-17-gabc1234`). A `denver.toml` can
+  release it is heading for (`1.1.0-17-gabc1234`). A `denver.yml` can
   require a minimum with `denver-version: ">=1.1.0"`, and is rejected up
   front by a denver older than that (see
   [Configuration](../configuration/denver-toml.md)).

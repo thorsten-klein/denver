@@ -60,13 +60,13 @@ invoked `denver complete` is the registration line above; the completion
 logic itself never has to be regenerated:
 
 - `run`, `clean` and `complete`, the subcommands themselves
-- `<env>` — directories and `denver.toml`/`denver.*.toml` files on disk
+- `<env>` — directories and `denver.yml`/`denver.*.yml`/`denver.toml`/`denver.*.toml` files on disk
 - denver’s own `run` flags (`--fast`, `--until`, `--skip`, `--scripts`, …)
 - `--until`/`--skip`’s values — the stage ids the given `<env>` actually
   declares
 - `--scripts`’ value — the names that env’s `scripts:` sections actually
   define
-- an env’s own `denver-custom-args:` — whatever extra flags its `denver.toml` declares (see
+- an env’s own `denver-custom-args:` — whatever extra flags its `denver.yml` declares (see
   “Environment-specific arguments” in
   [Configuration](../configuration/denver-toml.md)), completed the same way
   denver’s own flags are

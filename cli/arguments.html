@@ -343,7 +343,7 @@ directory kept.</p></li>
 <h2>Control the config: Change values for one run<a class="headerlink" href="#control-the-config-change-values-for-one-run" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">-c</span></code>/<code class="docutils literal notranslate"><span class="pre">--config</span> <span class="pre">KEY.PATH=VALUE</span></code></strong> overrides a single value in the merged
-<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">uv.python=3.13</span></code>); any missing parent section is
+<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> (e.g. <code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">uv.python=3.13</span></code>); any missing parent section is
 created as an empty mapping. <code class="docutils literal notranslate"><span class="pre">KEY.PATH+=VALUE</span></code> appends to an existing
 list/string/number instead of replacing it (behaves like <code class="docutils literal notranslate"><span class="pre">=</span></code> if the path
 doesn’t exist yet). <code class="docutils literal notranslate"><span class="pre">VALUE</span></code> is parsed as JSON when that succeeds, so
@@ -351,8 +351,9 @@ doesn’t exist yet). <code class="docutils literal notranslate"><span class="pr
 valid JSON on its own (a bare word, an unquoted version string like
 <code class="docutils literal notranslate"><span class="pre">3.12.3</span></code>) is kept as a plain string. Repeatable; later <code class="docutils literal notranslate"><span class="pre">-c</span></code>s win when they
 target the same path.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">-cf</span></code>/<code class="docutils literal notranslate"><span class="pre">--config-file</span> <span class="pre">FILE</span></code></strong> overlays a whole TOML file on top of the
-env’s <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, using the same merge rules as <code class="docutils literal notranslate"><span class="pre">import:</span></code>. Repeatable,
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">-cf</span></code>/<code class="docutils literal notranslate"><span class="pre">--config-file</span> <span class="pre">FILE</span></code></strong> overlays a whole config file (<code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>
+or <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, dispatched the same way <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> itself is) on top of the
+env’s own config, using the same merge rules as <code class="docutils literal notranslate"><span class="pre">import:</span></code>. Repeatable,
 applied in the order given; <code class="docutils literal notranslate"><span class="pre">-c</span></code> overrides are applied last, on top of
 every <code class="docutils literal notranslate"><span class="pre">-cf</span></code> file.</p></li>
 </ul>
@@ -365,22 +366,20 @@ every <code class="docutils literal notranslate"><span class="pre">-cf</span></c
 or two knobs an env actually wants to offer (“which board?”, “debug or
 release?”): its users have to know the dotted path, nothing shows up in
 <code class="docutils literal notranslate"><span class="pre">--help</span></code>, and a typo just becomes a new config key instead of an error.</p>
-<p><code class="docutils literal notranslate"><span class="pre">denver-custom-args:</span></code>, in the env’s own <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, declares those knobs
+<p><code class="docutils literal notranslate"><span class="pre">denver-custom-args:</span></code>, in the env’s own <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, declares those knobs
 as real flags instead. Each entry is one <code class="docutils literal notranslate"><span class="pre">parser.add_argument()</span></code> call:
 <code class="docutils literal notranslate"><span class="pre">flags:</span></code> names the flag (a string, or a list to give it aliases), and
 <strong>every other key is forwarded verbatim as a keyword argument</strong> — so an env
 gets argparse’s whole vocabulary (<code class="docutils literal notranslate"><span class="pre">help:</span></code>, <code class="docutils literal notranslate"><span class="pre">default:</span></code>, <code class="docutils literal notranslate"><span class="pre">action:</span></code>, <code class="docutils literal notranslate"><span class="pre">nargs:</span></code>,
 <code class="docutils literal notranslate"><span class="pre">choices:</span></code>, <code class="docutils literal notranslate"><span class="pre">required:</span></code>, <code class="docutils literal notranslate"><span class="pre">metavar:</span></code>, <code class="docutils literal notranslate"><span class="pre">dest:</span></code>, …) without denver
 re-inventing, or restricting, any of it:</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[[denver-custom-args]]</span>
-<span class="n">flags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"--board"</span><span class="p">,</span><span class="w"> </span><span class="s2">"-b"</span><span class="p">]</span>
-<span class="n">default</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"nrf52840dk"</span>
-<span class="n">help</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"which board to build for"</span>
-
-<span class="k">[[denver-custom-args]]</span>
-<span class="n">flags</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"--release"</span><span class="p">]</span>
-<span class="n">action</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"store_true"</span>
-<span class="n">help</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"build with optimisations"</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">denver-custom-args</span><span class="p">:</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">flags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"--board"</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">"-b"</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">default</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nrf52840dk</span>
+<span class="w">  </span><span class="nt">help</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">which board to build for</span>
+<span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">flags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">"--release"</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">action</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">store_true</span>
+<span class="w">  </span><span class="nt">help</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">build with optimisations</span>
 </pre></div>
 </div>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>denver<span class="w"> </span>run<span class="w"> </span>my-project<span class="w"> </span>--board<span class="w"> </span>nrf5340dk<span class="w"> </span>--release<span class="w"> </span>--<span class="w"> </span>west<span class="w"> </span>build
@@ -391,11 +390,11 @@ is argparse’s own destination name uppercased (<code class="docutils literal n
 <code class="docutils literal notranslate"><span class="pre">--build-type</span></code> → <code class="docutils literal notranslate"><span class="pre">DENVER_ARG_BUILD_TYPE</span></code>, or whatever an explicit <code class="docutils literal notranslate"><span class="pre">dest:</span></code>
 says). That is one variable in the environment denver is building, so it
 reaches everything through the same mechanisms as any other variable —
-<code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation in the same <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, hooks, <code class="docutils literal notranslate"><span class="pre">scripts:</span></code>, and the
+<code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation in the same <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, hooks, <code class="docutils literal notranslate"><span class="pre">scripts:</span></code>, and the
 final command:</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="k">[zephyr-build]</span>
-<span class="n">provider</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"custom"</span>
-<span class="n">cmd</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"west build -b ${DENVER_ARG_BOARD}"</span>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">zephyr-build</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">custom</span>
+<span class="w">  </span><span class="nt">cmd</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">west build -b ${DENVER_ARG_BOARD}</span>
 </pre></div>
 </div>
 <p>The value is always a string, since an environment variable is:</p>
@@ -568,7 +567,7 @@ trees, downloads, logs and the fingerprints that decide what a run can skip
 (see
 <a class="reference internal" href="environment-variables.html#where-an-environment-s-state-lives"><span class="std std-ref">Where an environment’s state lives</span></a>).
 There is nothing to preserve in it: the next <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span></code> rebuilds all of it
-from the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>, which is the whole point of an environment being
+from the <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, which is the whole point of an environment being
 code. It removes the directory whether or not the env declares any <code class="docutils literal notranslate"><span class="pre">clean</span></code>
 scripts at all.</p>
 <p>Four things worth knowing:</p>
@@ -579,13 +578,13 @@ environment (a venv’s tools, a container) that is about to go.</p></li>
 the env’s own <code class="docutils literal notranslate"><span class="pre">clean</span></code> scripts run — no stage’s setup work, and no final
 command afterwards.</p></li>
 <li><p><strong>It only removes what denver itself wrote.</strong> Anything the env’s own
-config points somewhere else — a <code class="docutils literal notranslate"><span class="pre">CONAN_HOME</span> <span class="pre">=</span> <span class="pre">&quot;${DENVER_ENV_DIR}/.conan2&quot;</span></code>,
+config points somewhere else — a <code class="docutils literal notranslate"><span class="pre">CONAN_HOME:</span> <span class="pre">&quot;${DENVER_ENV_DIR}/.conan2&quot;</span></code>,
 say — is a location the project chose for a tool’s own cache, not denver’s
 state, and is left alone.</p></li>
 <li><p><strong>The <code class="docutils literal notranslate"><span class="pre">.denver</span></code> directory goes too</strong>, once nothing but the <code class="docutils literal notranslate"><span class="pre">.gitignore</span></code>
 denver wrote is left inside it, so the env comes back to exactly the files
 its author checked in. A <code class="docutils literal notranslate"><span class="pre">.denver</span></code> still holding another config variant’s
-state (<code class="docutils literal notranslate"><span class="pre">denver.debug.toml</span></code>’s) is kept, along with that state — cleaning
+state (<code class="docutils literal notranslate"><span class="pre">denver.debug.yml</span></code>’s) is kept, along with that state — cleaning
 one variant never touches its neighbours. denver’s own shared-root
 fallback (<code class="docutils literal notranslate"><span class="pre">~/.denver</span></code>) is never removed either way; only this env’s own
 directory inside it is.</p></li>
@@ -608,7 +607,7 @@ denver’s own shared-root fallback (<code class="docutils literal notranslate">
 than one of these across different runs is left with nothing anywhere. And
 it does the same for every env <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> imports, since a base env is built as
 part of building whatever imports it.</p>
-<p>It needs no working config: an env whose <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> will not parse still
+<p>It needs no working config: an env whose <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> will not parse still
 has its own directories removed, with a warning that the envs it imports
 were left alone.</p>
 <p>Before removing anything, it shows the directory and asks to confirm it,
@@ -651,7 +650,7 @@ prints the running denver’s version and exits — derived
 from the checkout’s git tags when denver runs from a checkout (script or
 editable install), otherwise from the installed package’s metadata. A
 checkout ahead of its last tag reports as a development build of the
-release it is heading for (<code class="docutils literal notranslate"><span class="pre">1.1.0-17-gabc1234</span></code>). A <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> can
+release it is heading for (<code class="docutils literal notranslate"><span class="pre">1.1.0-17-gabc1234</span></code>). A <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> can
 require a minimum with <code class="docutils literal notranslate"><span class="pre">denver-version:</span> <span class="pre">&quot;&gt;=1.1.0&quot;</span></code>, and is rejected up
 front by a denver older than that (see
 <a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>).</p></li>

@@ -9,7 +9,10 @@ end you can write your own instead of copying one.
 Build along in your own repo under `envs/firmware-env/`; the finished result is
 bundled as
 [`examples/firmware-env`](https://github.com/thorsten-klein/denver/tree/develop/examples/firmware-env)
-if you want to compare, or skip ahead.
+if you want to compare, or skip ahead. (The bundled copy is a `denver.yml` –
+denver’s default format – while this walkthrough builds a `denver.toml`;
+same schema either way, see
+[denver.yml vs. denver.toml](../configuration/denver-toml.md#denver-yml-vs-denver-toml).)
 
 Terms used here (*environment*, *stage*, *provider*, *wrapper*, …) were
 introduced in
