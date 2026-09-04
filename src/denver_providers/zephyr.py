@@ -11,7 +11,15 @@ import os
 from pathlib import Path
 
 from .base import Provider, fill_unset
-from .context import banner, die, find_in_parents, find_outermost_in_parents, fingerprint_label, info
+from .context import (
+    banner,
+    die,
+    find_in_parents,
+    find_outermost_in_parents,
+    fingerprint_label,
+    info,
+    sha256_of_files,
+)
 
 # extra `west update` args added on top of 'update-args:' whenever ctx.ci --
 # a fixed shallow-clone strategy, not a denver.toml key (see doc/providers/zephyr.md).
@@ -133,30 +141,19 @@ class ZephyrProvider(Provider):
         self._configure(ctx, cfg, west, top, west_yml, zephyr_base)
         self._update(ctx, cfg, west, top, west_yml, zephyr_base)
 
-    # ------------------------------------------------------------------ #
-    @staticmethod
-    def _needs_west_config(ctx, west_config, removed):
-        """Whether the empty .west/config still has to be (re)created.
-
-        Under --dry-run the removal only *reported* itself, so ask whether
-        the file would have survived, not whether it is still on disk --
-        otherwise its recreation goes missing from the preview.
-        """
-        if removed and ctx.dry_run:
-            return True
-        return not west_config.exists()
-
     def _ensure_workspace(self, ctx, top):
-        """Create an empty .west/config at ``top`` if missing (or --force), so `west` recognizes the workspace."""
+        """Create an empty .west/config at ``top`` if missing, so `west` recognizes the workspace.
+
+        Never wiped by --force: an existing config holds settings (e.g.
+        zephyr.base-prefer) a user may have set by hand, and _configure
+        already reconciles every key denver.toml cares about individually.
+        """
         # bannered first (even though there's nothing to echo/run here today)
         # so a future addition to this step can't print ahead of any banner,
         # the way _configure/_update's own info() lines used to.
         banner(ctx, self.stage, "prepare")
         west_config = top / ".west" / "config"
-        removed = ctx.force and west_config.exists()
-        if removed:
-            ctx.unlink(west_config)
-        if self._needs_west_config(ctx, west_config, removed):
+        if not west_config.exists():
             ctx.mkdir(west_config.parent)
             ctx.touch(west_config)
         info(f"zephyr: workspace at {west_config}")
@@ -193,14 +190,23 @@ class ZephyrProvider(Provider):
             self._ensure_config(ctx, west, top, current, key, str(value))
 
     def _west_info(self, ctx, west, top, west_yml, zephyr_base):
-        """Build a fingerprint string (west-yml path, zephyr commit, resolved manifest) to detect workspace drift.
+        """Build a fingerprint string (west-yml content, zephyr commit, resolved manifest, patches.yml) to detect drift.
 
         The manifest is named relative to the env dir: a fingerprint must
         answer "did the workspace change", not "did this tree move", and an
         absolute path makes a second checkout of the same project look like
         drift and re-run `west update` in full (see context.fingerprint_label).
+
+        west-yml is hashed by content, not just named: 'west manifest
+        --resolve' doesn't reflect every possible edit (e.g. changes an
+        import pulls in indirectly), so a content checksum catches drift
+        it would otherwise miss. Each project's own zephyr/patches.yml is
+        hashed too -- it isn't part of the manifest at all, so editing it
+        alone wouldn't otherwise trigger a rerun of `west update` (and thus
+        of _apply_project_patches).
         """
         lines = [f"west-yml: {fingerprint_label(west_yml, ctx.env_dir)}"]
+        lines.append(sha256_of_files([west_yml], base=ctx.env_dir))
         commit = ctx.run(
             ["git", "-C", str(zephyr_base), "rev-parse", "HEAD"],
             capture=True,
@@ -216,6 +222,10 @@ class ZephyrProvider(Provider):
             check=False,
         ).stdout
         lines.append(resolved)
+        patches_files = [p / "zephyr" / "patches.yml" for p in self._west_projects(ctx, west, top)]
+        patches_files = [p for p in patches_files if p.is_file()]
+        lines.append("patches.yml:")
+        lines.append(sha256_of_files(patches_files, base=ctx.env_dir))
         return "\n".join(lines)
 
     def _update(self, ctx, cfg, west, top, west_yml, zephyr_base):
@@ -242,13 +252,9 @@ class ZephyrProvider(Provider):
 
         ctx.write_text(info_file, self._west_info(ctx, west, top, west_yml, zephyr_base))
 
-    def _apply_project_patches(self, ctx, cfg, west, top):
-        """Apply each west project's own zephyr/patches.yml (if any), reversed so dependents patch before their deps."""
-        committer = {
-            "GIT_COMMITTER_NAME": cfg["patch-committer-name"],
-            "GIT_COMMITTER_EMAIL": cfg["patch-committer-email"],
-            "GIT_COMMITTER_DATE": cfg["patch-committer-date"],
-        }
+    @staticmethod
+    def _west_projects(ctx, west, top):
+        """Every west project's abspath, as `west list -f {abspath}` reports (empty if it can't resolve yet)."""
         listing = ctx.run(
             [west, "list", "-f", "{abspath}"],
             cwd=top,
@@ -256,10 +262,19 @@ class ZephyrProvider(Provider):
             echo=False,
             check=False,
         ).stdout.split()
-        for project in reversed(listing):
-            if (Path(project) / "zephyr" / "patches.yml").is_file():
+        return [Path(p) for p in listing]
+
+    def _apply_project_patches(self, ctx, cfg, west, top):
+        """Apply each west project's own zephyr/patches.yml (if any), reversed so dependents patch before their deps."""
+        committer = {
+            "GIT_COMMITTER_NAME": cfg["patch-committer-name"],
+            "GIT_COMMITTER_EMAIL": cfg["patch-committer-email"],
+            "GIT_COMMITTER_DATE": cfg["patch-committer-date"],
+        }
+        for project in reversed(self._west_projects(ctx, west, top)):
+            if (project / "zephyr" / "patches.yml").is_file():
                 ctx.run(
-                    [west, "-v", "patch", "--src-module", project, "apply"],
+                    [west, "-v", "patch", "--src-module", str(project), "apply"],
                     cwd=top,
                     extra_env=committer,
                 )

@@ -368,7 +368,10 @@ def test_conan_dry_run_leaves_the_install_tree_alone(make_context, run_recorder,
 
 
 # ---- zephyr provider ---------------------------------------------------------#
-def test_zephyr_dry_run_previews_a_forced_workspace_reset_without_doing_it(make_context, which, tmp_path, capsys):
+def test_zephyr_dry_run_does_not_reset_existing_workspace_under_force(make_context, which, tmp_path, capsys):
+    # --force re-runs west update/configure but must not wipe an existing
+    # .west/config (see ZephyrProvider._ensure_workspace) -- confirm the
+    # --dry-run preview agrees: no rm/touch of it at all.
     config = {"zephyr": {"west-yml": "west.yml", "base": "zephyr-rtos"}}
     ctx = make_context(config=config, dry_run=True, force=True)
     (ctx.env_dir / "west.yml").write_text("manifest: {}\n")
@@ -385,10 +388,8 @@ def test_zephyr_dry_run_previews_a_forced_workspace_reset_without_doing_it(make_
 
     assert west_config.read_text() == "original\n"  # neither removed nor truncated
     reported = dry_lines(capsys, "~")
-    # both halves of the force-reset are shown, even though the removal that
-    # would have made the recreation necessary never happened
-    assert f"rm {west_config}" in reported
-    assert f"touch {west_config}" in reported
+    assert f"rm {west_config}" not in reported
+    assert f"touch {west_config}" not in reported
 
 
 # ---- docker provider ---------------------------------------------------------#
