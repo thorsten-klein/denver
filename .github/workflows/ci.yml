@@ -38,11 +38,14 @@ jobs:
       fail-fast: false
       matrix:
         # the floor denver declares support for (pyproject.toml's
-        # requires-python) and the newest available, so a change that only
-        # works on one end doesn't slip through -- crossed with every OS
-        # denver supports, so a change that only works on one of those
-        # doesn't either.
-        python-version: ["3.11", "3.13"]
+        # requires-python) through the newest available, so a change that
+        # only works on one end doesn't slip through -- crossed with every
+        # OS denver supports, so a change that only works on one of those
+        # doesn't either. 3.9/3.10 also cover the one behavioural split in
+        # denver's own code: tomllib (denver.toml support) is stdlib only
+        # from 3.11, so those two legs are what actually exercise "no
+        # tomllib" instead of just asserting it in a monkeypatched test.
+        python-version: ["3.9", "3.10", "3.11", "3.13"]
         os: [ubuntu-22.04, ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4

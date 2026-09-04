@@ -1,29 +1,37 @@
 """Tests for denver.py config loading & merging."""
 
+import textwrap
+
 import pytest
 
 import denver
 
+requires_tomllib = pytest.mark.skipif(denver.tomllib is None, reason="tomllib is stdlib only from Python 3.11")
 
+
+# ---- denver.toml (optional -- needs tomllib, Python 3.11+) -----------------#
+@requires_tomllib
 def test_load_config_file_empty_toml(tmp_path):
     p = tmp_path / "empty.toml"
     p.write_text("")
     assert denver.load_config_file(p) == {}
 
 
+@requires_tomllib
 def test_load_config_file_toml_mapping(tmp_path):
     p = tmp_path / "c.toml"
     p.write_text("a = 1\n")
     assert denver.load_config_file(p) == {"a": 1}
 
 
+@requires_tomllib
 def test_load_config_file_nested_value(tmp_path):
     p = tmp_path / "c.toml"
     p.write_text("a = [1, 2]\n")
     assert denver.load_config_file(p) == {"a": [1, 2]}
 
 
-# ---- denver.yml (optional PyYAML support) ----------------------------------#
+# ---- denver.yml/denver.yaml (default format) --------------------------------#
 def test_load_config_file_empty_yaml(tmp_path):
     p = tmp_path / "denver.yml"
     p.write_text("")
@@ -49,12 +57,32 @@ def test_load_config_file_yaml_non_mapping_top_level_dies(tmp_path):
         denver.load_config_file(p)
 
 
-def test_load_config_file_yaml_without_pyyaml_installed(tmp_path, monkeypatch):
-    monkeypatch.setattr(denver, "yaml", None)
-    p = tmp_path / "denver.yml"
-    p.write_text("a: 1\n")
-    with pytest.raises(denver.ConfigReadError, match="denver-tool\\[yml\\]"):
+def test_load_config_file_toml_without_tomllib(tmp_path, monkeypatch):
+    monkeypatch.setattr(denver, "tomllib", None)
+    p = tmp_path / "denver.toml"
+    p.write_text("a = 1\n")
+    with pytest.raises(denver.ConfigReadError, match="Python 3\\.11"):
         denver.load_config_file(p)
+
+
+def test_load_config_file_toml_dispatches_to_tomllib(tmp_path, monkeypatch):
+    # exercises the tomllib.load() call site itself regardless of whether
+    # this interpreter really has tomllib (stdlib only from Python 3.11) --
+    # the requires_tomllib-marked tests above cover real TOML parsing on the
+    # interpreters that do.
+    calls = []
+
+    class FakeTomllib:
+        @staticmethod
+        def load(f):
+            calls.append(f)
+            return {"a": 1}
+
+    monkeypatch.setattr(denver, "tomllib", FakeTomllib)
+    p = tmp_path / "denver.toml"
+    p.write_text("a = 1\n")
+    assert denver.load_config_file(p) == {"a": 1}
+    assert calls
 
 
 def test_deep_merge_dicts():
@@ -154,7 +182,7 @@ def test_resolve_import_directory_falls_back_to_yml_without_a_toml(tmp_path):
     assert resolved == target_dir / "denver.yml"
 
 
-def test_resolve_import_directory_prefers_toml_over_yml(tmp_path):
+def test_resolve_import_directory_prefers_yml_over_toml(tmp_path):
     base_dir = tmp_path / "env"
     base_dir.mkdir()
     target_dir = tmp_path / "base"
@@ -162,7 +190,7 @@ def test_resolve_import_directory_prefers_toml_over_yml(tmp_path):
     (target_dir / "denver.toml").write_text('a = 1\n')
     (target_dir / "denver.yml").write_text("a: 1\n")
     resolved = denver.resolve_import("../base", base_dir)
-    assert resolved == target_dir / "denver.toml"
+    assert resolved == target_dir / "denver.yml"
 
 
 def test_resolve_import_direct_file(tmp_path):
@@ -182,21 +210,41 @@ def test_resolve_import_missing_dies(tmp_path):
 
 
 def test_load_config_no_import(tmp_path):
-    p = tmp_path / "denver.toml"
-    p.write_text('stages = [\n  "uv",\n]\n')
+    p = tmp_path / "denver.yml"
+    p.write_text(
+        textwrap.dedent("""\
+        stages:
+        - uv
+        """)
+    )
     assert denver.load_config(p) == {"stages": ["uv"]}
 
 
 def test_load_config_with_import_merges_base_first(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.toml").write_text('stages = [\n  "uv",\n]\n\n[uv]\npython = "3.9"\n')
+    (base_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - uv
+        uv:
+          python: '3.9'
+        """)
+    )
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\n\n[uv]\nrequirements = [\n  "r.txt",\n]\n')
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        uv:
+          requirements:
+          - r.txt
+        """)
+    )
 
-    cfg = denver.load_config(env_dir / "denver.toml")
+    cfg = denver.load_config(env_dir / "denver.yml")
     assert cfg["stages"] == ["uv"]
     assert cfg["uv"] == {"python": "3.9", "requirements": ["r.txt"]}
     assert "import" not in cfg
@@ -210,21 +258,38 @@ def test_load_config_runnable_false_does_not_leak_through_import(tmp_path):
     # reason -- see load_config()'s own comment).
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.toml").write_text('runnable = false\nstages = [\n  "uv",\n]\n')
+    (base_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        runnable: false
+        stages:
+        - uv
+        """)
+    )
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\n')
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        """)
+    )
 
-    cfg = denver.load_config(env_dir / "denver.toml")
+    cfg = denver.load_config(env_dir / "denver.yml")
     assert "runnable" not in cfg
 
 
 def test_load_config_runnable_own_value_still_applies(tmp_path):
     # unlike 'import', 'runnable' isn't dropped from the file that actually
     # sets it -- only from what an *importer* inherits from it.
-    p = tmp_path / "denver.toml"
-    p.write_text('runnable = false\nstages = [\n  "uv",\n]\n')
+    p = tmp_path / "denver.yml"
+    p.write_text(
+        textwrap.dedent("""\
+        runnable: false
+        stages:
+        - uv
+        """)
+    )
     cfg = denver.load_config(p)
     assert cfg["runnable"] is False
 
@@ -232,35 +297,59 @@ def test_load_config_runnable_own_value_still_applies(tmp_path):
 def test_load_config_import_override_wins(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.toml").write_text('command = "fish"\n')
+    (base_dir / "denver.yml").write_text('command: fish\n')
     env_dir = tmp_path / "env"
     env_dir.mkdir()
     # a different string for a key the base already set requires '!' -- see
     # test_load_config_conflicting_string_dies / test_load_config_bang_override_wins
-    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\ncommand = "!bash"\n')
-    cfg = denver.load_config(env_dir / "denver.toml")
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        command: '!bash'
+        """)
+    )
+    cfg = denver.load_config(env_dir / "denver.yml")
     assert cfg["command"] == "bash"
 
 
 def test_load_config_conflicting_string_dies(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.toml").write_text('command = "fish"\n')
+    (base_dir / "denver.yml").write_text('command: fish\n')
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\ncommand = "bash"\n')
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        command: bash
+        """)
+    )
     with pytest.raises(SystemExit):
-        denver.load_config(env_dir / "denver.toml")
+        denver.load_config(env_dir / "denver.yml")
 
 
 def test_load_config_same_string_no_conflict(tmp_path):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.toml").write_text('[uv]\npython = "3.12.3"\n')
+    (base_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        uv:
+          python: 3.12.3
+        """)
+    )
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text('import = [\n  "../base",\n]\n\n[uv]\npython = "3.12.3"\n')
-    cfg = denver.load_config(env_dir / "denver.toml")
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        uv:
+          python: 3.12.3
+        """)
+    )
+    cfg = denver.load_config(env_dir / "denver.yml")
     assert cfg["uv"]["python"] == "3.12.3"
 
 
@@ -269,10 +358,20 @@ def test_load_config_circular_import_dies(tmp_path):
     b_dir = tmp_path / "b"
     a_dir.mkdir()
     b_dir.mkdir()
-    (a_dir / "denver.toml").write_text('import = [\n  "../b",\n]\n')
-    (b_dir / "denver.toml").write_text('import = [\n  "../a",\n]\n')
+    (a_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../b
+        """)
+    )
+    (b_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../a
+        """)
+    )
     with pytest.raises(SystemExit):
-        denver.load_config(a_dir / "denver.toml")
+        denver.load_config(a_dir / "denver.yml")
 
 
 # ---- typo hints ("did you mean") --------------------------------------------#

@@ -1,5 +1,7 @@
 """Tests for denver.py env resolution & listing."""
 
+import textwrap
+
 import pytest
 
 import denver
@@ -26,14 +28,20 @@ def test_checkout_root_src_named_dir_without_providers_sibling_is_none(monkeypat
 def test_resolve_env_dir_existing_directory(tmp_path):
     envd = tmp_path / "myenv"
     envd.mkdir()
-    assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.toml")
+    assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.yml")
 
 
 def test_resolve_env_dir_direct_file(tmp_path):
     envd = tmp_path / "myenv"
     envd.mkdir()
     toml_path = envd / "denver.toml"
-    toml_path.write_text('stages = [\n  "uv",\n]\n')
+    toml_path.write_text(
+        textwrap.dedent("""\
+        stages = [
+          "uv",
+        ]
+        """)
+    )
     assert denver.resolve_env_dir(str(toml_path)) == (envd.resolve(), toml_path.resolve())
 
 
@@ -53,18 +61,25 @@ def test_resolve_env_dir_not_found_dies(tmp_path):
         denver.resolve_env_dir(str(tmp_path / "does-not-exist"))
 
 
-def test_resolve_env_dir_falls_back_to_yml_without_a_toml(tmp_path):
+def test_resolve_env_dir_finds_yml_alongside_no_toml(tmp_path):
     envd = tmp_path / "myenv"
     envd.mkdir()
     (envd / "denver.yml").write_text("stages: [uv]\n")
     assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.yml")
 
 
-def test_resolve_env_dir_prefers_toml_over_yml(tmp_path):
+def test_resolve_env_dir_prefers_yml_over_toml(tmp_path):
     envd = tmp_path / "myenv"
     envd.mkdir()
     (envd / "denver.toml").write_text('stages = ["uv"]\n')
     (envd / "denver.yml").write_text("stages: [uv]\n")
+    assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.yml")
+
+
+def test_resolve_env_dir_falls_back_to_toml_without_a_yml_or_yaml(tmp_path):
+    envd = tmp_path / "myenv"
+    envd.mkdir()
+    (envd / "denver.toml").write_text('stages = ["uv"]\n')
     assert denver.resolve_env_dir(str(envd)) == (envd.resolve(), envd.resolve() / "denver.toml")
 
 
@@ -85,18 +100,28 @@ def test_resolve_env_dir_prefers_yml_over_yaml(tmp_path):
 
 # ---- is_runnable_env -------------------------------------------------------#
 def test_is_runnable_env_true_by_default(tmp_path):
-    toml_path = tmp_path / "denver.toml"
-    toml_path.write_text('stages = ["uv"]\n')
-    assert denver.is_runnable_env(toml_path)
+    yml_path = tmp_path / "denver.yml"
+    yml_path.write_text('stages: [uv]\n')
+    assert denver.is_runnable_env(yml_path)
 
 
 def test_is_runnable_env_true_when_explicit(tmp_path):
-    toml_path = tmp_path / "denver.toml"
-    toml_path.write_text('stages = ["uv"]\nrunnable = true\n')
-    assert denver.is_runnable_env(toml_path)
+    yml_path = tmp_path / "denver.yml"
+    yml_path.write_text(
+        textwrap.dedent("""\
+        stages: [uv]
+        runnable: true
+        """)
+    )
+    assert denver.is_runnable_env(yml_path)
 
 
 def test_is_runnable_env_false_when_explicit(tmp_path):
-    toml_path = tmp_path / "denver.toml"
-    toml_path.write_text('stages = ["uv"]\nrunnable = false\n')
-    assert not denver.is_runnable_env(toml_path)
+    yml_path = tmp_path / "denver.yml"
+    yml_path.write_text(
+        textwrap.dedent("""\
+        stages: [uv]
+        runnable: false
+        """)
+    )
+    assert not denver.is_runnable_env(yml_path)

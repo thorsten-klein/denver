@@ -29,6 +29,9 @@ import denver
 import denver_providers.context as context_provider
 import denver_providers.zephyr as zephyr_provider
 
+# every bundled examples/*/ env is a denver.toml -- needs tomllib (Python 3.11+)
+requires_tomllib = pytest.mark.skipif(denver.tomllib is None, reason="tomllib is stdlib only from Python 3.11")
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_DIR = Path(__file__).resolve().parent / "golden"
 FAKE_WEST_TOPDIR = "/fake-west-topdir"
@@ -49,6 +52,7 @@ def _normalize(text):
     return text.replace(str(REPO_ROOT), "<REPO>")
 
 
+@requires_tomllib
 @pytest.mark.parametrize("env_name", _tracked_env_names())
 def test_show_config_matches_golden(env_name, capsys, monkeypatch, which):
     monkeypatch.setenv("WEST_TOPDIR", FAKE_WEST_TOPDIR)
@@ -81,7 +85,7 @@ def test_show_config_matches_golden(env_name, capsys, monkeypatch, which):
     assert denver.main(["run", str(env_dir), "--show-config-full"]) == 0
     actual = _normalize(capsys.readouterr().out)
 
-    golden_path = GOLDEN_DIR / f"{env_name}.toml"
+    golden_path = GOLDEN_DIR / f"{env_name}.yml"
     expected = golden_path.read_text()
     assert actual == expected, (
         f"--show-config-full for examples/{env_name} no longer matches {golden_path} -- if this change is "

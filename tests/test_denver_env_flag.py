@@ -7,6 +7,7 @@ with, plus os.environ itself (see build_arg_parser's -e/--env).
 """
 
 import os
+import textwrap
 
 import pytest
 
@@ -32,8 +33,13 @@ def echo_env(tmp_path, exec_recorder):
         def _run(argv=()):
             env_dir = tmp_path / "e"
             env_dir.mkdir(exist_ok=True)
-            (env_dir / "denver.toml").write_text(
-                'stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n'
+            (env_dir / "denver.yml").write_text(
+                textwrap.dedent("""\
+                stages:
+                - fakesetup
+                fakesetup:
+                  provider: fakesetup
+                """)
             )
             denver.main(["run", str(env_dir), *argv, "--", "echo", "hi"])
             return exec_recorder["env"]
@@ -96,8 +102,15 @@ def test_overrides_the_config_env_map(tmp_path, exec_recorder, monkeypatch):
     monkeypatch.delenv("MY_VAR", raising=False)
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text(
-        'stages = [\n  "fakesetup",\n]\n\n[fakesetup]\nprovider = "fakesetup"\n\n[env]\nMY_VAR = "from-config"\n'
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - fakesetup
+        fakesetup:
+          provider: fakesetup
+        env:
+          MY_VAR: from-config
+        """)
     )
     denver.main(["run", str(env_dir), "-e", "MY_VAR=from-cli", "--", "echo", "hi"])
     assert exec_recorder["env"]["MY_VAR"] == "from-cli"
@@ -164,8 +177,16 @@ def test_flags_are_carried_into_the_wrapper(tmp_path, monkeypatch, exec_recorder
 
     env_dir = tmp_path / "e"
     env_dir.mkdir()
-    (env_dir / "denver.toml").write_text(
-        'stages = [\n  "fakewrap",\n  "fakesetup",\n]\n\n[fakewrap]\nprovider = "fakewrap"\n\n[fakesetup]\nprovider = "fakesetup"\n'
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - fakewrap
+        - fakesetup
+        fakewrap:
+          provider: fakewrap
+        fakesetup:
+          provider: fakesetup
+        """)
     )
     denver.main(["run", str(env_dir), "-e", "MY_VAR=hello", "--", "echo", "hi"])
 

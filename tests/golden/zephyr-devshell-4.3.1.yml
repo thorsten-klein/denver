@@ -1,0 +1,164 @@
+version: 1.0
+denver-version: '>=1.5.2'
+hooks:
+  env:
+  - <REPO>/examples/zephyr-devshell/hooks/env.sh
+  post-conan: null
+  post-docker: null
+  post-uv: null
+  post-uv-zephyr: null
+  post-zephyr: null
+  pre-cmd: null
+  pre-conan: null
+  pre-docker:
+  - <REPO>/examples/zephyr-docker/create-env.sh
+  pre-uv: null
+  pre-uv-zephyr: null
+  pre-zephyr: null
+stages:
+- docker
+- conan
+- uv
+- zephyr
+- uv-zephyr
+docker:
+  provider: docker
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts:
+    setup:
+    - setup/install_host_tools.sh
+  compose:
+    build: true
+    default-cmd: fish
+    file: docker-compose.yml
+    image: null
+    run-args:
+    - --rm
+    service: dev
+  exe: docker
+  registries: null
+conan:
+  provider: conan
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  authentication: true
+  base-classes:
+  - <REPO>/examples/zephyr-devshell/conan/base_classes
+  build: missing
+  channel: snapshot
+  conanfile: <REPO>/examples/zephyr-devshell-4.3.1/conan/conanfile.py
+  config: null
+  deployers:
+  - <REPO>/src/denver_providers/conan_scripts/extensions/symlink.py
+  exe: conan
+  install-args: null
+  keep-remotes: false
+  profiles:
+    build: []
+    host: []
+  recipes:
+  - catalog: <REPO>/examples/zephyr-devshell-4.3.1/conan/catalog.yml
+    dirs:
+    - <REPO>/examples/zephyr-devshell/conan/recipes
+    - <REPO>/examples/zephyr-devshell-4.3.1/conan/recipes
+    export-tool: <REPO>/src/denver_providers/conan_scripts/recipes.py
+  remotes: {}
+  user: denver
+uv:
+  provider: uv
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success:
+  - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-on-success.sh
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  amend: true
+  exe: uv
+  freeze-to: null
+  install-args: null
+  lockfile: null
+  no-index: auto
+  overrides:
+  - conan/recipes/python-cache/denver/overrides.txt
+  patches-apply:
+  - venv-patcher
+  - apply
+  - -f
+  - <REPO>/examples/zephyr-devshell-4.3.1/uv/venv-patcher/patches.yml
+  python: 3.12.3
+  requirements:
+  - conan/recipes/python-cache/denver/requirements.txt
+  - conan/recipes/python-cache/denver/requirements.final.txt
+  venv: null
+zephyr:
+  provider: zephyr
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts:
+    setup:
+    - setup/install_jlink_udev_rules.sh
+  base: /fake-west-topdir/zephyr-rtos
+  blobs-cache: conan/recipes/west-blobs-cache/denver/blobs.txt
+  blobs-fetch-args:
+  - --auto-accept
+  exe: west
+  patch-committer-date: '2000-01-01T00:00:00'
+  patch-committer-email: denver@denver
+  patch-committer-name: denver
+  update-args: null
+  west-config: null
+  west-yml: <REPO>/examples/zephyr-devshell-4.3.1/west.yml
+uv-zephyr:
+  provider: uv
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success:
+  - <REPO>/examples/zephyr-devshell-4.3.1/uv/skip-on-success.sh
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  amend: true
+  exe: uv
+  freeze-to: conan/recipes/python-cache/denver/requirements.final.txt
+  install-args:
+  - $(west packages pip)
+  lockfile: null
+  no-index: auto
+  overrides:
+  - conan/recipes/python-cache/denver/overrides.txt
+  patches-apply:
+  - venv-patcher
+  - apply
+  - -f
+  - <REPO>/examples/zephyr-devshell-4.3.1/uv/venv-patcher/patches.yml
+  python: null
+  requirements: null
+  venv: null
+

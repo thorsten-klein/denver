@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """denver -- Development Environment Launcher.
 
-Launch a reproducible development environment described by a ``denver.toml``
+Launch a reproducible development environment described by a ``denver.yml``
 file: denver resolves it (following ``import:`` inheritance), then runs the
 generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker,
 ...) to build/enter the environment purely from config.
@@ -19,11 +19,12 @@ hi`) is forwarded as-is instead. ``--scripts <name>`` runs one of the env's
 own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
 ``login``; with no name, lists the names this env defines). ``--setup`` and
 ``--login`` are shorthand for ``--scripts setup`` and ``--scripts login``.
-``--show-config`` prints the fully resolved, deep-merged denver.toml and
+``--show-config`` prints the fully resolved, deep-merged config as YAML and
 exits, dropping every key left unset so only keys with an actual value
-remain. ``--show-config-full`` does the same but keeps every key left unset
-too, each shown as a commented-out ``# key = null`` line (TOML has no
-``null``).
+remain -- always YAML, regardless of whether the env itself is a
+denver.yml or a denver.toml. ``--show-config-full`` does the same but
+keeps every key left unset too, each shown as an explicit ``key: null``
+line.
 
 ``complete`` prints a script wiring up completion for the installed
 ``denver`` command, for the given shell (bash/fish/zsh) or, if omitted,
@@ -31,14 +32,16 @@ the one it's run from (auto-detected); wire it up with e.g. ``eval
 "$(denver complete)"`` in your shell rc file (fish: ``denver complete |
 source``).
 
-<env> is a path to a directory containing a denver.toml (or denver.yml/
-denver.yaml, if there's no denver.toml -- requires the 'yml' extra, 'pip
-install denver-tool[yml]'), or a path directly to a config file (any name,
-e.g. denver.debug.toml). If omitted, it falls back to the DENVER_ENV_DIR
-environment variable.
+<env> is a path to a directory containing a denver.yml/denver.yaml (or
+denver.toml, if there's no denver.yml/denver.yaml -- requires Python
+3.11+, since tomllib is stdlib only from there), or a path directly to a
+config file (any name, e.g. denver.debug.yml). If omitted, it falls back
+to the DENVER_ENV_DIR environment variable.
 
 Run `denver run --help` to see more details about the run-specific flags.
 """
+
+from __future__ import annotations
 
 import argparse
 import copy
@@ -53,19 +56,32 @@ import shutil
 import subprocess
 import sys
 import time
-import tomllib
 import types
 from pathlib import Path
 from typing import NoReturn, cast
 
-# denver.yml support is optional (the 'yml' extra, 'pip install
-# denver-tool[yml]') -- denver's own required config format is TOML, read
-# with the stdlib's tomllib, so PyYAML is never a hard dependency.
-yaml: types.ModuleType | None
-try:
-    import yaml
-except ImportError:  # pragma: no cover -- PyYAML is always installed in denver's own test env (test dep-group)
-    yaml = None
+import yaml
+
+# denver.toml support is optional: tomllib is stdlib only from Python 3.11,
+# so on an older interpreter it just isn't there. denver.yml/denver.yaml is
+# the default format -- PyYAML is a required dependency (denver's floor,
+# ">=3.9", is set by what PyYAML itself supports, not by tomllib). The
+# sys.version_info guard (rather than try/except ImportError) is what lets
+# mypy -- itself running on 3.11+ -- statically know the else branch is the
+# live one whenever it type-checks against an older target.
+#
+# Both branches below are pragma'd: CI's test matrix runs both a <3.11 and a
+# >=3.11 leg (see .github/workflows/ci.yml), so exactly one of these two
+# lines is genuinely unreachable on any single interpreter -- there's no
+# single run where both could ever be exercised together. What each branch
+# actually does (tomllib.load() dispatch, or the "no tomllib" error) is
+# covered directly -- see test_load_config_file_toml_dispatches_to_tomllib
+# and test_load_config_file_toml_without_tomllib in test_denver_config.py.
+tomllib: types.ModuleType | None
+if sys.version_info >= (3, 11):
+    import tomllib  # pragma: no cover -- see the module-level comment above
+else:
+    tomllib = None  # pragma: no cover -- see the module-level comment above
 
 # Make the bundled ``providers`` package importable both when run as
 # ``src/denver.py`` and when installed as the ``denver`` module.
@@ -76,8 +92,8 @@ CONFIG_NAME_YAML = ("denver.yml", "denver.yaml")
 
 
 def _config_names_text():
-    """Every name a config file may go by, joined for error messages -- 'denver.toml/denver.yml/denver.yaml'."""
-    return "/".join((CONFIG_NAME, *CONFIG_NAME_YAML))
+    """Every name a config file may go by, joined for error messages -- 'denver.yml/denver.yaml/denver.toml'."""
+    return "/".join((*CONFIG_NAME_YAML, CONFIG_NAME))
 
 
 # where denver's own code lives (this file's directory, containing denver.py
@@ -345,7 +361,7 @@ def license_text():
 # Config loading & merging
 # --------------------------------------------------------------------------- #
 class ConfigReadError(Exception):
-    """A denver.toml/denver.yml exists but can't be turned into a config mapping.
+    """A denver.yml/denver.toml exists but can't be turned into a config mapping.
 
     Raised, not die()'d, from load_config_file itself: that function is also
     called from clean's best-effort import-chain walk (_readable_imports),
@@ -356,12 +372,14 @@ class ConfigReadError(Exception):
 
 
 def load_config_file(path):
-    """Load a denver.toml or denver.yml file, returning a dict ({} for empty files).
+    """Load a denver.yml/denver.yaml or denver.toml file, returning a dict ({} for empty files).
 
-    Dispatches on suffix: '.yml'/'.yaml' is read as YAML -- only if PyYAML
-    (the optional 'yml' extra, 'pip install denver-tool[yml]') is installed,
-    else a ConfigReadError explains that only denver.toml is supported --
-    anything else is read as TOML.
+    Dispatches on suffix: '.toml' is read as TOML -- only if tomllib is
+    importable (stdlib only from Python 3.11), else a ConfigReadError
+    explains that only denver.yml/denver.yaml is supported on this
+    interpreter -- anything else ('.yml'/'.yaml', or no recognised suffix)
+    is read as YAML, denver's default format (PyYAML is a required
+    dependency, so it's always there).
 
     TOML needs no "is this a mapping?" check -- its grammar makes that
     structurally impossible to get wrong: a document is always a table
@@ -371,19 +389,24 @@ def load_config_file(path):
     explicitly below.
     """
     path = Path(path)
-    if path.suffix in (".yml", ".yaml"):
-        return _load_yaml_config_file(path)
+    if path.suffix == ".toml":
+        return _load_toml_config_file(path)
+    return _load_yaml_config_file(path)
+
+
+def _load_toml_config_file(path):
+    """load_config_file's '.toml' branch."""
+    if tomllib is None:
+        raise ConfigReadError(
+            f"{path}: reading a denver.toml config needs tomllib, which is stdlib only from Python 3.11 -- "
+            f"this interpreter is older. Without it, only denver.yml/denver.yaml is supported."
+        )
     with path.open("rb") as f:
         return tomllib.load(f)
 
 
 def _load_yaml_config_file(path):
-    """load_config_file's '.yml'/'.yaml' branch."""
-    if yaml is None:
-        raise ConfigReadError(
-            f"{path}: reading a denver.yml config requires PyYAML, which isn't installed -- install it "
-            f"or install denver with 'pip install denver-tool[yml]'. Without that extra, only denver.toml is supported."
-        )
+    """load_config_file's YAML branch -- denver's default format ('.yml'/'.yaml', or any other name)."""
     with path.open("rb") as f:
         data = yaml.safe_load(f)
     if data is None:
@@ -395,12 +418,12 @@ def _load_yaml_config_file(path):
 
 # Every exception load_config_file() can raise for a config that just plain
 # won't parse -- used by _readable_imports (clean's best-effort import-chain
-# walk) to tell "unreadable, skip it" apart from a real bug. yaml.YAMLError
-# only exists to catch when PyYAML itself is installed.
+# walk) to tell "unreadable, skip it" apart from a real bug. tomllib.TOMLDecodeError
+# only exists to catch when this interpreter has tomllib at all (Python 3.11+).
 _CONFIG_READ_ERRORS = (
-    (OSError, tomllib.TOMLDecodeError, ConfigReadError)
-    if yaml is None
-    else (OSError, tomllib.TOMLDecodeError, ConfigReadError, yaml.YAMLError)
+    (OSError, yaml.YAMLError, ConfigReadError)
+    if tomllib is None
+    else (OSError, yaml.YAMLError, ConfigReadError, tomllib.TOMLDecodeError)
 )
 
 
@@ -504,21 +527,20 @@ def _merge_scalar(base, override, path):
 
 
 def _config_file_in_dir(dir_path):
-    """The config file ``dir_path`` holds: ``denver.toml``, else ``denver.yml``, else ``denver.yaml``.
+    """The config file ``dir_path`` holds: ``denver.yml``, else ``denver.yaml``, else ``denver.toml``.
 
-    Falls back to the (nonexistent) ``denver.toml`` path when none is
-    present, so callers get a stable path to report as "not found" -- same
-    as before ``denver.yml``/``denver.yaml`` support existed.
+    Falls back to the (nonexistent) ``denver.yml`` path when none is
+    present, so callers get a stable path to report as "not found".
     """
-    for name in (CONFIG_NAME, *CONFIG_NAME_YAML):
+    for name in (*CONFIG_NAME_YAML, CONFIG_NAME):
         candidate = dir_path / name
         if candidate.is_file():
             return candidate
-    return dir_path / CONFIG_NAME
+    return dir_path / CONFIG_NAME_YAML[0]
 
 
 def _import_target(entry, base_dir):
-    """Where an ``import:`` entry points -- a directory means its ``denver.toml``/``denver.yml`` -- or None if no file is there."""
+    """Where an ``import:`` entry points -- a directory means its ``denver.yml``/``denver.toml`` -- or None if no file is there."""
     target = (base_dir / entry).resolve()
     if target.is_dir():
         target = _config_file_in_dir(target)
@@ -526,10 +548,10 @@ def _import_target(entry, base_dir):
 
 
 def resolve_import(entry, base_dir):
-    """Resolve an ``import:`` entry to the denver.toml/denver.yml/denver.yaml path it refers to.
+    """Resolve an ``import:`` entry to the denver.yml/denver.yaml/denver.toml path it refers to.
 
-    An entry may point at a directory (its ``denver.toml``, or ``denver.yml``/``denver.yaml``
-    if there's no ``denver.toml``, is used -- see _config_file_in_dir) or directly at a config
+    An entry may point at a directory (its ``denver.yml``/``denver.yaml``, or ``denver.toml``
+    if there's neither, is used -- see _config_file_in_dir) or directly at a config
     file, relative to the importing config's directory.
     """
     target = _import_target(entry, base_dir)
@@ -1099,13 +1121,13 @@ def _validate_depends_on(stage_id, depends_on, seen, all_stage_ids):
 def resolve_env_dir(env_arg):
     """Resolve the <env> argument to (env_dir, config_path).
 
-    Accepts a path to an env directory (its denver.toml, or denver.yml/
-    denver.yaml if there's no denver.toml, is used -- see
-    _config_file_in_dir) or a path directly to a config file (any name, e.g.
-    denver.debug.toml -- lets a folder hold several denver.xxx.toml/
-    denver.xxx.yml variants side by side). Mirrors resolve_import()'s own
-    directory-or-file convention for 'import:' entries, so both the
-    top-level <env> and imports resolve the same way.
+    Accepts a path to an env directory (its denver.yml/denver.yaml, or
+    denver.toml if there's neither, is used -- see _config_file_in_dir) or a
+    path directly to a config file (any name, e.g. denver.debug.yml -- lets
+    a folder hold several denver.xxx.yml/denver.xxx.toml variants side by
+    side). Mirrors resolve_import()'s own directory-or-file convention for
+    'import:' entries, so both the top-level <env> and imports resolve the
+    same way.
     """
     candidate = Path(env_arg).expanduser()
 
@@ -2848,355 +2870,10 @@ def _provider_keys(section):
     return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
-# --------------------------------------------------------------------------- #
-# --show-config rendering
-# --------------------------------------------------------------------------- #
-def supports_color(stream=None):
-    """Whether ``stream`` (default: stdout) is a real terminal that would render ANSI color.
-
-    Used to decide --show-config's own syntax highlighting (see dump_toml).
-    ``NO_COLOR`` (https://no-color.org -- any non-empty value) always wins
-    when set: an explicit, universal opt-out. ``FORCE_COLOR`` is the
-    matching opt-in, for a pipeline that redirects stdout but still wants
-    color (e.g. piping through ``less -R``) -- checked after ``NO_COLOR``,
-    so an explicit "no" still wins over an explicit "yes" if a caller
-    somehow sets both. ``TERM=dumb`` is the traditional "this terminal
-    doesn't do escape codes at all" signal. Otherwise, color only makes
-    sense talking to a real terminal, not a file or another program's
-    stdin -- hence the ``isatty()`` fallback.
-    """
-    stream = sys.stdout if stream is None else stream
-    if os.environ.get("NO_COLOR"):
-        return False
-    if os.environ.get("FORCE_COLOR"):
-        return True
-    if os.environ.get("TERM") == "dumb":
-        return False
-    return stream.isatty()
-
-
-# Bright-* (9x) ANSI codes, reset to default foreground (\033[39m) rather than
-# a full \033[0m -- same convention as every other color code in this codebase
-# (context.py's banner()/stage_banner()/etc, the blue "finished in Ns" lines
-# below) needs no different reset story. One color per syntactic role, chosen
-# to stay distinct from those existing yellow/blue banners even though the
-# two are never on screen at once (--show-config never runs a stage).
-_TOML_HEADER_COLOR = "\033[95m"  # [section] / [[section]]
-_TOML_KEY_COLOR = "\033[96m"  # # a 'key = ...' line
-_TOML_STRING_COLOR = "\033[92m"  # "..." / '''...'''
-_TOML_SCALAR_COLOR = "\033[93m"  # true/false, numbers
-_TOML_COMMENT_COLOR = "\033[90m"  # a '# key = null' line -- unset, de-emphasized
-_TOML_RESET = "\033[39m"
-
-# Set once per dump_toml() call (see there), consulted by _c() -- the same
-# "module global, not threaded through every function" pattern context.py's
-# _quiet_level/_verbose already use for banner()/info(), for the same reason:
-# threading a `color` bool through every one of dump_toml's dozen small
-# recursive helpers would obscure what each is actually building.
-_toml_color_enabled = False
-
-
-def _c(code, text):
-    r"""Wrap ``text`` in ANSI color ``code``, reset after -- a no-op unless dump_toml() was asked for color.
-
-    Every call site here opens and closes its own span; none ever nests one
-    of these inside another. That matters because \033[39m resets to
-    *default* foreground, not "whatever the enclosing span's color was" --
-    nesting two spans would truncate the outer one right at the inner
-    span's own reset. dump_toml()'s own helpers are written so no call site
-    ever needs to: a colored key/value pair's two spans are always
-    separated by plain punctuation (` = `, `, `, ...), and a '[section]'
-    header or '# key = null' comment line colors itself as one single span,
-    built from the *plain* (uncolored) _toml_key()/_toml_path(), never the
-    already-colored key text a real 'key = value' line uses.
-    """
-    if not _toml_color_enabled or not text:
-        return text
-    return f"{code}{text}{_TOML_RESET}"
-
-
-def dump_toml(data, *, color=False):
-    """A minimal, hand-written TOML rendering of ``data`` for --show-config.
-
-    Covers exactly the shapes a resolved denver config can take (nested dicts, lists of scalars or of
-    dicts, strings, numbers, bools, ``None``), not the full TOML spec. No dependency needed: this is
-    denver's own display format, not something round-tripped through a TOML library.
-
-    TOML has no ``null`` -- a ``None`` value (fill_unset()'s placeholder for a documented-but-unset
-    key, see show_config) is rendered as a commented-out ``# key = null`` line instead of dropping it
-    silently, so --show-config-full's "every possible key, unset ones included" contract still holds
-    (the default --show-config drops ``None`` values before they ever reach here -- see show_config's
-    own ``minimal`` handling).
-
-    ``color`` (see supports_color) turns on ANSI syntax highlighting -- off
-    by default, since every non-CLI caller (tests writing a synthetic
-    denver.toml to disk, mostly) wants the plain text a real TOML file is.
-    """
-    global _toml_color_enabled
-    _toml_color_enabled = color
-    try:
-        lines = []
-        _dump_toml_table(data, (), lines)
-        return "\n".join(lines) + ("\n" if lines else "")
-    finally:
-        _toml_color_enabled = False
-
-
-def _dump_toml_table(table, path, lines):
-    """Append the whole document's TOML rendering to ``lines``.
-
-    Plain keys (scalars, ``None``, arrays) come first, then nested tables/array-of-tables get their
-    own '[section]'/'[[section]]' header -- TOML requires a table's own keys to precede its
-    sub-tables, so grouping here (rather than emitting strictly in ``table``'s own key order) is
-    unavoidable; each group keeps its own relative order.
-
-    Only this top level hands out '[section]' headers to plain tables; everything below one is
-    rendered inline -- see _dump_toml_section_body.
-    """
-    plain, nested = _toml_partition_table(table)
-    for key, value in plain:
-        _dump_toml_plain_key(key, value, lines)
-    for key, value in nested:
-        _dump_toml_nested_key(value, (*path, key), lines)
-
-
-def _dump_toml_section_body(table, path, lines):
-    """Append one section's own keys: nested tables inline, arrays of tables as '[[...]]' blocks.
-
-    A sub-table could equally get a '[a.b]' header of its own -- valid TOML, and what the document's
-    top level does. Below that, a header buys nothing and costs clarity: it moves the sub-table an
-    arbitrary distance away from the section it belongs to, and under a '[[a.b]]' entry it is
-    outright ambiguous, since such a header attaches to whichever entry precedes it *by position*
-    with nothing on the line saying which one. So a section is rendered self-contained: one line per
-    key, nested tables as inline '{ ... }' tables, the way they are written by hand.
-
-    Two shapes are still given a header of their own at any depth -- see _toml_needs_header.
-    """
-    plain, headed = _toml_partition_section(table)
-    for key, value in plain:
-        _dump_toml_plain_key(key, value, lines)
-    for key, value in headed:
-        _dump_toml_nested_key(value, (*path, key), lines)
-
-
-def _toml_partition_section(table):
-    """``table``'s items split into (inline, still-needs-a-header) -- see _dump_toml_section_body."""
-    plain = [(k, v) for k, v in table.items() if not _toml_needs_header(v)]
-    headed = [(k, v) for k, v in table.items() if _toml_needs_header(v)]
-    return plain, headed
-
-
-def _toml_needs_header(value):
-    """Whether ``value`` still needs a '[section]'/'[[section]]' header below the document's top level.
-
-    Only two shapes do. An **array of tables**, because its entries stay far more readable as blocks
-    of one key per line than as one flattened line each. And a **table holding an unset key**
-    somewhere inside it, because an unset key renders as a ``# key = null`` comment line (see
-    _dump_toml_plain_key) and TOML has no way to put a comment inside an inline table -- so such a
-    table keeps its header rather than losing the key from --show-config-full altogether.
-    """
-    if isinstance(value, dict):
-        return bool(value) and not _toml_inlinable(value)
-    return _toml_is_array_of_tables(value)
-
-
-def _toml_inlinable(value):
-    """Whether ``value`` can be rendered inline at all: nothing unset (``None``) anywhere inside it."""
-    pending = [value]
-    while pending:
-        current = pending.pop()
-        if current is None:
-            return False
-        pending.extend(_toml_nested_values(current))
-    return True
-
-
-def _toml_nested_values(value):
-    """The values sitting directly inside ``value``: a table's values, an array's entries, else none."""
-    if isinstance(value, dict):
-        return list(value.values())
-    if isinstance(value, list):
-        return value
-    return []
-
-
-def _toml_partition_table(table):
-    """``table``'s items split into (plain, nested) -- see _dump_toml_table for why the split matters."""
-    plain = [(k, v) for k, v in table.items() if not _toml_is_table_like(v)]
-    nested = [(k, v) for k, v in table.items() if _toml_is_table_like(v)]
-    return plain, nested
-
-
-def _dump_toml_plain_key(key, value, lines):
-    """Append one plain (non-table-like) ``key = value`` line -- commented out (``None``) if unset."""
-    if value is None:
-        # the whole line is one comment span -- built from the plain _toml_key(),
-        # not a colored one, see _c's own docstring for why
-        lines.append(_c(_TOML_COMMENT_COLOR, f"# {_toml_key(key)} = null"))
-    else:
-        lines.append(f"{_c(_TOML_KEY_COLOR, _toml_key(key))} = {_toml_value(value)}")
-
-
-def _dump_toml_nested_key(value, child_path, lines):
-    """Append one table-like key's '[section]' (a dict) or '[[section]]' blocks (a list of dicts)."""
-    if lines and lines[-1] != "":
-        lines.append("")
-    if isinstance(value, dict):
-        lines.append(_c(_TOML_HEADER_COLOR, f"[{_toml_path(child_path)}]"))
-        _dump_toml_section_body(value, child_path, lines)
-    else:
-        _dump_toml_array_of_tables(value, child_path, lines)
-
-
-def _dump_toml_array_of_tables(entries, child_path, lines):
-    """Append one '[[section]]' block per entry of a non-empty list of dicts."""
-    for i, entry in enumerate(entries):
-        if i:
-            lines.append("")
-        lines.append(_c(_TOML_HEADER_COLOR, f"[[{_toml_path(child_path)}]]"))
-        _dump_toml_section_body(entry, child_path, lines)
-
-
-def _toml_is_table_like(value):
-    """Whether ``value`` needs a '[section]'/'[[section]]' header rather than an inline value.
-
-    True for a non-empty dict, or a non-empty list whose entries are all dicts. An empty dict/list is
-    rendered inline instead ('{}'/'[]') -- a header with nothing under it would be a pointless empty
-    section.
-    """
-    if isinstance(value, dict):
-        return bool(value)
-    return _toml_is_array_of_tables(value)
-
-
-def _toml_is_array_of_tables(value):
-    """Whether ``value`` is a non-empty list of dicts -- the one shape still given '[[section]]' headers at any depth."""
-    return isinstance(value, list) and bool(value) and all(isinstance(v, dict) for v in value)
-
-
-_TOML_BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-
-
-def _toml_key(key):
-    """One TOML key -- bare, or quoted if it isn't plain identifier-ish text.
-
-    Bare covers every real denver.toml key (letters/digits/underscore/dash); anything else is quoted.
-    """
-    key = str(key)
-    return key if _TOML_BARE_KEY_RE.match(key) else _toml_string(key)
-
-
-def _toml_path(path):
-    """A dotted '[a.b.c]'/'[[a.b.c]]' table header path from a tuple of keys."""
-    return ".".join(_toml_key(p) for p in path)
-
-
-def _toml_value(value):
-    """One TOML value expression: a scalar, an array, or a table rendered inline.
-
-    A dict reaches here either because it is empty (never worth a header of its own, see
-    _toml_is_table_like) or because it sits below the document's top level, which is rendered
-    self-contained -- see _dump_toml_section_body.
-    """
-    if isinstance(value, dict):
-        return _toml_inline_table(value)
-    if isinstance(value, list):
-        return _toml_array(value)
-    return _toml_scalar(value)
-
-
-def _toml_array(values):
-    """A multi-line TOML array literal, one entry per line.
-
-    Denver's config lists (file paths, requirements, ...) are usually short, but this stays readable
-    even when they aren't.
-    """
-    if not values:
-        return "[]"
-    entries = ",\n".join(f"  {_toml_inline_value(v)}" for v in values)
-    return f"[\n{entries},\n]"
-
-
-def _toml_inline_value(value):
-    """One TOML value for an array *entry*.
-
-    Like ``_toml_value``, but a dict/list entry can't get its own '[section]' header (arrays have no
-    headers), so a non-empty dict renders as an inline table (``{ k = v, ... }``) here instead. Reached
-    for e.g. a malformed ``denver-custom-args:`` entry mixing mapping and non-mapping items in one list -- not
-    table-like as a whole (see _toml_is_table_like), but each dict entry in it still needs *some*
-    rendering.
-    """
-    if isinstance(value, dict):
-        return _toml_inline_table(value)
-    if isinstance(value, list):
-        return _toml_array(value)
-    return _toml_scalar(value)
-
-
-def _toml_inline_table(value):
-    """One inline TOML table (``{ k = v, ... }``) for a dict reached outside a '[section]' context."""
-    if not value:
-        return "{}"
-    items = ", ".join(f"{_c(_TOML_KEY_COLOR, _toml_key(k))} = {_toml_single_line_value(v)}" for k, v in value.items())
-    return "{ " + items + " }"
-
-
-def _toml_single_line_value(value):
-    """One TOML value rendered without a line break, as an inline table's values must be.
-
-    TOML allows an array to span lines (_toml_array's normal rendering) but never an inline table:
-    everything between its braces has to sit on one line, so an array *inside* one is written out
-    flat here rather than one entry per line.
-    """
-    if isinstance(value, dict):
-        return _toml_inline_table(value)
-    if isinstance(value, list):
-        return "[" + ", ".join(_toml_single_line_value(v) for v in value) + "]"
-    return _toml_scalar(value)
-
-
-def _toml_scalar(value):
-    """One TOML scalar literal -- bool/int/float/str.
-
-    Anything else (e.g. a bare ``None`` reaching here, which shouldn't happen -- fill_unset() only
-    ever nulls a dict *value*, never a list entry) is a bug in the caller, so this raises rather than
-    silently rendering something wrong.
-
-    Colored here, not in a wrapper around the call site: unlike a key (see
-    _c's docstring), a scalar's own text is never reused for anything but
-    itself -- there's no header/comment context it also has to serve plain.
-    """
-    if isinstance(value, bool):
-        return _c(_TOML_SCALAR_COLOR, "true" if value else "false")
-    if isinstance(value, (int, float)):
-        return _c(_TOML_SCALAR_COLOR, repr(value))
-    if isinstance(value, str):
-        return _c(_TOML_STRING_COLOR, _toml_string(value))
-    raise TypeError(f"cannot render {value!r} as a TOML scalar")
-
-
-def _toml_string(value):
-    r"""A TOML string literal for ``value``.
-
-    A multi-line literal string ('''...''') for embedded newlines (matches YAML's '|' block scalars
-    almost exactly -- raw content, no escaping needed), falling back to an escaped basic string
-    otherwise (or if the content itself contains ''').
-
-    The ``\n`` placed right after the opening ``'''`` below is a pure formatting separator (so the
-    content starts on its own line) -- TOML's own "trim one newline immediately after the opening
-    delimiter" rule removes exactly that one on read-back, regardless of what ``value`` itself starts
-    with, so this always round-trips to ``value`` unchanged.
-    """
-    if "\n" in value and "'''" not in value:
-        return f"'''\n{value}'''"
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return '"' + escaped.replace("\n", "\\n") + '"'
-
-
 def show_config(
     env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None, env_vars=None, minimal=False
 ):
-    """Print the fully resolved config as TOML -- exactly what the real run would use.
+    """Print the fully resolved config as YAML -- exactly what the real run would use.
 
     Whole-file 'import:' stacking, section-level 'import:' stacking, and
     every provider's defaults are all baked in. 'stages:' is narrowed by
@@ -3240,7 +2917,7 @@ def show_config(
             ordered[stage_id] = _drop_defaulted_stage_keys(ordered[stage_id], ctx.raw_sections.get(stage_id, {}))
         ordered = _drop_null_values(ordered)
 
-    print(dump_toml(ordered, color=supports_color()))
+    print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
 
 
 def _drop_defaulted_stage_keys(section, raw_section):
@@ -3769,7 +3446,7 @@ def _add_env_positional(parser):
     parser.add_argument(
         "env",
         nargs="?",
-        help="path to an env directory or a denver.toml/denver.yml/denver.yaml file (falls back to $DENVER_ENV_DIR if omitted)",
+        help="path to an env directory or a denver.yml/denver.yaml/denver.toml file (falls back to $DENVER_ENV_DIR if omitted)",
     )
 
 
@@ -3896,7 +3573,7 @@ def _add_run_parser(subparsers, config_args):
     run_p.add_argument(
         "--show-config-full",
         action="store_true",
-        help="like --show-config, but keeps every key left unset too (shown as a commented-out '# key = null' line)",
+        help="like --show-config, but keeps every key left unset too (shown as an explicit 'key: null' line)",
     )
     run_p.add_argument(
         "-q",
@@ -4303,7 +3980,9 @@ def _run_completion_state(rest):
 
 def _first_positional(rest, consumed_as_value):
     """The first token in 'rest' that's neither a flag nor already consumed as one's value, or None."""
-    for tok, consumed in zip(rest, consumed_as_value, strict=True):
+    # zip(strict=True) is Python 3.10+ only (denver's floor is 3.9); plain zip() is fine
+    # here since consumed_as_value is built as [False] * len(rest) right above, in the caller.
+    for tok, consumed in zip(rest, consumed_as_value):
         if not consumed and not tok.startswith("-"):
             return tok
     return None
@@ -4589,12 +4268,13 @@ def _listdir_or_empty(base):
 def _is_denver_config_name(name):
     """Whether ``name`` names a denver.*.<ext> config file completion should offer.
 
-    A '.toml' always qualifies; '.yml'/'.yaml' only if PyYAML is installed
-    (see the module-level 'yaml' import at the top of this file).
+    A '.yml'/'.yaml' always qualifies (denver's default format, PyYAML is a
+    required dependency); '.toml' only if tomllib is importable (Python
+    3.11+ -- see the module-level 'tomllib' import at the top of this file).
     """
     if not name.startswith("denver."):
         return False
-    return name.endswith(".toml") or (yaml is not None and name.endswith((".yml", ".yaml")))
+    return name.endswith((".yml", ".yaml")) or (tomllib is not None and name.endswith(".toml"))
 
 
 def _completion_path_candidate(base, name):
@@ -4869,7 +4549,9 @@ def _completion_script_fish(names, quoted):
         f"    contains -- $prev {path_value_flags};",
         "end;",
     ]
-    for name, quoted_name in zip(names, quoted, strict=True):
+    # zip(strict=True) is Python 3.10+ only (denver's floor is 3.9); plain zip() is fine
+    # here since 'quoted' is built 1:1 from 'names' in the caller, _completion_script.
+    for name, quoted_name in zip(names, quoted):
         flag = "-p" if "/" in name else "-c"
         lines.append(f"complete {flag} {quoted_name} -f -a '(__denver_complete)';")
         lines.append(f"complete {flag} {quoted_name} -n __denver_expects_path -F -a '(__denver_complete)';")
@@ -5266,7 +4948,7 @@ def _load_cli_config(args, config_path) -> dict:
 
 
 def _require_config_source(config_path, config_files):
-    """Die if <env> resolved to a directory with no denver.toml of its own, and no -f/--config-file either.
+    """Die if <env> resolved to a directory with no config file of its own, and no -f/--config-file either.
 
     Checked once ``--help``/``--version``/``--license`` are ruled out (see
     _load_cli_config, which tolerates the same situation so those can still

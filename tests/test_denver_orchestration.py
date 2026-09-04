@@ -3,9 +3,11 @@
 import json
 import re
 import sys
+import textwrap
 from pathlib import Path
 
 import pytest
+import yaml
 
 import denver
 import denver_providers as providers
@@ -16,19 +18,34 @@ from denver_providers.base import Provider
 def test_collect_import_dirs(tmp_path):
     base = tmp_path / "base"
     base.mkdir()
-    (base / "denver.toml").write_text('stages = [\n  "uv",\n]\n')
+    (base / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - uv
+        """)
+    )
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.toml"
-    cfg_path.write_text('import = [\n  "../base",\n]\n')
+    cfg_path = env_dir / "denver.yml"
+    cfg_path.write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        """)
+    )
     assert denver.collect_import_dirs(cfg_path) == [base]
 
 
 def test_collect_import_dirs_none(tmp_path):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.toml"
-    cfg_path.write_text('stages = [\n  "uv",\n]\n')
+    cfg_path = env_dir / "denver.yml"
+    cfg_path.write_text(
+        textwrap.dedent("""\
+        stages:
+        - uv
+        """)
+    )
     assert denver.collect_import_dirs(cfg_path) == []
 
 
@@ -38,16 +55,31 @@ def test_collect_import_dirs_multi_level_nearest_first(tmp_path):
     found in 'mid' before falling through to 'base'."""
     base = tmp_path / "base"
     base.mkdir()
-    (base / "denver.toml").write_text('stages = [\n  "uv",\n]\n')
+    (base / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - uv
+        """)
+    )
 
     mid = tmp_path / "mid"
     mid.mkdir()
-    (mid / "denver.toml").write_text('import = [\n  "../base",\n]\n')
+    (mid / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        """)
+    )
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.toml"
-    cfg_path.write_text('import = [\n  "../mid",\n]\n')
+    cfg_path = env_dir / "denver.yml"
+    cfg_path.write_text(
+        textwrap.dedent("""\
+        import:
+        - ../mid
+        """)
+    )
 
     assert denver.collect_import_dirs(cfg_path) == [mid, base]
 
@@ -55,31 +87,41 @@ def test_collect_import_dirs_multi_level_nearest_first(tmp_path):
 def test_collect_import_dirs_circular_dies(tmp_path):
     a = tmp_path / "a"
     a.mkdir()
-    (a / "denver.toml").write_text('import = [\n  "../b",\n]\n')
+    (a / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../b
+        """)
+    )
     b = tmp_path / "b"
     b.mkdir()
-    (b / "denver.toml").write_text('import = [\n  "../a",\n]\n')
+    (b / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../a
+        """)
+    )
 
     with pytest.raises(SystemExit):
-        denver.collect_import_dirs(a / "denver.toml")
+        denver.collect_import_dirs(a / "denver.yml")
 
 
 # ---- run_hook / collect_hook_entries ----------------------------------------#
-def _write_denver_toml(env_dir, content):
-    (env_dir / "denver.toml").write_text(content)
-    return env_dir / "denver.toml"
+def _write_denver_yml(env_dir, content):
+    (env_dir / "denver.yml").write_text(content)
+    return env_dir / "denver.yml"
 
 
 def test_run_hook_missing_key_noop(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_toml(ctx.env_dir, 'stages = ["uv"]\n')
+    cfg_path = _write_denver_yml(ctx.env_dir, 'stages: [uv]\n')
     denver.run_hook(ctx, cfg_path, "pre-uv")  # no error
 
 
 def test_run_hook_single_script(make_context):
     ctx = make_context()
     (ctx.env_dir / "hook.sh").write_text("export HOOKED=1\n")
-    cfg_path = _write_denver_toml(ctx.env_dir, '[hooks]\npre-uv = "hook.sh"\n')
+    cfg_path = _write_denver_yml(ctx.env_dir, 'hooks:\n  pre-uv: hook.sh\n')
     denver.run_hook(ctx, cfg_path, "pre-uv")
     assert ctx.env["HOOKED"] == "1"
 
@@ -88,7 +130,7 @@ def test_run_hook_list_of_scripts(make_context):
     ctx = make_context()
     (ctx.env_dir / "a.sh").write_text("export A=1\n")
     (ctx.env_dir / "b.sh").write_text("export B=1\n")
-    cfg_path = _write_denver_toml(ctx.env_dir, '[hooks]\npre-cmd = ["a.sh", "b.sh"]\n')
+    cfg_path = _write_denver_yml(ctx.env_dir, 'hooks:\n  pre-cmd:\n  - a.sh\n  - b.sh\n')
     denver.run_hook(ctx, cfg_path, "pre-cmd")
     assert ctx.env["A"] == "1"
     assert ctx.env["B"] == "1"
@@ -96,25 +138,25 @@ def test_run_hook_list_of_scripts(make_context):
 
 def test_run_hook_missing_script_dies(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_toml(ctx.env_dir, '[hooks]\npre-uv = "nope.sh"\n')
+    cfg_path = _write_denver_yml(ctx.env_dir, 'hooks:\n  pre-uv: nope.sh\n')
     with pytest.raises(SystemExit):
         denver.run_hook(ctx, cfg_path, "pre-uv")
 
 
 def test_run_hook_unconfigured_script_is_never_discovered(make_context):
     # hooks/env.sh is the conventional name, and it is sitting right next to
-    # the denver.toml -- but nothing lists it, so it is not sourced.
+    # the denver.yml -- but nothing lists it, so it is not sourced.
     ctx = make_context()
     (ctx.env_dir / "hooks").mkdir()
     (ctx.env_dir / "hooks" / "env.sh").write_text("export CONVENTIONAL=1\n")
-    cfg_path = _write_denver_toml(ctx.env_dir, 'stages = ["uv"]\n')  # no hooks: at all
+    cfg_path = _write_denver_yml(ctx.env_dir, 'stages: [uv]\n')  # no hooks: at all
     denver.run_hook(ctx, cfg_path, "env")
     assert "CONVENTIONAL" not in ctx.env
 
 
 def test_run_hook_nothing_configured_is_a_no_op(make_context):
     ctx = make_context()
-    cfg_path = _write_denver_toml(ctx.env_dir, 'stages = ["uv"]\n')
+    cfg_path = _write_denver_yml(ctx.env_dir, 'stages: [uv]\n')
     denver.run_hook(ctx, cfg_path, "env")  # no error, nothing to source
     assert "CONVENTIONAL" not in ctx.env
 
@@ -126,9 +168,9 @@ def test_run_hook_list_is_sourced_in_order(make_context):
     (ctx.env_dir / "hooks").mkdir()
     (ctx.env_dir / "hooks" / "env.sh").write_text("export BASE=1\nexport SHARED=from-base\n")
     (ctx.env_dir / "hooks" / "env.user.sh").write_text("export USER_ONLY=1\nexport SHARED=from-user\n")
-    cfg_path = _write_denver_toml(
+    cfg_path = _write_denver_yml(
         ctx.env_dir,
-        '[hooks]\nenv = ["hooks/env.sh", "hooks/env.user.sh"]\n',
+        'hooks:\n  env:\n  - hooks/env.sh\n  - hooks/env.user.sh\n',
     )
     denver.run_hook(ctx, cfg_path, "env")
     assert ctx.env["BASE"] == "1"
@@ -141,7 +183,7 @@ def test_run_hook_only_configured_script_runs(make_context):
     (ctx.env_dir / "hooks").mkdir()
     (ctx.env_dir / "hooks" / "env.sh").write_text("export CONVENTIONAL=1\n")
     (ctx.env_dir / "explicit.sh").write_text("export EXPLICIT=1\n")
-    cfg_path = _write_denver_toml(ctx.env_dir, '[hooks]\nenv = "explicit.sh"\n')
+    cfg_path = _write_denver_yml(ctx.env_dir, 'hooks:\n  env: explicit.sh\n')
     denver.run_hook(ctx, cfg_path, "env")
     assert ctx.env["EXPLICIT"] == "1"
     assert "CONVENTIONAL" not in ctx.env
@@ -150,14 +192,26 @@ def test_run_hook_only_configured_script_runs(make_context):
 def test_run_hook_stacked_base_runs_before_derived(tmp_path, make_context):
     base_dir = tmp_path / "base"
     base_dir.mkdir()
-    (base_dir / "denver.toml").write_text('[hooks]\nenv = "base.sh"\n')
+    (base_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        hooks:
+          env: base.sh
+        """)
+    )
     (base_dir / "base.sh").write_text("export ORDER=${ORDER}base\nexport FROM_BASE=1\n")
 
     env_dir = tmp_path / "derived"
     env_dir.mkdir()
     (env_dir / "derived.sh").write_text("export ORDER=${ORDER}derived\nexport FROM_DERIVED=1\n")
-    cfg_path = env_dir / "denver.toml"
-    cfg_path.write_text('import = [\n  "../base",\n]\n\n[hooks]\nenv = "derived.sh"\n')
+    cfg_path = env_dir / "denver.yml"
+    cfg_path.write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        hooks:
+          env: derived.sh
+        """)
+    )
 
     ctx = make_context(env_dir=env_dir)
     denver.run_hook(ctx, cfg_path, "env")
@@ -171,14 +225,30 @@ def test_run_hook_stacked_lists_from_both_layers(tmp_path, make_context):
     # base-first, and each entry resolves against its own layer's dir.
     base_dir = tmp_path / "base"
     (base_dir / "hooks").mkdir(parents=True)
-    (base_dir / "denver.toml").write_text('stages = [\n  "uv",\n]\n\n[hooks]\nenv = [\n  "hooks/env.sh",\n]\n')
+    (base_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - uv
+        hooks:
+          env:
+          - hooks/env.sh
+        """)
+    )
     (base_dir / "hooks" / "env.sh").write_text("export FROM_BASE=1\n")
 
     env_dir = tmp_path / "derived"
     (env_dir / "hooks").mkdir(parents=True)
     (env_dir / "hooks" / "env.sh").write_text("export FROM_DERIVED=1\n")
-    cfg_path = env_dir / "denver.toml"
-    cfg_path.write_text('import = [\n  "../base",\n]\n\n[hooks]\nenv = [\n  "hooks/env.sh",\n]\n')
+    cfg_path = env_dir / "denver.yml"
+    cfg_path.write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        hooks:
+          env:
+          - hooks/env.sh
+        """)
+    )
 
     ctx = make_context(env_dir=env_dir)
     denver.run_hook(ctx, cfg_path, "env")
@@ -191,17 +261,33 @@ def test_collect_hook_entries_circular_import_dies(tmp_path):
     b_dir = tmp_path / "b"
     a_dir.mkdir()
     b_dir.mkdir()
-    (a_dir / "denver.toml").write_text('import = [\n  "../b",\n]\n')
-    (b_dir / "denver.toml").write_text('import = [\n  "../a",\n]\n')
+    (a_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../b
+        """)
+    )
+    (b_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../a
+        """)
+    )
     with pytest.raises(SystemExit):
-        denver.collect_hook_entries(a_dir / "denver.toml", "env")
+        denver.collect_hook_entries(a_dir / "denver.yml", "env")
 
 
 # ---- expand_section_imports ------------------------------------------------#
 def test_expand_section_imports_stacks_and_overrides(tmp_path):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.toml").write_text('[docker]\nexe = "docker"\nservice = "dev"\n')
+    (src_env / "denver.yml").write_text(
+        textwrap.dedent("""\
+        docker:
+          exe: docker
+          service: dev
+        """)
+    )
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
@@ -216,11 +302,16 @@ def test_expand_section_imports_stacks_and_overrides(tmp_path):
 def test_expand_section_imports_direct_file_ref(tmp_path):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.toml").write_text('[docker]\nexe = "docker"\n')
+    (src_env / "denver.yml").write_text(
+        textwrap.dedent("""\
+        docker:
+          exe: docker
+        """)
+    )
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    config = {"docker": {"import": ["../src/denver.toml"]}}
+    config = {"docker": {"import": ["../src/denver.yml"]}}
     expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
     assert expanded["docker"] == {"exe": "docker"}
     assert extra_dirs == [src_env]
@@ -229,11 +320,17 @@ def test_expand_section_imports_direct_file_ref(tmp_path):
 def test_expand_section_imports_explicit_section_ref(tmp_path):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.toml").write_text('[conan]\nbase-classes = [\n  "conan/base_classes",\n]\n')
+    (src_env / "denver.yml").write_text(
+        textwrap.dedent("""\
+        conan:
+          base-classes:
+          - conan/base_classes
+        """)
+    )
 
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    config = {"conan": {"import": ["../src/denver.toml:conan"]}}
+    config = {"conan": {"import": ["../src/denver.yml:conan"]}}
     expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
     assert expanded["conan"] == {"base-classes": ["conan/base_classes"]}
     assert extra_dirs == [src_env]
@@ -500,15 +597,15 @@ def fake_providers(monkeypatch):
 
 
 def _env(tmp_path, config):
-    """Create an env dir with a denver.toml written from ``config``.
+    """Create an env dir with a denver.yml written from ``config``.
 
     collect_import_dirs() re-reads the file from disk (to find 'import:'), so
     the on-disk file must reflect the config passed to run_stages().
     """
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.toml"
-    cfg_path.write_text(denver.dump_toml(config))
+    cfg_path = env_dir / "denver.yml"
+    cfg_path.write_text(yaml.safe_dump(config))
     return env_dir, cfg_path
 
 
@@ -1473,7 +1570,12 @@ def test_run_stages_refresh_keeps_an_explicit_value(tmp_path, run_recorder, exec
 def test_run_stages_stacking_used_by_stage(tmp_path, fake_providers, exec_recorder):
     src_env = tmp_path / "src"
     src_env.mkdir()
-    (src_env / "denver.toml").write_text('[fakewrap]\nmarker = "from-src"\n')
+    (src_env / "denver.yml").write_text(
+        textwrap.dedent("""\
+        fakewrap:
+          marker: from-src
+        """)
+    )
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakewrap"], "fakewrap": {"import": ["../src"], "provider": "fakewrap"}}
     denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])

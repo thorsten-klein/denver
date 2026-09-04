@@ -14,6 +14,7 @@ import re
 import subprocess
 
 import pytest
+import yaml
 
 import denver
 import denver_providers as providers
@@ -416,8 +417,8 @@ def test_docker_dry_run_previews_without_docker_on_path(make_context, run_record
 def _env(tmp_path, config):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
-    cfg_path = env_dir / "denver.toml"
-    cfg_path.write_text(denver.dump_toml(config))
+    cfg_path = env_dir / "denver.yml"
+    cfg_path.write_text(yaml.safe_dump(config))
     return env_dir, cfg_path
 
 

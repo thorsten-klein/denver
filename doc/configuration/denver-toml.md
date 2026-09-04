@@ -20,17 +20,16 @@ config*, ...) are defined once in the
 [Glossary](../concepts/glossary.md); each provider's own config keys are
 documented on its own page under [Providers](../providers/uv.md).
 
-### denver.yml
+### denver.yml vs. denver.toml
 
-TOML is denver's preferred format as it is supported by standard library, no
-extra install. If you'd rather write YAML, install `PyYAML` manually or install
-denver with `pip install denver-tool[yml]`.
-If `import yaml` is available, denver also accepts `denver.yml` (or `denver.yaml`).
-When a directory holds more than one, denver picks in this order:
-`denver.toml`, then `denver.yml`, then `denver.yaml`.
-Without the extra installed, a `denver.yml` is rejected with an error
-explaining that only `denver.toml` is supported. Every example on this page
-is TOML, but the schema is the same either way -- only the syntax differs.
+`denver.yml`/`denver.yaml` is denver's default format: PyYAML is a required
+dependency, so it always works, down to denver's `>=3.9` floor. `denver.toml`
+is supported too, but only where `tomllib` is importable (stdlib only from
+Python 3.11) — on an older interpreter it isn't there, and denver says so
+with a clear error instead of silently misreading it. When a directory
+holds more than one, denver picks in this order: `denver.yml`, then
+`denver.yaml`, then `denver.toml`. Every example on this page is TOML, but
+the schema is the same either way — only the syntax differs.
 
 ## Core model
 

@@ -1,0 +1,34 @@
+version: 1.0
+denver-version: '>=1.5.2'
+command: bash
+hooks:
+  env: null
+  post-uv: null
+  pre-cmd: null
+  pre-uv: null
+stages:
+- uv
+uv:
+  provider: uv
+  description: null
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  amend: true
+  exe: uv
+  freeze-to: null
+  install-args: null
+  lockfile: null
+  no-index: false
+  overrides: null
+  patches-apply: null
+  python: null
+  requirements:
+  - requirements.txt
+  venv: null
+

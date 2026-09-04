@@ -7,15 +7,15 @@ name = "denver-tool"
 dynamic = ["version"]
 description = "Development Environments as code -- reproducible, flexible, simple and fast"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-# denver's own required config format is TOML, read with the standard
-# library (tomllib) -- nothing to install for that. requires-python is
-# bumped to 3.11 precisely so tomllib (stdlib since 3.11) can be relied on
-# instead of a dependency. denver.yml is optional (see the 'yml' extra
-# below): PyYAML is never a hard dependency.
-dependencies = []
+# denver's own default config format is YAML (denver.yml/denver.yaml),
+# parsed with PyYAML -- a required dependency, and the reason the floor can
+# be as low as 3.9. denver.toml is supported too, but only where tomllib is
+# importable (stdlib only from Python 3.11): on an older interpreter it's
+# simply not there, and denver says so instead of guessing.
+dependencies = ["pyyaml>=6"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
@@ -23,17 +23,13 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS :: MacOS X",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Build Tools",
 ]
-
-[project.optional-dependencies]
-# 'pip install denver-tool[yml]' -- lets denver read denver.yml configs
-# (parsed with PyYAML) alongside denver.toml. Without it, denver.yml is
-# rejected with an error pointing at this extra; denver.toml always works.
-yml = ["pyyaml>=6"]
 
 [project.urls]
 Homepage = "https://github.com/thorsten-klein/denver"
@@ -64,12 +60,8 @@ test = [
     "pytest-cov>=7.0,<8",
     "pytest-mock>=3.6.1,<4",
     "pytest-flakefinder>=1.1.0,<2",
-    # not one of denver's own runtime dependencies (its config is TOML, stdlib
-    # tomllib) -- needed here because conan_scripts/*.py (build_catalog.py,
-    # get_rrev.py, recipes.py) unconditionally read/write conandata.yml and
-    # catalog.yml, formats Conan itself dictates, and the suite imports those
-    # modules directly.
-    "pyyaml>=6",
+    # pyyaml itself is already a core dependency (see [project] above); no
+    # need to repeat it here.
 ]
 dev = [
     "poethepoet~=0.37",
@@ -160,7 +152,7 @@ color = "auto"
 sort = "asc"
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.9"
 files = ["src"]
 # conan_scripts run standalone (see catalog.py's docstring): their
 # sibling-module imports (get_rrev, DenverConanFile) only resolve via each
@@ -177,7 +169,7 @@ module = ["conan.*"]
 ignore_missing_imports = true
 
 [tool.pyright]
-pythonVersion = "3.11"
+pythonVersion = "3.9"
 include = ["src"]
 
 [tool.bandit]
