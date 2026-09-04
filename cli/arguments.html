@@ -163,7 +163,10 @@
 <p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/denver-toml.html">denver.toml</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#overview">Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../configuration/denver-toml.html#denver-yml-vs-denver-toml">denver.yml vs. denver.toml</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#core-model">Core model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#the-denver-toml-schema">The <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../configuration/denver-toml.html#top-level-keys">Top-level keys</a></li>
@@ -258,8 +261,8 @@
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#ci">CI</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#releasing">Releasing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#known-limitations">Known limitations</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#denver-has-zero-runtime-dependencies">denver has zero runtime dependencies</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#pyyaml-is-still-a-dependency-just-not-denver-s-own">PyYAML is still a dependency – just not denver’s own</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#denver-has-exactly-one-runtime-dependency-pyyaml">denver has exactly one runtime dependency: PyYAML</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#more-pyyaml-unrelated-to-denver-s-own-config">More PyYAML, unrelated to denver’s own config</a></li>
 </ul>
 </li>
 </ul>
@@ -455,18 +458,26 @@ set is left out rather than shown as unset. The fastest way to understand
 an env you didn’t write, and it needs no toolchain, no network and no
 Docker.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--show-config-full</span></code></strong> is <code class="docutils literal notranslate"><span class="pre">--show-config</span></code> plus every key left unset,
-each shown as a commented-out <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">key</span> <span class="pre">=</span> <span class="pre">null</span></code> line (TOML has no <code class="docutils literal notranslate"><span class="pre">null</span></code>) —
-the complete key reference for a stage’s own section, not just what this
+each shown explicitly (<code class="docutils literal notranslate"><span class="pre">key:</span> <span class="pre">null</span></code> — YAML, the default; a commented-out
+<code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">key</span> <span class="pre">=</span> <span class="pre">null</span></code> line with <code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">toml</span></code>, since TOML has no <code class="docutils literal notranslate"><span class="pre">null</span></code>) — the
+complete key reference for a stage’s own section, not just what this
 particular env happens to set.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">{yml,toml}</span></code></strong> picks the output format for either of the
+above, independent of whether the env itself is a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> or a
+<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> — <code class="docutils literal notranslate"><span class="pre">yml</span></code> (the default) always works, <code class="docutils literal notranslate"><span class="pre">toml</span></code> needs no extra
+install either (denver’s own hand-written renderer, not <code class="docutils literal notranslate"><span class="pre">tomllib</span></code> —
+writing TOML doesn’t need what only reading it does).</p></li>
 </ul>
-<p>Both are syntax-highlighted (table headers, keys, strings, numbers/booleans
-and <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">key</span> <span class="pre">=</span> <span class="pre">null</span></code> comments each their own color) whenever stdout looks like
-a real terminal — auto-detected, off the moment output is piped or
-redirected, so a golden-file snapshot, <code class="docutils literal notranslate"><span class="pre">|</span> <span class="pre">grep</span></code>, or a redirect into a file
-all still get plain text. Two environment variables override the
+<p><code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">toml</span></code> output is syntax-highlighted (table headers, keys, strings,
+numbers/booleans and <code class="docutils literal notranslate"><span class="pre">#</span> <span class="pre">key</span> <span class="pre">=</span> <span class="pre">null</span></code> comments each their own color) whenever
+stdout looks like a real terminal — auto-detected, off the moment output is
+piped or redirected, so a golden-file snapshot, <code class="docutils literal notranslate"><span class="pre">|</span> <span class="pre">grep</span></code>, or a redirect into
+a file all still get plain text. Two environment variables override the
 auto-detection, the same convention most CLI tools use:
 <a class="reference external" href="https://no-color.org"><code class="docutils literal notranslate"><span class="pre">NO_COLOR</span></code></a> (any non-empty value) always forces it
-off, and <code class="docutils literal notranslate"><span class="pre">FORCE_COLOR</span></code> forces it on even when piped (e.g. into <code class="docutils literal notranslate"><span class="pre">less</span> <span class="pre">-R</span></code>).</p>
+off, and <code class="docutils literal notranslate"><span class="pre">FORCE_COLOR</span></code> forces it on even when piped (e.g. into <code class="docutils literal notranslate"><span class="pre">less</span> <span class="pre">-R</span></code>).
+(<code class="docutils literal notranslate"><span class="pre">--format</span> <span class="pre">yml</span></code>’s output is always plain text — PyYAML’s own renderer, not
+denver’s, doesn’t have this.)</p>
 <ul>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">--dry-run</span></code></strong> shows what each stage <em>would</em> do instead of doing it: no
 command is executed for its effect, no file is written, and the final

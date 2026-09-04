@@ -141,10 +141,14 @@ this or a fork: see “Extension providers” in
 request, in three jobs:
 
 - **lint** — `pre-commit`, `ruff format --check`, `ruff check`, `mypy`.
-- **test** — `uv run poe test` on Python 3.9 and 3.13: the floor denver
-  declares support for (`pyproject.toml`’s `requires-python`) and the newest
-  available, so a change that only works at one end doesn’t slip through.
-  Coverage and test results are uploaded to Codecov from the 3.13 run.
+- **test** — `uv run poe test` on Python 3.9, 3.10, 3.11 and 3.13: the floor
+  denver declares support for (`pyproject.toml`’s `requires-python`) through
+  the newest available, so a change that only works at one end doesn’t slip
+  through. 3.9/3.10 also exercise the one behavioural split in denver’s own
+  code – `tomllib` (`denver.toml` support) is stdlib only from 3.11, so
+  those two legs are what actually runs with it absent, not just a
+  monkeypatched test. Coverage and test results are uploaded to Codecov from
+  the 3.13 run.
 - **build** — builds the wheel/sdist, then installs it into a clean venv and
   runs `denver --help` plus a real `--show-config` against a bundled example,
   with `-c denver-version=null` to drop that example’s pin (a dev-versioned
@@ -206,28 +210,35 @@ not a claim to be the release). So:
 
 ## Known limitations
 
-### denver has zero runtime dependencies
+### denver has exactly one runtime dependency: PyYAML
 
-`denver.toml` is read with the standard library alone (`tomllib` — hence
-`requires-python = ">=3.11"` in `pyproject.toml`). Nothing to install, on the
-host or inside a wrapper’s re-invoked process (`reinvoke_command()` in
-`src/denver.py` builds `["python3", <this file>, ...]`, a bare command
-resolved against the container’s `PATH` for a docker-wrapped env — an
-interpreter denver cannot pip-install anything into ahead of time, so
-depending on nothing there is exactly the point). Keep it that way when
-contributing: reaching for a runtime dependency for denver’s own config
-handling is what would invalidate this, and turns a documented feature into
-a real compatibility matrix.
+`denver.yml`/`denver.yaml` is denver’s default config format, parsed with
+PyYAML — a required dependency (`pyproject.toml`’s `[project] dependencies`),
+and the reason the floor can be as low as `requires-python = ">=3.9"`.
+`denver.toml` is supported too, but only where `tomllib` is importable
+(stdlib only from Python 3.11): on an older interpreter it just isn’t there,
+and `load_config_file()` says so with a clear error instead of guessing (see
+[Configuration](../configuration/denver-toml.md)).
 
-### PyYAML is still a dependency – just not denver’s own
+Both formats need to work inside a wrapper’s re-invoked process too
+(`reinvoke_command()` in `src/denver.py` builds `["python3", <this file>, ...]`, a bare command resolved against the container’s `PATH` for a
+docker-wrapped env — an interpreter denver cannot pip-install anything into
+ahead of time). PyYAML is always there because pip installed it as a real
+dependency of the `denver-tool` distribution the image’s own `python3`
+resolves against; `tomllib` is there or not purely based on that
+interpreter’s own version, same as on the host. Keep it that way when
+contributing: reaching for a *second* runtime dependency for denver’s own
+config handling is what would invalidate this, and turns a documented
+feature into a real compatibility matrix.
+
+### More PyYAML, unrelated to denver’s own config
 
 `conan_scripts/*.py` (`build_catalog.py`, `get_rrev.py`, `recipes.py`)
 unconditionally `import yaml`, because `conandata.yml`/`catalog.yml` are
 formats Conan itself dictates, not something denver chose – see
-[Configuration](../configuration/denver-toml.md) and
 [the conan provider](../providers/conan.md). This is unrelated to denver’s
-own `denver.toml`: those scripts run inside the env’s own venv (whatever
-`python3` the `conan` provider resolves at that point, see
+own `denver.yml`/`denver.toml`: those scripts run inside the env’s own venv
+(whatever `python3` the `conan` provider resolves at that point, see
 `src/denver_providers/conan.py`), not in the process running `denver.py`
 itself, so it’s the `test` dependency group that names it (for the suite,
 which imports those modules directly), not `pyproject.toml`’s own

@@ -162,7 +162,10 @@
 <p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="../configuration/denver-toml.html">denver.toml</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#overview">Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../configuration/denver-toml.html#denver-yml-vs-denver-toml">denver.yml vs. denver.toml</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#core-model">Core model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../configuration/denver-toml.html#the-denver-toml-schema">The <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="../configuration/denver-toml.html#top-level-keys">Top-level keys</a></li>
@@ -257,8 +260,8 @@
 <li class="toctree-l2"><a class="reference internal" href="#ci">CI</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#releasing">Releasing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#known-limitations">Known limitations</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#denver-has-zero-runtime-dependencies">denver has zero runtime dependencies</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#pyyaml-is-still-a-dependency-just-not-denver-s-own">PyYAML is still a dependency – just not denver’s own</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#denver-has-exactly-one-runtime-dependency-pyyaml">denver has exactly one runtime dependency: PyYAML</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#more-pyyaml-unrelated-to-denver-s-own-config">More PyYAML, unrelated to denver’s own config</a></li>
 </ul>
 </li>
 </ul>
@@ -428,10 +431,14 @@ notes), link it from <code class="docutils literal notranslate"><span class="pre
 request, in three jobs:</p>
 <ul class="simple">
 <li><p><strong>lint</strong> — <code class="docutils literal notranslate"><span class="pre">pre-commit</span></code>, <code class="docutils literal notranslate"><span class="pre">ruff</span> <span class="pre">format</span> <span class="pre">--check</span></code>, <code class="docutils literal notranslate"><span class="pre">ruff</span> <span class="pre">check</span></code>, <code class="docutils literal notranslate"><span class="pre">mypy</span></code>.</p></li>
-<li><p><strong>test</strong> — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">poe</span> <span class="pre">test</span></code> on Python 3.9 and 3.13: the floor denver
-declares support for (<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>’s <code class="docutils literal notranslate"><span class="pre">requires-python</span></code>) and the newest
-available, so a change that only works at one end doesn’t slip through.
-Coverage and test results are uploaded to Codecov from the 3.13 run.</p></li>
+<li><p><strong>test</strong> — <code class="docutils literal notranslate"><span class="pre">uv</span> <span class="pre">run</span> <span class="pre">poe</span> <span class="pre">test</span></code> on Python 3.9, 3.10, 3.11 and 3.13: the floor
+denver declares support for (<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>’s <code class="docutils literal notranslate"><span class="pre">requires-python</span></code>) through
+the newest available, so a change that only works at one end doesn’t slip
+through. 3.9/3.10 also exercise the one behavioural split in denver’s own
+code – <code class="docutils literal notranslate"><span class="pre">tomllib</span></code> (<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> support) is stdlib only from 3.11, so
+those two legs are what actually runs with it absent, not just a
+monkeypatched test. Coverage and test results are uploaded to Codecov from
+the 3.13 run.</p></li>
 <li><p><strong>build</strong> — builds the wheel/sdist, then installs it into a clean venv and
 runs <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">--help</span></code> plus a real <code class="docutils literal notranslate"><span class="pre">--show-config</span></code> against a bundled example,
 with <code class="docutils literal notranslate"><span class="pre">-c</span> <span class="pre">denver-version=null</span></code> to drop that example’s pin (a dev-versioned
@@ -490,28 +497,34 @@ release, whatever <code class="docutils literal notranslate"><span class="pre">D
 </section>
 <section id="known-limitations">
 <h2>Known limitations<a class="headerlink" href="#known-limitations" title="Link to this heading"></a></h2>
-<section id="denver-has-zero-runtime-dependencies">
-<h3>denver has zero runtime dependencies<a class="headerlink" href="#denver-has-zero-runtime-dependencies" title="Link to this heading"></a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> is read with the standard library alone (<code class="docutils literal notranslate"><span class="pre">tomllib</span></code> — hence
-<code class="docutils literal notranslate"><span class="pre">requires-python</span> <span class="pre">=</span> <span class="pre">&quot;&gt;=3.11&quot;</span></code> in <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>). Nothing to install, on the
-host or inside a wrapper’s re-invoked process (<code class="docutils literal notranslate"><span class="pre">reinvoke_command()</span></code> in
-<code class="docutils literal notranslate"><span class="pre">src/denver.py</span></code> builds <code class="docutils literal notranslate"><span class="pre">[&quot;python3&quot;,</span> <span class="pre">&lt;this</span> <span class="pre">file&gt;,</span> <span class="pre">...]</span></code>, a bare command
-resolved against the container’s <code class="docutils literal notranslate"><span class="pre">PATH</span></code> for a docker-wrapped env — an
-interpreter denver cannot pip-install anything into ahead of time, so
-depending on nothing there is exactly the point). Keep it that way when
-contributing: reaching for a runtime dependency for denver’s own config
-handling is what would invalidate this, and turns a documented feature into
-a real compatibility matrix.</p>
+<section id="denver-has-exactly-one-runtime-dependency-pyyaml">
+<h3>denver has exactly one runtime dependency: PyYAML<a class="headerlink" href="#denver-has-exactly-one-runtime-dependency-pyyaml" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>/<code class="docutils literal notranslate"><span class="pre">denver.yaml</span></code> is denver’s default config format, parsed with
+PyYAML — a required dependency (<code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>’s <code class="docutils literal notranslate"><span class="pre">[project]</span> <span class="pre">dependencies</span></code>),
+and the reason the floor can be as low as <code class="docutils literal notranslate"><span class="pre">requires-python</span> <span class="pre">=</span> <span class="pre">&quot;&gt;=3.9&quot;</span></code>.
+<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> is supported too, but only where <code class="docutils literal notranslate"><span class="pre">tomllib</span></code> is importable
+(stdlib only from Python 3.11): on an older interpreter it just isn’t there,
+and <code class="docutils literal notranslate"><span class="pre">load_config_file()</span></code> says so with a clear error instead of guessing (see
+<a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a>).</p>
+<p>Both formats need to work inside a wrapper’s re-invoked process too
+(<code class="docutils literal notranslate"><span class="pre">reinvoke_command()</span></code> in <code class="docutils literal notranslate"><span class="pre">src/denver.py</span></code> builds <code class="docutils literal notranslate"><span class="pre">[&quot;python3&quot;,</span> <span class="pre">&lt;this</span> <span class="pre">file&gt;,</span> <span class="pre">...]</span></code>, a bare command resolved against the container’s <code class="docutils literal notranslate"><span class="pre">PATH</span></code> for a
+docker-wrapped env — an interpreter denver cannot pip-install anything into
+ahead of time). PyYAML is always there because pip installed it as a real
+dependency of the <code class="docutils literal notranslate"><span class="pre">denver-tool</span></code> distribution the image’s own <code class="docutils literal notranslate"><span class="pre">python3</span></code>
+resolves against; <code class="docutils literal notranslate"><span class="pre">tomllib</span></code> is there or not purely based on that
+interpreter’s own version, same as on the host. Keep it that way when
+contributing: reaching for a <em>second</em> runtime dependency for denver’s own
+config handling is what would invalidate this, and turns a documented
+feature into a real compatibility matrix.</p>
 </section>
-<section id="pyyaml-is-still-a-dependency-just-not-denver-s-own">
-<h3>PyYAML is still a dependency – just not denver’s own<a class="headerlink" href="#pyyaml-is-still-a-dependency-just-not-denver-s-own" title="Link to this heading"></a></h3>
+<section id="more-pyyaml-unrelated-to-denver-s-own-config">
+<h3>More PyYAML, unrelated to denver’s own config<a class="headerlink" href="#more-pyyaml-unrelated-to-denver-s-own-config" title="Link to this heading"></a></h3>
 <p><code class="docutils literal notranslate"><span class="pre">conan_scripts/*.py</span></code> (<code class="docutils literal notranslate"><span class="pre">build_catalog.py</span></code>, <code class="docutils literal notranslate"><span class="pre">get_rrev.py</span></code>, <code class="docutils literal notranslate"><span class="pre">recipes.py</span></code>)
 unconditionally <code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">yaml</span></code>, because <code class="docutils literal notranslate"><span class="pre">conandata.yml</span></code>/<code class="docutils literal notranslate"><span class="pre">catalog.yml</span></code> are
 formats Conan itself dictates, not something denver chose – see
-<a class="reference internal" href="../configuration/denver-toml.html"><span class="std std-doc">Configuration</span></a> and
 <a class="reference internal" href="../providers/conan.html"><span class="std std-doc">the conan provider</span></a>. This is unrelated to denver’s
-own <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>: those scripts run inside the env’s own venv (whatever
-<code class="docutils literal notranslate"><span class="pre">python3</span></code> the <code class="docutils literal notranslate"><span class="pre">conan</span></code> provider resolves at that point, see
+own <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>/<code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>: those scripts run inside the env’s own venv
+(whatever <code class="docutils literal notranslate"><span class="pre">python3</span></code> the <code class="docutils literal notranslate"><span class="pre">conan</span></code> provider resolves at that point, see
 <code class="docutils literal notranslate"><span class="pre">src/denver_providers/conan.py</span></code>), not in the process running <code class="docutils literal notranslate"><span class="pre">denver.py</span></code>
 itself, so it’s the <code class="docutils literal notranslate"><span class="pre">test</span></code> dependency group that names it (for the suite,
 which imports those modules directly), not <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code>’s own

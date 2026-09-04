@@ -166,18 +166,26 @@ A few more properties worth knowing:
   an env you didn’t write, and it needs no toolchain, no network and no
   Docker.
 - **`--show-config-full`** is `--show-config` plus every key left unset,
-  each shown as a commented-out `# key = null` line (TOML has no `null`) —
-  the complete key reference for a stage’s own section, not just what this
+  each shown explicitly (`key: null` — YAML, the default; a commented-out
+  `# key = null` line with `--format toml`, since TOML has no `null`) — the
+  complete key reference for a stage’s own section, not just what this
   particular env happens to set.
+- **`--format {yml,toml}`** picks the output format for either of the
+  above, independent of whether the env itself is a `denver.yml` or a
+  `denver.toml` — `yml` (the default) always works, `toml` needs no extra
+  install either (denver’s own hand-written renderer, not `tomllib` —
+  writing TOML doesn’t need what only reading it does).
 
-Both are syntax-highlighted (table headers, keys, strings, numbers/booleans
-and `# key = null` comments each their own color) whenever stdout looks like
-a real terminal — auto-detected, off the moment output is piped or
-redirected, so a golden-file snapshot, `| grep`, or a redirect into a file
-all still get plain text. Two environment variables override the
+`--format toml` output is syntax-highlighted (table headers, keys, strings,
+numbers/booleans and `# key = null` comments each their own color) whenever
+stdout looks like a real terminal — auto-detected, off the moment output is
+piped or redirected, so a golden-file snapshot, `| grep`, or a redirect into
+a file all still get plain text. Two environment variables override the
 auto-detection, the same convention most CLI tools use:
 [`NO_COLOR`](https://no-color.org) (any non-empty value) always forces it
 off, and `FORCE_COLOR` forces it on even when piped (e.g. into `less -R`).
+(`--format yml`’s output is always plain text — PyYAML’s own renderer, not
+denver’s, doesn’t have this.)
 
 - **`--dry-run`** shows what each stage *would* do instead of doing it: no
   command is executed for its effect, no file is written, and the final

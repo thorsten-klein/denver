@@ -8,7 +8,10 @@ The fastest way to try denver, and the one with nothing to install: clone
 the repository and run the script directly.
 
 > [!NOTE]
-> python3 (version `>=3.11`) is required to be installed.
+> python3 (version `>=3.9`) is required to be installed. `denver.toml`
+> configs additionally need `>=3.11` (`tomllib` is stdlib only from there) –
+> `denver.yml`/`denver.yaml`, denver’s default format, works on the full
+> `>=3.9` range.
 ```bash
 git clone https://github.com/thorsten-klein/denver.git
 ```
@@ -56,11 +59,14 @@ Any of those commands installs the `denver` command.
 
 ## Prebuilt binary
 
-On a machine with no Python at all, or if you are stuck on Python older than `3.11`
-(denver needs `>=3.11` for `tomllib`), use the standalone executable
-attached to every [release](https://github.com/thorsten-klein/denver/releases)
-instead. It bundles `denver`, its providers and a Python interpreter into one
-executable.
+On a machine with no Python at all, or if you are stuck on Python older than
+`3.9`, use the standalone executable attached to every
+[release](https://github.com/thorsten-klein/denver/releases) instead. It
+bundles `denver`, its providers and a Python interpreter into one
+executable. (Stuck between `3.9` and `3.11`, specifically? A regular install
+still works fine as long as your configs are `denver.yml`/`denver.yaml` –
+only `denver.toml` needs `3.11`, see
+[Configuration](../configuration/denver-toml.md).)
 
 Find the download link for the latest release
 [in your browser](https://github.com/thorsten-klein/denver/releases)

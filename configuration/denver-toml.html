@@ -163,7 +163,10 @@
 <p class="caption" role="heading"><span class="caption-text">Configuration</span></p>
 <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">denver.toml</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#denver-yml-vs-denver-toml">denver.yml vs. denver.toml</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#core-model">Core model</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#the-denver-toml-schema">The <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#top-level-keys">Top-level keys</a></li>
@@ -258,8 +261,8 @@
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#ci">CI</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#releasing">Releasing</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../contributing/development.html#known-limitations">Known limitations</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#denver-has-zero-runtime-dependencies">denver has zero runtime dependencies</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#pyyaml-is-still-a-dependency-just-not-denver-s-own">PyYAML is still a dependency – just not denver’s own</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#denver-has-exactly-one-runtime-dependency-pyyaml">denver has exactly one runtime dependency: PyYAML</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../contributing/development.html#more-pyyaml-unrelated-to-denver-s-own-config">More PyYAML, unrelated to denver’s own config</a></li>
 </ul>
 </li>
 </ul>
@@ -309,6 +312,17 @@ exact rules live.</p>
 config</em>, …) are defined once in the
 <a class="reference internal" href="../concepts/glossary.html"><span class="std std-doc">Glossary</span></a>; each provider’s own config keys are
 documented on its own page under <a class="reference internal" href="../providers/uv.html"><span class="std std-doc">Providers</span></a>.</p>
+<section id="denver-yml-vs-denver-toml">
+<h3>denver.yml vs. denver.toml<a class="headerlink" href="#denver-yml-vs-denver-toml" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>/<code class="docutils literal notranslate"><span class="pre">denver.yaml</span></code> is denver’s default format: PyYAML is a required
+dependency, so it always works, down to denver’s <code class="docutils literal notranslate"><span class="pre">&gt;=3.9</span></code> floor. <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>
+is supported too, but only where <code class="docutils literal notranslate"><span class="pre">tomllib</span></code> is importable (stdlib only from
+Python 3.11) — on an older interpreter it isn’t there, and denver says so
+with a clear error instead of silently misreading it. When a directory
+holds more than one, denver picks in this order: <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>, then
+<code class="docutils literal notranslate"><span class="pre">denver.yaml</span></code>, then <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>. Every example on this page is TOML, but
+the schema is the same either way — only the syntax differs.</p>
+</section>
 </section>
 <section id="core-model">
 <h2>Core model<a class="headerlink" href="#core-model" title="Link to this heading"></a></h2>
