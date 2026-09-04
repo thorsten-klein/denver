@@ -31,6 +31,12 @@ jobs:
   examples:
     needs: binary
     runs-on: ubuntu-latest
+    # the venvs below and uv's cache land on different filesystems on this
+    # runner, so uv's default hardlinking can't work -- asking for a copy
+    # up front avoids the "falling back to full copy" warning uv would
+    # otherwise print for every install.
+    env:
+      UV_LINK_MODE: copy
     strategy:
       # every mode reported, not just the first to break. Which modes fail is
       # the whole signal here -- a fault in one of them says something quite
@@ -48,7 +54,7 @@ jobs:
         # is left to the develop push and to a manual 'Run workflow'.
         example: ${{ (github.event_name == 'pull_request' && fromJSON('["simple-env", "firmware-env"]')) || fromJSON('["simple-env", "raspberry-pico", "firmware-env", "zephyr-devshell-4.3.1"]') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # denver derives its own version from the checkout's git tags (see
           # denver.py's scm_version), and the default shallow, tagless
@@ -58,11 +64,11 @@ jobs:
           # the version setuptools-scm baked in at build time instead -- also
           # from these tags, so they need them just as much.
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
         with:
-          enable-cache: true
+          enable-cache: false
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: denver-binary
           path: /tmp/denver-binary

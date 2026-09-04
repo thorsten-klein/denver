@@ -25,6 +25,7 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
+from typing import Literal
 from urllib.error import HTTPError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
@@ -606,7 +607,21 @@ class DownloadProvider(Provider):
             self._run_unpack_cmd(ctx, pkg, raw_pkg, archive, staging)
             return
         try:
-            shutil.unpack_archive(archive, staging)
+            try:
+                # 'data' is tarfile's safe extraction filter (Python 3.12+);
+                # 3.14 makes it the default even without asking, so pass it
+                # explicitly where it's accepted rather than have behaviour
+                # change out from under this call on 3.14. Passed via a dict
+                # rather than as a literal named argument -- SonarCloud's
+                # Python stub for this call predates the 3.12 'filter'
+                # parameter and flags the literal form as an unknown kwarg.
+                filter_kwargs: dict[str, Literal["data"]] = {"filter": "data"}
+                shutil.unpack_archive(archive, staging, **filter_kwargs)
+            except TypeError:
+                # not every unpack backend takes 'filter': zip's never
+                # gained the parameter, and tar's didn't before 3.12 --
+                # either way, plain extraction is the only option here.
+                shutil.unpack_archive(archive, staging)
         except shutil.ReadError:
             # not an archive python recognises: a bare binary release (a
             # single executable, an AppImage). The download *is* the payload,
