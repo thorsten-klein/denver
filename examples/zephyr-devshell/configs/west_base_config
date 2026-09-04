@@ -9,4 +9,4 @@ auto-cache = /var/tmp/west/auto-cache
 auto-cache = /var/tmp/west/blobs-auto-cache
 
 [alias]
-build-llvm =             build --cmake-opt=-DZEPHYR_TOOLCHAIN_VARIANT=llvm
+build-llvm =             build --cmake-opt=-DZEPHYR_TOOLCHAIN_VARIANT=host/llvm

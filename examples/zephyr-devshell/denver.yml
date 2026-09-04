@@ -1,6 +1,6 @@
-version = 1.0
+version: 1.0
 # minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
-denver-version = ">=1.5.2"
+denver-version: ">=1.6.0"
 
 # Shared base for all zephyr-devshell-<version> environments.
 #
@@ -10,7 +10,7 @@ denver-version = ">=1.5.2"
 # their version-pinned bits (requirements, conanfile, blobs, ...).
 
 # Not directly runnable: only inherited via 'import:', never started on its own.
-runnable = false
+runnable: false
 
 # Pipeline stages, run in this order (see src/denver_providers/). conan runs before uv
 # so the python-cache it provides (UV_FIND_LINKS) is available to the offline
@@ -20,19 +20,19 @@ runnable = false
 # into that same running `west` process, can see what it installs. Each
 # entry is a stage id; its section must always declare 'provider: <name>'
 # explicitly (never guessed from the id).
-stages = [
-  "docker",
-  "conan",
-  "uv",
-  "zephyr",
-  "uv-zephyr",
-]
+stages:
+- docker
+- conan
+- uv
+- zephyr
+- uv-zephyr
 
 # The docker provider's config is stacked from the standalone zephyr-docker env
 # (which declares 'provider: docker' itself), including its 'default-cmd:'
 # (the shell to drop into when no command is given).
-[docker]
-import = ["../zephyr-docker"]
+docker:
+  import:
+  - ../zephyr-docker
 
 # Hooks are listed explicitly -- denver does not pick up a hooks/env.sh just
 # because it sits next to this file. 'hooks: <name>:' is a list, and every
@@ -43,14 +43,16 @@ import = ["../zephyr-docker"]
 #
 # 'pre-docker' has to be redeclared here rather than inherited from
 # ../zephyr-docker: hooks only follow the whole-file 'import:' chain (this
-# env's own, above), not the section-level 'import:' the '[docker]' section
+# env's own, above), not the section-level 'import:' the 'docker:' section
 # above uses to stack its compose config -- so zephyr-docker's own
 # 'hooks: pre-docker:' entry (for running it standalone) is never visited by
 # an env that only imports this file. Points at ../zephyr-docker's script
 # directly since that is where create-env.sh actually lives.
-[hooks]
-env = ["hooks/env.sh"]
-pre-docker = ["../zephyr-docker/create-env.sh"]
+hooks:
+  env:
+  - hooks/env.sh
+  pre-docker:
+  - ../zephyr-docker/create-env.sh
 
 # Conan: base classes + shared recipes live here; version envs add the
 # conanfile and their own recipes. 'base-classes' is env-wide, so it is
@@ -60,27 +62,28 @@ pre-docker = ["../zephyr-docker/create-env.sh"]
 # own here: 'conanfile:' (which conanfile to install) and 'recipes:' (which
 # dirs to export) are independent, and this base has no conanfile at all.
 # Each version env lists '../zephyr-devshell/conan/recipes' in its own
-# 'recipes:' entry instead -- see ../zephyr-devshell-4.3.1/denver.toml.
-[conan]
-provider = "conan"
-base-classes = ["conan/base_classes"]
+# 'recipes:' entry instead -- see ../zephyr-devshell-4.3.1/denver.yml.
+conan:
+  provider: conan
+  base-classes:
+  - conan/base_classes
 
 # uv/zephyr/uv-zephyr are fully configured by the version-specific env
 # that imports this base; only their provider type is declared here.
-[uv]
-provider = "uv"
+uv:
+  provider: uv
 
-[zephyr]
-provider = "zephyr"
-
-# JLink debugger udev rule, so it's usable without root on the host --
-# not built/run every time, run via `denver run <env> --scripts setup`.
-[zephyr.scripts]
-setup = ["setup/install_jlink_udev_rules.sh"]
+zephyr:
+  provider: zephyr
+  # JLink debugger udev rule, so it's usable without root on the host --
+  # not built/run every time, run via `denver run <env> --scripts setup`.
+  scripts:
+    setup:
+    - setup/install_jlink_udev_rules.sh
 
 # west's own extension commands need whatever pip packages the workspace's
 # modules declare (via `west packages pip`) importable in the same running
 # `west` process -- so this shares the 'uv' stage's venv (no 'venv:' here)
 # rather than getting an isolated one of its own.
-[uv-zephyr]
-provider = "uv"
+uv-zephyr:
+  provider: uv

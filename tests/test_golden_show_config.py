@@ -3,7 +3,7 @@ output must match a checked-in golden file.
 
 This is the gap the rest of the suite leaves open -- everything else mocks
 subprocess.run/shutil.which/os.execvpe and drives providers through small,
-synthetic configs. Nothing takes a real denver.toml from examples/, runs it
+synthetic configs. Nothing takes a real denver.yml from examples/, runs it
 through the whole resolver, and checks the result against a known-good
 snapshot -- so a resolver regression in a real env's config only shows up by
 manually diffing --show-config output. These tests catch that automatically.
@@ -29,9 +29,6 @@ import denver
 import denver_providers.context as context_provider
 import denver_providers.zephyr as zephyr_provider
 
-# every bundled examples/*/ env is a denver.toml -- needs tomllib (Python 3.11+)
-requires_tomllib = pytest.mark.skipif(denver.tomllib is None, reason="tomllib is stdlib only from Python 3.11")
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GOLDEN_DIR = Path(__file__).resolve().parent / "golden"
 FAKE_WEST_TOPDIR = "/fake-west-topdir"
@@ -40,9 +37,9 @@ FAKE_DENVER_VERSION = "999.0.0"
 
 
 def _tracked_env_names():
-    """Env dir names with a denver.toml tracked in git -- not e.g. a developer's local scratch env under examples/."""
+    """Env dir names with a denver.yml tracked in git -- not e.g. a developer's local scratch env under examples/."""
     result = subprocess.run(
-        ["git", "ls-files", "examples/*/denver.toml"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ["git", "ls-files", "examples/*/denver.yml"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
     )
     return sorted(Path(line).parent.name for line in result.stdout.splitlines() if line)
 
@@ -52,7 +49,6 @@ def _normalize(text):
     return text.replace(str(REPO_ROOT), "<REPO>")
 
 
-@requires_tomllib
 @pytest.mark.parametrize("env_name", _tracked_env_names())
 def test_show_config_matches_golden(env_name, capsys, monkeypatch, which):
     monkeypatch.setenv("WEST_TOPDIR", FAKE_WEST_TOPDIR)

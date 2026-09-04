@@ -1,5 +1,5 @@
 version: '1.0'
-denver-version: '>=1.5.2'
+denver-version: '>=1.6.0'
 hooks:
   env: null
   post-print-vars-after: null

@@ -10,11 +10,11 @@ else.
 
 denver itself holds no per-provider knowledge — it only calls whichever
 provider type a stage's `provider:` key names. A provider is a generic,
-reusable engine; every project-specific detail comes from `denver.toml`,
+reusable engine; every project-specific detail comes from `denver.yml`,
 never from the provider's own code.
 
 The test this principle has to pass: could this provider be dropped into a
-completely unrelated project's `denver.toml`, with zero code changes, and
+completely unrelated project's `denver.yml`, with zero code changes, and
 just work off that project's own config? If a provider ever needs an `if
 project == "x"` branch, genericity has already failed.
 
@@ -22,12 +22,12 @@ project == "x"` branch, genericity has already failed.
 
 denver never guesses that a file exists because it happens to sit in a
 conventional place. There's no "if there's a `docker-compose.yml` next to
-the `denver.toml`, use it," no "if there's a `conan/recipes` directory,
+the `denver.yml`, use it," no "if there's a `conan/recipes` directory,
 scan it." Every path an env needs — a compose file, a recipe dir, a
 skip-on-success/skip-on-failure script — is named explicitly, and a venv patch step is
 run only if `patches-apply:` names the exact command for it.
 
-What this buys: an env's `denver.toml` is a complete, honest description of
+What this buys: an env's `denver.yml` is a complete, honest description of
 what it does. Reading it (or running `--show-config-full`, which — unlike
 the minimal-by-default `--show-config` — shows every key a stage's own
 provider understands, unset ones included) tells you everything; nothing is
@@ -74,7 +74,7 @@ explicit escape hatch for the rare case a fingerprint gets it wrong.
 
 ## Reproducibility as a first-class goal
 
-The same `denver.toml`, run on a fresh clone and on a six-month-old working
+The same `denver.yml`, run on a fresh clone and on a six-month-old working
 copy, should produce the same environment — not one shaped by whatever
 history happens to be sitting on that particular machine.
 

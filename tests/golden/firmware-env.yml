@@ -1,5 +1,5 @@
 version: '1.0'
-denver-version: '>=1.5.2'
+denver-version: '>=1.6.0'
 command: bash
 env:
   CONAN_HOME: ${DENVER_ENV_DIR}/.conan2
