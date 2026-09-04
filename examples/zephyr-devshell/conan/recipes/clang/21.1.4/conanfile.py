@@ -24,4 +24,3 @@ class ConanRecipe(DenverConanFile):
             archive = Path(self.source_folder) / self.exports_sources[0]
             self.run(f"tar -xf {archive}")
             self.run("mv */* .")
-            self.run("cd bin && ln -s ld.lld ld")

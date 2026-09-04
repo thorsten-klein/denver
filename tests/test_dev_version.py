@@ -38,9 +38,9 @@ GOLDEN_DIR = Path(__file__).resolve().parent / "golden"
 
 
 def _tracked_env_names():
-    """Env dir names with a denver.toml tracked in git -- mirrors test_golden_show_config."""
+    """Env dir names with a denver.yml tracked in git -- mirrors test_golden_show_config."""
     result = subprocess.run(
-        ["git", "ls-files", "examples/*/denver.toml"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+        ["git", "ls-files", "examples/*/denver.yml"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
     )
     return sorted(Path(line).parent.name for line in result.stdout.splitlines() if line)
 

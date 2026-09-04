@@ -12,7 +12,7 @@ Development Environments as code — reproducible, flexible, simple and fast.
 
 ## Introduction
 
-Start here if you have never seen a `denver.toml`.
+Start here if you have never seen a `denver.yml`.
 
 - [About denver](introduction/index.md)
 - [Install denver](introduction/install.md)
@@ -81,9 +81,10 @@ cli/environment-variables
 
 ## Configuration
 
-The complete `denver.toml` reference: every top-level key, every generic
-stage key, how `import:` chains merge, and the mechanisms behind layering,
-hooks, overrides and fingerprinting.
+The complete config schema reference (`denver.yml`, denver's default, or
+`denver.toml`): every top-level key, every generic stage key, how `import:`
+chains merge, and the mechanisms behind layering, hooks, overrides and
+fingerprinting.
 
 - [denver.toml](configuration/denver-toml.md)
 
@@ -98,7 +99,7 @@ configuration/denver-toml
 ## Providers
 
 One page per provider: a full key reference for that provider's
-`denver.toml` section (every key, what it does, its default) plus design
+`denver.yml` section (every key, what it does, its default) plus design
 notes on the patterns it supports and how it behaves under
 `--fast`/`--force`.
 

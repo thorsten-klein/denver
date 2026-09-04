@@ -103,7 +103,7 @@ a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
   it. Scoped to the stage's own venv (see `venv:` above) -- pointing the
   stage at a different venv starts that venv off with no prior args to
   amend onto. On by default; set `false` for a venv that must depend only on
-  the current `denver.toml`, not this machine's run history.
+  the current `denver.yml`, not this machine's run history.
 
 `patches-apply` is never guessed from the env's directory layout (see
 "Explicit over implicit" in [`../concepts/philosophy.md`](../concepts/philosophy.md)) —

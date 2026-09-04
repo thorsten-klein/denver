@@ -1,0 +1,53 @@
+version: 1.0
+# minimum denver (the tool) this env needs -- see doc/configuration/denver-toml.md
+denver-version: ">=1.6.0"
+
+stages:
+- host-tools
+- arm-none-eabi
+- pico-sdk
+- picotool
+- build-picotool
+
+host-tools:
+  provider: custom
+  description:
+  - The apt packages the stages below need (cmake, build-essential, libusb-1.0-0-dev) -- installing them needs sudo, so it never happens as part of a normal 'denver run'; only once, explicitly, via 'denver run examples/raspberry-pico --scripts setup'. This stage's own cmd only checks they are actually there and fails loud, with that command, if not.
+  cmd: bash ${DENVER_ENV_DIR}/setup/check_host_tools.sh
+  scripts:
+    setup:
+    - setup/install_host_tools.sh
+
+arm-none-eabi:
+  provider: download
+  packages:
+  - name: arm-none-eabi
+    url: https://gitlab.arm.com/api/v4/projects/tooling%2Fgnu-toolchains-for-arm/packages/generic/gnu-toolchain/15.3.rel1/arm-gnu-toolchain-15.3.rel1-x86_64-arm-none-eabi.tar.xz
+    md5sum: bbe1e4bf65591692ed93cd19706c93af
+    unpack-cmd: 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'
+    env-prepend:
+      PATH: "${DENVER_UNPACK_DIR}/bin:"
+
+pico-sdk:
+  provider: git
+  url: https://github.com/raspberrypi/pico-sdk.git
+  path: "${DENVER_ENV_WORKDIR}/pico-sdk"
+  revision: "2.3.0"
+  submodules: true
+  env:
+    PICO_SDK_PATH: "${DENVER_ENV_WORKDIR}/pico-sdk"
+
+picotool:
+  provider: git
+  url: https://github.com/raspberrypi/picotool.git
+  path: "${DENVER_ENV_WORKDIR}/picotool"
+  revision: "2.3.0"
+  env:
+    PICOTOOL_SRC: "${DENVER_ENV_WORKDIR}/picotool"  # scalar path -- see 'pico-sdk's own env: above
+
+build-picotool:
+  provider: custom
+  description:
+  - "Builds picotool from the 'picotool' git checkout against the 'pico-sdk' git checkout, via cmake, and puts it on PATH. Same 'cmd: builds, source: activates' split as 'host-tools' above, just with a build instead of an apt-get check."
+  cmd: "${DENVER_ENV_DIR}/setup/build_picotool.sh"
+  source: setup/activate_picotool.sh

@@ -87,26 +87,25 @@ For more details see **[Shell completion →](https://github.com/thorsten-klein/
 
 ## Try it out
 
-Have a look at the `examples/simple-env/denver.toml`:
-```bash
-stages = [
-  "print-vars-before",
-  "set-vars",
-  "print-vars-after",
-]
+Have a look at the `examples/simple-env/denver.yml`:
+```yaml
+stages:
+- print-vars-before
+- set-vars
+- print-vars-after
 
-[print-vars-before]
-provider = "custom"
-cmd = 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
+print-vars-before:
+  provider: custom
+  cmd: 'echo "[print-vars-before] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
 
-[set-vars]
-provider = "custom"
-cmd = 'echo "[set-vars] sourcing custom.sh..."'
-source = "custom.sh"
+set-vars:
+  provider: custom
+  cmd: 'echo "[set-vars] sourcing custom.sh..."'
+  source: custom.sh
 
-[print-vars-after]
-provider = "custom"
-cmd = 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
+print-vars-after:
+  provider: custom
+  cmd: 'echo "[print-vars-after] MYVAR=$MYVAR FOO=$FOO BAR=$BAR"'
 ```
 
 As you can see, this environment consists of three stages.

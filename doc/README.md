@@ -34,8 +34,8 @@ This tree is denver's full reference
 ## Configuration
 
 - **[`configuration/denver-toml.md`](configuration/denver-toml.md)** —
-  Explains the complete `denver.toml` schema. This is the page to read
-  before writing your own `denver.toml`.
+  Explains the complete config schema (`denver.yml`, denver's default, or
+  `denver.toml`). This is the page to read before writing your own.
 
 ## Providers
 
