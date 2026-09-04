@@ -698,6 +698,14 @@ def test_dunder_complete_completes_stage_ids_for_until_and_skip(tmp_path, capsys
     assert capsys.readouterr().out.splitlines() == ["docker"]
 
 
+def test_dunder_complete_completes_format_values(capsys):
+    assert denver.main(["__complete", "run", "e", "--format", ""]) == 0
+    assert set(capsys.readouterr().out.splitlines()) == {"yml", "toml"}
+
+    assert denver.main(["__complete", "run", "e", "--format", "to"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["toml"]
+
+
 def test_dunder_complete_stage_ids_empty_without_an_env_yet(capsys):
     # --until given before <env> -- env_value is None, so there's nothing to
     # read 'stages:' from yet (see _completion_env_paths' own empty check).

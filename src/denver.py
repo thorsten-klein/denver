@@ -21,10 +21,12 @@ own ``scripts:`` entries instead of the normal pipeline (e.g. ``setup``,
 ``--login`` are shorthand for ``--scripts setup`` and ``--scripts login``.
 ``--show-config`` prints the fully resolved, deep-merged config as YAML and
 exits, dropping every key left unset so only keys with an actual value
-remain -- always YAML, regardless of whether the env itself is a
-denver.yml or a denver.toml. ``--show-config-full`` does the same but
-keeps every key left unset too, each shown as an explicit ``key: null``
-line.
+remain -- YAML by default regardless of whether the env itself is a
+denver.yml or a denver.toml, or TOML with ``--format toml`` (``--format
+yml`` is the explicit spelling of the default). ``--show-config-full``
+does the same but keeps every key left unset too, each shown as an
+explicit ``key: null`` line (YAML) or a commented-out ``# key = null``
+line (TOML has no ``null``).
 
 ``complete`` prints a script wiring up completion for the installed
 ``denver`` command, for the given shell (bash/fish/zsh) or, if omitted,
@@ -2870,10 +2872,366 @@ def _provider_keys(section):
     return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
+# --------------------------------------------------------------------------- #
+# --show-config rendering
+# --------------------------------------------------------------------------- #
+def supports_color(stream=None):
+    """Whether ``stream`` (default: stdout) is a real terminal that would render ANSI color.
+
+    Used to decide --show-config's own syntax highlighting (see dump_toml).
+    ``NO_COLOR`` (https://no-color.org -- any non-empty value) always wins
+    when set: an explicit, universal opt-out. ``FORCE_COLOR`` is the
+    matching opt-in, for a pipeline that redirects stdout but still wants
+    color (e.g. piping through ``less -R``) -- checked after ``NO_COLOR``,
+    so an explicit "no" still wins over an explicit "yes" if a caller
+    somehow sets both. ``TERM=dumb`` is the traditional "this terminal
+    doesn't do escape codes at all" signal. Otherwise, color only makes
+    sense talking to a real terminal, not a file or another program's
+    stdin -- hence the ``isatty()`` fallback.
+    """
+    stream = sys.stdout if stream is None else stream
+    if os.environ.get("NO_COLOR"):
+        return False
+    if os.environ.get("FORCE_COLOR"):
+        return True
+    if os.environ.get("TERM") == "dumb":
+        return False
+    return stream.isatty()
+
+
+# Bright-* (9x) ANSI codes, reset to default foreground (\033[39m) rather than
+# a full \033[0m -- same convention as every other color code in this codebase
+# (context.py's banner()/stage_banner()/etc, the blue "finished in Ns" lines
+# below) needs no different reset story. One color per syntactic role, chosen
+# to stay distinct from those existing yellow/blue banners even though the
+# two are never on screen at once (--show-config never runs a stage).
+_TOML_HEADER_COLOR = "\033[95m"  # [section] / [[section]]
+_TOML_KEY_COLOR = "\033[96m"  # # a 'key = ...' line
+_TOML_STRING_COLOR = "\033[92m"  # "..." / '''...'''
+_TOML_SCALAR_COLOR = "\033[93m"  # true/false, numbers
+_TOML_COMMENT_COLOR = "\033[90m"  # a '# key = null' line -- unset, de-emphasized
+_TOML_RESET = "\033[39m"
+
+# Set once per dump_toml() call (see there), consulted by _c() -- the same
+# "module global, not threaded through every function" pattern context.py's
+# _quiet_level/_verbose already use for banner()/info(), for the same reason:
+# threading a `color` bool through every one of dump_toml's dozen small
+# recursive helpers would obscure what each is actually building.
+_toml_color_enabled = False
+
+
+def _c(code, text):
+    r"""Wrap ``text`` in ANSI color ``code``, reset after -- a no-op unless dump_toml() was asked for color.
+
+    Every call site here opens and closes its own span; none ever nests one
+    of these inside another. That matters because \033[39m resets to
+    *default* foreground, not "whatever the enclosing span's color was" --
+    nesting two spans would truncate the outer one right at the inner
+    span's own reset. dump_toml()'s own helpers are written so no call site
+    ever needs to: a colored key/value pair's two spans are always
+    separated by plain punctuation (` = `, `, `, ...), and a '[section]'
+    header or '# key = null' comment line colors itself as one single span,
+    built from the *plain* (uncolored) _toml_key()/_toml_path(), never the
+    already-colored key text a real 'key = value' line uses.
+    """
+    if not _toml_color_enabled or not text:
+        return text
+    return f"{code}{text}{_TOML_RESET}"
+
+
+def dump_toml(data, *, color=False):
+    """A minimal, hand-written TOML rendering of ``data`` for --show-config.
+
+    Covers exactly the shapes a resolved denver config can take (nested dicts, lists of scalars or of
+    dicts, strings, numbers, bools, ``None``), not the full TOML spec. No dependency needed: this is
+    denver's own display format, not something round-tripped through a TOML library.
+
+    TOML has no ``null`` -- a ``None`` value (fill_unset()'s placeholder for a documented-but-unset
+    key, see show_config) is rendered as a commented-out ``# key = null`` line instead of dropping it
+    silently, so --show-config-full's "every possible key, unset ones included" contract still holds
+    (the default --show-config drops ``None`` values before they ever reach here -- see show_config's
+    own ``minimal`` handling).
+
+    ``color`` (see supports_color) turns on ANSI syntax highlighting -- off
+    by default, since every non-CLI caller (tests writing a synthetic
+    denver.toml to disk, mostly) wants the plain text a real TOML file is.
+    """
+    global _toml_color_enabled
+    _toml_color_enabled = color
+    try:
+        lines = []
+        _dump_toml_table(data, (), lines)
+        return "\n".join(lines) + ("\n" if lines else "")
+    finally:
+        _toml_color_enabled = False
+
+
+def _dump_toml_table(table, path, lines):
+    """Append the whole document's TOML rendering to ``lines``.
+
+    Plain keys (scalars, ``None``, arrays) come first, then nested tables/array-of-tables get their
+    own '[section]'/'[[section]]' header -- TOML requires a table's own keys to precede its
+    sub-tables, so grouping here (rather than emitting strictly in ``table``'s own key order) is
+    unavoidable; each group keeps its own relative order.
+
+    Only this top level hands out '[section]' headers to plain tables; everything below one is
+    rendered inline -- see _dump_toml_section_body.
+    """
+    plain, nested = _toml_partition_table(table)
+    for key, value in plain:
+        _dump_toml_plain_key(key, value, lines)
+    for key, value in nested:
+        _dump_toml_nested_key(value, (*path, key), lines)
+
+
+def _dump_toml_section_body(table, path, lines):
+    """Append one section's own keys: nested tables inline, arrays of tables as '[[...]]' blocks.
+
+    A sub-table could equally get a '[a.b]' header of its own -- valid TOML, and what the document's
+    top level does. Below that, a header buys nothing and costs clarity: it moves the sub-table an
+    arbitrary distance away from the section it belongs to, and under a '[[a.b]]' entry it is
+    outright ambiguous, since such a header attaches to whichever entry precedes it *by position*
+    with nothing on the line saying which one. So a section is rendered self-contained: one line per
+    key, nested tables as inline '{ ... }' tables, the way they are written by hand.
+
+    Two shapes are still given a header of their own at any depth -- see _toml_needs_header.
+    """
+    plain, headed = _toml_partition_section(table)
+    for key, value in plain:
+        _dump_toml_plain_key(key, value, lines)
+    for key, value in headed:
+        _dump_toml_nested_key(value, (*path, key), lines)
+
+
+def _toml_partition_section(table):
+    """``table``'s items split into (inline, still-needs-a-header) -- see _dump_toml_section_body."""
+    plain = [(k, v) for k, v in table.items() if not _toml_needs_header(v)]
+    headed = [(k, v) for k, v in table.items() if _toml_needs_header(v)]
+    return plain, headed
+
+
+def _toml_needs_header(value):
+    """Whether ``value`` still needs a '[section]'/'[[section]]' header below the document's top level.
+
+    Only two shapes do. An **array of tables**, because its entries stay far more readable as blocks
+    of one key per line than as one flattened line each. And a **table holding an unset key**
+    somewhere inside it, because an unset key renders as a ``# key = null`` comment line (see
+    _dump_toml_plain_key) and TOML has no way to put a comment inside an inline table -- so such a
+    table keeps its header rather than losing the key from --show-config-full altogether.
+    """
+    if isinstance(value, dict):
+        return bool(value) and not _toml_inlinable(value)
+    return _toml_is_array_of_tables(value)
+
+
+def _toml_inlinable(value):
+    """Whether ``value`` can be rendered inline at all: nothing unset (``None``) anywhere inside it."""
+    pending = [value]
+    while pending:
+        current = pending.pop()
+        if current is None:
+            return False
+        pending.extend(_toml_nested_values(current))
+    return True
+
+
+def _toml_nested_values(value):
+    """The values sitting directly inside ``value``: a table's values, an array's entries, else none."""
+    if isinstance(value, dict):
+        return list(value.values())
+    if isinstance(value, list):
+        return value
+    return []
+
+
+def _toml_partition_table(table):
+    """``table``'s items split into (plain, nested) -- see _dump_toml_table for why the split matters."""
+    plain = [(k, v) for k, v in table.items() if not _toml_is_table_like(v)]
+    nested = [(k, v) for k, v in table.items() if _toml_is_table_like(v)]
+    return plain, nested
+
+
+def _dump_toml_plain_key(key, value, lines):
+    """Append one plain (non-table-like) ``key = value`` line -- commented out (``None``) if unset."""
+    if value is None:
+        # the whole line is one comment span -- built from the plain _toml_key(),
+        # not a colored one, see _c's own docstring for why
+        lines.append(_c(_TOML_COMMENT_COLOR, f"# {_toml_key(key)} = null"))
+    else:
+        lines.append(f"{_c(_TOML_KEY_COLOR, _toml_key(key))} = {_toml_value(value)}")
+
+
+def _dump_toml_nested_key(value, child_path, lines):
+    """Append one table-like key's '[section]' (a dict) or '[[section]]' blocks (a list of dicts)."""
+    if lines and lines[-1] != "":
+        lines.append("")
+    if isinstance(value, dict):
+        lines.append(_c(_TOML_HEADER_COLOR, f"[{_toml_path(child_path)}]"))
+        _dump_toml_section_body(value, child_path, lines)
+    else:
+        _dump_toml_array_of_tables(value, child_path, lines)
+
+
+def _dump_toml_array_of_tables(entries, child_path, lines):
+    """Append one '[[section]]' block per entry of a non-empty list of dicts."""
+    for i, entry in enumerate(entries):
+        if i:
+            lines.append("")
+        lines.append(_c(_TOML_HEADER_COLOR, f"[[{_toml_path(child_path)}]]"))
+        _dump_toml_section_body(entry, child_path, lines)
+
+
+def _toml_is_table_like(value):
+    """Whether ``value`` needs a '[section]'/'[[section]]' header rather than an inline value.
+
+    True for a non-empty dict, or a non-empty list whose entries are all dicts. An empty dict/list is
+    rendered inline instead ('{}'/'[]') -- a header with nothing under it would be a pointless empty
+    section.
+    """
+    if isinstance(value, dict):
+        return bool(value)
+    return _toml_is_array_of_tables(value)
+
+
+def _toml_is_array_of_tables(value):
+    """Whether ``value`` is a non-empty list of dicts -- the one shape still given '[[section]]' headers at any depth."""
+    return isinstance(value, list) and bool(value) and all(isinstance(v, dict) for v in value)
+
+
+_TOML_BARE_KEY_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _toml_key(key):
+    """One TOML key -- bare, or quoted if it isn't plain identifier-ish text.
+
+    Bare covers every real denver.toml key (letters/digits/underscore/dash); anything else is quoted.
+    """
+    key = str(key)
+    return key if _TOML_BARE_KEY_RE.match(key) else _toml_string(key)
+
+
+def _toml_path(path):
+    """A dotted '[a.b.c]'/'[[a.b.c]]' table header path from a tuple of keys."""
+    return ".".join(_toml_key(p) for p in path)
+
+
+def _toml_value(value):
+    """One TOML value expression: a scalar, an array, or a table rendered inline.
+
+    A dict reaches here either because it is empty (never worth a header of its own, see
+    _toml_is_table_like) or because it sits below the document's top level, which is rendered
+    self-contained -- see _dump_toml_section_body.
+    """
+    if isinstance(value, dict):
+        return _toml_inline_table(value)
+    if isinstance(value, list):
+        return _toml_array(value)
+    return _toml_scalar(value)
+
+
+def _toml_array(values):
+    """A multi-line TOML array literal, one entry per line.
+
+    Denver's config lists (file paths, requirements, ...) are usually short, but this stays readable
+    even when they aren't.
+    """
+    if not values:
+        return "[]"
+    entries = ",\n".join(f"  {_toml_inline_value(v)}" for v in values)
+    return f"[\n{entries},\n]"
+
+
+def _toml_inline_value(value):
+    """One TOML value for an array *entry*.
+
+    Like ``_toml_value``, but a dict/list entry can't get its own '[section]' header (arrays have no
+    headers), so a non-empty dict renders as an inline table (``{ k = v, ... }``) here instead. Reached
+    for e.g. a malformed ``denver-custom-args:`` entry mixing mapping and non-mapping items in one list -- not
+    table-like as a whole (see _toml_is_table_like), but each dict entry in it still needs *some*
+    rendering.
+    """
+    if isinstance(value, dict):
+        return _toml_inline_table(value)
+    if isinstance(value, list):
+        return _toml_array(value)
+    return _toml_scalar(value)
+
+
+def _toml_inline_table(value):
+    """One inline TOML table (``{ k = v, ... }``) for a dict reached outside a '[section]' context."""
+    if not value:
+        return "{}"
+    items = ", ".join(f"{_c(_TOML_KEY_COLOR, _toml_key(k))} = {_toml_single_line_value(v)}" for k, v in value.items())
+    return "{ " + items + " }"
+
+
+def _toml_single_line_value(value):
+    """One TOML value rendered without a line break, as an inline table's values must be.
+
+    TOML allows an array to span lines (_toml_array's normal rendering) but never an inline table:
+    everything between its braces has to sit on one line, so an array *inside* one is written out
+    flat here rather than one entry per line.
+    """
+    if isinstance(value, dict):
+        return _toml_inline_table(value)
+    if isinstance(value, list):
+        return "[" + ", ".join(_toml_single_line_value(v) for v in value) + "]"
+    return _toml_scalar(value)
+
+
+def _toml_scalar(value):
+    """One TOML scalar literal -- bool/int/float/str.
+
+    Anything else (e.g. a bare ``None`` reaching here, which shouldn't happen -- fill_unset() only
+    ever nulls a dict *value*, never a list entry) is a bug in the caller, so this raises rather than
+    silently rendering something wrong.
+
+    Colored here, not in a wrapper around the call site: unlike a key (see
+    _c's docstring), a scalar's own text is never reused for anything but
+    itself -- there's no header/comment context it also has to serve plain.
+    """
+    if isinstance(value, bool):
+        return _c(_TOML_SCALAR_COLOR, "true" if value else "false")
+    if isinstance(value, (int, float)):
+        return _c(_TOML_SCALAR_COLOR, repr(value))
+    if isinstance(value, str):
+        return _c(_TOML_STRING_COLOR, _toml_string(value))
+    raise TypeError(f"cannot render {value!r} as a TOML scalar")
+
+
+def _toml_string(value):
+    r"""A TOML string literal for ``value``.
+
+    A multi-line literal string ('''...''') for embedded newlines (matches YAML's '|' block scalars
+    almost exactly -- raw content, no escaping needed), falling back to an escaped basic string
+    otherwise (or if the content itself contains ''').
+
+    The ``\n`` placed right after the opening ``'''`` below is a pure formatting separator (so the
+    content starts on its own line) -- TOML's own "trim one newline immediately after the opening
+    delimiter" rule removes exactly that one on read-back, regardless of what ``value`` itself starts
+    with, so this always round-trips to ``value`` unchanged.
+    """
+    if "\n" in value and "'''" not in value:
+        return f"'''\n{value}'''"
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return '"' + escaped.replace("\n", "\\n") + '"'
+
+
 def show_config(
-    env_dir, config, config_path, until_stage=None, skip_stages=(), *, cli_args=None, env_vars=None, minimal=False
+    env_dir,
+    config,
+    config_path,
+    until_stage=None,
+    skip_stages=(),
+    *,
+    cli_args=None,
+    env_vars=None,
+    minimal=False,
+    format="yml",
 ):
-    """Print the fully resolved config as YAML -- exactly what the real run would use.
+    """Print the fully resolved config -- exactly what the real run would use.
+
+    Rendered as YAML, or TOML with ``format="toml"`` (see --format).
 
     Whole-file 'import:' stacking, section-level 'import:' stacking, and
     every provider's defaults are all baked in. 'stages:' is narrowed by
@@ -2917,7 +3275,10 @@ def show_config(
             ordered[stage_id] = _drop_defaulted_stage_keys(ordered[stage_id], ctx.raw_sections.get(stage_id, {}))
         ordered = _drop_null_values(ordered)
 
-    print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
+    if format == "toml":
+        print(dump_toml(ordered, color=supports_color()))
+    else:
+        print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
 
 
 def _drop_defaulted_stage_keys(section, raw_section):
@@ -3573,7 +3934,14 @@ def _add_run_parser(subparsers, config_args):
     run_p.add_argument(
         "--show-config-full",
         action="store_true",
-        help="like --show-config, but keeps every key left unset too (shown as an explicit 'key: null' line)",
+        help="like --show-config, but keeps every key left unset too (shown as an explicit 'key: null' line, "
+        "or a commented-out '# key = null' line with --format toml)",
+    )
+    run_p.add_argument(
+        "--format",
+        choices=["yml", "toml"],
+        default="yml",
+        help="with --show-config/--show-config-full: render the output as this format instead of the default yml",
     )
     run_p.add_argument(
         "-q",
@@ -3856,6 +4224,7 @@ _RUN_FLAGS = [
     "--clean",
     "--show-config",
     "--show-config-full",
+    "--format",
     "--fast",
     "--force",
     "--ci",
@@ -3888,6 +4257,7 @@ _VALUE_FLAGS = {
     "--skip",
     "--scripts",
     "--export-env",
+    "--format",
 }
 _PATH_VALUE_FLAGS = ("-c", "--config", "-cf", "--config-file")  # see _pending_flag_value_candidates
 
@@ -4000,6 +4370,8 @@ def _pending_flag_value_candidates(pending_flag, env_value, cur):
         return _matching(_completion_script_names(env_value), cur)
     if pending_flag in ("-e", "--env"):
         return _matching(list(os.environ), cur)
+    if pending_flag == "--format":
+        return _matching(["yml", "toml"], cur)
     if pending_flag is not None:
         return []  # _PATH_VALUE_FLAGS: no sensible dynamic completion; shell filename fallback takes over
     return None
@@ -4976,6 +5348,7 @@ def _handle_config_subcommands(args, env_dir, config, config_path, *, cli_args=N
             # --show-config-full wins if both are given -- more keys is the
             # more inclusive ask, so it's the natural tiebreaker.
             minimal=not args.show_config_full,
+            format=args.format,
         )
         return True
 

@@ -892,6 +892,41 @@ def test_main_show_config_flag_from_a_denver_yml(tmp_path, capsys, which):
     assert printed["uv"]["requirements"] == ["r.txt"]
 
 
+def test_main_show_config_format_toml_flag(tmp_path, capsys, which):
+    # --format toml renders the same resolved config as TOML instead of the
+    # default YAML -- works from a denver.yml source too, --format is about
+    # the *output*, unrelated to which format the env itself is written in.
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        stages:
+        - uv
+        uv:
+          provider: uv
+          python: 3.12.3
+        """)
+    )
+
+    assert denver.main(["run", str(env_dir), "--show-config", "--format", "toml"]) == 0
+    out = capsys.readouterr().out
+    # TOML syntax, not YAML -- '[uv]' header, 'key = value', quoted strings
+    assert "[uv]" in out
+    assert 'provider = "uv"' in out
+    assert 'python = "3.12.3"' in out
+    assert "uv:" not in out  # not YAML's own 'key:' syntax
+
+
+def test_main_show_config_format_yml_flag_is_the_explicit_default(tmp_path, capsys, which):
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text('stages:\n- uv\nuv:\n  provider: uv\n')
+
+    assert denver.main(["run", str(env_dir), "--show-config", "--format", "yml"]) == 0
+    printed = yaml.safe_load(capsys.readouterr().out)
+    assert printed["uv"]["provider"] == "uv"
+
+
 def test_main_denver_toml_without_tomllib_dies_with_a_clear_message(tmp_path, monkeypatch, caplog):
     monkeypatch.setattr(denver, "tomllib", None)
     env_dir = tmp_path / "e"
