@@ -18,10 +18,10 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v3
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
-          enable-cache: true
+          enable-cache: false
       - run: uv sync --group lint
       - run: uv run poe pre-commit
       - run: uv run ruff format --check .
@@ -48,16 +48,16 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.13"]
         os: [ubuntu-22.04, ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # denver derives its own version from the checkout's git tags (see
           # denver.py's scm_version), and the default shallow, tagless
           # checkout has none -- leaving it to answer 0.1.dev1, which no
           # example's 'denver-version:' pin is satisfied by.
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
         with:
-          enable-cache: true
+          enable-cache: false
       # the fish/zsh completion tests skip themselves (via shutil.which)
       # when the shell isn't on PATH -- installing both here is what
       # actually exercises them, rather than leaving them permanently
@@ -67,7 +67,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y fish zsh
       - name: Install fish and zsh (macOS)
         if: runner.os == 'macOS'
+        # HOMEBREW_NO_REQUIRE_TAP_TRUST: this step never touches the runner
+        # image's preinstalled aws/tap, so its trust status is not this
+        # step's business -- but brew checks every enabled tap regardless
+        # and warns about it on every 'install'.
         run: brew install fish zsh
+        env:
+          HOMEBREW_NO_REQUIRE_TAP_TRUST: 1
       - run: uv sync --group dev --python ${{ matrix.python-version }}
       - run: uv run poe test
       # coverage/Sonar are properties of the code, not of the OS it ran
@@ -75,18 +81,18 @@ jobs:
       # rather than once per OS.
       - name: Upload coverage reports to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           report_type: test_results
       - name: SonarCloud Scan
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
-        uses: SonarSource/sonarqube-scan-action@v4
+        uses: SonarSource/sonarqube-scan-action@v8
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
@@ -98,15 +104,15 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # setuptools-scm derives the wheel's version from the git tags, so
           # a tagless shallow checkout would build a 0.1.dev1 wheel rather
           # than one named after the release this commit builds on.
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v3
+      - uses: astral-sh/setup-uv@v7
         with:
-          enable-cache: true
+          enable-cache: false
       - run: uv build
       # Installed-mode smoke test: denver's providers must actually be
       # importable and --help must work from the built wheel, in a venv that

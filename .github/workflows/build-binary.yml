@@ -29,10 +29,10 @@ jobs:
     # A PyInstaller binary links the glibc of the machine that built it, and
     # glibc is only backward compatible -- built on ubuntu-latest it would
     # refuse to start on anything older than that runner. AlmaLinux 8 has
-    # glibc 2.28, the oldest that still runs the node20 the actions below
-    # need, which covers every distro from Ubuntu 20.04 / Debian 10 /
-    # Fedora 29 / RHEL 8 onwards. glibc-based distros only -- musl ones
-    # (Alpine) can never run this binary.
+    # glibc 2.28, old enough to cover every distro from Ubuntu 20.04 /
+    # Debian 10 / Fedora 29 / RHEL 8 onwards, and still new enough for the
+    # node24 GitHub injects to run the actions below. glibc-based distros
+    # only -- musl ones (Alpine) can never run this binary.
     container: almalinux:8
     outputs:
       version: ${{ steps.build.outputs.version }}
@@ -43,7 +43,7 @@ jobs:
       - name: Install build prerequisites
         run: dnf -y install python3.12 python3.12-pip git tar xz
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ref }}
           # the version frozen into the binary comes from the tags, and the
@@ -71,7 +71,7 @@ jobs:
       # by create-python-exe.sh, so the version can't be spelled out here --
       # matched by glob instead (see steps.build.outputs.version for callers
       # that need the exact name).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.artifact }}
           path: dist/denver-*-x64-linux.tar.xz
