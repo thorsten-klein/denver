@@ -312,13 +312,17 @@ installs it. In practice an earlier <code class="docutils literal notranslate"><
 <section id="key-reference">
 <h2>Key reference<a class="headerlink" href="#key-reference" title="Link to this heading"></a></h2>
 <ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">topdir</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">WEST_TOPDIR</span></code> (a zephyr concept, not a denver built-in),
+set explicitly. Wins outright over everything else, and is exported as
+<code class="docutils literal notranslate"><span class="pre">WEST_TOPDIR</span></code> (overwriting an already-exported value) so every
+<code class="docutils literal notranslate"><span class="pre">${WEST_TOPDIR}</span></code> substitution elsewhere in this env agrees with it.
+Without it, <code class="docutils literal notranslate"><span class="pre">WEST_TOPDIR</span></code> falls back to an already-exported <code class="docutils literal notranslate"><span class="pre">WEST_TOPDIR</span></code>
+env var (e.g. set by the user, or by an outer denver run before
+re-invoking inside docker), else discovery: walking up from the env dir
+for the nearest enclosing <code class="docutils literal notranslate"><span class="pre">.west</span></code>, or failing that, the <em>outermost</em>
+enclosing <code class="docutils literal notranslate"><span class="pre">.git</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">exe</span></code></strong> (default: <code class="docutils literal notranslate"><span class="pre">&quot;west&quot;</span></code>) — the <code class="docutils literal notranslate"><span class="pre">west</span></code> executable, resolved on <code class="docutils literal notranslate"><span class="pre">PATH</span></code>.</p></li>
-<li><p><strong><code class="docutils literal notranslate"><span class="pre">west-yml</span></code></strong> (default: <code class="docutils literal notranslate"><span class="pre">&lt;WEST_TOPDIR&gt;/west.yml</span></code>) — the manifest.
-<code class="docutils literal notranslate"><span class="pre">WEST_TOPDIR</span></code> (a zephyr concept, not a denver built-in) is discovered by
-walking up from the env dir: the nearest enclosing <code class="docutils literal notranslate"><span class="pre">.west</span></code>, or failing
-that, the <em>outermost</em> enclosing <code class="docutils literal notranslate"><span class="pre">.git</span></code>. Already-exported <code class="docutils literal notranslate"><span class="pre">WEST_TOPDIR</span></code>
-(e.g. set by the user, or by an outer denver run before re-invoking
-inside docker) wins over this discovery.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">west-yml</span></code></strong> (default: <code class="docutils literal notranslate"><span class="pre">&lt;WEST_TOPDIR&gt;/west.yml</span></code>) — the manifest.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">base</span></code></strong> (default: <code class="docutils literal notranslate"><span class="pre">${WEST_TOPDIR}/zephyr-rtos</span></code>) — <code class="docutils literal notranslate"><span class="pre">ZEPHYR_BASE</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">west-config</span></code></strong> — extra/overriding <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">config</span></code> key/value pairs, e.g.
 <code class="docutils literal notranslate"><span class="pre">{zephyr.base-prefer:</span> <span class="pre">env}</span></code>.</p></li>

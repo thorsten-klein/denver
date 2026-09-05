@@ -19,13 +19,17 @@ installs it. In practice an earlier `uv` stage provides it, by listing
 
 ## Key reference
 
+- **`topdir`** — `WEST_TOPDIR` (a zephyr concept, not a denver built-in),
+  set explicitly. Wins outright over everything else, and is exported as
+  `WEST_TOPDIR` (overwriting an already-exported value) so every
+  `${WEST_TOPDIR}` substitution elsewhere in this env agrees with it.
+  Without it, `WEST_TOPDIR` falls back to an already-exported `WEST_TOPDIR`
+  env var (e.g. set by the user, or by an outer denver run before
+  re-invoking inside docker), else discovery: walking up from the env dir
+  for the nearest enclosing `.west`, or failing that, the *outermost*
+  enclosing `.git`.
 - **`exe`** (default: `"west"`) — the `west` executable, resolved on `PATH`.
 - **`west-yml`** (default: `<WEST_TOPDIR>/west.yml`) — the manifest.
-  `WEST_TOPDIR` (a zephyr concept, not a denver built-in) is discovered by
-  walking up from the env dir: the nearest enclosing `.west`, or failing
-  that, the *outermost* enclosing `.git`. Already-exported `WEST_TOPDIR`
-  (e.g. set by the user, or by an outer denver run before re-invoking
-  inside docker) wins over this discovery.
 - **`base`** (default: `${WEST_TOPDIR}/zephyr-rtos`) — `ZEPHYR_BASE`.
 - **`west-config`** — extra/overriding `west config` key/value pairs, e.g.
   `{zephyr.base-prefer: env}`.
