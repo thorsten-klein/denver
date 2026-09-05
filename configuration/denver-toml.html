@@ -349,7 +349,7 @@ different venvs) at different points of the pipeline.</p>
 <p>The following keys are recognised at the top level; everything else at that
 level must be a stage id declared in <code class="docutils literal notranslate"><span class="pre">stages:</span></code> (anything else is an error —
 see “Fail loud” in <a class="reference internal" href="../concepts/philosophy.html"><span class="std std-doc"><code class="docutils literal notranslate"><span class="pre">philosophy.md</span></code></span></a>).</p>
-<ul class="simple">
+<ul>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">version</span></code></strong> — the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> schema version this file is written
 against. The only value this denver understands is <code class="docutils literal notranslate"><span class="pre">&quot;1.0&quot;</span></code>; any other
 value is rejected with a clear message rather than silently
@@ -375,7 +375,15 @@ with an explanatory message. Deliberately <em>not</em> inherited: an env importi
 <code class="docutils literal notranslate"><span class="pre">runnable:</span> <span class="pre">false</span></code> base is itself runnable unless it says otherwise.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">env</span></code></strong> — a mapping of environment variables to set for the whole
 environment (values go through <code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation). Applied once,
-right after the <code class="docutils literal notranslate"><span class="pre">env</span></code> hook, before any stage runs.</p></li>
+right after the <code class="docutils literal notranslate"><span class="pre">env</span></code> hook, before any stage runs. Entries are set one at a
+time, in the order written, so a later entry’s <code class="docutils literal notranslate"><span class="pre">${...}</span></code> can reference an
+earlier one from the same map:</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">env</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">PROJECT_ROOT</span><span class="p">:</span><span class="w"> </span><span class="s">"${DENVER_ENV_DIR}/.."</span>
+<span class="w">  </span><span class="nt">PATH</span><span class="p">:</span><span class="w"> </span><span class="s">"${PROJECT_ROOT}/tools:${PATH}"</span>
+</pre></div>
+</div>
+</li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">hooks</span></code></strong> — scripts sourced at fixed points in the pipeline. See “Hooks”
 below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">extensions</span></code></strong> — own, project-local <code class="docutils literal notranslate"><span class="pre">Provider</span></code> subclasses to register
@@ -471,7 +479,8 @@ normal pipeline. See “Hooks and scripts” below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">env</span></code></strong> — a mapping of environment variables to set once this stage’s
 own setup is done, as <code class="docutils literal notranslate"><span class="pre">{</span> <span class="pre">VAR</span> <span class="pre">=</span> <span class="pre">&quot;value&quot;</span> <span class="pre">}</span></code> (values go through <code class="docutils literal notranslate"><span class="pre">${...}</span></code>
 interpolation, so a value can read what this stage’s own setup() just
-exported). The per-stage counterpart of the top-level <code class="docutils literal notranslate"><span class="pre">env:</span></code> — the same
+exported, or an earlier entry of this same map, entries being set in the
+order written). The per-stage counterpart of the top-level <code class="docutils literal notranslate"><span class="pre">env:</span></code> — the same
 key, one level down, in scope for one stage rather than the whole
 environment.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">env-prepend</span></code></strong> / <strong><code class="docutils literal notranslate"><span class="pre">env-append</span></code></strong> — what a stage contributes to an

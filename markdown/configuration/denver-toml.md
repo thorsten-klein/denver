@@ -84,7 +84,14 @@ see “Fail loud” in [`philosophy.md`](../concepts/philosophy.md)).
   `runnable: false` base is itself runnable unless it says otherwise.
 - **`env`** — a mapping of environment variables to set for the whole
   environment (values go through `${...}` interpolation). Applied once,
-  right after the `env` hook, before any stage runs.
+  right after the `env` hook, before any stage runs. Entries are set one at a
+  time, in the order written, so a later entry’s `${...}` can reference an
+  earlier one from the same map:
+  ```yaml
+  env:
+    PROJECT_ROOT: "${DENVER_ENV_DIR}/.."
+    PATH: "${PROJECT_ROOT}/tools:${PATH}"
+  ```
 - **`hooks`** — scripts sourced at fixed points in the pipeline. See “Hooks”
   below.
 - **`extensions`** — own, project-local `Provider` subclasses to register
@@ -180,7 +187,8 @@ These keys may appear in *any* stage’s section, whatever its provider:
 - **`env`** — a mapping of environment variables to set once this stage’s
   own setup is done, as `{ VAR = "value" }` (values go through `${...}`
   interpolation, so a value can read what this stage’s own setup() just
-  exported). The per-stage counterpart of the top-level `env:` — the same
+  exported, or an earlier entry of this same map, entries being set in the
+  order written). The per-stage counterpart of the top-level `env:` — the same
   key, one level down, in scope for one stage rather than the whole
   environment.
 - **`env-prepend`** / **`env-append`** — what a stage contributes to an
