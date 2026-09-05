@@ -21,7 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import NoReturn
 
 # Every line a --dry-run emits starts with '[dry-run ', so the whole preview
 # can be grepped/filtered out of a terminal session in one go (e.g. `grep
@@ -1064,9 +1064,17 @@ class Context:
         self.set(key, f"{value}{current}" if prepend else f"{current}{value}")
 
     def apply_env_map(self, mapping):
-        """Apply an interpolated {name: value} mapping into the environment."""
-        for key, value in cast(dict, interpolate(mapping or {}, self.variables)).items():
-            self.set(key, value)
+        """Apply an {name: value} mapping into the environment, interpolating one entry at a time.
+
+        Each value is expanded against ``self.variables`` (i.e. ``self.env``,
+        see the ``variables`` property) right before it's set -- not the
+        whole mapping up front -- so a later entry's ``${...}`` can reference
+        an earlier entry of the *same* mapping, in the order it was written
+        (e.g. ``PROJECT_ROOT`` set from ``DENVER_ENV_DIR``, then a later entry
+        built from ``${PROJECT_ROOT}``).
+        """
+        for key, value in (mapping or {}).items():
+            self.set(key, interpolate(value, self.variables))
 
     # ---- dry-run reporting ---------------------------------------------- #
     def dry_note(self, marker, message):

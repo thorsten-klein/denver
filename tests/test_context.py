@@ -656,6 +656,18 @@ def test_apply_env_map(make_context):
     ctx.apply_env_map(None)  # no-op
 
 
+def test_apply_env_map_later_entry_sees_earlier_one(make_context):
+    """A later entry's ${...} can reference an earlier entry of the *same* mapping.
+
+    Each entry is interpolated and set before the next one is expanded, in
+    the mapping's own (insertion) order -- not the whole mapping interpolated
+    up front against the pre-call environment.
+    """
+    ctx = make_context()
+    ctx.apply_env_map({"PROJECT_ROOT": "${DENVER_ENV_DIR}/..", "TOOLS": "${PROJECT_ROOT}/tools"})
+    assert ctx.env["TOOLS"] == f"{ctx.env['DENVER_ENV_DIR']}/../tools"
+
+
 # ---- stage toggles -------------------------------------------------------- #
 def test_toggles(make_context):
     # force/ci are plain constructor-set flags -- never read back out of a
