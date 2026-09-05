@@ -621,6 +621,7 @@ class Context:
         env_dir,
         config,
         import_dirs=None,
+        extra_hook_entries=None,
         quiet=0,
         verbose=False,
         fast=False,
@@ -650,6 +651,11 @@ class Context:
         self.env_dir = Path(env_dir).resolve()
         self.config = config or {}
         self.import_dirs = [Path(d).resolve() for d in (import_dirs or [])]
+        # section-stacked source envs' own 'hooks:' (e.g. a stacked-in
+        # 'docker:' section's 'pre-docker:') -- see expand_section_imports;
+        # collect_hook_entries() only walks the whole-file 'import:' chain
+        # and would otherwise never see these. name -> [(base_dir, script), ...].
+        self.extra_hook_entries = extra_hook_entries or {}
         self.quiet = quiet
         self.verbose = verbose
         self.fast = fast

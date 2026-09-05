@@ -1244,10 +1244,20 @@ def run_hook(ctx, config_path, name):
     before any stage and before the declarative ``env:`` map, so its exports
     apply to the whole devshell; ``pre-<stage>`` / ``post-<stage>`` run
     around each stage; ``pre-cmd`` runs just before the final command. See
-    ``collect_hook_entries`` for how each name's script(s) are found.
+    ``collect_hook_entries`` for how each name's script(s) are found -- run
+    after those, ``ctx.extra_hook_entries`` contributes any hook a
+    section-stacked source env declared for this name (see
+    expand_section_imports), which the whole-file-only ``collect_hook_entries``
+    never sees on its own. Resolved paths are de-duplicated, first-seen-wins,
+    so an env that also redeclares one of these explicitly (a workaround for
+    when this fix did not exist yet) still only sources it once.
     """
-    for base_dir, script in collect_hook_entries(config_path, name):
+    seen = set()
+    for base_dir, script in collect_hook_entries(config_path, name) + ctx.extra_hook_entries.get(name, []):
         path = ctx.resolve_path(script, base=base_dir)
+        if path in seen:
+            continue
+        seen.add(path)
         if not path.is_file():
             die(f"hook '{name}' script not found: {path}")
         info(f"hook {name}: {path}")
@@ -1361,36 +1371,55 @@ def expand_section_imports(config, env_dir):
           - ../zephyr-devshell/denver.toml:conan
 
     The referenced sections are merged in (base-first), then the local keys
-    override. Returns (expanded_config, extra_search_dirs) where the extra
-    dirs let relative paths in the imported section (compose file, scripts,
-    ...) resolve against their source env.
+    override. Returns (expanded_config, extra_search_dirs, extra_hook_entries)
+    where the extra dirs let relative paths in the imported section (compose
+    file, scripts, ...) resolve against their source env, and extra_hook_entries
+    (name -> [(base_dir, script), ...]) carries each source env's own ``hooks:``
+    -- e.g. a stacked-in 'docker:' section's 'pre-docker:' hook -- since
+    collect_hook_entries() only ever walks the whole-file 'import:' chain and
+    would otherwise never see a source env reached solely through stacking.
     """
     result = dict(config)
     extra_dirs = []
+    extra_hook_entries = {}
     for key, value in config.items():
         if not (isinstance(value, dict) and value.get("import")):
             continue
-        merged, dirs = _stacked_section(value, key, env_dir)
+        merged, dirs, hooks = _stacked_section(value, key, env_dir)
         extra_dirs += dirs
+        _merge_hook_entries(extra_hook_entries, hooks)
         result[key] = deep_merge(merged, _without_import(value))
-    return result, extra_dirs
+    return result, extra_dirs, extra_hook_entries
+
+
+def _merge_hook_entries(hook_entries, more_hook_entries):
+    """Merge ``more_hook_entries`` (name -> [(base_dir, script), ...]) into ``hook_entries`` in place."""
+    for name, entries in more_hook_entries.items():
+        hook_entries.setdefault(name, []).extend(entries)
 
 
 def _stacked_section(value, key, env_dir):
     """Merge every section-level 'import:' entry of one section, base-first.
 
-    Returns ``(merged, extra_dirs)``, the extra dirs being each source env's
-    own directory (so its relative paths still resolve, see the caller).
+    Returns ``(merged, extra_dirs, hook_entries)``, the extra dirs being each
+    source env's own directory (so its relative paths still resolve, see the
+    caller), and hook_entries the source env's own ``hooks:`` declarations
+    (name -> [(base_dir, script), ...]) -- see expand_section_imports.
     """
     merged = {}
     extra_dirs = []
+    hook_entries = {}
     for ref in value["import"]:
         path, section = parse_section_import_ref(ref)
         src_path = resolve_import(path, env_dir)
         src_config = load_config(src_path)
         merged = deep_merge(merged, src_config.get(section or key) or {})
         extra_dirs.append(src_path.parent)
-    return merged, extra_dirs
+        _merge_hook_entries(
+            hook_entries,
+            {name: _own_hook_entries(src_config, src_path.parent, name) for name in src_config.get("hooks") or {}},
+        )
+    return merged, extra_dirs, hook_entries
 
 
 def default_command(config, in_container=False):
@@ -1621,13 +1650,14 @@ def resolve_full_config(
     from denver_providers import Context, load_extension_providers
     from denver_providers.context import CLI_ENV_VAR_NAMES
 
-    config, extra_dirs = expand_section_imports(config, env_dir)
+    config, extra_dirs, extra_hook_entries = expand_section_imports(config, env_dir)
     import_dirs = collect_import_dirs(config_path) + extra_dirs
     ctx = Context(
         env_dir,
         config,
         config_path=config_path,
         import_dirs=import_dirs,
+        extra_hook_entries=extra_hook_entries,
         quiet=quiet,
         verbose=verbose,
         fast=fast,
@@ -1967,7 +1997,7 @@ def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()
     # config_path may not exist -- see _load_cli_config's own is_file() guard: an
     # env dir need not have its own denver.toml if -f/-c supply the whole config.
     config = load_config(config_path) if config_path.is_file() else {}
-    config, _ = expand_section_imports(config, env_dir)
+    config, _, _ = expand_section_imports(config, env_dir)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
 
     by_name = _scripts_by_name(config, stage_ids)
@@ -2815,12 +2845,14 @@ def resolve_hooks(ctx, config_path, stage_ids):
     exactly what run_hook()/collect_hook_entries() use at real-run time. None
     if nothing would run for that name. Computed here (rather than read
     straight off the raw 'hooks:' key) because the effective list spans every
-    layer of the 'import:' chain, not just the env being launched.
+    layer of the 'import:' chain, not just the env being launched. De-duplicated
+    the same way run_hook() de-duplicates before sourcing, so this reflects
+    what would actually run rather than a script counted twice.
     """
     resolved = {}
     for name in hook_names_for_stages(stage_ids):
-        entries = collect_hook_entries(config_path, name)
-        scripts = [str(ctx.resolve_path(script, base=base_dir)) for base_dir, script in entries]
+        entries = collect_hook_entries(config_path, name) + ctx.extra_hook_entries.get(name, [])
+        scripts = list(dict.fromkeys(str(ctx.resolve_path(script, base=base_dir)) for base_dir, script in entries))
         resolved[name] = scripts or None
     return resolved
 
@@ -4395,7 +4427,7 @@ def _completion_config(env_value):
     if env_dir is None or config_path is None or not config_path.is_file():
         return None
     config = load_config(config_path)
-    config, _ = expand_section_imports(config, env_dir)
+    config, _, _ = expand_section_imports(config, env_dir)
     return config
 
 

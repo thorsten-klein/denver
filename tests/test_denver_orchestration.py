@@ -256,6 +256,20 @@ def test_run_hook_stacked_lists_from_both_layers(tmp_path, make_context):
     assert ctx.env["FROM_DERIVED"] == "1"
 
 
+def test_run_hook_extra_hook_entries_deduplicated_against_collect_hook_entries(make_context):
+    # a script already found via the whole-file 'import:' chain (collect_hook_entries)
+    # may also show up in ctx.extra_hook_entries (e.g. an env that redeclares a
+    # section-stacked hook explicitly, a workaround from before this fix existed) --
+    # it must still only be sourced once.
+    ctx = make_context()
+    (ctx.env_dir / "hooks").mkdir()
+    (ctx.env_dir / "hooks" / "env.sh").write_text("export COUNT=$((${COUNT:-0}+1))\n")
+    cfg_path = _write_denver_yml(ctx.env_dir, "hooks:\n  env: hooks/env.sh\n")
+    ctx.extra_hook_entries = {"env": [(ctx.env_dir, "hooks/env.sh")]}
+    denver.run_hook(ctx, cfg_path, "env")
+    assert ctx.env["COUNT"] == "1"
+
+
 def test_collect_hook_entries_circular_import_dies(tmp_path):
     a_dir = tmp_path / "a"
     b_dir = tmp_path / "b"
@@ -294,9 +308,10 @@ def test_expand_section_imports_stacks_and_overrides(tmp_path):
     # 'service' conflicts with the stacked-in value, so overriding it deliberately
     # needs '!' -- see test_denver_config.py's deep_merge conflict tests
     config = {"docker": {"import": ["../src"], "service": "!override"}}
-    expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
+    expanded, extra_dirs, extra_hooks = denver.expand_section_imports(config, env_dir)
     assert expanded["docker"] == {"exe": "docker", "service": "override"}
     assert extra_dirs == [src_env]
+    assert extra_hooks == {}
 
 
 def test_expand_section_imports_direct_file_ref(tmp_path):
@@ -312,9 +327,10 @@ def test_expand_section_imports_direct_file_ref(tmp_path):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
     config = {"docker": {"import": ["../src/denver.yml"]}}
-    expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
+    expanded, extra_dirs, extra_hooks = denver.expand_section_imports(config, env_dir)
     assert expanded["docker"] == {"exe": "docker"}
     assert extra_dirs == [src_env]
+    assert extra_hooks == {}
 
 
 def test_expand_section_imports_explicit_section_ref(tmp_path):
@@ -331,18 +347,20 @@ def test_expand_section_imports_explicit_section_ref(tmp_path):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
     config = {"conan": {"import": ["../src/denver.yml:conan"]}}
-    expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
+    expanded, extra_dirs, extra_hooks = denver.expand_section_imports(config, env_dir)
     assert expanded["conan"] == {"base-classes": ["conan/base_classes"]}
     assert extra_dirs == [src_env]
+    assert extra_hooks == {}
 
 
 def test_expand_section_imports_no_imports_passthrough(tmp_path):
     env_dir = tmp_path / "env"
     env_dir.mkdir()
     config = {"uv": {"python": "3.9"}, "stages": ["uv"]}
-    expanded, extra_dirs = denver.expand_section_imports(config, env_dir)
+    expanded, extra_dirs, extra_hooks = denver.expand_section_imports(config, env_dir)
     assert expanded == config
     assert extra_dirs == []
+    assert extra_hooks == {}
 
 
 # ---- default_command --------------------------------------------------------#

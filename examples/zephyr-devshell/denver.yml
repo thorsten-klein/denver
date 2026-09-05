@@ -41,18 +41,12 @@ docker:
 # replacing it. Add a personal, uncommitted hooks/env.user.sh here too if you
 # want one.
 #
-# 'pre-docker' has to be redeclared here rather than inherited from
-# ../zephyr-docker: hooks only follow the whole-file 'import:' chain (this
-# env's own, above), not the section-level 'import:' the 'docker:' section
-# above uses to stack its compose config -- so zephyr-docker's own
-# 'hooks: pre-docker:' entry (for running it standalone) is never visited by
-# an env that only imports this file. Points at ../zephyr-docker's script
-# directly since that is where create-env.sh actually lives.
+# ../zephyr-docker's own 'hooks: pre-docker:' entry (its create-env.sh) is
+# picked up automatically via the 'docker: import:' stacking above -- no need
+# to redeclare it here.
 hooks:
   env:
   - hooks/env.sh
-  pre-docker:
-  - ../zephyr-docker/create-env.sh
 
 # Conan: base classes + shared recipes live here; version envs add the
 # conanfile and their own recipes. 'base-classes' is env-wide, so it is
