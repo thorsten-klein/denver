@@ -477,6 +477,13 @@ def deep_merge(base, override, _path=""):
     to start with ``!`` (e.g. a shell history-expansion string) isn't
     silently mangled with nothing to deliberately override in the first
     place.
+
+    Several keys (``docker.compose.file``, ``conan``'s ``build:``, ...) accept
+    either a bare scalar or a list as shorthand for a one-item list -- a lower
+    layer using the bare-scalar form is coerced to a one-item list before
+    merging when this layer's own value is a list, so it's extended the same
+    way two lists would be (bare scalar override onto a list base coerces the
+    same way, the other direction).
     """
     if isinstance(base, dict) and isinstance(override, dict):
         return _merge_dicts(base, override, _path)
@@ -484,7 +491,17 @@ def deep_merge(base, override, _path=""):
     if isinstance(base, list) and isinstance(override, list):
         return _merge_lists(base, override)
 
+    if _coercible_to_list(base, override):
+        return _merge_lists(_as_list(base), _as_list(override))
+
     return _merge_scalar(base, override, _path)
+
+
+def _coercible_to_list(base, override):
+    """Whether one side is a list and the other a bare scalar that ``deep_merge`` should coerce to match it."""
+    if isinstance(override, list):
+        return base is not _UNSET and not isinstance(base, dict)
+    return isinstance(base, list) and not isinstance(override, dict)
 
 
 def _merge_dicts(base, override, _path):
@@ -496,9 +513,12 @@ def _merge_dicts(base, override, _path):
     return result
 
 
+OVERWRITE_MARKER = "<overwrite>"
+
+
 def _has_reset_marker(override):
     """Whether a layer's list carries a ``!``/``<overwrite>`` marker, dropping every lower-layer entry."""
-    return any(isinstance(entry, str) and (entry.startswith("!") or entry == "<overwrite>") for entry in override)
+    return any(isinstance(entry, str) and (entry.startswith("!") or entry == OVERWRITE_MARKER) for entry in override)
 
 
 def _strip_reset_marker(entry):
@@ -512,7 +532,7 @@ def _merge_lists(base, override):
     """``deep_merge``'s list case: appended, unless ``override`` carries a ``!``/``<overwrite>`` reset marker."""
     if not _has_reset_marker(override):
         return base + override
-    return [_strip_reset_marker(entry) for entry in override if entry != "<overwrite>"]
+    return [_strip_reset_marker(entry) for entry in override if entry != OVERWRITE_MARKER]
 
 
 def _merge_scalar(base, override, path):
@@ -575,7 +595,7 @@ def load_config(config_path, _seen=None) -> dict:
         die(f"circular import detected at {config_path}")
     _seen.add(config_path)
 
-    raw = load_config_file(config_path)
+    raw = _rebased_section_imports(load_config_file(config_path), config_path.parent)
     merged = _merged_imports(raw, config_path.parent, _seen)
 
     # 'runnable' marks one specific denver.toml (e.g. a shared base meant only
@@ -593,6 +613,45 @@ def load_config(config_path, _seen=None) -> dict:
 def _without_import(mapping):
     """A config layer's own keys, minus the 'import:' directive -- it isn't inheritable data."""
     return {k: v for k, v in mapping.items() if k != "import"}
+
+
+def _rebased_section_imports(raw, base_dir):
+    """Rewrite every section-level ``import:`` entry to an absolute path, anchored at ``base_dir``.
+
+    E.g. ``docker: import: [./docker]`` of this one raw layer to an absolute path, anchored at
+    ``base_dir`` -- the directory of the denver.toml/yml that actually declares it.
+
+    Section-level imports are only resolved later, by expand_section_imports(), against the single
+    top-level env dir the whole merged config ends up running from -- correct for a layer that IS that
+    top-level file, but wrong for one only reached through a whole-file 'import:' chain (its own
+    relative paths are meant to be relative to itself, same as every other path it declares). Doing the
+    rebase here, while ``base_dir`` is still this layer's own directory, fixes that once and for all --
+    everything downstream (deep_merge's list-append, the final expand_section_imports call) keeps
+    working unchanged since an already-absolute path resolves the same regardless of what it's joined
+    against.
+    """
+    return {key: _rebased_section_value(value, base_dir) for key, value in raw.items()}
+
+
+def _rebased_section_value(value, base_dir):
+    """A single raw layer's section value, with its own ``import:`` entries (if any) rebased to ``base_dir``."""
+    if not (isinstance(value, dict) and value.get("import")):
+        return value
+    return {**value, "import": [_rebased_import_entry(entry, base_dir) for entry in value["import"]]}
+
+
+def _rebased_import_entry(entry, base_dir):
+    """One section-level import ref with its path portion made absolute.
+
+    A '!' reset marker, the bare '<overwrite>' marker, and an explicit ':section' suffix are all
+    preserved as-is.
+    """
+    if entry == OVERWRITE_MARKER:
+        return entry
+    marker = "!" if isinstance(entry, str) and entry.startswith("!") else ""
+    path, section = parse_section_import_ref(entry[len(marker) :])
+    abs_path = str((base_dir / path).resolve())
+    return f"{marker}{abs_path}:{section}" if section else f"{marker}{abs_path}"
 
 
 def _merged_imports(raw, base_dir, _seen) -> dict:

@@ -108,6 +108,17 @@ def test_deep_merge_lists_append():
     assert base == [1, 2]
 
 
+def test_deep_merge_bare_scalar_base_coerced_to_list_when_override_is_a_list():
+    # e.g. a lower layer's 'compose.file: base.yml' plus this layer's own
+    # 'compose.file: [override.yml]' -- the bare scalar is treated as a one-item list.
+    assert denver.deep_merge("base.yml", ["override.yml"]) == ["base.yml", "override.yml"]
+
+
+def test_deep_merge_bare_scalar_override_coerced_to_list_onto_a_list_base():
+    # the same coercion the other direction: a list base, this layer's own value a bare scalar.
+    assert denver.deep_merge(["base.yml"], "override.yml") == ["base.yml", "override.yml"]
+
+
 def test_deep_merge_new_list_key_no_lower_layer_is_used_as_is():
     assert denver.deep_merge({}, {"a": [1, 2]}) == {"a": [1, 2]}
 
@@ -248,6 +259,106 @@ def test_load_config_with_import_merges_base_first(tmp_path):
     assert cfg["stages"] == ["uv"]
     assert cfg["uv"] == {"python": "3.9", "requirements": ["r.txt"]}
     assert "import" not in cfg
+
+
+def test_load_config_rebases_section_import_reached_via_whole_file_import(tmp_path):
+    # 'base' is only reached through env's whole-file 'import:' chain -- its own
+    # 'docker: import:' entry is relative to *base*'s directory, not env's, so
+    # load_config must rebase it before the two layers get merged.
+    docker_src_dir = tmp_path / "docker_src"
+    docker_src_dir.mkdir()
+    (docker_src_dir / "denver.yml").write_text("docker:\n  exe: docker\n")
+
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    (base_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        docker:
+          import:
+          - ../docker_src
+        """)
+    )
+
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        """)
+    )
+
+    cfg = denver.load_config(env_dir / "denver.yml")
+    assert cfg["docker"]["import"] == [str(docker_src_dir.resolve())]
+
+
+def test_load_config_then_expand_section_imports_resolves_across_whole_file_import(tmp_path):
+    # end-to-end: without the load_config-time rebase, expand_section_imports would
+    # resolve 'docker: import: [../docker_src]' against env_dir instead of base's own
+    # dir -- exactly the failure this reproduces for a real multi-repo whole-file
+    # import chain. 'base' and 'env' are deliberately at different nesting depths (as
+    # e.g. neo-core/denver and uc-platform/build-denver are, in the wild) so the two
+    # resolutions actually diverge -- siblings at the same depth would make '../docker_src'
+    # resolve to the same place either way and silently hide the bug.
+    docker_src_dir = tmp_path / "repo-a" / "docker_src"
+    docker_src_dir.mkdir(parents=True)
+    (docker_src_dir / "denver.yml").write_text("docker:\n  exe: docker\n")
+
+    base_dir = tmp_path / "repo-a" / "base"
+    base_dir.mkdir()
+    (base_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        docker:
+          import:
+          - ../docker_src
+        """)
+    )
+
+    env_dir = tmp_path / "repo-b" / "nested" / "env"
+    env_dir.mkdir(parents=True)
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../../../repo-a/base
+        """)
+    )
+
+    cfg = denver.load_config(env_dir / "denver.yml")
+    expanded, extra_dirs, extra_hooks = denver.expand_section_imports(cfg, env_dir)
+    assert expanded["docker"] == {"exe": "docker"}
+    assert extra_dirs == [docker_src_dir]
+    assert extra_hooks == {}
+
+
+def test_load_config_rebases_section_import_overwrite_marker_left_untouched(tmp_path):
+    # the bare '<overwrite>' marker is a reset instruction, not a path -- rebasing
+    # must pass it through literally so expand_section_imports still recognizes it.
+    docker_src_dir = tmp_path / "docker_src"
+    docker_src_dir.mkdir()
+    (docker_src_dir / "denver.yml").write_text("docker:\n  exe: docker\n")
+
+    base_dir = tmp_path / "base"
+    base_dir.mkdir()
+    (base_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        docker:
+          import:
+          - <overwrite>
+          - ../docker_src
+        """)
+    )
+
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text(
+        textwrap.dedent("""\
+        import:
+        - ../base
+        """)
+    )
+
+    cfg = denver.load_config(env_dir / "denver.yml")
+    assert cfg["docker"]["import"] == ["<overwrite>", str(docker_src_dir.resolve())]
 
 
 def test_load_config_runnable_false_does_not_leak_through_import(tmp_path):
