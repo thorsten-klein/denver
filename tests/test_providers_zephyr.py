@@ -102,6 +102,45 @@ def test_no_west_topdir_dies(make_context, which):
         run_zephyr(config, ctx)
 
 
+# ---- topdir --------------------------------------------------------------#
+def test_topdir_configured_explicitly_needs_no_git_or_west(make_context, run_recorder, which, tmp_path):
+    custom = tmp_path / "custom-topdir"
+    config = {"zephyr": {"topdir": str(custom), "west-yml": "${WEST_TOPDIR}/west.yml"}}
+    ctx = make_context(config=config)  # no .git/.west anywhere
+    run_zephyr(config, ctx)
+    assert ctx.env["WEST_TOPDIR"] == str(custom)
+    assert (custom / ".west" / "config").is_file()
+
+
+def test_topdir_relative_resolved_against_env_dir(make_context, run_recorder, which):
+    config = {"zephyr": {"topdir": "custom-topdir", "west-yml": "${WEST_TOPDIR}/west.yml"}}
+    ctx = make_context(config=config)  # no .git/.west anywhere
+    run_zephyr(config, ctx)
+    assert Path(ctx.env["WEST_TOPDIR"]) == ctx.env_dir / "custom-topdir"
+
+
+def test_topdir_overrides_already_exported_west_topdir(make_context, run_recorder, which, tmp_path):
+    exported = tmp_path / "exported-topdir"
+    configured = tmp_path / "configured-topdir"
+    config = {"zephyr": {"topdir": str(configured), "west-yml": "${WEST_TOPDIR}/west.yml"}}
+    ctx = make_context(config=config, env={"WEST_TOPDIR": str(exported)})
+    run_zephyr(config, ctx)
+    assert ctx.env["WEST_TOPDIR"] == str(configured)
+    assert (configured / ".west" / "config").is_file()
+    assert not (exported / ".west").exists()
+
+
+def test_exported_west_topdir_used_without_topdir_configured(make_context, run_recorder, which, tmp_path):
+    # no 'topdir:', no .git/.west -- an already-exported WEST_TOPDIR is still
+    # discovery's fallback before dying.
+    exported = tmp_path / "exported-topdir"
+    config = {"zephyr": {"west-yml": "${WEST_TOPDIR}/west.yml"}}
+    ctx = make_context(config=config, env={"WEST_TOPDIR": str(exported)})
+    run_zephyr(config, ctx)
+    assert ctx.env["WEST_TOPDIR"] == str(exported)
+    assert (exported / ".west" / "config").is_file()
+
+
 def test_west_missing_dies(make_context, which):
     which["west"] = None
     config = {"zephyr": {}}
