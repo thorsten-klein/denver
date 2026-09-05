@@ -42,6 +42,7 @@ class ZephyrProvider(Provider):
 
     name = "zephyr"
     KEYS = (
+        "topdir",
         "exe",
         "west-yml",
         "base",
@@ -68,6 +69,30 @@ class ZephyrProvider(Provider):
         return str(Path(super_root) / "west.yml")
 
     @staticmethod
+    def _resolved_topdir(ctx, cfg):
+        """WEST_TOPDIR -- see doc/providers/zephyr.md's 'topdir:' entry for the full precedence rationale.
+
+        An explicit 'topdir:' wins outright (also overwriting an
+        already-exported WEST_TOPDIR, so the rest of this env's
+        ${WEST_TOPDIR} substitutions agree with it); otherwise an
+        already-exported WEST_TOPDIR (e.g. set by the user, or by an outer
+        denver run before re-invoking inside docker) wins over discovery.
+        """
+        configured = cfg.get("topdir")
+        if configured:
+            top = ctx.resolve_path(configured)
+            ctx.env["WEST_TOPDIR"] = str(top)
+            return top
+
+        exported = ctx.env.get("WEST_TOPDIR")
+        if exported:
+            return Path(exported)
+
+        top = west_topdir(ctx.env_dir)
+        ctx.env.setdefault("WEST_TOPDIR", str(top) if top else "")
+        return top
+
+    @staticmethod
     def _resolved_patch_committer(cfg):
         """'patch-committer-name:'/'-email:'/'-date:', each defaulting to denver's own fixed identity.
 
@@ -82,16 +107,14 @@ class ZephyrProvider(Provider):
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve west-yml/base/blobs-fetch-args/patch-committer-* -- see doc/providers/zephyr.md."""
+        """Resolve topdir/west-yml/base/blobs-fetch-args/patch-committer-* -- see doc/providers/zephyr.md."""
         # WEST_TOPDIR is a zephyr concept, not a denver built-in -- computed
         # and exported here (not in Context) so non-zephyr envs never pay for
-        # the parent-directory walk or carry an irrelevant env var. setdefault
-        # so an already-exported WEST_TOPDIR (e.g. set by the user, or by an
-        # outer denver run before re-invoking inside docker) wins.
-        top = west_topdir(ctx.env_dir)
-        ctx.env.setdefault("WEST_TOPDIR", str(top) if top else "")
+        # the parent-directory walk or carry an irrelevant env var.
+        top = cls._resolved_topdir(ctx, cfg)
 
         resolved = dict(cfg)
+        resolved["topdir"] = str(top) if top else None
         resolved["exe"] = cfg.get("exe") or "west"
         resolved["west-yml"] = cls._resolved_west_yml(ctx, cfg.get("west-yml"))
         resolved["base"] = str(ctx.resolve_path(cfg.get("base") or "${WEST_TOPDIR}/zephyr-rtos"))
@@ -104,10 +127,13 @@ class ZephyrProvider(Provider):
         """Configure and update the West workspace."""
         cfg = self.config_section(ctx)
 
-        top = west_topdir(ctx.env_dir)
-        if not top:
-            die("zephyr: could not determine WEST_TOPDIR (no .west or .git found)")
-        top = Path(top)
+        # already resolved by resolve_defaults (from 'topdir:', an
+        # already-exported WEST_TOPDIR, or discovery) -- read back here
+        # rather than recomputed, so this is the same value --show-config
+        # already reported.
+        if not cfg.get("topdir"):
+            die("zephyr: could not determine WEST_TOPDIR (no .west or .git found, and no 'topdir:' configured)")
+        top = Path(cfg["topdir"])
 
         if ctx.fast:
             # same banner sequence as a full run (_ensure_workspace/_configure/
