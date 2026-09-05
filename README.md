@@ -55,14 +55,12 @@ alias denver="$PWD/src/denver.py"
 denver --version
 ```
 
-> **Note:** denver needs Python `>=3.9`. Stuck below that? Run the script
-> with `uv run src/denver.py`, e.g by setting `alias denver="uv run $PWD/src/denver.py"`.
-> Alternatively grab a prebuilt executable from a
-> [release](https://github.com/thorsten-klein/denver/releases), or build one
-> yourself with `uv run poe pyinstaller`.
-> (Between `3.9` and `3.11`? Regular installs work fine -- only `denver.toml`
-> configs need `>=3.11`, for `tomllib`; `denver.yml`/`denver.yaml` works
-> everywhere `denver` itself does.)
+> **Note:** denver needs Python `>=3.9` and always supports `denver.yml` configs;
+> `denver.toml` needs python `>=3.11` (uses stdlib `tomllib`).
+> Stuck below `3.11` or even below `3.9`? Grab a prebuilt executable from a
+> [release](https://github.com/thorsten-klein/denver/releases), which bundles python 3.12.
+> Or create a venv with a newer python, for example `uv venv --python 3.14`, and run
+> `uv run src/denver.py` (alternatively with `alias denver="uv run $PWD/src/denver.py"`).
 
 For more details about how to install or run `denver` see
 **[Install denver →](https://github.com/thorsten-klein/denver/blob/develop/doc/introduction/install.md)**.
@@ -111,12 +109,12 @@ print-vars-after:
 As you can see, this environment consists of three stages.
 - First stage prints out the variables and their values how they are currently set (most probably empty)
 - Second stage prints some text, and it sources custom.sh script. In this script each variable is set to a value
-- Third stage prints out the variables and their values again so see if the second stage has worked
+- Third stage prints out the variables and their values again to see if the second stage has worked
 
 You can run an own command (e.g. `printenv FOO MYVAR BAR`) within this environment as following:
 
 ```bash
-denver run examples/simple-env -- printenv MYVAR
+denver run examples/simple-env -- printenv FOO MYVAR BAR
 ```
 
 Output:
@@ -140,7 +138,7 @@ You want to see some even more advanced example? Have a look at **[denver in 30 
 
 ## Known limitations
 
-**denver has exactly one runtime dependency: PyYAML.** Its default config
+**denver has exactly one runtime dependency: PyYAML.** `denver`'s default config
 format is YAML (`denver.yml`/`denver.yaml`), parsed with PyYAML — that's
 what lets the floor be as low as python `>=3.9`. `denver.toml` is supported
 too, but only where `tomllib` is importable (stdlib only from python
