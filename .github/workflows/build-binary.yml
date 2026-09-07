@@ -40,12 +40,6 @@ jobs:
           - name: x64-linux
             runs-on: ubuntu-latest
             container: almalinux:8
-          # macOS needs no old container -- no glibc floor to worry about.
-          # Two legs: x64 and arm64 Macs need separate builds, PyInstaller
-          # only builds for the arch it runs on.
-          - name: x64-macos
-            runs-on: macos-13
-            container: ''
           - name: arm64-macos
             runs-on: macos-14
             container: ''

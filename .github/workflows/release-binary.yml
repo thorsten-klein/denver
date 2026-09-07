@@ -1,9 +1,9 @@
 name: Release binary
 
 # Builds the single-file 'denver' executable (see scripts/create-python-exe.sh)
-# for Linux and macOS (x64 + arm64), and attaches all three .tar.xz archives
-# to the release, so denver can be used on a machine with no python -- and
-# no pip, no uv -- at all.
+# for Linux (x64) and macOS (arm64), and attaches both .tar.xz archives to
+# the release, so denver can be used on a machine with no python -- and no
+# pip, no uv -- at all.
 #
 # Separate from publish.yml on purpose. That one is triggered by the tag push
 # and uploads to PyPI, while attaching an asset needs the GitHub *release* to
@@ -97,19 +97,11 @@ jobs:
             ${{ matrix.image }} \
             sh -c 'export PATH="/work:$PATH"; denver --version && denver run /work/examples/simple-env -c denver-version=null -- echo "denver runs on ${{ matrix.image }}"'
 
-  # No docker/emulation for macOS, so just run the binary directly on each
-  # arch's own runner instead of sweeping a matrix of images like 'verify-linux'.
+  # No docker/emulation for macOS, so just run the binary directly on the
+  # runner instead of sweeping a matrix of images like 'verify-linux'.
   verify-macos:
     needs: build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: x64-macos
-            runs-on: macos-13
-          - name: arm64-macos
-            runs-on: macos-14
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
@@ -117,16 +109,16 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: denver-binary-${{ matrix.name }}
+          name: denver-binary-arm64-macos
 
       - name: Unpack
-        run: tar -xf denver-*-${{ matrix.name }}.tar.xz
+        run: tar -xf denver-*-arm64-macos.tar.xz
 
       - name: Run
         run: |
           export PATH="$PWD:$PATH"
           denver --version
-          denver run "$PWD/examples/simple-env" -c denver-version=null -- echo "denver runs on ${{ matrix.name }}"
+          denver run "$PWD/examples/simple-env" -c denver-version=null -- echo "denver runs on arm64-macos"
 
   upload:
     # 'build' listed directly (not just transitively via 'verify-linux') because
@@ -138,15 +130,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      # merge-multiple: safe here since each of the 3 artifacts has its own
-      # distinct filename, so they can't collide in one folder.
+      # merge-multiple: safe here since each artifact has its own distinct
+      # filename, so they can't collide in one folder.
       - uses: actions/download-artifact@v4
         with:
           pattern: denver-binary*
           merge-multiple: true
 
       # --clobber so re-running against an already-attached release replaces
-      # the assets instead of failing halfway. Globbed since the 3 files
+      # the assets instead of failing halfway. Globbed since the files
       # differ by arch/os, not just version.
       - name: Attach denver-${{ needs.build.outputs.version }}-*.tar.xz to ${{ env.REF }}
         env:
