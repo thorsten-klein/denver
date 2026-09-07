@@ -61,6 +61,11 @@ uv tool install git+https://github.com/thorsten-klein/denver.git@develop
 Any of those commands installs the `denver` command.
 
 
+If you want to enforce a specific python and denver version, you can use an alias which runs `uvx`
+
+```
+alias denver="uvx --python 3.14 denver-tool==x.y.z"
+```
 
 
 ## Prebuilt binary

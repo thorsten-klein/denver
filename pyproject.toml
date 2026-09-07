@@ -39,7 +39,11 @@ Issues = "https://github.com/thorsten-klein/denver/issues"
 Changelog = "https://github.com/thorsten-klein/denver/releases"
 
 [project.scripts]
-# After installation, 'denver run <env>' works the same as 'src/denver.py run <env>'.
+# Expose executable under own name so that 'uvx denver-tool==x.y.z' (or 'uv tool install denver-tool')
+# resolves it automatically (executable name must match the package name).
+denver-tool = "denver:main"
+
+# Additionally expose under a shorter name
 denver = "denver:main"
 
 [dependency-groups]
