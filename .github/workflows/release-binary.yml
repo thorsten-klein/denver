@@ -1,8 +1,9 @@
 name: Release binary
 
 # Builds the single-file 'denver' executable (see scripts/create-python-exe.sh)
-# and attaches denver-<version>-x64-linux.tar.xz to the release, so denver can
-# be used on a machine that has no python -- and no pip, no uv -- at all.
+# for Linux and macOS (x64 + arm64), and attaches all three .tar.xz archives
+# to the release, so denver can be used on a machine with no python -- and
+# no pip, no uv -- at all.
 #
 # Separate from publish.yml on purpose. That one is triggered by the tag push
 # and uploads to PyPI, while attaching an asset needs the GitHub *release* to
@@ -47,7 +48,7 @@ jobs:
   # Proves the "runs on any x86_64 Linux" claim rather than assuming it. The
   # binary is dropped into stock distro images that have no python installed,
   # and has to run an example end to end there.
-  verify:
+  verify-linux:
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -73,7 +74,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: denver-binary
+          name: denver-binary-x64-linux
 
       # Named denver-<version>-x64-linux.tar.xz -- resolved by glob since the
       # version isn't known here.
@@ -96,27 +97,59 @@ jobs:
             ${{ matrix.image }} \
             sh -c 'export PATH="/work:$PATH"; denver --version && denver run /work/examples/simple-env -c denver-version=null -- echo "denver runs on ${{ matrix.image }}"'
 
+  # No docker/emulation for macOS, so just run the binary directly on each
+  # arch's own runner instead of sweeping a matrix of images like 'verify-linux'.
+  verify-macos:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x64-macos
+            runs-on: macos-13
+          - name: arm64-macos
+            runs-on: macos-14
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.REF }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: denver-binary-${{ matrix.name }}
+
+      - name: Unpack
+        run: tar -xf denver-*-${{ matrix.name }}.tar.xz
+
+      - name: Run
+        run: |
+          export PATH="$PWD:$PATH"
+          denver --version
+          denver run "$PWD/examples/simple-env" -c denver-version=null -- echo "denver runs on ${{ matrix.name }}"
+
   upload:
-    # 'build' listed directly (not just transitively via 'verify') because a
-    # job's outputs are only visible to jobs that name it in 'needs'.
-    needs: [build, verify]
+    # 'build' listed directly (not just transitively via 'verify-linux') because
+    # a job's outputs are only visible to jobs that name it in 'needs'.
+    needs: [build, verify-linux, verify-macos]
     # nothing to attach when workflow_dispatch ran without a tag
     if: github.event_name == 'release' || inputs.tag != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      # merge-multiple: safe here since each of the 3 artifacts has its own
+      # distinct filename, so they can't collide in one folder.
       - uses: actions/download-artifact@v4
         with:
-          name: denver-binary
+          pattern: denver-binary*
+          merge-multiple: true
 
       # --clobber so re-running against an already-attached release replaces
-      # the asset instead of failing halfway. The filename is composed from
-      # 'build's version output -- this is the point that actually names the
-      # release asset, so it uses the real version rather than a glob.
-      - name: Attach denver-${{ needs.build.outputs.version }}-x64-linux.tar.xz to ${{ env.REF }}
+      # the assets instead of failing halfway. Globbed since the 3 files
+      # differ by arch/os, not just version.
+      - name: Attach denver-${{ needs.build.outputs.version }}-*.tar.xz to ${{ env.REF }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          ARCHIVE: denver-${{ needs.build.outputs.version }}-x64-linux.tar.xz
-        run: gh release upload "$REF" "$ARCHIVE" --clobber
+        run: gh release upload "$REF" denver-*.tar.xz --clobber

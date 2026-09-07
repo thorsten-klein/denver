@@ -9,18 +9,22 @@
 #   scripts/create-python-exe.sh [--output DIR] [--python PYTHON] [--no-archive]
 #
 # Output (default dist/): the executable 'denver' plus a
-# denver-<version>-x64-linux.tar.xz holding it, which is what the release
-# workflow attaches to the release.
+# denver-<version>-<arch>-<os>.tar.xz holding it (e.g.
+# denver-1.2.3-arm64-macos.tar.xz), which the release workflow attaches to
+# the release. <arch>/<os> come from the build machine, since PyInstaller
+# only builds for the platform it runs on.
 #
 # PORTABILITY: a PyInstaller binary bundles the interpreter but still links
 # the *build machine's* glibc, and glibc is only backward compatible -- so the
 # binary runs on every distro whose glibc is at least as new as the one it was
 # built against, and on none older. Building it on a modern Ubuntu would
 # therefore quietly exclude every LTS/enterprise distro older than that
-# runner. .github/workflows/release-binary.yml builds inside almalinux:8
-# (glibc 2.28) for that reason; run this script there too (or in any
-# comparably old glibc) if you want a binary as portable as the released one.
-# The floor that build actually gives is printed at the end of this script.
+# runner. .github/workflows/release-binary.yml builds Linux inside
+# almalinux:8 (glibc 2.28) for that reason; run this script there too (or in
+# any comparably old glibc) if you want a binary as portable as the released
+# one. The floor that build actually gives is printed at the end of this
+# script. macOS has no such floor -- just needs the right arch (arm64 needs
+# Apple Silicon).
 set -euo pipefail
 
 # Pinned rather than floating: the bootloader PyInstaller prepends is shipped
@@ -29,10 +33,17 @@ set -euo pipefail
 # executable.
 PYINSTALLER_VERSION="6.16.0"
 
-# The asset name the release workflow uploads follows
-# denver-<version>-x64-linux.tar.xz; x64/Linux is not a guess but what this
-# build is -- PyInstaller freezes for the running platform only. The version
-# is filled in once it's known, after freezing (see below).
+# Read <arch>/<os> off uname, for the archive name below.
+case "$(uname -s)" in
+    Linux) OS_NAME="linux" ;;
+    Darwin) OS_NAME="macos" ;;
+    *) echo "ERROR: unsupported OS '$(uname -s)'" >&2; exit 1 ;;
+esac
+case "$(uname -m)" in
+    x86_64|amd64) ARCH_NAME="x64" ;;
+    arm64|aarch64) ARCH_NAME="arm64" ;;
+    *) echo "ERROR: unsupported arch '$(uname -m)'" >&2; exit 1 ;;
+esac
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUTPUT_DIR="$REPO_ROOT/dist"
@@ -148,19 +159,19 @@ echo "$VERSION_OUTPUT"
 
 # 'denver X.Y.Z' -> X.Y.Z; see denver.py's package_version for what it prints.
 VERSION="${VERSION_OUTPUT#denver }"
-ARCHIVE_NAME="denver-${VERSION}-x64-linux.tar.xz"
+PLATFORM="${ARCH_NAME}-${OS_NAME}"
+ARCHIVE_NAME="denver-${VERSION}-${PLATFORM}.tar.xz"
 
 mkdir -p "$OUTPUT_DIR"
 cp "$BUILD_DIR/dist/denver" "$OUTPUT_DIR/denver"
 
 if [ "$ARCHIVE" = 1 ]; then
-    # The tarball holds the versioned binary plus a 'denver' symlink to it,
-    # so it can be dropped anywhere on PATH under a name that doesn't change
-    # release to release, while the file itself still names the version it
-    # is -- e.g. for side-by-side installs of more than one release.
-    cp "$BUILD_DIR/dist/denver" "$BUILD_DIR/dist/denver-$VERSION"
-    ln -sf "denver-$VERSION" "$BUILD_DIR/dist/denver"
-    XZ_OPT=-9 tar -C "$BUILD_DIR/dist" -caf "$OUTPUT_DIR/$ARCHIVE_NAME" "denver-$VERSION" denver
+    # Tarball holds the versioned+platform binary, plus a plain 'denver'
+    # symlink to put on PATH. Version+platform in the name avoids clashes
+    # when installing several releases or several platforms side by side.
+    cp "$BUILD_DIR/dist/denver" "$BUILD_DIR/dist/denver-$VERSION-$PLATFORM"
+    ln -sf "denver-$VERSION-$PLATFORM" "$BUILD_DIR/dist/denver"
+    XZ_OPT=-9 tar -C "$BUILD_DIR/dist" -caf "$OUTPUT_DIR/$ARCHIVE_NAME" "denver-$VERSION-$PLATFORM" denver
 fi
 
 echo
@@ -168,4 +179,8 @@ echo ">>> $VERSION_OUTPUT -> $OUTPUT_DIR/denver ($(du -h "$OUTPUT_DIR/denver" | 
 if [ "$ARCHIVE" = 1 ]; then
     echo ">>> $OUTPUT_DIR/$ARCHIVE_NAME ($(du -h "$OUTPUT_DIR/$ARCHIVE_NAME" | cut -f1))"
 fi
-echo ">>> built against $(getconf GNU_LIBC_VERSION 2>/dev/null || echo 'glibc (unknown version)'): runs on any x86_64 Linux with at least that glibc"
+if [ "$OS_NAME" = "linux" ]; then
+    echo ">>> built against $(getconf GNU_LIBC_VERSION 2>/dev/null || echo 'glibc (unknown version)'): runs on any $ARCH_NAME Linux with at least that glibc"
+else
+    echo ">>> built on $(sw_vers -productVersion 2>/dev/null || echo 'macOS'): runs on $ARCH_NAME macOS"
+fi

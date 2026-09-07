@@ -70,7 +70,7 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          name: denver-binary
+          name: denver-binary-x64-linux
           path: /tmp/denver-binary
 
       - name: Install denver, every mode
