@@ -1,0 +1,14 @@
+{
+  "name": "zephyr-devshell-4.3.1",
+  "dockerComposeFile": [
+    "../../zephyr-docker/docker-compose.yml",
+    "docker-compose.devcontainer.yml"
+  ],
+  "service": "dev",
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "initializeCommand": "${localWorkspaceFolder}/.devcontainer/denver.sh run ${localWorkspaceFolder} --until docker -- echo Done",
+  "overrideCommand": true,
+  "postStartCommand": "${localWorkspaceFolder}/.devcontainer/refresh-env.sh",
+  "postAttachCommand": "${localWorkspaceFolder}/.devcontainer/refresh-env.sh",
+  "shutdownAction": "stopCompose"
+}
