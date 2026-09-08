@@ -1,0 +1,3 @@
+services:
+  dev:
+    build: !reset # avoid re-building the container

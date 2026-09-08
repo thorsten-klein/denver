@@ -138,11 +138,52 @@ the host's tools instead of the pinned ones. A `skip-on-success:` script decides
 whether *this env's* work is already done, so it must only ever look at
 this env's own state.
 
+**7. Opening the same container in VS Code.** `.devcontainer/devcontainer.json`
+follows the same pattern as [`../firmware-env`](../firmware-env)'s, adapted
+to a compose file it doesn't own: it points `dockerComposeFile` straight at
+`../zephyr-docker/docker-compose.yml` (the one the imported `docker:` section
+actually resolves to — see `ctx.resolve_path`'s base-dir-then-imports search
+order) plus `docker-compose.devcontainer.yml`, a one-line override that
+`!reset`s `build:` so VS Code never tries to rebuild the image itself, only
+ever the tag denver's own runs already built. `initializeCommand` (on the
+**host**, before the container exists) re-invokes denver from its own
+checkout up through `--until docker`, so the real `pre-docker` hook
+(`create-env.sh`) and image resolution run exactly as a normal `denver run`
+would, ending in a throwaway `--rm` container that proves the whole path
+works before VS Code ever calls `docker compose` itself.
+
+Every hook re-invokes denver the same way, via `denver.sh` — a two-line
+wrapper around `python3 .../src/denver.py "$@"`, its own directory the one
+thing that can't drift when a hook is edited. denver isn't pip-installed in
+the image, so this always runs straight off the checkout that's already
+there: this whole repo lives inside the workspace `docker-compose.yml`
+bind-mounts in full, `src/` included.
+
+Once the container is up, `postStartCommand`/`postAttachCommand` both call
+`refresh-env.sh` — the same script, not the same command pasted twice, so it
+can't drift. It re-invokes denver (`--skip docker`: this already runs
+*inside* the container the docker stage would relocate into, and its
+`setup()` refuses to do that a second time) to bring up
+`conan`/`uv`/`zephyr`/`uv-zephyr`, exports the result to `/tmp/denver.env`,
+and makes sure `~/.bashrc` sources it. Both hooks run it, and every time
+(not once): a VS Code terminal is never a child process of whatever ran
+this script, so denver's own exports can only reach it by being written out
+and re-sourced — the same trick `direnv`/`nvm` use — and neither `/tmp` nor
+a bare append to `~/.bashrc` is guaranteed to survive a container restart,
+only a rebuild always re-triggers it. Patched into the user's own
+`~/.bashrc`, not `zephyr-docker/container/Dockerfile`'s
+`/etc/bash.bashrc`, since that image is shared by every `zephyr-devshell-*`
+env and isn't this one's to patch.
+
 ## Files
 
 | Path | What it is |
 |---|---|
 | `denver.toml` | The pins, and nothing else |
+| `.devcontainer/devcontainer.json` | Opens this same container in VS Code — see point 7 above |
+| `.devcontainer/docker-compose.devcontainer.yml` | `!reset`s `build:` so VS Code only ever uses the pre-built image |
+| `.devcontainer/denver.sh` | Every hook's shared way to re-invoke denver straight off this checkout — see point 7 above |
+| `.devcontainer/refresh-env.sh` | `postStartCommand`/`postAttachCommand`'s shared script — see point 7 above |
 | `conan/conanfile.py` / `catalog.yml` | The tool set for 4.3.1, pinned by revision |
 | `conan/recipes/python-cache/denver/` | Wheel cache; `requirements.final.txt` is the generated lockfile |
 | `conan/recipes/west-blobs-cache/denver/` | Pre-cached west blobs (`blobs.txt`) |
