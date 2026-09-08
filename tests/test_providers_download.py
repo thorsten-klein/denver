@@ -415,6 +415,155 @@ def test_a_non_http_url_dies(make_context, fake_urlopen):
     assert fake_urlopen.calls == []
 
 
+# ---- mirrors -----------------------------------------------------------------#
+MIRROR = "https://mirror.invalid/tools/tool-1.0.zip"
+SECOND_MIRROR = "https://mirror2.invalid/tools/tool-1.0.zip"
+
+
+def test_a_failed_primary_url_falls_back_to_the_mirror(make_context, fake_urlopen):
+    payload = make_zip()
+    fake_urlopen.payloads[URL] = OSError("connection reset")
+    fake_urlopen.payloads[MIRROR] = payload
+    config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR]}])
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    assert fake_urlopen.calls == [URL, MIRROR]
+    assert (ctx.env_workdir / "downloads" / "tool-1.0.zip").read_bytes() == payload
+
+
+def test_mirrors_are_tried_in_order_until_one_works(make_context, fake_urlopen):
+    payload = make_zip()
+    fake_urlopen.payloads[URL] = OSError("connection reset")
+    fake_urlopen.payloads[MIRROR] = OSError("connection reset")
+    fake_urlopen.payloads[SECOND_MIRROR] = payload
+    config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR, SECOND_MIRROR]}])
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    assert fake_urlopen.calls == [URL, MIRROR, SECOND_MIRROR]
+    assert (ctx.env_workdir / "downloads" / "tool-1.0.zip").read_bytes() == payload
+
+
+def test_url_is_tried_before_any_mirror(make_context, fake_urlopen):
+    fake_urlopen.payloads["*"] = make_zip()
+    config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR]}])
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    assert fake_urlopen.calls == [URL]
+
+
+def test_every_source_failing_dies_and_names_each_one(make_context, fake_urlopen):
+    fake_urlopen.payloads[URL] = OSError("connection reset")
+    fake_urlopen.payloads[MIRROR] = OSError("timed out")
+    config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR]}])
+    ctx = make_context(config=config)
+
+    with pytest.raises(SystemExit):
+        run_download(config, ctx)
+
+    assert fake_urlopen.calls == [URL, MIRROR]
+    assert not (ctx.env_workdir / "downloads" / "tool-1.0.zip.part").exists()
+    assert not (ctx.env_workdir / "downloads" / "tool-1.0.zip").exists()
+
+
+def test_a_checksum_mismatch_falls_back_to_the_mirror_like_a_failed_transfer(make_context, fake_urlopen):
+    good_payload = make_zip()
+    bad_payload = make_zip(files={"tool": b"not the right bytes"})
+    fake_urlopen.payloads[URL] = bad_payload
+    fake_urlopen.payloads[MIRROR] = good_payload
+    config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR], "sha256sum": sha256(good_payload)}])
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    assert fake_urlopen.calls == [URL, MIRROR]
+    assert (ctx.env_workdir / "downloads" / "tool-1.0.zip").read_bytes() == good_payload
+    assert not (ctx.env_workdir / "downloads" / "tool-1.0.zip.part").exists()
+
+
+def test_every_source_failing_its_checksum_dies_and_names_each_one(make_context, fake_urlopen, caplog):
+    fake_urlopen.payloads[URL] = make_zip(files={"tool": b"wrong 1"})
+    fake_urlopen.payloads[MIRROR] = make_zip(files={"tool": b"wrong 2"})
+    config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR], "sha256sum": "0" * 64}])
+    ctx = make_context(config=config)
+
+    with pytest.raises(SystemExit):
+        run_download(config, ctx)
+
+    assert fake_urlopen.calls == [URL, MIRROR]
+    assert not (ctx.env_workdir / "downloads" / "tool-1.0.zip").exists()
+    assert not (ctx.env_workdir / "downloads" / "tool-1.0.zip.part").exists()
+    assert "sha256sum mismatch" in caplog.text
+
+
+def test_each_download_attempt_is_logged(make_context, fake_urlopen, caplog):
+    payload = make_zip()
+    fake_urlopen.payloads[URL] = OSError("connection reset")
+    fake_urlopen.payloads[MIRROR] = payload
+    config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR]}])
+    ctx = make_context(config=config, verbose=True)
+
+    run_download(config, ctx)
+
+    assert f"fetching {URL}" in caplog.text
+    assert "cannot fetch" in caplog.text
+    assert f"trying mirror 1/1 {MIRROR}" in caplog.text
+
+
+def test_a_non_http_mirror_dies_before_any_network_call(make_context, fake_urlopen):
+    config = config_for([{"name": "tool", "url": URL, "mirrors": ["file:///etc/passwd.zip"]}])
+    ctx = make_context(config=config)
+
+    with pytest.raises(SystemExit):
+        run_download(config, ctx)
+
+    assert fake_urlopen.calls == []
+
+
+def test_dry_run_reports_only_the_primary_url(make_context, fake_urlopen, capsys):
+    config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR]}])
+    ctx = make_context(config=config, dry_run=True)
+
+    run_download(config, ctx)
+
+    assert fake_urlopen.calls == []
+    err = capsys.readouterr().err
+    assert URL in err
+    assert MIRROR not in err
+
+
+@pytest.mark.parametrize(
+    "mirrors",
+    [
+        "https://mirror.invalid/tool.zip",  # not a list
+        [7],  # not a string
+        [""],  # empty
+        ["   "],  # blank
+    ],
+)
+def test_a_broken_mirrors_entry_dies_while_the_config_resolves(make_context, mirrors):
+    ctx = make_context()
+    with pytest.raises(SystemExit):
+        DownloadProvider.resolve_defaults(ctx, {"packages": [{"name": "tool", "url": URL, "mirrors": mirrors}]}, {})
+
+
+def test_mirrors_default_to_an_empty_list(make_context):
+    ctx = make_context()
+    pkg = resolved_package(ctx, {"name": "tool", "url": URL})
+    assert pkg["mirrors"] == []
+
+
+def test_mirrors_are_interpolated(make_context):
+    ctx = make_context(env={"MIRROR_HOST": "mirror.invalid"})
+    pkg = resolved_package(ctx, {"name": "tool", "url": URL, "mirrors": ["https://${MIRROR_HOST}/tool.zip"]})
+    assert pkg["mirrors"] == ["https://mirror.invalid/tool.zip"]
+
+
 def test_a_failing_unpack_leaves_no_unpack_dir_behind(make_context, fake_urlopen, run_recorder):
     fake_urlopen.payloads["*"] = make_zip()
     config = config_for([{"name": "tool", "url": URL, "unpack-cmd": "exit 3"}])

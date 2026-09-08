@@ -113,6 +113,7 @@ ninja-setup:
     env-prepend:
       PATH: '${DENVER_UNPACK_DIR}:'
     md5sum: ''
+    mirrors: []
     name: ninja
     outfile: <REPO>/examples/firmware-env/.denver/denver/downloads/ninja-linux.zip
     sha256sum: 5749cbc4e668273514150a80e387a957f933c6ed3f5f11e03fb30955e2bbead6

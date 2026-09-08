@@ -154,6 +154,11 @@ def package_env_map(entry, key):
     return dict(entry.get(key) or {})
 
 
+def package_mirrors(entry):
+    """One 'mirrors:' list of a 'packages:' entry -- [] when unset."""
+    return list(entry.get("mirrors") or [])
+
+
 # ---- authenticated downloads ------------------------------------------------ #
 def auth_entries(config):
     """Every '[[download-auth]]' entry of the whole denver.toml, validated -- [] when the config declares none."""
@@ -351,6 +356,7 @@ class DownloadProvider(Provider):
         "name",
         "description",
         "url",
+        "mirrors",
         "outfile",
         "sha256sum",
         "md5sum",
@@ -403,10 +409,12 @@ class DownloadProvider(Provider):
         # default 'outfile:' is derived from the url, so a url written as
         # '${TOOLS_MIRROR}/ninja.zip' has to be a real url by then.
         url = interpolate(entry["url"], ctx.variables)
+        mirrors = [interpolate(mirror, ctx.variables) for mirror in package_mirrors(entry)]
         return {
             "name": name,
             "description": package_text(entry, "description"),
             "url": url,
+            "mirrors": mirrors,
             "outfile": str(cls._archive_path(ctx, package_text(entry, "outfile"), url)),
             "sha256sum": package_text(entry, "sha256sum").strip().lower(),
             "md5sum": package_text(entry, "md5sum").strip().lower(),
@@ -452,6 +460,8 @@ class DownloadProvider(Provider):
         die_on_unknown_keys(entry, cls.PACKAGE_KEYS, where)
         die_unless_required_strings(entry, cls.REQUIRED_PACKAGE_KEYS, where)
         cls._validate_optional_strings(entry, where)
+        if entry.get("mirrors") is not None:
+            cls._validate_mirrors(entry["mirrors"], where)
         for key in ("env-prepend", "env-append"):
             if entry.get(key) is not None:
                 die_unless_flat_str_map(entry[key], f"{where}: '{key}:'")
@@ -463,6 +473,15 @@ class DownloadProvider(Provider):
             value = entry.get(key)
             if value is not None and not isinstance(value, str):
                 die(f"{where}: '{key}:' must be a string (got {value!r})")
+
+    @staticmethod
+    def _validate_mirrors(mirrors, where):
+        """Die unless 'mirrors:' is a list of non-empty strings -- each an alternative 'url:' to fall back to."""
+        if not isinstance(mirrors, list):
+            die(f"{where}: 'mirrors:' must be a list of urls, got {mirrors!r}")
+        for value in mirrors:
+            if not isinstance(value, str) or not value.strip():
+                die(f"{where}: 'mirrors:' entries must be non-empty strings (got {value!r})")
 
     # ---- lifecycle --------------------------------------------------------- #
     def setup(self, ctx):
@@ -515,13 +534,11 @@ class DownloadProvider(Provider):
             # "already downloaded" -- drop it and fetch it again.
             warn(f"download[{self.stage}]: {pkg['name']}: {mismatch} -- re-downloading")
             ctx.unlink(archive)
+        # verified per source inside _download() -- a checksum mismatch is
+        # treated exactly like a failed transfer there, so a mirror gets a
+        # chance to serve the right bytes instead of dying on the first
+        # source that merely transferred *something*.
         self._download(ctx, pkg, archive)
-        if ctx.dry_run:
-            return  # nothing was fetched, so there is nothing to verify
-        mismatch = self._checksum_mismatch(pkg, archive)
-        if mismatch:
-            ctx.unlink(archive)
-            die(f"download[{self.stage}]: {pkg['name']}: {mismatch} -- {pkg['url']}")
 
     @staticmethod
     def _checksum_mismatch(pkg, archive):
@@ -533,32 +550,78 @@ class DownloadProvider(Provider):
         return None
 
     def _download(self, ctx, pkg, archive):
-        """Fetch 'url:' to ``archive``, with whatever '[[download-auth]]' configured for its host.
+        """Fetch 'url:' to ``archive``, falling back to each 'mirrors:' entry in turn if it fails.
+
+        A source "fails" either by not transferring at all, or by
+        transferring something that doesn't match a configured checksum --
+        both get the same treatment: the partial file is dropped and the
+        next source is tried. A mirror serving a stale or corrupted archive
+        is exactly the case 'mirrors:' exists for, so it must not be treated
+        as better than a mirror that is simply down.
 
         The transfer goes to a .part file, renamed into place only once it
-        is complete, so an interrupted run never leaves a truncated archive
-        the next run would accept as downloaded.
+        is complete and verified, so an interrupted run never leaves a
+        truncated archive the next run would accept as downloaded. Every
+        source tried gets its own log line -- a fetch, or a failure naming
+        which source it was and that a mirror follows -- so a run that fell
+        back is never silent about it.
         """
-        url = pkg["url"]
-        if urlparse(url).scheme not in ("http", "https"):
-            die(f"download[{self.stage}]: {pkg['name']}: 'url:' must be http(s), got {url!r}")
+        sources = self._sources(pkg)
         if ctx.dry_run:
-            ctx.dry_note("~", f"download {url} -> {archive}")
+            ctx.dry_note("~", f"download {pkg['url']} -> {archive}")
             return
-        info(f"download[{self.stage}]: {pkg['name']}: fetching {url}")
+        part = archive.with_name(archive.name + ".part")
+        failures = []
+        for index, url in enumerate(sources):
+            failure = self._try_source(ctx, pkg, url, index, len(sources), part)
+            if failure is None:
+                part.replace(archive)
+                return
+            failures.append(failure)
+        details = "\n".join(f"  - {failure}" for failure in failures)
+        die(
+            f"download[{self.stage}]: {pkg['name']}: cannot fetch a valid archive from 'url:' or any "
+            f"'mirrors:' entry:\n{details}"
+        )
+
+    def _sources(self, pkg):
+        """'url:' followed by every 'mirrors:' entry, in order -- dies unless every one is http(s)."""
+        sources = [pkg["url"], *pkg["mirrors"]]
+        for url in sources:
+            if urlparse(url).scheme not in ("http", "https"):
+                die(f"download[{self.stage}]: {pkg['name']}: 'url:'/'mirrors:' must be http(s), got {url!r}")
+        return sources
+
+    def _try_source(self, ctx, pkg, url, index, total, part):
+        """Fetch and checksum-verify one source into ``part``, logging the attempt -- the failure message, or None."""
+        label = "fetching" if index == 0 else f"trying mirror {index}/{total - 1}"
+        info(f"download[{self.stage}]: {pkg['name']}: {label} {url}")
         headers = auth_headers_for(ctx.config, url, ctx.variables)
         if headers:
             info(
                 f"download[{self.stage}]: {pkg['name']}: with the '{AUTH_SECTION}' credentials for {urlparse(url).hostname}"
             )
-        part = archive.with_name(archive.name + ".part")
+        failure = self._fetch_one(pkg, url, headers, part)
+        if failure is None:
+            return None
+        message = f"{url}: {failure}"
+        remaining = "-- trying the next mirror" if index < total - 1 else ""
+        warn(f"download[{self.stage}]: {pkg['name']}: {message} {remaining}".rstrip())
+        return message
+
+    def _fetch_one(self, pkg, url, headers, part):
+        """Transfer and checksum-verify ``url`` into ``part`` -- the failure message, or None once it's good."""
         try:
             with open_url(url, headers) as response, part.open("wb") as fh:
                 shutil.copyfileobj(response, fh)
         except OSError as exc:  # URLError (HTTPError included) and every socket/filesystem failure below it
             part.unlink(missing_ok=True)
-            die(f"download[{self.stage}]: {pkg['name']}: cannot fetch {url}: {exc}{auth_hint(exc, url, headers)}")
-        part.replace(archive)
+            return f"cannot fetch: {exc}{auth_hint(exc, url, headers)}"
+        mismatch = self._checksum_mismatch(pkg, part)
+        if mismatch:
+            part.unlink(missing_ok=True)
+            return mismatch
+        return None
 
     # ---- unpack -------------------------------------------------------------- #
     def _ensure_unpacked(self, ctx, pkg, raw_pkg, archive):
