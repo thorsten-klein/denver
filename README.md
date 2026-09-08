@@ -23,9 +23,8 @@ pattern is the same: you run a pile of one-off steps to get a working build
 the first time.
 
 `denver` gives you a declarative way to setup your environment. You describe the steps a
-project needs in a `denver.yml`, and `denver` runs them -- the same way every
-time on any machine — for you, for teammates, and in CI. `denver` is optimized to run
-only necessary stages, so it stays fast.
+project needs in a `denver.yml`, and `denver` runs them — the same way every
+time on any machine — for you, for teammates, and in CI.
 
 ## Documentation
 
