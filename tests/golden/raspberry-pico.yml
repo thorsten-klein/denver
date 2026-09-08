@@ -57,6 +57,7 @@ arm-none-eabi:
     env-prepend:
       PATH: '${DENVER_UNPACK_DIR}/bin:'
     md5sum: bbe1e4bf65591692ed93cd19706c93af
+    mirrors: []
     name: arm-none-eabi
     outfile: <REPO>/examples/raspberry-pico/.denver/denver/downloads/arm-gnu-toolchain-15.3.rel1-x86_64-arm-none-eabi.tar.xz
     sha256sum: ''

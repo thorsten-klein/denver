@@ -36,6 +36,15 @@ The stage has exactly one key of its own:
 - **`url`** (**required**) — where to fetch the archive from. Must be
   `http(s)`; `${...}` interpolation works (e.g. an internal mirror in
   `[env]`).
+- **`mirrors`** — a list of alternative urls, tried in order if `url` fails
+  (and then each other, in the order written) until one succeeds. "Fails"
+  includes a checksum mismatch, not just a transfer error — a mirror
+  serving the wrong bytes is treated the same as one that is unreachable,
+  and the next source is tried. Only when every one of them fails does the
+  download fail. Same rules as `url`: `http(s)` only, `${...}`
+  interpolation works. Each attempt logs a line — what it is fetching, and,
+  on failure, that it is falling back to the next mirror — so a run that
+  needed one is never silent about it.
 - **`outfile`** — the file name to store the archive under, inside the
   downloads folder (default: the file name the `url` ends in). An absolute
   value puts the archive wherever it names instead.
@@ -146,12 +155,18 @@ never finished and is rebuilt too.
 Per package, in order:
 
 1. **Download** — skipped when the archive is already there *and* passes
-   its configured checksums. An archive that fails them is deleted and
-   fetched again; one that fails them again right after being fetched is a
-   hard error, and the bad file is not left behind. The transfer itself
-   goes to a `.part` file that is renamed into place only once complete, so
-   an interrupted run never leaves a truncated archive that the next run
-   would accept.
+   its configured checksums. An archive already on disk that fails them is
+   deleted and fetched again. `url` is tried first, then each `mirrors:`
+   entry in order on any failure of the one before it — and a checksum
+   mismatch counts as a failure exactly like a transfer error: a mirror
+   serving a stale or corrupted file is treated no better than one that is
+   simply down, and the next source gets a chance. Only once every source
+   has failed (transfer or checksum) does the download fail, naming what
+   went wrong with each one it tried; the bad file is never left behind.
+   The transfer itself goes to a `.part` file that is checksummed and
+   renamed into place only once complete and verified, so an interrupted or
+   corrupted run never leaves a truncated or wrong archive that the next
+   run would accept.
 2. **Unpack** — skipped when the stamp above says this exact package is
    already unpacked there. Otherwise the tree is removed and rebuilt: the
    archive is extracted into a staging dir *next to* `unpack-dir:` and
