@@ -329,6 +329,15 @@ unpack dir and prefixes every log line about it. Unique within the stage.</p></l
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">url</span></code></strong> (<strong>required</strong>) — where to fetch the archive from. Must be
 <code class="docutils literal notranslate"><span class="pre">http(s)</span></code>; <code class="docutils literal notranslate"><span class="pre">${...}</span></code> interpolation works (e.g. an internal mirror in
 <code class="docutils literal notranslate"><span class="pre">[env]</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">mirrors</span></code></strong> — a list of alternative urls, tried in order if <code class="docutils literal notranslate"><span class="pre">url</span></code> fails
+(and then each other, in the order written) until one succeeds. “Fails”
+includes a checksum mismatch, not just a transfer error — a mirror
+serving the wrong bytes is treated the same as one that is unreachable,
+and the next source is tried. Only when every one of them fails does the
+download fail. Same rules as <code class="docutils literal notranslate"><span class="pre">url</span></code>: <code class="docutils literal notranslate"><span class="pre">http(s)</span></code> only, <code class="docutils literal notranslate"><span class="pre">${...}</span></code>
+interpolation works. Each attempt logs a line — what it is fetching, and,
+on failure, that it is falling back to the next mirror — so a run that
+needed one is never silent about it.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">outfile</span></code></strong> — the file name to store the archive under, inside the
 downloads folder (default: the file name the <code class="docutils literal notranslate"><span class="pre">url</span></code> ends in). An absolute
 value puts the archive wherever it names instead.</p></li>
@@ -434,12 +443,18 @@ never finished and is rebuilt too.</p>
 <p>Per package, in order:</p>
 <ol class="arabic simple">
 <li><p><strong>Download</strong> — skipped when the archive is already there <em>and</em> passes
-its configured checksums. An archive that fails them is deleted and
-fetched again; one that fails them again right after being fetched is a
-hard error, and the bad file is not left behind. The transfer itself
-goes to a <code class="docutils literal notranslate"><span class="pre">.part</span></code> file that is renamed into place only once complete, so
-an interrupted run never leaves a truncated archive that the next run
-would accept.</p></li>
+its configured checksums. An archive already on disk that fails them is
+deleted and fetched again. <code class="docutils literal notranslate"><span class="pre">url</span></code> is tried first, then each <code class="docutils literal notranslate"><span class="pre">mirrors:</span></code>
+entry in order on any failure of the one before it — and a checksum
+mismatch counts as a failure exactly like a transfer error: a mirror
+serving a stale or corrupted file is treated no better than one that is
+simply down, and the next source gets a chance. Only once every source
+has failed (transfer or checksum) does the download fail, naming what
+went wrong with each one it tried; the bad file is never left behind.
+The transfer itself goes to a <code class="docutils literal notranslate"><span class="pre">.part</span></code> file that is checksummed and
+renamed into place only once complete and verified, so an interrupted or
+corrupted run never leaves a truncated or wrong archive that the next
+run would accept.</p></li>
 <li><p><strong>Unpack</strong> — skipped when the stamp above says this exact package is
 already unpacked there. Otherwise the tree is removed and rebuilt: the
 archive is extracted into a staging dir <em>next to</em> <code class="docutils literal notranslate"><span class="pre">unpack-dir:</span></code> and
