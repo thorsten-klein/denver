@@ -330,19 +330,41 @@ def _same_origin(url, other):
     return (first.scheme, first.hostname, first.port) == (second.scheme, second.hostname, second.port)
 
 
-def open_url(url, headers):
-    """Open ``url``, sending ``headers`` if there are any.
+def _is_plain_get(headers, method, body):
+    """Whether the request has no credentials, is a GET and has no body -- the plain urlopen case."""
+    return not headers and method == "GET" and body is None
 
-    With no credentials configured this is urllib's plain urlopen, exactly
-    as before: an opener that drops auth headers across a redirect has
-    nothing to drop when none were sent in the first place.
+
+def _build_request(url, headers, method, body):
+    """Build the ``Request`` for a non-plain call, defaulting 'Content-Type' for a bare body."""
+    request = Request(url, data=body, headers=headers, method=method)  # nosec B310
+    if body is not None and not _has_content_type(headers):
+        # the same default curl's own '-d'/'--data' sends -- what a POST
+        # accepting a license agreement's form fields (the case this exists
+        # for) needs the server to parse 'data:' as
+        request.add_header("Content-Type", "application/x-www-form-urlencoded")
+    return request
+
+
+def open_url(url, headers, *, method="GET", data=None):
+    """Open ``url``, sending ``headers``/``method``/``data`` if there are any.
+
+    With no credentials, a plain GET and no body, this is urllib's plain
+    urlopen, exactly as before: an opener that drops auth headers across a
+    redirect has nothing to drop when none were sent in the first place.
     """
-    if not headers:
-        # scheme validated by the caller -- file:/ and other local-file schemes are rejected
+    body = data.encode() if data else None
+    # scheme validated by the caller -- file:/ and other local-file schemes are rejected
+    if _is_plain_get(headers, method, body):
         return urlopen(url)  # nosec B310
-    # scheme validated by the caller, same as the plain path above
-    request = Request(url, headers=headers)  # nosec B310
-    return build_opener(AuthStrippingRedirectHandler(headers)).open(request)
+    request = _build_request(url, headers, method, body)
+    opener = build_opener(AuthStrippingRedirectHandler(headers)) if headers else build_opener()
+    return opener.open(request)
+
+
+def _has_content_type(headers):
+    """Whether ``headers`` already names a 'Content-Type', case-insensitively."""
+    return any(name.lower() == "content-type" for name in headers)
 
 
 class DownloadProvider(Provider):
@@ -357,6 +379,8 @@ class DownloadProvider(Provider):
         "description",
         "url",
         "mirrors",
+        "method",
+        "data",
         "outfile",
         "sha256sum",
         "md5sum",
@@ -372,12 +396,17 @@ class DownloadProvider(Provider):
     #: package keys that are optional, but must be a string when given
     OPTIONAL_STRING_KEYS = (
         "description",
+        "method",
+        "data",
         "outfile",
         "sha256sum",
         "md5sum",
         "unpack-dir",
         "unpack-cmd",
     )
+
+    #: the only 'method:' values this provider knows how to send
+    METHODS = ("GET", "POST")
 
     # ---- config defaults ------------------------------------------------- #
     @classmethod
@@ -415,6 +444,8 @@ class DownloadProvider(Provider):
             "description": package_text(entry, "description"),
             "url": url,
             "mirrors": mirrors,
+            "method": package_text(entry, "method", "GET").strip().upper(),
+            "data": interpolate(package_text(entry, "data"), ctx.variables),
             "outfile": str(cls._archive_path(ctx, package_text(entry, "outfile"), url)),
             "sha256sum": package_text(entry, "sha256sum").strip().lower(),
             "md5sum": package_text(entry, "md5sum").strip().lower(),
@@ -460,6 +491,7 @@ class DownloadProvider(Provider):
         die_on_unknown_keys(entry, cls.PACKAGE_KEYS, where)
         die_unless_required_strings(entry, cls.REQUIRED_PACKAGE_KEYS, where)
         cls._validate_optional_strings(entry, where)
+        cls._validate_method(entry, where)
         if entry.get("mirrors") is not None:
             cls._validate_mirrors(entry["mirrors"], where)
         for key in ("env-prepend", "env-append"):
@@ -473,6 +505,20 @@ class DownloadProvider(Provider):
             value = entry.get(key)
             if value is not None and not isinstance(value, str):
                 die(f"{where}: '{key}:' must be a string (got {value!r})")
+
+    @classmethod
+    def _validate_method(cls, entry, where):
+        """Die unless 'method:' (if given) is GET/POST, and 'data:' (if given) only appears on a POST.
+
+        A bare GET has no body to send, so a 'data:' entry with no explicit
+        'method: POST' would silently do nothing -- an error here, not a
+        request that quietly ignores half its own config.
+        """
+        method = (entry.get("method") or "GET").strip().upper()
+        if method not in cls.METHODS:
+            die(f"{where}: 'method:' must be one of {cls.METHODS!r}, got {entry['method']!r}")
+        if entry.get("data") and method != "POST":
+            die(f"{where}: 'data:' needs 'method: POST' -- a GET has no body to send it in")
 
     @staticmethod
     def _validate_mirrors(mirrors, where):
@@ -612,7 +658,10 @@ class DownloadProvider(Provider):
     def _fetch_one(self, pkg, url, headers, part):
         """Transfer and checksum-verify ``url`` into ``part`` -- the failure message, or None once it's good."""
         try:
-            with open_url(url, headers) as response, part.open("wb") as fh:
+            with (
+                open_url(url, headers, method=pkg["method"], data=pkg["data"] or None) as response,
+                part.open("wb") as fh,
+            ):
                 shutil.copyfileobj(response, fh)
         except OSError as exc:  # URLError (HTTPError included) and every socket/filesystem failure below it
             part.unlink(missing_ok=True)
@@ -644,7 +693,8 @@ class DownloadProvider(Provider):
     @staticmethod
     def _stamp_text(pkg):
         """What the unpacked tree records about its origin -- change any of it and the tree is rebuilt."""
-        return "\n".join(f"{key}: {pkg[key]}" for key in ("url", "outfile", "sha256sum", "md5sum", "unpack-cmd"))
+        keys = ("url", "method", "data", "outfile", "sha256sum", "md5sum", "unpack-cmd")
+        return "\n".join(f"{key}: {pkg[key]}" for key in keys)
 
     def _unpack(self, ctx, pkg, raw_pkg, archive, dest):
         """Extract into a staging dir next to ``dest`` and move it into place only once it is complete.
