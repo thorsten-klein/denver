@@ -1,0 +1,25 @@
+{# Adds the version line under the sidebar title.
+
+   sphinx_rtd_theme used to render this itself, behind a `display_version`
+   theme option; 3.x dropped it -- the theme's own sidebar now shows a
+   version only on readthedocs.org-hosted builds, where the RTD addons
+   inject a switcher into `div.switch-menus`. This site is self-built and
+   published to gh-pages, so it renders the line itself.
+
+   `release` and `version_url` both come from doc/conf.py (the latter via
+   html_context) -- the version links to the exact tag or commit the build
+   came from. The theme's sidebartitle block ends with the search box, so
+   `super()` puts this markup after it; doc/_static/custom.css orders it
+   back above the box, where the theme always had it. #}
+{% extends "!layout.html" %}
+
+{%- block sidebartitle %}
+{{ super() }}
+{%- if release %}
+<div class="version">
+  {%- if version_url %}<a href="{{ version_url }}">{{ release }}</a>
+  {%- else %}{{ release }}
+  {%- endif %}
+</div>
+{%- endif %}
+{%- endblock %}
