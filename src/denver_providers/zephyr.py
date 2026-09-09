@@ -198,22 +198,45 @@ class ZephyrProvider(Provider):
             ctx.run([west, "config", key, value], cwd=top)
         info(f"zephyr: west config {key}={value}")
 
-    def _configure(self, ctx, cfg, west, top, west_yml, zephyr_base):
-        """Set every `west config` key that differs from its current value (manifest.path/file, zephyr.base, ...)."""
+    def _configure(self, ctx, cfg, west, top, west_yml, zephyr_base):  # noqa: ARG002  # shared _configure/_update signature
+        """Set every `west config` key that differs from its current value (manifest.path/file, ...).
+
+        `zephyr.base` is deliberately not set here: until `west update` has
+        run, there's no manifest to say where (or whether) a project named
+        'zephyr' actually lives -- see `_set_zephyr_base`.
+        """
         banner(ctx, self.stage, "west config")
         current = ctx.run([west, "config", "-l"], cwd=top, capture=True, echo=False, check=False).stdout
 
-        # computed from the (already-resolved) west-yml/base, then any
-        # extra/overriding entries from denver.toml -- these three are workspace
-        # topology, not denver.toml defaults, so they're computed right here.
+        # computed from the (already-resolved) west-yml, then any
+        # extra/overriding entries from denver.toml -- workspace topology,
+        # not denver.toml defaults, so it's computed right here.
         west_config = {
             "manifest.path": os.path.relpath(west_yml.parent, top),
             "manifest.file": west_yml.name,
-            "zephyr.base": os.path.relpath(zephyr_base, top),
         }
         west_config.update(cfg.get("west-config") or {})
         for key, value in west_config.items():
             self._ensure_config(ctx, west, top, current, key, str(value))
+
+    def _set_zephyr_base(self, ctx, west, top):
+        """After patches are applied, point `zephyr.base` at the manifest's own 'zephyr' project path, if it has one.
+
+        `west list zephyr -f {path}` fails (empty stdout) when the manifest
+        has no project named 'zephyr' -- left untouched then, since there's
+        nothing to point it at.
+        """
+        path = ctx.run(
+            [west, "list", "zephyr", "-f", "{path}"],
+            cwd=top,
+            capture=True,
+            echo=False,
+            check=False,
+        ).stdout.strip()
+        if not path:
+            return
+        current = ctx.run([west, "config", "-l"], cwd=top, capture=True, echo=False, check=False).stdout
+        self._ensure_config(ctx, west, top, current, "zephyr.base", path)
 
     def _west_info(self, ctx, west, top, west_yml, zephyr_base):
         """Build a fingerprint string (west-yml content, zephyr commit, resolved manifest, patches.yml) to detect drift.
@@ -255,7 +278,7 @@ class ZephyrProvider(Provider):
         return "\n".join(lines)
 
     def _update(self, ctx, cfg, west, top, west_yml, zephyr_base):
-        """`west update` (skipped if nothing changed since last run), apply patches, then fetch/cache blobs."""
+        """`west update` (skipped if nothing changed since last run), apply patches, set zephyr.base, then fetch/cache blobs."""
         banner(ctx, self.stage, "west update")
         info_file = ctx.logs_dir / "west-update.info"
         ctx.mkdir(info_file.parent)
@@ -272,6 +295,7 @@ class ZephyrProvider(Provider):
         ctx.run([west, "update", *update_args], cwd=top)
 
         self._apply_project_patches(ctx, cfg, west, top)
+        self._set_zephyr_base(ctx, west, top)
 
         ctx.run([west, "-v", "blobs", "fetch", *cfg["blobs-fetch-args"]], cwd=top)
         self._update_blobs_cache(ctx, cfg, west, top)

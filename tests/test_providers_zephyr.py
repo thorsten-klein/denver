@@ -247,12 +247,10 @@ def test_configure_sets_all_keys_when_missing(make_context, run_recorder, which)
     config = {"zephyr": {"west-yml": "west.yml"}}
     ctx = make_ctx(make_context, config)
     run_zephyr(config, ctx)
-    set_cmds = [
-        c
-        for c in run_recorder.commands()
-        if "config manifest.path" in c or "config manifest.file" in c or "config zephyr.base" in c
-    ]
-    assert len(set_cmds) == 3
+    set_cmds = [c for c in run_recorder.commands() if "config manifest.path" in c or "config manifest.file" in c]
+    assert len(set_cmds) == 2
+    # zephyr.base isn't one of _configure's keys -- see _set_zephyr_base tests below.
+    assert not any("config zephyr.base " in c for c in run_recorder.commands())
 
 
 def test_configure_skips_matching_existing(make_context, run_recorder, which):
@@ -262,14 +260,9 @@ def test_configure_skips_matching_existing(make_context, run_recorder, which):
     import os as _os
 
     manifest_path = _os.path.relpath(west_yml_path.parent, west_topdir(ctx.env_dir))
-    zephyr_base = _os.path.relpath((west_topdir(ctx.env_dir) / "zephyr-rtos").resolve(), west_topdir(ctx.env_dir))
-    run_recorder.responses["config -l"] = resp(
-        stdout=(f"manifest.path={manifest_path}\nmanifest.file=west.yml\nzephyr.base={zephyr_base}\n")
-    )
+    run_recorder.responses["config -l"] = resp(stdout=(f"manifest.path={manifest_path}\nmanifest.file=west.yml\n"))
     run_zephyr(config, ctx)
-    set_cmds = [
-        c for c in run_recorder.commands() if c.startswith("west config manifest") or "config zephyr.base " in c
-    ]
+    set_cmds = [c for c in run_recorder.commands() if c.startswith("west config manifest")]
     assert set_cmds == []
 
 
@@ -359,6 +352,39 @@ def test_update_args_combined_with_fixed_ci_args(make_context, run_recorder, whi
     update_cmd = next(c for c in run_recorder.commands() if c.endswith("update") or " update " in c)
     assert "--stats" in update_cmd
     assert "--narrow" in update_cmd
+
+
+# ---- _set_zephyr_base ------------------------------------------------------------#
+def test_set_zephyr_base_from_west_list(make_context, run_recorder, which, tmp_path):
+    config = {"zephyr": {"west-yml": "west.yml"}}
+    ctx = make_ctx(make_context, config)
+    zephyr_path = str(tmp_path / "zephyr")
+    run_recorder.responses["list zephyr -f {path}"] = resp(stdout=f"{zephyr_path}\n")
+    run_zephyr(config, ctx)
+    assert any(a[-2:] == ["zephyr.base", zephyr_path] for a in run_recorder.argvs())
+
+
+def test_set_zephyr_base_untouched_when_no_zephyr_project(make_context, run_recorder, which):
+    config = {"zephyr": {"west-yml": "west.yml"}}
+    ctx = make_ctx(make_context, config)
+    run_recorder.responses["list zephyr -f {path}"] = resp(stdout="")
+    run_zephyr(config, ctx)
+    assert not any("config zephyr.base " in c for c in run_recorder.commands())
+
+
+def test_set_zephyr_base_runs_after_patches(make_context, run_recorder, which, tmp_path):
+    config = {"zephyr": {"west-yml": "west.yml"}}
+    ctx = make_ctx(make_context, config)
+    proj = tmp_path / "proj"
+    (proj / "zephyr").mkdir(parents=True)
+    (proj / "zephyr" / "patches.yml").write_text("x\n")
+    run_recorder.responses["list -f {abspath}"] = resp(stdout=f"{proj}\n")
+    run_recorder.responses["list zephyr -f {path}"] = resp(stdout=f"{tmp_path / 'zephyr'}\n")
+    run_zephyr(config, ctx)
+    commands = run_recorder.commands()
+    patch_idx = next(i for i, c in enumerate(commands) if "--src-module" in c)
+    base_idx = next(i for i, c in enumerate(commands) if "config zephyr.base " in c)
+    assert patch_idx < base_idx
 
 
 # ---- _apply_project_patches -----------------------------------------------------#

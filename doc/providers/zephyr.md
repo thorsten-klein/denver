@@ -30,7 +30,11 @@ installs it. In practice an earlier `uv` stage provides it, by listing
   enclosing `.git`.
 - **`exe`** (default: `"west"`) — the `west` executable, resolved on `PATH`.
 - **`west-yml`** (default: `<WEST_TOPDIR>/west.yml`) — the manifest.
-- **`base`** (default: `${WEST_TOPDIR}/zephyr-rtos`) — `ZEPHYR_BASE`.
+- **`base`** (default: `${WEST_TOPDIR}/zephyr-rtos`) — `ZEPHYR_BASE`. The
+  `zephyr.base` `west config` entry itself is set separately, *after* `west
+  update` and project patches are applied, from `west list zephyr -f
+  {path}` — i.e. wherever the manifest's own `zephyr` project actually
+  landed. Left untouched if the manifest has no project named `zephyr`.
 - **`west-config`** — extra/overriding `west config` key/value pairs, e.g.
   `{zephyr.base-prefer: env}`.
 - **`blobs-cache`** — a path to an auto-generated list of west blobs to
