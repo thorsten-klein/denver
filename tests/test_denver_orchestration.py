@@ -1,5 +1,6 @@
 """Tests for denver.py orchestration: hooks, stacking, run_stages."""
 
+import inspect
 import json
 import re
 import sys
@@ -570,6 +571,74 @@ def test_reinvoke_command_preserves_custom_config_filename(tmp_path):
     cmd = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"])
     assert cmd[2] == "run"
     assert cmd[3] == str(config_path)
+
+
+# ---- reinvoke_command <-> RunOptions parity ---------------------------------#
+# One value per RunOptions field, distinct from that field's own default, used
+# to prove reinvoke_command's argv actually changes when the field does (see
+# test_reinvoke_command_forwards_every_run_option below). A field that must
+# NOT be forwarded belongs in _NOT_REINVOKED instead, with a comment saying
+# why -- never silently dropped from both.
+_REINVOKE_FIELD_OVERRIDES = {
+    "until_stage": "conan",
+    "skip_stages": ("uv-zephyr",),
+    "quiet": 2,
+    "verbose": True,
+    "fast": True,
+    "force": True,
+    "ci": True,
+    "no_wait": True,
+    "start_time": 12345.0,
+    "cli_args": denver.CliArgs(argv=["--custom-flag", "custom-value"]),
+    "env_vars": {"SOME_VAR": "some-value"},
+    "export_env": "/tmp/exported.env",
+}
+
+# dry_run is deliberately not forwarded: reinvoke_command's argv is only ever
+# handed to Context.exec(), which itself never really execs under --dry-run
+# (see its own docstring) -- it prints the command and returns instead -- so
+# there is nothing for a --dry-run flag on the *inner* invocation to do.
+_NOT_REINVOKED = {"dry_run"}
+
+
+def test_reinvoke_command_forwards_every_run_option(tmp_path):
+    """Every RunOptions field either changes reinvoke_command's argv, or is a documented exception.
+
+    Guards against the bug class this class of field is prone to: a
+    RunOptions field read by the outer (host) run_stages() but never
+    re-passed to the inner, wrapper-relocated one -- correct on a plain run,
+    silently wrong only once a wrapper stage (docker) actually relocates the
+    command (see reinvoke_command's own docstring for the full list of what
+    has to travel and why). First checks that every constructor parameter is
+    accounted for one way or the other, so a newly added field can't be
+    forgotten by this test either -- then that each accounted-for field
+    actually moves the needle.
+    """
+    params = set(inspect.signature(denver.RunOptions.__init__).parameters) - {"self"}
+    accounted_for = set(_REINVOKE_FIELD_OVERRIDES) | _NOT_REINVOKED
+    assert params == accounted_for, (
+        f"RunOptions field(s) {params ^ accounted_for} not accounted for -- add each to "
+        "_REINVOKE_FIELD_OVERRIDES (if reinvoke_command should forward it) or "
+        "_NOT_REINVOKED (with a comment saying why not) in this test"
+    )
+
+    config_path = tmp_path / "e" / "denver.toml"
+    # start_time fixed on the baseline (rather than left to its own
+    # RunOptions() default of time.time()) so comparing baseline_argv against
+    # every other field's changed_argv isn't itself contaminated by two
+    # different real-clock start_time values -- see the loop below.
+    baseline = denver.RunOptions(start_time=100.0)
+    baseline_argv = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], options=baseline)
+
+    for field, value in _REINVOKE_FIELD_OVERRIDES.items():
+        overrides = {"start_time": 100.0, field: value}
+        changed = denver.RunOptions(**overrides)
+        changed_argv = denver.reinvoke_command(config_path, ["echo", "hi"], ["docker"], options=changed)
+        assert changed_argv != baseline_argv, (
+            f"RunOptions.{field}={value!r} did not change reinvoke_command's argv -- "
+            "it is read on the outer invocation but never re-passed to the inner "
+            "one, so a wrapper reinvocation (e.g. docker) silently drops it"
+        )
 
 
 # ---- run_stages -------------------------------------------------------------#
