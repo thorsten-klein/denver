@@ -2,6 +2,9 @@
 
 There are several ways to install denver. Pick whichever fits your project.
 
+All versions, changelogs and prebuilt binaries are on the
+[GitHub releases page](https://github.com/thorsten-klein/denver/releases).
+
 ## Run from source (no install)
 
 The fastest way to try denver, and the one with nothing to install: clone
