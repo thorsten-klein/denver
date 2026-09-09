@@ -2589,7 +2589,7 @@ def _mark_relocated(ctx, wrappers):
 
 
 class _StageSkipState:
-    """Everything ``_show_skipped``/``_run_stage_setup`` need to explain why a stage isn't running -- see run_stages.
+    """Everything ``_prepare_or_report``/``_run_stage_setup`` need to explain why a stage isn't running -- see run_stages.
 
     ``all_stages`` is every declared stage, in 'stages:' order: it is what
     lets both run paths walk the pipeline once, in order, rather than
@@ -2665,20 +2665,15 @@ class RunOptions:
         self.env_vars = dict(env_vars or {})
 
 
-def _show_skipped(ctx, skipped, skip_state):
-    """Print a "skipped by ..." banner for each stage in ``skipped`` (disabled: true, --until, --skip, or depends-on)."""
-    for s in skipped:
-        _announce_skip(ctx, s.stage, skip_state.reasons[s.stage], skip_state)
-
-
 def _announce_skip(ctx, stage_id, reason, skip_state):
     """Print one "[i/n] stage '<id>' <reason>" banner and record it in ``ctx.stage_timings``.
 
-    Shared by _show_skipped (every statically-skipped stage) and
-    _run_stage_setup (a runtime skip-on-*/depends-on skip, discovered only
-    once the pipeline walk actually reaches that stage) -- both are a whole
-    stage doing nothing this run, so both get the same one-line banner
-    rather than stage_banner()'s "entering a stage" line.
+    Shared by _prepare_or_report (every statically-skipped stage: disabled,
+    --until, --skip, or depends-on) and _run_stage_setup (a runtime
+    skip-on-*/depends-on skip, discovered only once the pipeline walk
+    actually reaches that stage) -- both are a whole stage doing nothing
+    this run, so both get the same one-line banner rather than
+    stage_banner()'s "entering a stage" line.
     """
     from denver_providers.context import skip_banner
 
@@ -2767,7 +2762,7 @@ def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, 
             skip_state=skip_state,
         )
     elif stage.stage in report_ids:
-        _show_skipped(ctx, [stage], skip_state)
+        _announce_skip(ctx, stage.stage, skip_state.reasons[stage.stage], skip_state)
 
 
 def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers, setups, options):
@@ -2923,20 +2918,10 @@ def _sorted_nested(value):
     alphabetical, easy-to-scan ordering.
     """
     if isinstance(value, dict):
-        return _sorted_dict(value)
+        return {k: _sorted_nested(value[k]) for k in sorted(value)}
     if isinstance(value, list):
-        return _sorted_list(value)
+        return [_sorted_nested(v) for v in value]
     return value
-
-
-def _sorted_dict(value):
-    """A mapping's keys alphabetically, each value recursively sorted."""
-    return {k: _sorted_nested(value[k]) for k in sorted(value)}
-
-
-def _sorted_list(value):
-    """A list's entries recursively sorted (the list's own order is kept)."""
-    return [_sorted_nested(v) for v in value]
 
 
 def _ordered_stage_section(section):
@@ -3066,7 +3051,8 @@ def _dump_toml_table(table, path, lines):
     Only this top level hands out '[section]' headers to plain tables; everything below one is
     rendered inline -- see _dump_toml_section_body.
     """
-    plain, nested = _toml_partition_table(table)
+    plain = [(k, v) for k, v in table.items() if not _toml_is_table_like(v)]
+    nested = [(k, v) for k, v in table.items() if _toml_is_table_like(v)]
     for key, value in plain:
         _dump_toml_plain_key(key, value, lines)
     for key, value in nested:
@@ -3085,18 +3071,12 @@ def _dump_toml_section_body(table, path, lines):
 
     Two shapes are still given a header of their own at any depth -- see _toml_needs_header.
     """
-    plain, headed = _toml_partition_section(table)
+    plain = [(k, v) for k, v in table.items() if not _toml_needs_header(v)]
+    headed = [(k, v) for k, v in table.items() if _toml_needs_header(v)]
     for key, value in plain:
         _dump_toml_plain_key(key, value, lines)
     for key, value in headed:
         _dump_toml_nested_key(value, (*path, key), lines)
-
-
-def _toml_partition_section(table):
-    """``table``'s items split into (inline, still-needs-a-header) -- see _dump_toml_section_body."""
-    plain = [(k, v) for k, v in table.items() if not _toml_needs_header(v)]
-    headed = [(k, v) for k, v in table.items() if _toml_needs_header(v)]
-    return plain, headed
 
 
 def _toml_needs_header(value):
@@ -3131,13 +3111,6 @@ def _toml_nested_values(value):
     if isinstance(value, list):
         return value
     return []
-
-
-def _toml_partition_table(table):
-    """``table``'s items split into (plain, nested) -- see _dump_toml_table for why the split matters."""
-    plain = [(k, v) for k, v in table.items() if not _toml_is_table_like(v)]
-    nested = [(k, v) for k, v in table.items() if _toml_is_table_like(v)]
-    return plain, nested
 
 
 def _dump_toml_plain_key(key, value, lines):
@@ -3405,15 +3378,11 @@ def _drop_null_values_dict(section):
         if sub is None:
             continue
         sub = _drop_null_values(sub)
-        if _is_empty_container(sub):
+        # drop a dict/list that's now empty (--show-config's minimal default)
+        if isinstance(sub, (dict, list)) and not sub:
             continue
         kept[key] = sub
     return kept
-
-
-def _is_empty_container(value):
-    """Whether ``value`` is a dict/list ``_drop_null_values`` emptied out, for the default --show-config (minimal)."""
-    return isinstance(value, (dict, list)) and not value
 
 
 def _drop_filtered_sections(resolved, stage_ids):
@@ -3697,7 +3666,10 @@ def _removal_chains(config_path, *, all_dirs):
     for path in [Path(config_path), *_import_chain(config_path)]:
         chains += _state_dir_chains_for(path)
     if all_dirs:
-        chains += _cache_dir_chain()
+        # shared cache dir: one more chain, if it exists.
+        cache_dir = _shared_cache_dir()
+        if cache_dir.exists():
+            chains += [[cache_dir]]
     return chains
 
 
@@ -3706,12 +3678,6 @@ def _state_dir_chains_for(config_path):
     env_dir = config_path.parent
     plans = (_state_dir_plan(state_dir, env_dir) for state_dir in _state_dirs_for(env_dir, config_path))
     return [chain for chain in plans if chain]
-
-
-def _cache_dir_chain():
-    """``[[<shared cache dir>]]`` if it exists, else ``[]`` -- denver's own contribution to '--all'."""
-    cache_dir = _shared_cache_dir()
-    return [[cache_dir]] if cache_dir.exists() else []
 
 
 def _remove_chains(chains, *, dry_run, assume_yes):
@@ -4537,11 +4503,7 @@ def _entry_flag_spellings(entry):
     """
     if not isinstance(entry, dict):
         return []
-    return _flags_value_as_list(entry.get("flags"))
-
-
-def _flags_value_as_list(raw):
-    """A 'flags:' value normalised to a list of strings -- a bare string becomes a one-item list."""
+    raw = entry.get("flags")
     if isinstance(raw, str):
         return [raw]
     if isinstance(raw, list):

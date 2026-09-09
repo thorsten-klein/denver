@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from denver_errors import die
 
@@ -313,14 +314,6 @@ def find_outermost_in_parents(start, name):
 _VAR_RE = re.compile(r"\$\{([A-Za-z_]\w*)(?::-([^}]*))?\}")
 
 
-def _resolved_var(match, variables):
-    """One ``${VAR}`` / ``${VAR:-default}`` match's replacement text, unquoted."""
-    name, default = match.group(1), match.group(2)
-    if variables.get(name) is not None:
-        return str(variables[name])
-    return default if default is not None else ""
-
-
 def _expand_str(value, variables, *, quote=False):
     """Expand every ``${VAR}`` / ``${VAR:-default}`` occurrence in one string.
 
@@ -330,30 +323,25 @@ def _expand_str(value, variables, *, quote=False):
     """
 
     def repl(match):
-        resolved = _resolved_var(match, variables)
+        name, default = match.group(1), match.group(2)
+        found = variables.get(name)
+        resolved = str(found) if found is not None else (default if default is not None else "")
         return shlex.quote(resolved) if quote else resolved
 
     return _VAR_RE.sub(repl, value)
 
 
-def _expand_list(value, variables):
-    """Expand every entry of a list."""
-    return [interpolate(v, variables) for v in value]
+def interpolate(value, variables) -> Any:
+    """Expand ``${VAR}`` / ``${VAR:-default}`` in strings, lists and dicts.
 
-
-def _expand_dict(value, variables):
-    """Expand every value of a mapping (its keys are left alone)."""
-    return {k: interpolate(v, variables) for k, v in value.items()}
-
-
-def interpolate(value, variables):
-    """Expand ``${VAR}`` / ``${VAR:-default}`` in strings, lists and dicts."""
+    Return type pinned to ``Any`` so pyright doesn't over-narrow it.
+    """
     if isinstance(value, str):
         return _expand_str(value, variables)
     if isinstance(value, list):
-        return _expand_list(value, variables)
+        return [interpolate(v, variables) for v in value]
     if isinstance(value, dict):
-        return _expand_dict(value, variables)
+        return {k: interpolate(v, variables) for k, v in value.items()}
     return value
 
 
