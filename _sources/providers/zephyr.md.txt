@@ -41,12 +41,21 @@ installs it. In practice an earlier `uv` stage provides it, by listing
   pre-cache.
 - **`blobs-fetch-args`** (default `["--auto-accept"]`) — extra `west blobs
   fetch` args.
+- **`skip-blobs-fetch`** (default `false`) — skip `west blobs fetch`
+  entirely.
+- **`blobs-fetch-allow-failure`** (default `false`) — don't fail the stage
+  if `west blobs fetch` exits non-zero (e.g. a flaky blob host). Ignored if
+  `skip-blobs-fetch:` is set.
 - **`patch-committer-name`**/**`patch-committer-email`**/**`patch-committer-date`**
   — the identity used when applying project patches via `west patches`
   (`GIT_COMMITTER_NAME`/`_EMAIL`/`_DATE`), defaulting to
   `denver`/`denver@denver`/`2000-01-01T00:00:00` (a fixed value, so
   applying the same patches twice never produces a different commit).
 - **`update-args`** — extra `west update` args.
+- **`skip-update`** (default `false`) — skip `west update` entirely (patch
+  application, `zephyr.base`, and blobs fetch/cache still run).
+- **`skip-patch-apply`** (default `false`) — skip applying projects'
+  `zephyr/patches.yml` via `west patches`.
 
 `WEST_CONFIG_SYSTEM` (west's own base-config env var, e.g. the
 remotes/defaults denver ships) is *not* a `denver.yml` key — set it

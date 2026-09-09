@@ -331,12 +331,21 @@ landed. Left untouched if the manifest has no project named <code class="docutil
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">blobs-cache</span></code></strong> — a path to an auto-generated list of west blobs to
 pre-cache.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">blobs-fetch-args</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">[&quot;--auto-accept&quot;]</span></code>) — extra <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">blobs</span> <span class="pre">fetch</span></code> args.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-blobs-fetch</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">false</span></code>) — skip <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">blobs</span> <span class="pre">fetch</span></code>
+entirely.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">blobs-fetch-allow-failure</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">false</span></code>) — don’t fail the stage
+if <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">blobs</span> <span class="pre">fetch</span></code> exits non-zero (e.g. a flaky blob host). Ignored if
+<code class="docutils literal notranslate"><span class="pre">skip-blobs-fetch:</span></code> is set.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">patch-committer-name</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">patch-committer-email</span></code></strong>/<strong><code class="docutils literal notranslate"><span class="pre">patch-committer-date</span></code></strong>
 — the identity used when applying project patches via <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">patches</span></code>
 (<code class="docutils literal notranslate"><span class="pre">GIT_COMMITTER_NAME</span></code>/<code class="docutils literal notranslate"><span class="pre">_EMAIL</span></code>/<code class="docutils literal notranslate"><span class="pre">_DATE</span></code>), defaulting to
 <code class="docutils literal notranslate"><span class="pre">denver</span></code>/<code class="docutils literal notranslate"><span class="pre">denver&#64;denver</span></code>/<code class="docutils literal notranslate"><span class="pre">2000-01-01T00:00:00</span></code> (a fixed value, so
 applying the same patches twice never produces a different commit).</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">update-args</span></code></strong> — extra <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code> args.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-update</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">false</span></code>) — skip <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code> entirely (patch
+application, <code class="docutils literal notranslate"><span class="pre">zephyr.base</span></code>, and blobs fetch/cache still run).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-patch-apply</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">false</span></code>) — skip applying projects’
+<code class="docutils literal notranslate"><span class="pre">zephyr/patches.yml</span></code> via <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">patches</span></code>.</p></li>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">WEST_CONFIG_SYSTEM</span></code> (west’s own base-config env var, e.g. the
 remotes/defaults denver ships) is <em>not</em> a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> key — set it
