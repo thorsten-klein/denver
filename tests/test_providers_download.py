@@ -197,6 +197,18 @@ def test_optional_key_of_the_wrong_type_dies(make_context):
         resolved_package(ctx, {"name": "tool", "url": URL, "unpack-cmd": ["tar", "-xf"]})
 
 
+def test_unknown_method_dies(make_context):
+    ctx = make_context()
+    with pytest.raises(SystemExit):
+        resolved_package(ctx, {"name": "tool", "url": URL, "method": "PUT"})
+
+
+def test_data_without_method_post_dies(make_context):
+    ctx = make_context()
+    with pytest.raises(SystemExit):
+        resolved_package(ctx, {"name": "tool", "url": URL, "data": "accept=yes"})
+
+
 def test_env_map_not_a_mapping_dies(make_context):
     ctx = make_context()
     with pytest.raises(SystemExit):
@@ -251,6 +263,18 @@ def test_downloads_unpacks_and_puts_the_package_on_path(make_context, fake_urlop
     # no separator is inserted -- the value is glued directly onto whatever
     # PATH already held
     assert ctx.env["PATH"].startswith(str(unpacked))
+
+
+def test_post_data_is_sent_with_a_default_content_type(make_context, fake_opener):
+    config = config_for([{"name": "tool", "url": URL, "method": "POST", "data": "accept=yes"}])
+    ctx = make_context(config=config)
+
+    run_download(config, ctx)
+
+    request = fake_opener.opened[0]
+    assert request.get_method() == "POST"
+    assert request.data == b"accept=yes"
+    assert request.get_header("Content-type") == "application/x-www-form-urlencoded"
 
 
 def test_zip_executable_bits_survive_unpacking(make_context, fake_urlopen):

@@ -45,6 +45,34 @@ The stage has exactly one key of its own:
   interpolation works. Each attempt logs a line — what it is fetching, and,
   on failure, that it is falling back to the next mirror — so a run that
   needed one is never silent about it.
+- **`method`** — `GET` (default) or `POST`. Needed for the release that
+  won't hand over its archive to a plain `GET` at all — a download gated
+  behind accepting a license agreement, say, where the real transfer only
+  starts once that acceptance is posted.
+- **`data`** — the request body to send with `method: POST`, sent exactly
+  as written (`${...}` interpolation works, e.g. a token from `[env]`) with
+  `Content-Type: application/x-www-form-urlencoded` — the same default
+  curl's own `-d`/`--data` sends, for a server whose form expects
+  `key=value&key=value` pairs. Only valid alongside `method: POST`; on a
+  `GET` (the default) there is no body to send it in, and denver says so
+  rather than silently dropping it.
+
+  ```toml
+  [jlink-setup]
+  provider = "download"
+
+  [[jlink-setup.packages]]
+  name = "jlink"
+  url = "https://www.segger.com/downloads/jlink/JLink_Linux_V882_x86_64.tgz"
+  method = "POST"
+  data = "accept_license_agreement=accepted&submit=Download+software"
+  md5sum = "1691b1c79764bf1caade424cc39c2e0c"
+  unpack-cmd = 'tar -xf "$DENVER_DOWNLOAD_ARCHIVE" --strip-components=1'
+  env-prepend = { PATH = "${DENVER_UNPACK_DIR}/bin:" }
+  ```
+
+  `mirrors:` (above), if given, are sent with the same `method:`/`data:` —
+  they are alternative sources for the same request, not a different one.
 - **`outfile`** — the file name to store the archive under, inside the
   downloads folder (default: the file name the `url` ends in). An absolute
   value puts the archive wherever it names instead.

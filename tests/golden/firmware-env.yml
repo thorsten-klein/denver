@@ -108,11 +108,13 @@ ninja-setup:
   env-append: {}
   scripts: null
   packages:
-  - description: ''
+  - data: ''
+    description: ''
     env-append: {}
     env-prepend:
       PATH: '${DENVER_UNPACK_DIR}:'
     md5sum: ''
+    method: GET
     mirrors: []
     name: ninja
     outfile: <REPO>/examples/firmware-env/.denver/denver/downloads/ninja-linux.zip
