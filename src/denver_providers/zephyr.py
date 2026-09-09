@@ -49,10 +49,14 @@ class ZephyrProvider(Provider):
         "west-config",
         "blobs-cache",
         "blobs-fetch-args",
+        "skip-blobs-fetch",
+        "blobs-fetch-allow-failure",
         "patch-committer-name",
         "patch-committer-email",
         "patch-committer-date",
         "update-args",
+        "skip-update",
+        "skip-patch-apply",
     )
 
     @staticmethod
@@ -107,7 +111,7 @@ class ZephyrProvider(Provider):
 
     @classmethod
     def resolve_defaults(cls, ctx, cfg, config):  # noqa: ARG003  # shared (ctx, cfg, config) signature
-        """Resolve topdir/west-yml/base/blobs-fetch-args/patch-committer-* -- see doc/providers/zephyr.md."""
+        """Resolve topdir/west-yml/base/blobs-fetch-args/skip-*/patch-committer-* -- see doc/providers/zephyr.md."""
         # WEST_TOPDIR is a zephyr concept, not a denver built-in -- computed
         # and exported here (not in Context) so non-zephyr envs never pay for
         # the parent-directory walk or carry an irrelevant env var.
@@ -119,6 +123,10 @@ class ZephyrProvider(Provider):
         resolved["west-yml"] = cls._resolved_west_yml(ctx, cfg.get("west-yml"))
         resolved["base"] = str(ctx.resolve_path(cfg.get("base") or "${WEST_TOPDIR}/zephyr-rtos"))
         resolved["blobs-fetch-args"] = cfg.get("blobs-fetch-args") or ["--auto-accept"]
+        resolved["skip-blobs-fetch"] = cfg.get("skip-blobs-fetch", False)
+        resolved["blobs-fetch-allow-failure"] = cfg.get("blobs-fetch-allow-failure", False)
+        resolved["skip-update"] = cfg.get("skip-update", False)
+        resolved["skip-patch-apply"] = cfg.get("skip-patch-apply", False)
         resolved.update(cls._resolved_patch_committer(cfg))
 
         return fill_unset(resolved, cls.KEYS)
@@ -164,7 +172,7 @@ class ZephyrProvider(Provider):
         zephyr_base = Path(cfg["base"])
 
         self._ensure_workspace(ctx, top)
-        self._configure(ctx, cfg, west, top, west_yml, zephyr_base)
+        self._configure(ctx, cfg, west, top, west_yml)
         self._update(ctx, cfg, west, top, west_yml, zephyr_base)
 
     def _ensure_workspace(self, ctx, top):
@@ -198,7 +206,7 @@ class ZephyrProvider(Provider):
             ctx.run([west, "config", key, value], cwd=top)
         info(f"zephyr: west config {key}={value}")
 
-    def _configure(self, ctx, cfg, west, top, west_yml, zephyr_base):  # noqa: ARG002  # shared _configure/_update signature
+    def _configure(self, ctx, cfg, west, top, west_yml):
         """Set every `west config` key that differs from its current value (manifest.path/file, ...).
 
         `zephyr.base` is deliberately not set here: until `west update` has
@@ -289,18 +297,41 @@ class ZephyrProvider(Provider):
             info("zephyr: no need to rerun west update (enforce with --force)")
             return
 
+        self._run_update(ctx, cfg, west, top)
+        self._run_patch_apply(ctx, cfg, west, top)
+        self._set_zephyr_base(ctx, west, top)
+        self._run_blobs_fetch(ctx, cfg, west, top)
+        self._update_blobs_cache(ctx, cfg, west, top)
+
+        ctx.write_text(info_file, self._west_info(ctx, west, top, west_yml, zephyr_base))
+
+    def _run_update(self, ctx, cfg, west, top):
+        """Run `west update`, unless 'skip-update:' is set."""
+        if cfg["skip-update"]:
+            info("zephyr: west update skipped (skip-update=true)")
+            return
         update_args = list(cfg.get("update-args") or [])
         if ctx.ci:
             update_args += CI_UPDATE_ARGS
         ctx.run([west, "update", *update_args], cwd=top)
 
+    def _run_patch_apply(self, ctx, cfg, west, top):
+        """Apply project patches, unless 'skip-patch-apply:' is set."""
+        if cfg["skip-patch-apply"]:
+            info("zephyr: patch apply skipped (skip-patch-apply=true)")
+            return
         self._apply_project_patches(ctx, cfg, west, top)
-        self._set_zephyr_base(ctx, west, top)
 
-        ctx.run([west, "-v", "blobs", "fetch", *cfg["blobs-fetch-args"]], cwd=top)
-        self._update_blobs_cache(ctx, cfg, west, top)
-
-        ctx.write_text(info_file, self._west_info(ctx, west, top, west_yml, zephyr_base))
+    def _run_blobs_fetch(self, ctx, cfg, west, top):
+        """Run `west blobs fetch`, unless 'skip-blobs-fetch:' is set; 'blobs-fetch-allow-failure:' makes a non-zero exit non-fatal."""
+        if cfg["skip-blobs-fetch"]:
+            info("zephyr: blobs fetch skipped (skip-blobs-fetch=true)")
+            return
+        ctx.run(
+            [west, "-v", "blobs", "fetch", *cfg["blobs-fetch-args"]],
+            cwd=top,
+            check=not cfg["blobs-fetch-allow-failure"],
+        )
 
     @staticmethod
     def _west_projects(ctx, west, top):
