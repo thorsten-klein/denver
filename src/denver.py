@@ -1569,63 +1569,21 @@ def resolve_command(config, forwarded, in_container=False):
 def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None):
     """Re-invoke denver (skipping ``wrapper_stage_ids``) so setup providers run in the wrapper.
 
-    Used inside a wrapper (e.g. docker): the same denver runs again inside the
-    container, where the wrapper is inactive and uv/conan/zephyr build/enter
-    the environment. denver's sources are available at the same path (the
-    workspace is bind-mounted) -- ``Path(__file__).resolve()`` is this exact
-    file's own absolute path, so this works unchanged whether denver runs
-    from a checkout or an editable install (both keep ``__file__`` pointing
-    into the checkout); a non-editable install only re-invokes correctly if
-    the container has denver installed at that same absolute path too.
-    ``python3`` (a bare command, not this host's interpreter path) is looked
-    up wherever the command actually runs -- the container's PATH, not the
-    host's -- matching docker.wrap()'s own bare-name commands.
-    Running as a frozen single-file executable (see
-    scripts/create-python-exe.sh) there is no denver.py to hand to an
-    interpreter at all: ``__file__`` then names a file inside PyInstaller's
-    per-run extraction directory that is never actually written (the modules
-    live in an archive inside the executable), and the container's ``python3``
-    would need denver's dependencies -- exactly what that build exists to
-    avoid. So the executable re-invokes *itself*, by its own absolute path,
-    which the wrapper makes resolvable inside the relocated environment by
-    bind-mounting it there (see docker.py's _frozen_denver_mount).
-    ``wrapper_stage_ids`` (the active wrapper(s) relocating this command) are
-    each passed as their own ``--skip``, so the re-invoked denver's own stage
-    filtering drops them from 'stages:' and never tries to relocate again.
+    Used inside a wrapper (e.g. docker): the same denver runs again inside
+    the container, where the wrapper is inactive and uv/conan/zephyr
+    build/enter the environment, with ``wrapper_stage_ids`` each passed as
+    their own ``--skip`` so it never tries to relocate again. Nearly all of
+    ``options`` (this invocation's own RunOptions) is re-passed too, since
+    every one of its fields was consumed out of argv by the outer main() and
+    none is read back out of a real environment variable.
 
-    ``options`` is this invocation's own RunOptions, and essentially all of
-    it has to be re-passed: every one of these was consumed out of argv by
-    the outer main(), and none is read back out of a real environment
-    variable, so there is no other way for the inner process to inherit any
-    of them.
-
-    * --until/--skip, so a stage the user asked to skip stays skipped inside
-      the wrapper too, instead of the inner denver re-computing 'stages:'
-      from scratch with no memory of them and running it anyway;
-    * --quiet (repeated ``options.quiet`` times, so e.g. -qq's level 2
-      survives, not just a single -q), --verbose, --fast/--force/--ci/--no-wait;
-    * -e/--env (``options.env_vars``): re-passed as its own ``--env
-      NAME=VALUE`` flags, one per entry, for the same reason -- the inner
-      denver's own os.environ starts empty of them (a wrapper reinvocation
-      is a fresh process, docker included -- see docker.py's
-      _relocation_env for how the raw container environment itself gets
-      them too);
-    * the env's own 'denver-custom-args:' flags (``options.cli_args.argv``): the inner
-      denver re-reads the same denver.toml, so it declares the same flags --
-      but nobody would have given them to it, and every one would quietly
-      fall back to its 'default:';
-    * ``start_time`` (the hidden --start-time flag), the outer denver's own
-      ``time.time()`` at the very start of this startup -- carried across so
-      the "env started in Ns" line the inner denver prints right before
-      launching the command reflects the *whole* startup (including the
-      outer denver's own wrapper-stage work), not just the inner process's
-      own, much shorter, wall-clock.
-
-    ``forwarded`` (already stripped of any '--' marker by the outer main(),
-    see resolve_command) is re-introduced with a fresh '--' here, so the
-    re-invoked denver's own argv splitting (main() splits on the first
-    literal '--') separates it from denver's own flags again instead of
-    trying to parse it as one of them.
+    See "Wrapper reinvocation, in detail" in
+    doc/contributing/development.md for why ``Path(__file__).resolve()``
+    and a bare ``python3`` are what make this resolve correctly inside the
+    container, why a frozen build re-invokes itself instead, and the full,
+    field-by-field list of what has to travel and why (guarded by
+    test_reinvoke_command_forwards_every_run_option in
+    tests/test_denver_orchestration.py).
     """
     options = options or RunOptions()
     filter_flags = []
@@ -1648,7 +1606,8 @@ def reinvoke_command(config_path, forwarded, wrapper_stage_ids, *, options=None)
 def _denver_launcher():
     """The interpreter+script pair to re-run denver with, or the frozen executable on its own.
 
-    See reinvoke_command's docstring for why a frozen build re-invokes itself.
+    See "Wrapper reinvocation, in detail" in doc/contributing/development.md
+    for why a frozen build re-invokes itself.
     """
     if getattr(sys, "frozen", False):
         return [str(Path(sys.executable).resolve())]

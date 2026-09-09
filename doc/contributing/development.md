@@ -139,6 +139,71 @@ this or a fork: see "Extension providers" in
    notes), link it from `doc/README.md`'s provider table and the top-level
    `README.md`, and point the module docstring at the new page.
 
+## Wrapper reinvocation, in detail
+
+"Wrapper / relocation" in [Configuration](../configuration/denver-toml.md)
+covers what a wrapper stage does from an env author's side. This is the
+implementation underneath it -- `reinvoke_command()` in `src/denver.py`,
+which builds the argv the outer (host) process re-execs into once a
+wrapper stage (`docker`, or a `custom` stage with `launcher:`) has relocated
+into the container: the same denver, run again, with that wrapper stage
+`--skip`ped so the remaining stages build the environment there instead.
+
+**Finding denver itself, from inside the container.** `Path(__file__).resolve()`
+is this exact file's own absolute path, and it works unchanged whether
+denver runs from a checkout or an editable install -- both keep `__file__`
+pointing into the checkout, which the wrapper bind-mounts at the same path
+inside the container (see `docker.py`'s `_frozen_denver_mount`). `python3`
+itself is looked up as a bare command, not the host interpreter's own path:
+it has to resolve against the *container's* `PATH`, which is very unlikely
+to be the same interpreter as the host's.
+
+A frozen single-file build (`scripts/create-python-exe.sh`) has no
+`denver.py` to hand to an interpreter at all -- `__file__` then names a
+file inside PyInstaller's per-run extraction directory that is never
+actually written (the modules live in an archive inside the executable),
+and the container's `python3` would need denver's own dependencies, exactly
+what that build exists to avoid. So a frozen build re-invokes *itself*, by
+its own absolute path, which the wrapper makes resolvable inside the
+relocated environment by bind-mounting the executable there too.
+
+**What has to travel, and why.** Nearly all of `RunOptions` does: every one
+of these was consumed out of `argv` by the outer `main()`, and none is read
+back out of a real environment variable, so there is no other way for the
+inner process to inherit it.
+
+- `--until`/`--skip`, so a stage the user asked to skip stays skipped
+  inside the wrapper too, instead of the inner denver re-computing
+  `stages:` from scratch with no memory of them and running it anyway.
+- `--quiet` (repeated once per level, so `-qq`'s level 2 survives, not just
+  a single `-q`), `--verbose`, `--fast`/`--force`/`--ci`/`--no-wait`.
+- `-e`/`--env`, re-passed as its own `--env NAME=VALUE` flags: the inner
+  denver's own `os.environ` starts empty of them -- a wrapper reinvocation
+  is a fresh process, docker included.
+- the env's own `denver-custom-args:` flags: the inner denver re-reads the
+  same config and declares the same flags, but nobody would have given them
+  to it, and every one would quietly fall back to its `default:`.
+- `start_time`, the outer denver's own clock origin at the very start of
+  this startup, so the "env started in Ns" line the inner denver prints
+  right before launching the command reflects the *whole* startup
+  (including the outer denver's own wrapper-stage work), not just the
+  inner process's own, much shorter, wall-clock.
+
+`--dry-run` is the one field that does *not* travel: `Context.exec()` --
+the only thing this argv is ever handed to -- never really execs under
+`--dry-run` in the first place, it prints the command and returns, so
+there is nothing for an inner `--dry-run` flag to do.
+`test_reinvoke_command_forwards_every_run_option`
+(`tests/test_denver_orchestration.py`) guards this list: it introspects
+`RunOptions.__init__` so a newly added field can't be silently missed by
+either the code or the test, then asserts every field it doesn't
+explicitly exempt actually changes `reinvoke_command()`'s output.
+
+`forwarded` (the command after `--`, already stripped of the `--` marker
+itself by the outer `main()`) is re-introduced behind a fresh `--` here, so
+the re-invoked denver's own argv splitting separates it from denver's own
+flags again instead of trying to parse it as one of them.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every push to `develop` and every pull
