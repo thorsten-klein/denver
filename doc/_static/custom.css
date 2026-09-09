@@ -104,3 +104,44 @@
   font-weight: 700;
   text-transform: capitalize;
 }
+
+/* 5. The sidebar version line (doc/_templates/layout.html). sphinx_rtd_theme
+ *    3.x dropped both the markup and the styling its older versions had for
+ *    this, so both live here now.
+ *
+ *    The theme's own sidebartitle block ends with the search box, so the
+ *    template can only append after it -- these two rules put the line back
+ *    between the title and the box, where the theme used to render it,
+ *    without the template having to restate the whole block (and drift from
+ *    it on the next theme upgrade). Everything else in the header keeps its
+ *    default order of 0, i.e. stays in source order ahead of these two. */
+.wy-side-nav-search {
+  display: flex;
+  flex-direction: column;
+}
+
+.wy-side-nav-search > div.version {
+  order: 1;
+  margin-top: -0.4045em;
+  margin-bottom: 0.809em;
+  font-weight: 400;
+  color: hsla(0, 0%, 100%, 0.4);
+}
+
+.wy-side-nav-search > [role="search"] {
+  order: 2;
+}
+
+/* The link is the version string itself -- it should read as that line, not
+ * as a blue link on a blue header; the underline on hover is what signals
+ * it's clickable. */
+.wy-side-nav-search > div.version a,
+.wy-side-nav-search > div.version a:visited {
+  color: inherit;
+  text-decoration: none;
+}
+
+.wy-side-nav-search > div.version a:hover {
+  color: #fcfcfc;
+  text-decoration: underline;
+}

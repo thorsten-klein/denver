@@ -21,21 +21,63 @@ build and publishes the combined result to the gh-pages branch.
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, version
+import re
+import subprocess
+from importlib.metadata import PackageNotFoundError
+
+# aliased -- this module defines a `version` of its own further down.
+from importlib.metadata import version as distribution_version
+from pathlib import Path
 
 project = "denver"
 copyright = "denver contributors"
 author = "denver contributors"
 
-try:
-    # matches the installed distribution's version (setuptools-scm, derived
-    # from git tags -- see pyproject.toml's [tool.setuptools_scm]). Falls
-    # back quietly so a docs-only checkout without the package installed, or
-    # a shallow/tagless one, still builds.
-    release = version("denver-tool")
-except PackageNotFoundError:
-    release = "0.0.0"
+# Version shown in the sidebar (see _templates/layout.html), linked to the
+# tree it was built from. Same `git describe` call as denver's own
+# scm_version() (src/denver.py), so both report the same string -- "1.6.3",
+# or "1.6.3-8-g21900a7" past a tag. The distribution metadata is only a
+# fallback: nothing installs denver-tool into this build's venv.
+_HERE = Path(__file__).resolve().parent
+
+
+def _git(*args):
+    """Output of a git command in this checkout, or "" when git can't answer (no git, no checkout, no tags)."""
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(_HERE), *args],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return completed.stdout.strip() if completed.returncode == 0 else ""
+
+
+def _metadata_version():
+    """The installed denver-tool's version, or "" -- the fallback above."""
+    try:
+        return distribution_version("denver-tool")
+    except PackageNotFoundError:
+        return ""
+
+
+release = _git("describe", "--tags", "--match", "*.*.*") or _metadata_version()
 version = release
+
+# the repo the "Edit on GitHub" flyout and the version line point at.
+github_user = "thorsten-klein"
+github_repo = "denver"
+github_url = f"https://github.com/{github_user}/{github_repo}"
+
+# Link target -- the full sha where git has one, else the short sha in the
+# version string, else the tag (all a tagged build's string holds). GitHub
+# resolves all three; nothing to name means no link.
+_scm_node = re.search(r"[-+]g([0-9a-f]{7,40})$", release)
+_ref = _git("rev-parse", "HEAD") or (_scm_node.group(1) if _scm_node else release)
+version_url = f"{github_url}/tree/{_ref}" if _ref else ""
 
 # -- General configuration --------------------------------------------------
 
@@ -92,6 +134,11 @@ html_logo = "../src/denver_assets/logo.svg"
 # _static/ the same way it does html_logo above.
 html_favicon = "../src/denver_assets/favicon.svg"
 
+# doc/_templates/layout.html renders the sidebar version line itself:
+# sphinx_rtd_theme 3.x dropped its `display_version` option, and now shows
+# a version only on readthedocs.org-hosted builds.
+templates_path = ["_templates"]
+
 # doc/_static/custom.css overrides two of sphinx_rtd_theme's own defaults
 # that don't suit a docs-only site: a fixed 800px content column (leaving
 # most of a normal monitor empty) and `white-space: nowrap` on every inline
@@ -120,8 +167,10 @@ html_theme_options = {
 # which templates it in for hosted builds; a self-built site has to supply it).
 html_context = {
     "display_github": True,
-    "github_user": "thorsten-klein",
-    "github_repo": "denver",
+    "github_user": github_user,
+    "github_repo": github_repo,
     "github_version": "develop",
     "conf_py_path": "/doc/",
+    # read by doc/_templates/layout.html.
+    "version_url": version_url,
 }
