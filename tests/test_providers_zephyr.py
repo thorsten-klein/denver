@@ -464,3 +464,48 @@ def test_blobs_fetch_args_configured(make_context, run_recorder, which):
     ctx = make_ctx(make_context, config)
     run_zephyr(config, ctx)
     assert any("blobs fetch --custom-flag" in c for c in run_recorder.commands())
+
+
+def test_skip_blobs_fetch(make_context, run_recorder, which):
+    config = {"zephyr": {"west-yml": "west.yml", "skip-blobs-fetch": True}}
+    ctx = make_ctx(make_context, config)
+    run_zephyr(config, ctx)
+    assert not any("blobs fetch" in c for c in run_recorder.commands())
+
+
+def test_blobs_fetch_allow_failure(make_context, run_recorder, which):
+    config = {"zephyr": {"west-yml": "west.yml", "blobs-fetch-allow-failure": True}}
+    ctx = make_ctx(make_context, config)
+    run_zephyr(config, ctx)
+    fetch_call = next(c for c in run_recorder.calls if "blobs" in c.cmd and "fetch" in c.cmd)
+    assert fetch_call.kwargs.get("check") is False
+
+
+def test_blobs_fetch_failure_not_suppressed_by_default(make_context, run_recorder, which):
+    config = {"zephyr": {"west-yml": "west.yml"}}
+    ctx = make_ctx(make_context, config)
+    run_zephyr(config, ctx)
+    fetch_call = next(c for c in run_recorder.calls if "blobs" in c.cmd and "fetch" in c.cmd)
+    assert fetch_call.kwargs.get("check", True) is not False
+
+
+# ---- skip-update / skip-patch-apply -------------------------------------------#
+def test_skip_update(make_context, run_recorder, which):
+    config = {"zephyr": {"west-yml": "west.yml", "skip-update": True}}
+    ctx = make_ctx(make_context, config)
+    run_zephyr(config, ctx)
+    assert not any(c.endswith(" update") or "west update" in c for c in run_recorder.commands())
+    # rest of the step still runs
+    assert any("blobs fetch" in c for c in run_recorder.commands())
+
+
+def test_skip_patch_apply(make_context, run_recorder, which, tmp_path):
+    config = {"zephyr": {"west-yml": "west.yml", "skip-patch-apply": True}}
+    ctx = make_ctx(make_context, config)
+    proj = tmp_path / "proj"
+    (proj / "zephyr").mkdir(parents=True)
+    (proj / "zephyr" / "patches.yml").write_text("x\n")
+    run_recorder.responses["list -f {abspath}"] = resp(stdout=f"{proj}\n")
+
+    run_zephyr(config, ctx)
+    assert not any("--src-module" in c for c in run_recorder.commands())
