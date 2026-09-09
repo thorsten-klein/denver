@@ -787,7 +787,7 @@ def validate_top_level_keys(config):
     unknown = sorted(set(config) - allowed)
     if unknown:
         die(
-            f"denver.toml: unknown top-level key(s) {_list_with_hints(unknown, allowed)} -- "
+            f"config: unknown top-level key(s) {_list_with_hints(unknown, allowed)} -- "
             f"not a recognised key and not a stage id in 'stages:'"
         )
 
@@ -809,10 +809,7 @@ def validate_config_version(config):
     """
     version = config.get("version")
     if version is not None and str(version) != SUPPORTED_CONFIG_VERSION:
-        die(
-            f"denver.toml: unsupported 'version: {version}' -- "
-            f"this denver understands version {SUPPORTED_CONFIG_VERSION}."
-        )
+        die(f"config: unsupported 'version: {version}' -- this denver understands version {SUPPORTED_CONFIG_VERSION}.")
 
 
 # A version is compared as (release-numbers, rank): 1.0.3 -> ((1, 0, 3), 0).
@@ -885,7 +882,7 @@ def _parse_version_requirement(part, spec):
     wanted = parse_version(match.group(2)) if match else None
     if match is None or wanted is None:
         die(
-            f"denver.toml: invalid 'denver-version: {spec}' -- {part.strip()!r} is not a version requirement "
+            f"config: invalid 'denver-version: {spec}' -- {part.strip()!r} is not a version requirement "
             f"(expected e.g. \">=1.0.3\", \"1.0.3\" or \">=1.0.3, <2\")."
         )
     operator = match.group(1) or ">="
@@ -925,7 +922,7 @@ def validate_denver_version(config):
     parsed = parse_version(running) if running is not None else None
     if parsed is None:
         logger.warning(
-            f"denver.toml requires 'denver-version: {spec}', but this denver's own version is "
+            f"config requires 'denver-version: {spec}', but this denver's own version is "
             f"{running or 'unknown'} -- cannot verify the requirement, continuing."
         )
         return
@@ -933,7 +930,7 @@ def validate_denver_version(config):
     unmet = _unmet_requirements(requirements, parsed)
     if unmet:
         die(
-            f"denver.toml requires 'denver-version: {spec}', but this denver is {running} "
+            f"config requires 'denver-version: {spec}', but this denver is {running} "
             f"(unmet: {', '.join(unmet)}) -- upgrade it, e.g. `pip install --upgrade {DISTRIBUTION_NAME}`."
         )
 
@@ -975,13 +972,12 @@ def validate_hooks_keys(config):
     if hooks is None:
         return
     if not isinstance(hooks, dict):
-        die(f"denver.toml: 'hooks:' must be a mapping of hook name to script(s), got {hooks!r}")
+        die(f"config: 'hooks:' must be a mapping of hook name to script(s), got {hooks!r}")
     allowed = set(hook_names_for_stages(_declared_stage_ids(config)))
     unknown = sorted(set(hooks) - allowed)
     if unknown:
         die(
-            f"denver.toml: unknown hooks key(s) {_list_with_hints(unknown, allowed)} -- "
-            f"known: {', '.join(sorted(allowed))}."
+            f"config: unknown hooks key(s) {_list_with_hints(unknown, allowed)} -- known: {', '.join(sorted(allowed))}."
         )
 
 
@@ -3471,7 +3467,7 @@ def add_config_args(parser, entries):
     if entries is None:
         return
     if not isinstance(entries, list):
-        die(f"denver.toml: 'denver-custom-args:' must be a list of argument definitions, got {entries!r}")
+        die(f"config: 'denver-custom-args:' must be a list of argument definitions, got {entries!r}")
     # every dest already spoken for: denver's own flags first (so an entry
     # can never quietly overwrite args.force et al.), then each entry added
     # here, so two entries cannot silently collide with each other either.
@@ -3483,16 +3479,14 @@ def add_config_args(parser, entries):
 def _add_config_arg(parser, entry, taken):
     """Add one 'denver-custom-args:' entry, refusing a dest that is already spoken for."""
     if not isinstance(entry, dict):
-        die(
-            f"denver.toml 'denver-custom-args:': every entry must be a mapping of add_argument arguments, got {entry!r}"
-        )
+        die(f"config 'denver-custom-args:': every entry must be a mapping of add_argument arguments, got {entry!r}")
     flags = config_arg_flags(entry)
     kwargs = {key: value for key, value in entry.items() if key != "flags"}
     _reject_type_key(flags, kwargs)
     dest = config_arg_dest(flags, entry)
     if dest in taken:
         die(
-            f"denver.toml 'denver-custom-args:': {', '.join(flags)} resolves to '{dest}', which denver's own arguments "
+            f"config 'denver-custom-args:': {', '.join(flags)} resolves to '{dest}', which denver's own arguments "
             f"already use -- rename the flag or give the entry a different 'dest:'."
         )
     _add_argument(parser, flags, kwargs)
@@ -3510,7 +3504,7 @@ def config_arg_flags(entry):
     if isinstance(flags, str):
         flags = [flags]
     if not isinstance(flags, list) or not flags:
-        die(f"denver.toml 'denver-custom-args:': entry {entry!r} needs 'flags:' -- a flag string, or a list of them")
+        die(f"config 'denver-custom-args:': entry {entry!r} needs 'flags:' -- a flag string, or a list of them")
     for flag in flags:
         _validate_flag(flag, entry)
     return flags
@@ -3520,7 +3514,7 @@ def _validate_flag(flag, entry):
     """Die unless one 'flags:' element is a string starting with '-'."""
     if not isinstance(flag, str) or not flag.startswith("-"):
         die(
-            f"denver.toml 'denver-custom-args:': flag {flag!r} in entry {entry!r} must be a string "
+            f"config 'denver-custom-args:': flag {flag!r} in entry {entry!r} must be a string "
             f"starting with '-' -- an env cannot declare a positional argument (denver's own <env> is the only one)."
         )
 
@@ -3536,7 +3530,7 @@ def _reject_type_key(flags, kwargs):
     """
     if "type" in kwargs:
         die(
-            f"denver.toml 'denver-custom-args:': {', '.join(flags)} sets 'type:', which denver.toml cannot express "
+            f"config 'denver-custom-args:': {', '.join(flags)} sets 'type:', which the config format cannot express "
             f"(argparse needs a callable) -- values are always strings; use 'choices:' or 'action:' instead."
         )
 
@@ -3546,7 +3540,7 @@ def _add_argument(parser, flags, kwargs):
     try:
         parser.add_argument(*flags, **kwargs)
     except (argparse.ArgumentError, TypeError, ValueError) as exc:
-        die(f"denver.toml 'denver-custom-args:': cannot add {', '.join(flags)} -- {exc}")
+        die(f"config 'denver-custom-args:': cannot add {', '.join(flags)} -- {exc}")
 
 
 def config_arg_dest(flags, entry):
