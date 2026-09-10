@@ -480,29 +480,40 @@ def deep_merge(base, override, _path=""):
     same way, the other direction).
     """
     if isinstance(base, dict) and isinstance(override, dict):
-        result = dict(base)
-        for key, value in override.items():
-            child_path = f"{_path}.{key}" if _path else str(key)
-            result[key] = deep_merge(result.get(key, _UNSET), value, child_path)
-        return result
+        return _merge_dicts(base, override, _path)
 
     if isinstance(base, list) and isinstance(override, list):
         return _merge_lists(base, override)
 
-    # one side a list, the other a bare scalar deep_merge should coerce to match it
-    coercible_to_list = (
-        (base is not _UNSET and not isinstance(base, dict))
-        if isinstance(override, list)
-        else (isinstance(base, list) and not isinstance(override, dict))
-    )
-    if coercible_to_list:
+    if _coercible_to_list(base, override):
         return _merge_lists(_as_list(base), _as_list(override))
 
+    return _merge_scalar(base, override, _path)
+
+
+def _merge_dicts(base, override, _path):
+    """``deep_merge``'s mapping case: every key of ``override`` merged one layer deeper."""
+    result = dict(base)
+    for key, value in override.items():
+        child_path = f"{_path}.{key}" if _path else str(key)
+        result[key] = deep_merge(result.get(key, _UNSET), value, child_path)
+    return result
+
+
+def _coercible_to_list(base, override):
+    """Whether one side is a list and the other a bare scalar that ``deep_merge`` should coerce to match it."""
+    if isinstance(override, list):
+        return base is not _UNSET and not isinstance(base, dict)
+    return isinstance(base, list) and not isinstance(override, dict)
+
+
+def _merge_scalar(base, override, path):
+    """``deep_merge``'s scalar case: ``override`` wins, but a conflicting string needs an explicit ``!``."""
     if isinstance(override, str) and override.startswith("!") and base is not _UNSET:
         return override[1:]
     if isinstance(base, str) and isinstance(override, str) and base != override:
         die(
-            f"conflicting values for '{_path}' across stacked layers: {base!r} vs {override!r}. "
+            f"conflicting values for '{path}' across stacked layers: {base!r} vs {override!r}. "
             f"Prefix the new value with '!' to override deliberately, e.g. \"!{override}\"."
         )
     return override
@@ -983,32 +994,15 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     """
     from denver_providers.base import fill_unset
 
-    allowed_keys = set(type(stage).KEYS) | set(GENERIC_STAGE_KEYS)
-    unknown_keys = sorted(set(raw_section) - allowed_keys)
-    if unknown_keys:
-        die(
-            f"stage '{stage.stage}': unknown key(s) {_list_with_hints(unknown_keys, allowed_keys)} for provider "
-            f"'{stage.name}' -- known: {', '.join(sorted(type(stage).KEYS)) or '(none)'}."
-        )
+    validate_stage_section_keys(stage, raw_section)
     section = type(stage).resolve_defaults(ctx, raw_section, config)
     disabled = raw_section.get("disabled", False)
     if not isinstance(disabled, bool):
         die(f"stage '{stage.stage}': 'disabled:' must be true or false, got {disabled!r}")
     section["disabled"] = disabled
-
-    depends_on = raw_section.get("depends-on")
-    if depends_on is None:
-        depends_on = []
-    elif not isinstance(depends_on, list) or not all(isinstance(v, str) for v in depends_on):
-        die(f"stage '{stage.stage}': 'depends-on:' must be a list of stage ids, got {depends_on!r}")
-    section["depends-on"] = depends_on
-
-    for skip_key in ("skip-on-success", "skip-on-failure"):
-        scripts = raw_section.get(skip_key) or []
-        if not isinstance(scripts, list) or not all(isinstance(s, str) for s in scripts):
-            die(f"stage '{stage.stage}': '{skip_key}:' must be a list of script paths, got {scripts!r}")
-        section[skip_key] = [str(ctx.resolve_path(s)) for s in scripts]
-
+    section["depends-on"] = _validated_depends_on(raw_section.get("depends-on"), stage.stage)
+    section["skip-on-success"] = _resolved_skip_scripts(ctx, stage.stage, raw_section, "skip-on-success")
+    section["skip-on-failure"] = _resolved_skip_scripts(ctx, stage.stage, raw_section, "skip-on-failure")
     description = raw_section.get("description")
     if description is not None and (
         not isinstance(description, list) or not all(isinstance(line, str) for line in description)
@@ -1018,6 +1012,43 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     section["env-prepend"] = _validated_stage_env_map(raw_section.get("env-prepend"), stage.stage, "env-prepend")
     section["env-append"] = _validated_stage_env_map(raw_section.get("env-append"), stage.stage, "env-append")
     return fill_unset(section, ["scripts", "description"])
+
+
+def validate_stage_section_keys(stage, section):
+    """Die on a key in ``section`` that isn't in the provider's own KEYS or a generic stage key.
+
+    Without this, a typo'd key (or one left behind after being renamed/
+    removed) is just silently ignored -- resolve_defaults() never reads it,
+    and nothing says so. Mirrors validate_top_level_keys, one level down.
+    """
+    allowed = set(type(stage).KEYS) | set(GENERIC_STAGE_KEYS)
+    unknown = sorted(set(section) - allowed)
+    if unknown:
+        die(
+            f"stage '{stage.stage}': unknown key(s) {_list_with_hints(unknown, allowed)} for provider "
+            f"'{stage.name}' -- known: {', '.join(sorted(type(stage).KEYS)) or '(none)'}."
+        )
+
+
+def _validated_depends_on(value, stage_id):
+    """One generic 'depends-on:' stage key, as a list of stage ids (``[]`` when unset).
+
+    Only shape-checked here; cross-stage validity is checked once, globally,
+    right after this resolves (see resolve_provider_defaults).
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        die(f"stage '{stage_id}': 'depends-on:' must be a list of stage ids, got {value!r}")
+    return value
+
+
+def _resolved_skip_scripts(ctx, stage_id, raw_section, key):
+    """One generic 'skip-on-success:'/'skip-on-failure:' list, resolved to absolute paths (empty when unset)."""
+    scripts = raw_section.get(key) or []
+    if not isinstance(scripts, list) or not all(isinstance(s, str) for s in scripts):
+        die(f"stage '{stage_id}': '{key}:' must be a list of script paths, got {scripts!r}")
+    return [str(ctx.resolve_path(s)) for s in scripts]
 
 
 def _validated_stage_env_map(mapping, stage_id, key):
@@ -1056,20 +1087,31 @@ def resolve_provider_defaults(config, ctx):
         raw_section = config.get(stage_id) or {}
         ctx.raw_sections[stage_id] = copy.deepcopy(raw_section)
         config[stage_id] = resolve_stage_section(stage, raw_section, config, ctx)
-        for dep in config[stage_id]["depends-on"]:
-            if dep in seen:
-                continue
-            if dep not in all_stage_ids:
-                die(
-                    f"stage '{stage_id}': 'depends-on:' names unknown stage id {_with_hint(dep, all_stage_ids)} -- "
-                    f"not declared in 'stages:'."
-                )
-            die(
-                f"stage '{stage_id}': 'depends-on:' names '{dep}', declared at or after '{stage_id}' in 'stages:' -- "
-                "a stage may only depend on one declared earlier."
-            )
+        _validate_depends_on(stage_id, config[stage_id]["depends-on"], seen, all_stage_ids)
         seen.append(stage_id)
     return config
+
+
+def _validate_depends_on(stage_id, depends_on, seen, all_stage_ids):
+    """Die if 'depends-on:' names an id that isn't declared, or isn't declared strictly *before* ``stage_id``.
+
+    Checked eagerly here, in 'stages:' order (``seen`` is every id already
+    walked): a typo or a forward/self-reference fails at startup rather than
+    surfacing as a wrong skip cascade once _compute_static_skip_reasons
+    walks the list assuming every dependency's reason is already decided.
+    """
+    for dep in depends_on:
+        if dep in seen:
+            continue
+        if dep not in all_stage_ids:
+            die(
+                f"stage '{stage_id}': 'depends-on:' names unknown stage id {_with_hint(dep, all_stage_ids)} -- "
+                f"not declared in 'stages:'."
+            )
+        die(
+            f"stage '{stage_id}': 'depends-on:' names '{dep}', declared at or after '{stage_id}' in 'stages:' -- "
+            "a stage may only depend on one declared earlier."
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -1313,10 +1355,20 @@ def expand_section_imports(config, env_dir):
             continue
         merged, dirs, hooks = _stacked_section(value, key, env_dir)
         extra_dirs += dirs
-        for name, entries in hooks.items():
-            extra_hook_entries.setdefault(name, []).extend(entries)
-        result[key] = deep_merge(merged, {k: v for k, v in value.items() if k != "import"})
+        _merge_hook_entries(extra_hook_entries, hooks)
+        result[key] = deep_merge(merged, _without_import(value))
     return result, extra_dirs, extra_hook_entries
+
+
+def _merge_hook_entries(hook_entries, more_hook_entries):
+    """Merge ``more_hook_entries`` (name -> [(base_dir, script), ...]) into ``hook_entries`` in place."""
+    for name, entries in more_hook_entries.items():
+        hook_entries.setdefault(name, []).extend(entries)
+
+
+def _without_import(mapping):
+    """A config layer's own keys, minus the 'import:' directive -- it isn't inheritable data."""
+    return {k: v for k, v in mapping.items() if k != "import"}
 
 
 def _stacked_section(value, key, env_dir):
@@ -1707,14 +1759,10 @@ def run_named_scripts(
 
     stages = _make_stages(config, stage_ids)
     wrappers, setups, _, _ = _partition_stages(stages, set(_stage_ids_of(stages)))
-    # a wrapper never relocates twice: already relocated, or already inside
-    # a container someone else started
-    active_wrappers = [] if bool(ctx.relocated) or ctx.in_container else wrappers
+    active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
     if not active_wrappers:
-        for name in names:
-            if not _run_stage_scripts(ctx, _stage_ids_of(setups), name):
-                info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
+        _run_named_scripts_directly(ctx, setups, names)
         return
 
     _relocate_named_scripts(
@@ -1731,6 +1779,18 @@ def run_named_scripts(
         cli_args=cli_args,
         env_vars=env_vars,
     )
+
+
+def _wrappers_inactive(ctx):
+    """True when no wrapper stage may relocate from here: already relocated, or already inside a container."""
+    return bool(ctx.relocated) or ctx.in_container
+
+
+def _run_named_scripts_directly(ctx, setups, names):
+    """Run every one of ``names`` for the given setup stages, in order -- the no-active-wrapper case."""
+    for name in names:
+        if not _run_stage_scripts(ctx, _stage_ids_of(setups), name):
+            info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
 
 
 def _relocate_named_scripts(
@@ -1979,30 +2039,34 @@ def _skip_for_dynamic_reason(ctx, config, provider, skip_state):
     cfg = config.get(provider.stage) or {}
     skip_reason = None
     if not ctx.force:
-        for key, expected_code, message in (
-            ("skip-on-success", 0, "skip-on-success scripts all exited 0"),
-            ("skip-on-failure", 1, "skip-on-failure scripts all exited 1"),
-        ):
-            scripts = cfg.get(key) or []
-            if not scripts:
-                continue
-            all_exited_as_expected = True
-            for script in scripts:
-                path = Path(script)
-                if not path.is_file():
-                    die(f"{key}: script not found: {path}")
-                result = ctx.run([path], check=False, capture=False, query=True, echo=False)
-                if result.returncode != expected_code:
-                    all_exited_as_expected = False
-                    break
-            if all_exited_as_expected:
-                skip_reason = message
-                break
+        skip_reason = _skip_kind_reason(
+            ctx, cfg, "skip-on-success", 0, "skip-on-success scripts all exited 0"
+        ) or _skip_kind_reason(ctx, cfg, "skip-on-failure", 1, "skip-on-failure scripts all exited 1")
     if not skip_reason:
         return False
     info(f"{provider.name}[{provider.stage}]: {skip_reason}; skipping stage")
     if skip_state is not None:
         skip_state.reasons[provider.stage] = skip_reason
+    return True
+
+
+def _skip_kind_reason(ctx, cfg, key, expected_code, message):
+    """``message`` if ``cfg[key]``'s scripts all exit ``expected_code``, else None -- one 'skip-on-*:' kind."""
+    scripts = cfg.get(key) or []
+    if scripts and _skip_scripts_exit(ctx, key, scripts, expected_code):
+        return message
+    return None
+
+
+def _skip_scripts_exit(ctx, label, scripts, expected_code):
+    """True if every ``scripts`` entry exits with ``expected_code``."""
+    for script in scripts:
+        path = Path(script)
+        if not path.is_file():
+            die(f"{label}: script not found: {path}")
+        result = ctx.run([path], check=False, capture=False, query=True, echo=False)
+        if result.returncode != expected_code:
+            return False
     return True
 
 
@@ -2147,9 +2211,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     runnable_stage_ids = {s for s in stage_ids if static_reasons[s] is None}
     wrappers, setups, skipped_wrappers, skipped_setups = _partition_stages(all_stages, runnable_stage_ids)
 
-    # a wrapper never relocates twice: already relocated, or already inside
-    # a container someone else started
-    active_wrappers = [] if bool(ctx.relocated) or ctx.in_container else wrappers
+    active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
     # ``reasons`` starts as the static verdict (--until/--skip, 'disabled:',
     # and 'depends-on:' cascaded from either) but is then mutated live as
@@ -2251,19 +2313,36 @@ def _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff):
     reasons = {}
     still_declared = set(stage_ids)
     for index, stage_id in enumerate(all_stage_ids):
-        if stage_id not in still_declared:
-            past_cutoff = cutoff is not None and index > cutoff
-            reason = "skipped by --until" if past_cutoff else "skipped by --skip"
-        elif (config.get(stage_id) or {}).get("disabled"):
-            reason = "skipped (disabled: true)"
-        else:
-            blocking_dep = next(
-                (dep for dep in (config.get(stage_id) or {}).get("depends-on") or [] if reasons.get(dep)),
-                None,
-            )
-            reason = f"skipped (depends-on '{blocking_dep}')" if blocking_dep else None
-        reasons[stage_id] = reason
+        reasons[stage_id] = _static_skip_reason(config, stage_id, index, still_declared, cutoff, reasons)
     return reasons
+
+
+def _static_skip_reason(config, stage_id, index, still_declared, cutoff, reasons):
+    """One stage's static skip reason -- see _compute_static_skip_reasons, which this is split out of.
+
+    ``reasons`` holds every earlier stage's already-decided reason, which is
+    all a 'depends-on:' cascade here ever needs to look at.
+    """
+    if stage_id not in still_declared:
+        return _cutoff_skip_reason(index, cutoff)
+    if (config.get(stage_id) or {}).get("disabled"):
+        return "skipped (disabled: true)"
+    return _dependency_skip_reason(config, stage_id, reasons)
+
+
+def _cutoff_skip_reason(index, cutoff):
+    """'--until' vs '--skip' wording for a stage that --skip/--until already dropped from 'stage_ids'."""
+    past_cutoff = cutoff is not None and index > cutoff
+    return "skipped by --until" if past_cutoff else "skipped by --skip"
+
+
+def _dependency_skip_reason(config, stage_id, reasons):
+    """This stage's reason cascaded from a 'depends-on:' target already decided skipped, if any."""
+    blocking_dep = next(
+        (dep for dep in (config.get(stage_id) or {}).get("depends-on") or [] if reasons.get(dep)),
+        None,
+    )
+    return f"skipped (depends-on '{blocking_dep}')" if blocking_dep else None
 
 
 def _partition_stages(all_stages, runnable):
@@ -2975,28 +3054,38 @@ def show_config(
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
     _drop_filtered_sections(resolved, stage_ids)
     resolved["stages"] = stage_ids
-    # the effective 'hooks:' section: resolved fresh (not read off the raw
-    # 'hooks:' key), since it spans the whole 'import:' chain, de-duplicated
-    # the same way run_hook() de-duplicates before sourcing
-    hooks = {}
-    for name in hook_names_for_stages(stage_ids):
-        entries = collect_hook_entries(config_path, name) + ctx.extra_hook_entries.get(name, [])
-        scripts = list(dict.fromkeys(str(ctx.resolve_path(script, base=base_dir)) for base_dir, script in entries))
-        hooks[name] = scripts or None
-    resolved["hooks"] = hooks
+    resolved["hooks"] = resolve_hooks(ctx, config_path, stage_ids)
 
     ordered = _ordered_config(resolved, stage_ids)
     if minimal:
         for stage_id in stage_ids:
-            raw_section = ctx.raw_sections.get(stage_id, {})
-            section = cast(dict, ordered[stage_id])
-            ordered[stage_id] = {key: value for key, value in section.items() if key in raw_section}
+            ordered[stage_id] = _drop_defaulted_stage_keys(ordered[stage_id], ctx.raw_sections.get(stage_id, {}))
         ordered = _drop_null_values(ordered)
 
     if format == "toml":
         print(dump_toml(ordered, color=supports_color()))
     else:
         print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
+
+
+def resolve_hooks(ctx, config_path, stage_ids):
+    """The effective 'hooks:' section for --show-config.
+
+    Resolved fresh (not read off the raw 'hooks:' key), since it spans the
+    whole 'import:' chain -- de-duplicated the same way run_hook()
+    de-duplicates before sourcing.
+    """
+    resolved = {}
+    for name in hook_names_for_stages(stage_ids):
+        entries = collect_hook_entries(config_path, name) + ctx.extra_hook_entries.get(name, [])
+        scripts = list(dict.fromkeys(str(ctx.resolve_path(script, base=base_dir)) for base_dir, script in entries))
+        resolved[name] = scripts or None
+    return resolved
+
+
+def _drop_defaulted_stage_keys(section, raw_section):
+    """Keep only ``section``'s keys the env actually wrote, for the default --show-config (minimal)."""
+    return {key: value for key, value in cast(dict, section).items() if key in raw_section}
 
 
 def _drop_null_values(value):
