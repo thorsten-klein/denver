@@ -397,11 +397,6 @@ def _printable(cmd):
     return shlex.join(str(c) for c in cmd)
 
 
-def _existing_scripts(scripts):
-    """The scripts that are actually on disk -- a missing one is skipped silently (see Context.source)."""
-    return [str(s) for s in scripts if s and Path(s).exists()]
-
-
 def _validate_exec_cmd(cmd):
     """Die on a command os.execvpe() could only fail at confusingly.
 
@@ -1134,7 +1129,14 @@ class Context:
             return self._dry_run_command(cmd, printable, cwd=cwd, env=env, query=query, input=input)
         self._echo_command(printable, echo)
         try:
-            return self._spawn(cmd, cwd=cwd, env=env, check=check, capture=capture, input=input)
+            return subprocess.run(
+                _argv(cmd),
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                check=check,
+                text=True,
+                **self._run_kwargs(capture=capture, input=input),
+            )
         except OSError as exc:
             self._die_unstartable(printable, exc)
 
@@ -1167,17 +1169,6 @@ class Context:
             run_kwargs["input"] = input
         return run_kwargs
 
-    def _spawn(self, cmd, *, cwd, env, check, capture, input):
-        """The actual subprocess.run() of a real (non-dry) run -- OSError is the caller's to report."""
-        return subprocess.run(
-            _argv(cmd),
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            check=check,
-            text=True,
-            **self._run_kwargs(capture=capture, input=input),
-        )
-
     def _die_unstartable(self, printable, exc):
         """Report a command that could not be started at all.
 
@@ -1191,18 +1182,6 @@ class Context:
         stage = f"stage '{self.stage_id}': " if self.stage_id else ""
         die(f"{stage}cannot run {printable}: {exc.strerror or exc}")
 
-    def _dry_query(self, cmd, *, cwd, env, input):
-        """Really run a ``capture=True`` query under --dry-run (see Context.run) -- it never aborts on failure."""
-        return subprocess.run(
-            _argv(cmd),
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            check=False,  # a dry run reports, it never aborts on a query
-            text=True,
-            capture_output=True,
-            input=input,
-        )
-
     def _dry_run_command(self, cmd, printable, *, cwd, env, query, input):
         """Report ``cmd`` under --dry-run: print-and-skip it, or really run it if it's a query (see Context.run)."""
         if not query:
@@ -1210,7 +1189,16 @@ class Context:
             return subprocess.CompletedProcess(_argv(cmd), 0, "", "")
         self.dry_note("?", printable)
         try:
-            result = self._dry_query(cmd, cwd=cwd, env=env, input=input)
+            # a dry run reports a query, it never aborts on one
+            result = subprocess.run(
+                _argv(cmd),
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                check=False,
+                text=True,
+                capture_output=True,
+                input=input,
+            )
         except OSError as exc:
             # e.g. the tool an earlier stage would have installed isn't
             # there: report it and let the caller see an ordinary failure.
@@ -1309,7 +1297,7 @@ class Context:
         (a venv's activate, conan's conanbuildenv.sh) is skipped in a dry
         run exactly as it is in a real one, silently.
         """
-        scripts = _existing_scripts(scripts)
+        scripts = [str(s) for s in scripts if s and Path(s).exists()]
         if not scripts:
             return
         if self.dry_run:

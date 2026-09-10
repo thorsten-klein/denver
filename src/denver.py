@@ -117,14 +117,11 @@ LOGO_PATH = DENVER_PKG_DIR / "denver_assets" / "logo.txt"
 
 
 def checkout_root():
-    """The source checkout denver itself is running out of, or None.
+    """The source checkout denver itself is running out of, or None (see module docstring context).
 
-    True whenever DENVER_PKG_DIR is a ``<checkout>/src`` holding
-    ``denver_providers/`` -- i.e. both when running the script directly
-    (``src/denver.py``) and under an editable install (``uv pip install
-    -e .``), which keeps DENVER_PKG_DIR pointing into the checkout's
-    ``src/``. Installed any other way (e.g. a built wheel), DENVER_PKG_DIR is
-    wherever the package manager put it (site-packages) and this is None.
+    Kept as its own function, not inlined: tests monkeypatch it directly to
+    fake "installed, no checkout" or "checkout at <path>" without touching
+    the real filesystem.
     """
     if DENVER_PKG_DIR.name == "src" and (DENVER_PKG_DIR / "denver_providers").is_dir():
         return DENVER_PKG_DIR.parent
@@ -394,19 +391,14 @@ def load_config_file(path):
     """
     path = Path(path)
     if path.suffix == ".toml":
-        return _load_toml_config_file(path)
+        if tomllib is None:
+            raise ConfigReadError(
+                f"{path}: reading a denver.toml config needs tomllib, which is stdlib only from Python 3.11 -- "
+                f"this interpreter is older. Without it, only denver.yml/denver.yaml is supported."
+            )
+        with path.open("rb") as f:
+            return tomllib.load(f)
     return _load_yaml_config_file(path)
-
-
-def _load_toml_config_file(path):
-    """load_config_file's '.toml' branch."""
-    if tomllib is None:
-        raise ConfigReadError(
-            f"{path}: reading a denver.toml config needs tomllib, which is stdlib only from Python 3.11 -- "
-            f"this interpreter is older. Without it, only denver.yml/denver.yaml is supported."
-        )
-    with path.open("rb") as f:
-        return tomllib.load(f)
 
 
 def _load_yaml_config_file(path):
@@ -488,39 +480,28 @@ def deep_merge(base, override, _path=""):
     same way, the other direction).
     """
     if isinstance(base, dict) and isinstance(override, dict):
-        return _merge_dicts(base, override, _path)
+        result = dict(base)
+        for key, value in override.items():
+            child_path = f"{_path}.{key}" if _path else str(key)
+            result[key] = deep_merge(result.get(key, _UNSET), value, child_path)
+        return result
 
     if isinstance(base, list) and isinstance(override, list):
         return _merge_lists(base, override)
 
-    if _coercible_to_list(base, override):
+    # one side a list, the other a bare scalar deep_merge should coerce to match it
+    coercible_to_list = (
+        (base is not _UNSET and not isinstance(base, dict))
+        if isinstance(override, list)
+        else (isinstance(base, list) and not isinstance(override, dict))
+    )
+    if coercible_to_list:
         return _merge_lists(_as_list(base), _as_list(override))
 
     return _merge_scalar(base, override, _path)
 
 
-def _coercible_to_list(base, override):
-    """Whether one side is a list and the other a bare scalar that ``deep_merge`` should coerce to match it."""
-    if isinstance(override, list):
-        return base is not _UNSET and not isinstance(base, dict)
-    return isinstance(base, list) and not isinstance(override, dict)
-
-
-def _merge_dicts(base, override, _path):
-    """``deep_merge``'s mapping case: every key of ``override`` merged one layer deeper."""
-    result = dict(base)
-    for key, value in override.items():
-        child_path = f"{_path}.{key}" if _path else str(key)
-        result[key] = deep_merge(result.get(key, _UNSET), value, child_path)
-    return result
-
-
 OVERWRITE_MARKER = "<overwrite>"
-
-
-def _has_reset_marker(override):
-    """Whether a layer's list carries a ``!``/``<overwrite>`` marker, dropping every lower-layer entry."""
-    return any(isinstance(entry, str) and (entry.startswith("!") or entry == OVERWRITE_MARKER) for entry in override)
 
 
 def _strip_reset_marker(entry):
@@ -532,7 +513,10 @@ def _strip_reset_marker(entry):
 
 def _merge_lists(base, override):
     """``deep_merge``'s list case: appended, unless ``override`` carries a ``!``/``<overwrite>`` reset marker."""
-    if not _has_reset_marker(override):
+    has_reset_marker = any(
+        isinstance(entry, str) and (entry.startswith("!") or entry == OVERWRITE_MARKER) for entry in override
+    )
+    if not has_reset_marker:
         return base + override
     return [_strip_reset_marker(entry) for entry in override if entry != OVERWRITE_MARKER]
 
@@ -597,8 +581,13 @@ def load_config(config_path, _seen=None) -> dict:
         die(f"circular import detected at {config_path}")
     _seen.add(config_path)
 
-    raw = _rebased_section_imports(load_config_file(config_path), config_path.parent)
-    merged = _merged_imports(raw, config_path.parent, _seen)
+    # rebase each section's own 'import:' entries to this layer's own dir,
+    # while base_dir still means that -- expand_section_imports() resolves
+    # them later against the top-level env dir instead, which would be wrong
+    # for a layer only reached through a whole-file 'import:' chain.
+    base_dir = config_path.parent
+    raw = {key: _rebased_section_value(value, base_dir) for key, value in load_config_file(config_path).items()}
+    merged = _merged_imports(raw, base_dir, _seen)
 
     # 'runnable' marks one specific denver.toml (e.g. a shared base meant only
     # to be imported, never started directly) -- it must never leak from an
@@ -609,30 +598,7 @@ def load_config(config_path, _seen=None) -> dict:
     # here keeps --show-config's output consistent with that.
     merged.pop("runnable", None)
 
-    return cast(dict, deep_merge(merged, _without_import(raw)))
-
-
-def _without_import(mapping):
-    """A config layer's own keys, minus the 'import:' directive -- it isn't inheritable data."""
-    return {k: v for k, v in mapping.items() if k != "import"}
-
-
-def _rebased_section_imports(raw, base_dir):
-    """Rewrite every section-level ``import:`` entry to an absolute path, anchored at ``base_dir``.
-
-    E.g. ``docker: import: [./docker]`` of this one raw layer to an absolute path, anchored at
-    ``base_dir`` -- the directory of the denver.toml/yml that actually declares it.
-
-    Section-level imports are only resolved later, by expand_section_imports(), against the single
-    top-level env dir the whole merged config ends up running from -- correct for a layer that IS that
-    top-level file, but wrong for one only reached through a whole-file 'import:' chain (its own
-    relative paths are meant to be relative to itself, same as every other path it declares). Doing the
-    rebase here, while ``base_dir`` is still this layer's own directory, fixes that once and for all --
-    everything downstream (deep_merge's list-append, the final expand_section_imports call) keeps
-    working unchanged since an already-absolute path resolves the same regardless of what it's joined
-    against.
-    """
-    return {key: _rebased_section_value(value, base_dir) for key, value in raw.items()}
+    return cast(dict, deep_merge(merged, {k: v for k, v in raw.items() if k != "import"}))
 
 
 def _rebased_section_value(value, base_dir):
@@ -929,21 +895,16 @@ def validate_denver_version(config):
         )
         return
 
-    unmet = _unmet_requirements(requirements, parsed)
+    unmet = [
+        text
+        for operator, wanted, text in requirements
+        if not _SPEC_OPERATORS[operator](compare_versions(parsed, wanted))
+    ]
     if unmet:
         die(
             f"config requires 'denver-version: {spec}', but this denver is {running} "
             f"(unmet: {', '.join(unmet)}) -- upgrade it, e.g. `pip install --upgrade {DISTRIBUTION_NAME}`."
         )
-
-
-def _unmet_requirements(requirements, parsed):
-    """The requirement texts the running version ``parsed`` does not satisfy."""
-    return [
-        text
-        for operator, wanted, text in requirements
-        if not _SPEC_OPERATORS[operator](compare_versions(parsed, wanted))
-    ]
 
 
 def validate_stage_filters(config, until_stage, skip_stages):
@@ -1228,7 +1189,8 @@ def collect_import_dirs(config_path, _seen=None):
         # an env dir need not have its own denver.toml if -f/-c supply the
         # whole config (see _load_cli_config) -- nothing to import from here.
         return []
-    imported = _imported_paths(load_config_file(config_path), config_path.parent)
+    raw = load_config_file(config_path)
+    imported = [resolve_import(entry, config_path.parent) for entry in (raw.get("import", []) or [])]
 
     dirs = [p.parent for p in imported]
     for imported_path in imported:
@@ -1250,11 +1212,6 @@ def _register_seen(config_path, _seen):
         die(f"circular import detected at {config_path}")
     _seen.add(config_path)
     return config_path, _seen
-
-
-def _imported_paths(raw, base_dir):
-    """Every whole-file 'import:' entry of ``raw``, resolved to the denver.toml it names."""
-    return [resolve_import(entry, base_dir) for entry in (raw.get("import", []) or [])]
 
 
 def collect_hook_entries(config_path, name, _seen=None):
@@ -1279,7 +1236,7 @@ def collect_hook_entries(config_path, name, _seen=None):
     base_dir = config_path.parent
 
     entries = []
-    for imported_path in _imported_paths(raw, base_dir):
+    for imported_path in (resolve_import(entry, base_dir) for entry in (raw.get("import", []) or [])):
         entries += collect_hook_entries(imported_path, name, _seen)
     return entries + _own_hook_entries(raw, base_dir, name)
 
@@ -1445,7 +1402,7 @@ def expand_section_imports(config, env_dir):
         merged, dirs, hooks = _stacked_section(value, key, env_dir)
         extra_dirs += dirs
         _merge_hook_entries(extra_hook_entries, hooks)
-        result[key] = deep_merge(merged, _without_import(value))
+        result[key] = deep_merge(merged, {k: v for k, v in value.items() if k != "import"})
     return result, extra_dirs, extra_hook_entries
 
 
@@ -1863,7 +1820,9 @@ def run_named_scripts(
 
     stages = _make_stages(config, stage_ids)
     wrappers, setups, _, _ = _partition_stages(stages, set(_stage_ids_of(stages)))
-    active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
+    # a wrapper never relocates twice: already relocated, or already inside
+    # a container someone else started
+    active_wrappers = [] if bool(ctx.relocated) or ctx.in_container else wrappers
 
     if not active_wrappers:
         _run_named_scripts_directly(ctx, setups, names)
@@ -1942,7 +1901,7 @@ def _relocate_named_scripts(
     names_label = ", ".join(f"'{n}'" for n in setup_names)
     _note_not_previewed(ctx, f"{names_label} scripts of stages", setups, active_wrappers)
 
-    stage_index = _stage_positions(stages)
+    stage_index = {s.stage: i for i, s in enumerate(stages, 1)}
     _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, len(stages), quiet=quiet)
 
     cmd = _relocated_run_cmd(
@@ -2064,30 +2023,21 @@ def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()
     _print_script_names(env_dir, by_name)
 
 
-def _stage_scripts_section(config, stage_id):
-    """One stage's raw 'scripts:' mapping (empty when that stage declares none)."""
-    return (config.get(stage_id) or {}).get("scripts") or {}
-
-
 def _scripts_by_name(config, stage_ids):
     """``{script name: [(stage id, entry count)]}`` across the given stages, in 'stages:' order."""
     by_name = {}
     for stage_id in stage_ids:
-        for name, entries in _stage_scripts_section(config, stage_id).items():
+        section = (config.get(stage_id) or {}).get("scripts") or {}
+        for name, entries in section.items():
             by_name.setdefault(name, []).append((stage_id, len(entries or [])))
     return by_name
-
-
-def _script_count_label(stage, count):
-    """One stage's contribution to a --scripts name, e.g. ``uv (2 scripts)``."""
-    return f"{stage} ({count} script{'s' if count != 1 else ''})"
 
 
 def _print_script_names(env_dir, by_name):
     """Print every --scripts name this env defines, with the stages contributing to it."""
     print(f"available --scripts names for env '{env_dir.name}':", file=sys.stderr)
     for name in sorted(by_name):
-        stages = ", ".join(_script_count_label(stage, count) for stage, count in by_name[name])
+        stages = ", ".join(f"{stage} ({count} script{'s' if count != 1 else ''})" for stage, count in by_name[name])
         print(f"  {name:<12} {stages}", file=sys.stderr)
 
 
@@ -2365,14 +2315,12 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     static_reasons = _compute_static_skip_reasons(
         config, all_stage_ids, stage_ids, _until_cutoff(all_stage_ids, options.until_stage)
     )
-    wrappers, setups, skipped_wrappers, skipped_setups = _partition_stages(
-        all_stages, _runnable_stage_ids(stage_ids, static_reasons)
-    )
+    runnable_stage_ids = {s for s in stage_ids if static_reasons[s] is None}
+    wrappers, setups, skipped_wrappers, skipped_setups = _partition_stages(all_stages, runnable_stage_ids)
 
-    # A wrapper (e.g. docker) is active only on the host: skip it yourself
-    # (e.g. `--skip docker`) to run on the host instead, or it's already
-    # excluded above by stage filtering; also inactive once already inside it.
-    active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
+    # a wrapper never relocates twice: already relocated, or already inside
+    # a container someone else started
+    active_wrappers = [] if bool(ctx.relocated) or ctx.in_container else wrappers
 
     # ``reasons`` starts as the static verdict (--until/--skip, 'disabled:',
     # and 'depends-on:' cascaded from either) but is then mutated live as
@@ -2380,7 +2328,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     # 'skip-on-success:'/'skip-on-failure:' skip can only be decided at that
     # point, and a later stage's own 'depends-on:' needs to see it.
     skip_state = _StageSkipState(
-        stage_index=_stage_positions(all_stages),
+        stage_index={s.stage: i for i, s in enumerate(all_stages, 1)},
         total=len(all_stages),
         reasons=static_reasons,
         all_stages=all_stages,
@@ -2449,26 +2397,9 @@ def _make_stages(config, stage_ids):
     return [make_stage(stage_id, config) for stage_id in stage_ids]
 
 
-def _stage_positions(stages):
-    """``{stage id: 1-based position}``, feeding banner()'s '[i/n]'."""
-    return {s.stage: i for i, s in enumerate(stages, 1)}
-
-
 def _stage_ids_of(stages):
     """The stage ids of a list of provider instances, in order."""
     return [s.stage for s in stages]
-
-
-def _runnable_stage_ids(stage_ids, static_reasons):
-    """Which of the filtered stage ids actually run: all of them, minus any with a static skip reason.
-
-    See _compute_static_skip_reasons for what counts as static (disabled,
-    --until/--skip, and 'depends-on:' cascaded from either) -- unlike
-    --skip/--until, none of that drops a stage's section from
-    --show-config/filtered_stage_ids: it's about whether the stage's own
-    setup() runs, not whether it's part of the declared pipeline.
-    """
-    return {s for s in stage_ids if static_reasons[s] is None}
 
 
 def _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff):
@@ -2554,25 +2485,6 @@ def _until_cutoff(all_stage_ids, until_stage):
     if until_stage in all_stage_ids:
         return all_stage_ids.index(until_stage)
     return None
-
-
-def _wrappers_inactive(ctx):
-    """True when no wrapper stage may relocate from here, whatever the env declares.
-
-    Two independent reasons, deliberately OR-ed:
-
-    * denver already relocated this process (``ctx.relocated``) -- its own
-      bookkeeping, stated by the outer run, and true for wrapper kinds no
-      filesystem marker could reveal (a ``custom`` stage's ``launcher:``);
-    * this is a container somebody else started (``ctx.in_container``), where
-      relocating again would mean starting a container inside a container.
-
-    The second is deliberately *unscoped*: an env launched from inside a
-    devshell builds right there rather than starting a second container, even
-    though nothing relocated *this* env. Scoping it per-env would turn that
-    into docker-in-docker.
-    """
-    return bool(ctx.relocated) or ctx.in_container
 
 
 def _mark_relocated(ctx, wrappers):
@@ -2863,7 +2775,7 @@ def _run_stages_directly(
         print_logo()
     # ctx.in_container covers both ways this path is reached already inside
     # one: the reinvoked-denver-in-docker case, and a container someone else
-    # started denver in directly (see _wrappers_inactive) -- either way,
+    # started denver in directly -- either way,
     # completion is wired into the fallback/configured interactive shell the
     # same as the pure-wrapper case in _wrapper_target_cmd. --skip docker
     # (ctx.in_container False here) is the one case genuinely running on the
@@ -2932,18 +2844,10 @@ def _ordered_stage_section(section):
     alphabetically. Each value is still recursively sorted via
     _sorted_nested -- only this section's own top level is special-cased.
     """
-    keys = _present_generic_keys(section) + _provider_keys(section)
+    present_generic = [key for key in GENERIC_STAGE_KEYS if key in section]
+    provider_specific = sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
+    keys = present_generic + provider_specific
     return {key: _sorted_nested(section[key]) for key in keys}
-
-
-def _present_generic_keys(section):
-    """The GENERIC_STAGE_KEYS this section actually has, in that fixed order."""
-    return [key for key in GENERIC_STAGE_KEYS if key in section]
-
-
-def _provider_keys(section):
-    """This section's provider-specific keys (everything GENERIC_STAGE_KEYS doesn't name), alphabetically."""
-    return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
 # --------------------------------------------------------------------------- #
@@ -3090,7 +2994,7 @@ def _toml_needs_header(value):
     """
     if isinstance(value, dict):
         return bool(value) and not _toml_inlinable(value)
-    return _toml_is_array_of_tables(value)
+    return isinstance(value, list) and bool(value) and all(isinstance(v, dict) for v in value)
 
 
 def _toml_inlinable(value):
@@ -3152,11 +3056,6 @@ def _toml_is_table_like(value):
     """
     if isinstance(value, dict):
         return bool(value)
-    return _toml_is_array_of_tables(value)
-
-
-def _toml_is_array_of_tables(value):
-    """Whether ``value`` is a non-empty list of dicts -- the one shape still given '[[section]]' headers at any depth."""
     return isinstance(value, list) and bool(value) and all(isinstance(v, dict) for v in value)
 
 
@@ -3318,12 +3217,11 @@ def show_config(
 
     ``minimal`` (plain --show-config; --show-config-full turns it off)
     additionally drops every stage-section key the env didn't actually
-    configure -- i.e. whatever a provider's resolve_defaults() filled in
-    itself, static or computed, fill_unset()'s ``None`` included (see
-    _drop_defaulted_stage_keys) -- and then, recursively, every remaining
-    key whose value is ``None`` or an empty dict/list (see
-    _drop_null_values), so only keys that actually carry an explicit value
-    remain. Other falsy scalars (``0``/``""``) are kept as-is.
+    configure -- whatever a provider's resolve_defaults() filled in itself
+    -- then, recursively, every remaining key whose value is ``None`` or an
+    empty dict/list (see _drop_null_values), so only keys that actually
+    carry an explicit value remain. Other falsy scalars (``0``/``""``) are
+    kept as-is.
     """
     resolved, ctx = resolve_full_config(env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
@@ -3334,24 +3232,14 @@ def show_config(
     ordered = _ordered_config(resolved, stage_ids)
     if minimal:
         for stage_id in stage_ids:
-            ordered[stage_id] = _drop_defaulted_stage_keys(ordered[stage_id], ctx.raw_sections.get(stage_id, {}))
+            raw_section = ctx.raw_sections.get(stage_id, {})
+            ordered[stage_id] = {key: value for key, value in ordered[stage_id].items() if key in raw_section}
         ordered = _drop_null_values(ordered)
 
     if format == "toml":
         print(dump_toml(ordered, color=supports_color()))
     else:
         print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
-
-
-def _drop_defaulted_stage_keys(section, raw_section):
-    """Keep only ``section``'s keys the env actually wrote, for the default --show-config (minimal).
-
-    Every key resolve_stage_section() added on its own -- a provider's
-    static/filesystem/PATH-derived default, or fill_unset()'s ``None`` for a
-    documented-but-unset one -- is a default, not something the env
-    configured, so it's left out here.
-    """
-    return {key: value for key, value in section.items() if key in raw_section}
 
 
 def _drop_null_values(value):
@@ -3806,7 +3694,9 @@ def _state_dir_plan(state_dir, env_dir):
     # --dry-run (and 'denver clean''s own preview) answers it exactly as a
     # real run would.
     in_env_dir = parent == Path(env_dir) / STATE_DIRNAME
-    if in_env_dir and _only_denver_leftovers(parent, state_dir):
+    # only the .gitignore denver wrote is left besides state_dir itself
+    only_denver_leftovers = not {entry.name for entry in parent.iterdir()} - {state_dir.name, ".gitignore"}
+    if in_env_dir and only_denver_leftovers:
         return [state_dir, parent]
     return [state_dir]
 
@@ -3817,11 +3707,6 @@ def _remove_state_dir(state_dir, env_dir, *, dry_run):
     for path in plan:
         _remove_tree(path, dry_run=dry_run)
     return bool(plan)
-
-
-def _only_denver_leftovers(parent, state_dir):
-    """Whether ``parent`` holds nothing besides ``state_dir`` and the .gitignore denver wrote into it."""
-    return not {entry.name for entry in parent.iterdir()} - {state_dir.name, ".gitignore"}
 
 
 def _remove_tree(path, *, dry_run):
@@ -4532,13 +4417,11 @@ def _action_help_by_flag(parser):
     hand-copied second string would.
     """
     return {
-        flag: action.help for action in parser._actions for flag in action.option_strings if _real_help(action.help)
+        flag: action.help
+        for action in parser._actions
+        for flag in action.option_strings
+        if action.help and action.help != argparse.SUPPRESS
     }
-
-
-def _real_help(text):
-    """Whether ``text`` (an argparse action's own .help) is real help, not None/'' /argparse.SUPPRESS."""
-    return bool(text) and text != argparse.SUPPRESS
 
 
 def _top_level_help():
@@ -4617,17 +4500,12 @@ def _completion_description_lookup(words):
         return _top_level_help()
     subcommand = prior[0]
     if subcommand == "complete":
-        return _complete_shell_names_help(prior)
+        return {} if len(prior) > 1 else _SHELL_HELP
     if subcommand == "clean":
         return _action_help_by_flag(build_arg_parser().subcommand_parsers["clean"])
     if subcommand == "run":
         return _run_description_lookup(prior[1:])
     return {}
-
-
-def _complete_shell_names_help(prior):
-    """{shell: blurb} for 'complete <TAB>' -- {} once a shell's already given. See _complete_shell_names."""
-    return {} if len(prior) > 1 else _SHELL_HELP
 
 
 def _run_description_lookup(rest):
@@ -4755,77 +4633,31 @@ def _completion_script(shell, names):
     """
     quoted = [shlex.quote(name) for name in names]
     if shell == "bash":
-        return _completion_script_bash(quoted)
+        # COMP_WORDS[0] may be a bash alias (`alias denver=...`), which
+        # `"$cmd" __complete` can't exec directly -- resolved via the
+        # 'alias' builtin ('alias -- "$cmd"'), not $BASH_ALIASES directly
+        # (an associative array, bash 4+ only; macOS's system bash is 3.2).
+        # 'args' is built before IFS is touched: bash 3.2 mis-splits a
+        # sliced array expansion once IFS no longer contains a space
+        # (verified against real bash 3.2 via Docker).
+        return (
+            "_denver_complete() {"
+            " local cmd=${COMP_WORDS[0]};"
+            ' local -a resolved=("$cmd");'
+            " local aliased raw;"
+            ' aliased=$(alias -- "$cmd" 2>/dev/null) && eval "raw=${aliased#*=}" && resolved=($raw);'
+            ' local -a args=("${COMP_WORDS[@]:1:COMP_CWORD}");'
+            " local out;"
+            ' out=$("${resolved[@]}" __complete "${args[@]}" 2>/dev/null);'
+            " local IFS=$'\\n';"
+            " COMPREPLY=($out);"
+            " };\n"
+            f"complete -F _denver_complete -o default -o bashdefault {' '.join(quoted)};\n"
+            '# denver bash completion -- wire up with: eval "$(denver complete)"\n'
+        )
     if shell == "zsh":
         return _completion_script_zsh(names)
     return _completion_script_fish(names, quoted)
-
-
-def _completion_script_bash(quoted):
-    """The bash branch of _completion_script -- see there for what ``quoted`` is."""
-    # COMP_WORDS[0] is the literal word typed at the prompt -- if that word is a
-    # bash alias (as with `alias denver=/path/to/denver.py`), it's not something
-    # `"$cmd" __complete ...` can exec directly: alias expansion happens at parse
-    # time, on the literal token, never on a variable's value.
-    #
-    # Resolved via the 'alias' *builtin* itself ('alias -- "$cmd"'), not by
-    # indexing $BASH_ALIASES directly the way an earlier version of this did:
-    # $BASH_ALIASES is an *associative* array, a bash-4.0+ feature, and macOS's
-    # own system /bin/bash is still 3.2.57 (frozen there pre-GPLv3) -- indexing
-    # it as if it always existed silently falls back to bash 3.2's only other
-    # interpretation of an array subscript, arithmetic evaluation of "$cmd"
-    # itself, which either crashes outright ("operand expected") for any 'cmd'
-    # containing a '/' (any path -- the normal way to run a checkout) or
-    # silently misresolves for one that doesn't. The 'alias' builtin, unlike
-    # associative-array indexing, has always existed and behaved identically
-    # since bash 3.2.
-    #
-    # 'alias -- "$cmd"' prints 'alias NAME=VALUE' with VALUE as one single
-    # quoted string (round-trippable as a whole, the same way declare -p prints
-    # any string) -- not as separately-quoted words the way real alias
-    # expansion's later re-parse would treat it. So this unwraps it in two
-    # eval'd steps: 'raw=${aliased#*=}' first (ordinary scalar assignment,
-    # eval'd once to strip that one quoting layer down to VALUE's own literal
-    # characters), then 'resolved=($raw)' -- unquoted, so bash's normal
-    # word-splitting on $raw does what real alias expansion's re-parse would
-    # have: split it into a command plus its own arguments.
-    #
-    # 'local -a args=("${COMP_WORDS[@]:1:COMP_CWORD}")' has to happen *before*
-    # IFS is ever touched below, not inlined into the same command substitution
-    # as the IFS=$'\n' change: bash 3.2 has a real bug where a double-quoted
-    # *sliced* array expansion ('${arr[@]:offset:length}', unlike a plain
-    # '${arr[@]}') stops treating each element as its own word once IFS no
-    # longer contains a space, silently IFS-joining the whole slice into ONE
-    # word instead ("run --show" instead of "run", "--show") -- verified
-    # against real bash 3.2 via Docker. __complete would then see one mangled
-    # argument and match nothing, exactly the empty-candidates failure this
-    # guards against. Building 'args' first, while IFS is still bash's own
-    # default, sidesteps the bug entirely; IFS is only ever changed afterward,
-    # for its real purpose -- splitting __complete's own output into COMPREPLY.
-    #
-    # Every statement below ends in ';', and the closing '}' is followed by one
-    # too, so the whole thing still parses if run as `eval $(denver complete)`
-    # (unquoted): unquoted command substitution word-splits on IFS, which turns
-    # every newline into a plain space before eval ever sees it. Without explicit
-    # ';'s that collapse would run separate statements together with nothing to
-    # separate them; the closing comment line is last for the same reason -- a
-    # '#' earlier in the (now single-line) script would silently comment out
-    # everything after it, since there'd be no real newline left to end it on.
-    return (
-        "_denver_complete() {"
-        " local cmd=${COMP_WORDS[0]};"
-        ' local -a resolved=("$cmd");'
-        " local aliased raw;"
-        ' aliased=$(alias -- "$cmd" 2>/dev/null) && eval "raw=${aliased#*=}" && resolved=($raw);'
-        ' local -a args=("${COMP_WORDS[@]:1:COMP_CWORD}");'
-        " local out;"
-        ' out=$("${resolved[@]}" __complete "${args[@]}" 2>/dev/null);'
-        " local IFS=$'\\n';"
-        " COMPREPLY=($out);"
-        " };\n"
-        f"complete -F _denver_complete -o default -o bashdefault {' '.join(quoted)};\n"
-        '# denver bash completion -- wire up with: eval "$(denver complete)"\n'
-    )
 
 
 def _completion_script_zsh(names):
@@ -4882,7 +4714,7 @@ def _completion_script_zsh(names):
     # A line with no tab at all (nothing known to describe it) keeps its
     # description empty for exactly that reason.
     # 'tab=$'"'"'\t'"'"'' -- not a literal tab byte in the script text itself --
-    # is the same trick '_completion_script_bash' uses for its own IFS=$'\n':
+    # is the same trick the bash branch above uses for its own IFS=$'\n':
     # written as the literal 4 characters $ ' \ t ', it's immune to the
     # unquoted-eval word-splitting problem discussed above (a literal tab
     # byte there would itself be an IFS character, and get split on same as
@@ -5008,16 +4840,12 @@ def _detect_shell():
     at all) -- never raises. An explicit `denver complete <shell>` bypasses
     this outright.
     """
-    name = _normalised_shell_name(_parent_process_name())
+    # login shells prefix their own name, e.g. "-zsh"
+    name = Path(_parent_process_name() or "").name.lstrip("-")
     if name in _COMPLETION_SHELLS:
         return name
-    name = _normalised_shell_name(os.environ.get("SHELL", ""))
+    name = Path(os.environ.get("SHELL", "") or "").name.lstrip("-")
     return name if name in _COMPLETION_SHELLS else "bash"
-
-
-def _normalised_shell_name(name):
-    """``name`` (a process name or $SHELL value, possibly None) as a bare shell name. See _detect_shell."""
-    return Path(name or "").name.lstrip("-")  # login shells prefix their name, e.g. "-zsh"
 
 
 def _own_process_names():
@@ -5184,16 +5012,11 @@ def _handle_dunder_complete(argv):
     their own completion pagers know how to show; bash never passes it, so
     it's unaffected.
     """
-    if not _is_dunder_complete(argv):
+    if not (argv and argv[0] == "__complete"):
         return False
     for candidate in _dunder_complete_candidates(argv[1:]):
         print(candidate)
     return True
-
-
-def _is_dunder_complete(argv):
-    """Whether ``argv`` is 'denver __complete ...' -- see _handle_dunder_complete, the only caller."""
-    return bool(argv) and argv[0] == "__complete"
 
 
 def _dunder_complete_candidates(words):
@@ -5264,7 +5087,22 @@ def _run_resolved_cli(argv):
         return
 
     _require_runnable(env_dir, config, config_path)
-    run_stages(env_dir, config, config_path, forwarded, options=_run_options(args, cli_args, env_vars))
+    options = RunOptions(
+        until_stage=args.until,
+        skip_stages=args.skip,
+        quiet=args.quiet,
+        verbose=args.verbose,
+        fast=args.fast,
+        force=args.force,
+        ci=args.ci,
+        dry_run=args.dry_run,
+        no_wait=args.no_wait,
+        start_time=args.start_time,
+        cli_args=cli_args,
+        env_vars=env_vars,
+        export_env=args.export_env,
+    )
+    run_stages(env_dir, config, config_path, forwarded, options=options)
 
 
 def _print_completion_script(preliminary):
@@ -5295,25 +5133,6 @@ def _preliminary_args(head):
     if preliminary.subcommand in ("run", "clean") and preliminary.env is None:
         preliminary.env = os.environ.get("DENVER_ENV_DIR") or None
     return preliminary, extra_argv
-
-
-def _run_options(args, cli_args, env_vars):
-    """Everything the parsed command line chose about *how* to run, as one RunOptions."""
-    return RunOptions(
-        until_stage=args.until,
-        skip_stages=args.skip,
-        quiet=args.quiet,
-        verbose=args.verbose,
-        fast=args.fast,
-        force=args.force,
-        ci=args.ci,
-        dry_run=args.dry_run,
-        no_wait=args.no_wait,
-        start_time=args.start_time,
-        cli_args=cli_args,
-        env_vars=env_vars,
-        export_env=args.export_env,
-    )
 
 
 def _handle_env_less_argv(preliminary, head):
