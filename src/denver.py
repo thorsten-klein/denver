@@ -117,14 +117,11 @@ LOGO_PATH = DENVER_PKG_DIR / "denver_assets" / "logo.txt"
 
 
 def checkout_root():
-    """The source checkout denver itself is running out of, or None.
+    """The source checkout denver itself is running out of, or None (see module docstring context).
 
-    True whenever DENVER_PKG_DIR is a ``<checkout>/src`` holding
-    ``denver_providers/`` -- i.e. both when running the script directly
-    (``src/denver.py``) and under an editable install (``uv pip install
-    -e .``), which keeps DENVER_PKG_DIR pointing into the checkout's
-    ``src/``. Installed any other way (e.g. a built wheel), DENVER_PKG_DIR is
-    wherever the package manager put it (site-packages) and this is None.
+    Kept as its own function, not inlined: tests monkeypatch it directly to
+    fake "installed, no checkout" or "checkout at <path>" without touching
+    the real filesystem.
     """
     if DENVER_PKG_DIR.name == "src" and (DENVER_PKG_DIR / "denver_providers").is_dir():
         return DENVER_PKG_DIR.parent
@@ -394,19 +391,14 @@ def load_config_file(path):
     """
     path = Path(path)
     if path.suffix == ".toml":
-        return _load_toml_config_file(path)
+        if tomllib is None:
+            raise ConfigReadError(
+                f"{path}: reading a denver.toml config needs tomllib, which is stdlib only from Python 3.11 -- "
+                f"this interpreter is older. Without it, only denver.yml/denver.yaml is supported."
+            )
+        with path.open("rb") as f:
+            return tomllib.load(f)
     return _load_yaml_config_file(path)
-
-
-def _load_toml_config_file(path):
-    """load_config_file's '.toml' branch."""
-    if tomllib is None:
-        raise ConfigReadError(
-            f"{path}: reading a denver.toml config needs tomllib, which is stdlib only from Python 3.11 -- "
-            f"this interpreter is older. Without it, only denver.yml/denver.yaml is supported."
-        )
-    with path.open("rb") as f:
-        return tomllib.load(f)
 
 
 def _load_yaml_config_file(path):
@@ -499,13 +491,6 @@ def deep_merge(base, override, _path=""):
     return _merge_scalar(base, override, _path)
 
 
-def _coercible_to_list(base, override):
-    """Whether one side is a list and the other a bare scalar that ``deep_merge`` should coerce to match it."""
-    if isinstance(override, list):
-        return base is not _UNSET and not isinstance(base, dict)
-    return isinstance(base, list) and not isinstance(override, dict)
-
-
 def _merge_dicts(base, override, _path):
     """``deep_merge``'s mapping case: every key of ``override`` merged one layer deeper."""
     result = dict(base)
@@ -515,12 +500,26 @@ def _merge_dicts(base, override, _path):
     return result
 
 
+def _coercible_to_list(base, override):
+    """Whether one side is a list and the other a bare scalar that ``deep_merge`` should coerce to match it."""
+    if isinstance(override, list):
+        return base is not _UNSET and not isinstance(base, dict)
+    return isinstance(base, list) and not isinstance(override, dict)
+
+
+def _merge_scalar(base, override, path):
+    """``deep_merge``'s scalar case: ``override`` wins, but a conflicting string needs an explicit ``!``."""
+    if isinstance(override, str) and override.startswith("!") and base is not _UNSET:
+        return override[1:]
+    if isinstance(base, str) and isinstance(override, str) and base != override:
+        die(
+            f"conflicting values for '{path}' across stacked layers: {base!r} vs {override!r}. "
+            f"Prefix the new value with '!' to override deliberately, e.g. \"!{override}\"."
+        )
+    return override
+
+
 OVERWRITE_MARKER = "<overwrite>"
-
-
-def _has_reset_marker(override):
-    """Whether a layer's list carries a ``!``/``<overwrite>`` marker, dropping every lower-layer entry."""
-    return any(isinstance(entry, str) and (entry.startswith("!") or entry == OVERWRITE_MARKER) for entry in override)
 
 
 def _strip_reset_marker(entry):
@@ -532,22 +531,12 @@ def _strip_reset_marker(entry):
 
 def _merge_lists(base, override):
     """``deep_merge``'s list case: appended, unless ``override`` carries a ``!``/``<overwrite>`` reset marker."""
-    if not _has_reset_marker(override):
+    has_reset_marker = any(
+        isinstance(entry, str) and (entry.startswith("!") or entry == OVERWRITE_MARKER) for entry in override
+    )
+    if not has_reset_marker:
         return base + override
     return [_strip_reset_marker(entry) for entry in override if entry != OVERWRITE_MARKER]
-
-
-def _merge_scalar(base, override, path):
-    """``deep_merge``'s scalar case: ``override`` wins, but a conflicting string needs an explicit ``!``."""
-    if isinstance(override, str) and override.startswith("!") and base is not _UNSET:
-        return override[1:]
-
-    if isinstance(base, str) and isinstance(override, str) and base != override:
-        die(
-            f"conflicting values for '{path}' across stacked layers: {base!r} vs {override!r}. "
-            f"Prefix the new value with '!' to override deliberately, e.g. \"!{override}\"."
-        )
-    return override
 
 
 def _config_file_in_dir(dir_path):
@@ -563,14 +552,6 @@ def _config_file_in_dir(dir_path):
     return dir_path / CONFIG_NAME_YAML[0]
 
 
-def _import_target(entry, base_dir):
-    """Where an ``import:`` entry points -- a directory means its ``denver.yml``/``denver.toml`` -- or None if no file is there."""
-    target = (base_dir / entry).resolve()
-    if target.is_dir():
-        target = _config_file_in_dir(target)
-    return target if target.is_file() else None
-
-
 def resolve_import(entry, base_dir):
     """Resolve an ``import:`` entry to the denver.yml/denver.yaml/denver.toml path it refers to.
 
@@ -578,8 +559,10 @@ def resolve_import(entry, base_dir):
     if there's neither, is used -- see _config_file_in_dir) or directly at a config
     file, relative to the importing config's directory.
     """
-    target = _import_target(entry, base_dir)
-    if target is None:
+    target = (base_dir / entry).resolve()
+    if target.is_dir():
+        target = _config_file_in_dir(target)
+    if not target.is_file():
         die(f"import '{entry}' in {base_dir} does not resolve to a {_config_names_text()} file")
     return target
 
@@ -597,8 +580,15 @@ def load_config(config_path, _seen=None) -> dict:
         die(f"circular import detected at {config_path}")
     _seen.add(config_path)
 
-    raw = _rebased_section_imports(load_config_file(config_path), config_path.parent)
-    merged = _merged_imports(raw, config_path.parent, _seen)
+    # rebase each section's own 'import:' entries to this layer's own dir,
+    # while base_dir still means that -- expand_section_imports() resolves
+    # them later against the top-level env dir instead, which would be wrong
+    # for a layer only reached through a whole-file 'import:' chain.
+    base_dir = config_path.parent
+    raw = {key: _rebased_section_value(value, base_dir) for key, value in load_config_file(config_path).items()}
+    merged: dict = {}
+    for entry in raw.get("import", []) or []:
+        merged = cast(dict, deep_merge(merged, load_config(resolve_import(entry, base_dir), _seen)))
 
     # 'runnable' marks one specific denver.toml (e.g. a shared base meant only
     # to be imported, never started directly) -- it must never leak from an
@@ -609,30 +599,7 @@ def load_config(config_path, _seen=None) -> dict:
     # here keeps --show-config's output consistent with that.
     merged.pop("runnable", None)
 
-    return cast(dict, deep_merge(merged, _without_import(raw)))
-
-
-def _without_import(mapping):
-    """A config layer's own keys, minus the 'import:' directive -- it isn't inheritable data."""
-    return {k: v for k, v in mapping.items() if k != "import"}
-
-
-def _rebased_section_imports(raw, base_dir):
-    """Rewrite every section-level ``import:`` entry to an absolute path, anchored at ``base_dir``.
-
-    E.g. ``docker: import: [./docker]`` of this one raw layer to an absolute path, anchored at
-    ``base_dir`` -- the directory of the denver.toml/yml that actually declares it.
-
-    Section-level imports are only resolved later, by expand_section_imports(), against the single
-    top-level env dir the whole merged config ends up running from -- correct for a layer that IS that
-    top-level file, but wrong for one only reached through a whole-file 'import:' chain (its own
-    relative paths are meant to be relative to itself, same as every other path it declares). Doing the
-    rebase here, while ``base_dir`` is still this layer's own directory, fixes that once and for all --
-    everything downstream (deep_merge's list-append, the final expand_section_imports call) keeps
-    working unchanged since an already-absolute path resolves the same regardless of what it's joined
-    against.
-    """
-    return {key: _rebased_section_value(value, base_dir) for key, value in raw.items()}
+    return cast(dict, deep_merge(merged, {k: v for k, v in raw.items() if k != "import"}))
 
 
 def _rebased_section_value(value, base_dir):
@@ -651,18 +618,11 @@ def _rebased_import_entry(entry, base_dir):
     if entry == OVERWRITE_MARKER:
         return entry
     marker = "!" if isinstance(entry, str) and entry.startswith("!") else ""
-    path, section = parse_section_import_ref(entry[len(marker) :])
+    ref = entry[len(marker) :]
+    path, sep, section = ref.rpartition(":")
+    path, section = (path, section) if sep else (ref, None)
     abs_path = str((base_dir / path).resolve())
     return f"{marker}{abs_path}:{section}" if section else f"{marker}{abs_path}"
-
-
-def _merged_imports(raw, base_dir, _seen) -> dict:
-    """Every 'import:' entry of ``raw``, loaded and merged in order -- the base its own keys overlay."""
-    merged: dict = {}
-    for entry in raw.get("import", []) or []:
-        imported_path = resolve_import(entry, base_dir)
-        merged = cast(dict, deep_merge(merged, load_config(imported_path, _seen)))
-    return merged
 
 
 def parse_config_override_spec(spec):
@@ -694,10 +654,12 @@ def _combine_config_override(current, op, value, path):
     """
     if op == "=" or current is _UNSET or current is None:
         return value
-    combined = _appended_config_value(current, value)
-    if combined is None:
-        die(f"--config: cannot += onto '{path}' ({current!r} += {value!r}): not a list, string or number")
-    return combined
+    if isinstance(current, list):
+        return current + _as_list(value)
+    if _both_are(current, value, (int, float)) or _both_are(current, value, str):
+        return current + value
+    die(f"--config: cannot += onto '{path}' ({current!r} += {value!r}): not a list, string or number")
+    return None  # pragma: no cover -- die() never returns; only here to satisfy RET503
 
 
 def _as_list(value):
@@ -710,15 +672,6 @@ def _both_are(current, value, types):
     if isinstance(current, bool) or isinstance(value, bool):
         return False
     return isinstance(current, types) and isinstance(value, types)
-
-
-def _appended_config_value(current, value):
-    """``+=``'s result for a path that already has a value, or None if the two cannot be combined at all."""
-    if isinstance(current, list):
-        return current + _as_list(value)
-    if _both_are(current, value, (int, float)) or _both_are(current, value, str):
-        return current + value
-    return None
 
 
 def _coerce_cli_value(raw_value):
@@ -929,21 +882,16 @@ def validate_denver_version(config):
         )
         return
 
-    unmet = _unmet_requirements(requirements, parsed)
+    unmet = [
+        text
+        for operator, wanted, text in requirements
+        if not _SPEC_OPERATORS[operator](compare_versions(parsed, wanted))
+    ]
     if unmet:
         die(
             f"config requires 'denver-version: {spec}', but this denver is {running} "
             f"(unmet: {', '.join(unmet)}) -- upgrade it, e.g. `pip install --upgrade {DISTRIBUTION_NAME}`."
         )
-
-
-def _unmet_requirements(requirements, parsed):
-    """The requirement texts the running version ``parsed`` does not satisfy."""
-    return [
-        text
-        for operator, wanted, text in requirements
-        if not _SPEC_OPERATORS[operator](compare_versions(parsed, wanted))
-    ]
 
 
 def validate_stage_filters(config, until_stage, skip_stages):
@@ -1001,9 +949,9 @@ def validate_hooks_keys(config):
 # --scripts <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
 # opts a stage out of the normal pipeline by default (see run_stages),
 # 'depends-on:' skips a stage whenever a stage it names is itself skipped,
-# for any reason (see _compute_static_skip_reasons/_blocked_by_dependency),
+# for any reason (see _compute_static_skip_reasons/_skip_for_blocked_dependency),
 # 'skip-on-success:'/'skip-on-failure:' skip a stage's setup() at run time
-# instead (see _stage_skip_reason), 'env:'/'env-prepend:'/'env-append:'
+# instead (see _run_stage_setup), 'env:'/'env-prepend:'/'env-append:'
 # adapt the environment once this stage's own setup() is done (see
 # _apply_stage_env) -- none of these are part of any one provider's own
 # KEYS, so every provider gets them for free, uv/conan/zephyr/docker/custom
@@ -1026,22 +974,6 @@ GENERIC_STAGE_KEYS = (
 )
 
 
-def validate_stage_section_keys(stage, section):
-    """Die on a key in ``section`` that isn't in the provider's own KEYS or a generic stage key.
-
-    Without this, a typo'd key (or one left behind after being renamed/
-    removed) is just silently ignored -- resolve_defaults() never reads it,
-    and nothing says so. Mirrors validate_top_level_keys, one level down.
-    """
-    allowed = set(type(stage).KEYS) | set(GENERIC_STAGE_KEYS)
-    unknown = sorted(set(section) - allowed)
-    if unknown:
-        die(
-            f"stage '{stage.stage}': unknown key(s) {_list_with_hints(unknown, allowed)} for provider "
-            f"'{stage.name}' -- known: {', '.join(sorted(type(stage).KEYS)) or '(none)'}."
-        )
-
-
 def resolve_stage_section(stage, raw_section, config, ctx):
     """Resolve one stage's *raw* section into its complete effective one.
 
@@ -1056,8 +988,8 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     'scripts:'/'disabled:'/'skip-on-success:'/'skip-on-failure:' are filled
     in for every stage regardless of provider -- all generic,
     provider-agnostic keys any stage's section may declare (see
-    _run_stage_scripts_in_context, run_stages's 'disabled:' handling, and
-    _stage_skip_reason), not part of any one provider's own KEYS, so they
+    _run_stage_scripts_in_context and run_stages's 'disabled:' handling), not
+    part of any one provider's own KEYS, so they
     belong here, not in Provider.resolve_defaults's default.
     """
     from denver_providers.base import fill_unset
@@ -1082,6 +1014,43 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     return fill_unset(section, ["scripts", "description"])
 
 
+def validate_stage_section_keys(stage, section):
+    """Die on a key in ``section`` that isn't in the provider's own KEYS or a generic stage key.
+
+    Without this, a typo'd key (or one left behind after being renamed/
+    removed) is just silently ignored -- resolve_defaults() never reads it,
+    and nothing says so. Mirrors validate_top_level_keys, one level down.
+    """
+    allowed = set(type(stage).KEYS) | set(GENERIC_STAGE_KEYS)
+    unknown = sorted(set(section) - allowed)
+    if unknown:
+        die(
+            f"stage '{stage.stage}': unknown key(s) {_list_with_hints(unknown, allowed)} for provider "
+            f"'{stage.name}' -- known: {', '.join(sorted(type(stage).KEYS)) or '(none)'}."
+        )
+
+
+def _validated_depends_on(value, stage_id):
+    """One generic 'depends-on:' stage key, as a list of stage ids (``[]`` when unset).
+
+    Only shape-checked here; cross-stage validity is checked once, globally,
+    right after this resolves (see resolve_provider_defaults).
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        die(f"stage '{stage_id}': 'depends-on:' must be a list of stage ids, got {value!r}")
+    return value
+
+
+def _resolved_skip_scripts(ctx, stage_id, raw_section, key):
+    """One generic 'skip-on-success:'/'skip-on-failure:' list, resolved to absolute paths (empty when unset)."""
+    scripts = raw_section.get(key) or []
+    if not isinstance(scripts, list) or not all(isinstance(s, str) for s in scripts):
+        die(f"stage '{stage_id}': '{key}:' must be a list of script paths, got {scripts!r}")
+    return [str(ctx.resolve_path(s)) for s in scripts]
+
+
 def _validated_stage_env_map(mapping, stage_id, key):
     """One generic 'env:'/'env-prepend:'/'env-append:' stage key, as a flat {name = "value"} mapping ({} if unset).
 
@@ -1095,34 +1064,6 @@ def _validated_stage_env_map(mapping, stage_id, key):
     if not isinstance(mapping, dict) or not all(isinstance(v, str) for v in mapping.values()):
         die(f"stage '{stage_id}': '{key}:' must be a mapping of environment variable to string value, got {mapping!r}")
     return dict(mapping)
-
-
-def _validated_depends_on(value, stage_id):
-    """One generic 'depends-on:' stage key, as a list of stage ids (``[]`` when unset).
-
-    Only shape-checked here; cross-stage validity -- every id declared, and
-    declared strictly *before* this stage in 'stages:' -- is checked once,
-    globally, right after this resolves (see _validate_depends_on, called
-    from resolve_provider_defaults).
-    """
-    if value is None:
-        return []
-    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-        die(f"stage '{stage_id}': 'depends-on:' must be a list of stage ids, got {value!r}")
-    return value
-
-
-def _resolved_skip_scripts(ctx, stage_id, raw_section, key):
-    """One generic 'skip-on-success:'/'skip-on-failure:' list, resolved to absolute paths (empty when unset).
-
-    Resolved centrally like every other path (see Context.resolve_path) so
-    --show-config shows the real script; whether it actually exists is
-    checked at run time, right before it would run (_stage_skip_reason).
-    """
-    scripts = raw_section.get(key) or []
-    if not isinstance(scripts, list) or not all(isinstance(s, str) for s in scripts):
-        die(f"stage '{stage_id}': '{key}:' must be a list of script paths, got {scripts!r}")
-    return [str(ctx.resolve_path(s)) for s in scripts]
 
 
 def resolve_provider_defaults(config, ctx):
@@ -1155,8 +1096,7 @@ def _validate_depends_on(stage_id, depends_on, seen, all_stage_ids):
     """Die if 'depends-on:' names an id that isn't declared, or isn't declared strictly *before* ``stage_id``.
 
     Checked eagerly here, in 'stages:' order (``seen`` is every id already
-    walked), the same as validate_stage_filters checks --until/--skip ids --
-    a typo or a forward/self-reference fails at startup rather than
+    walked): a typo or a forward/self-reference fails at startup rather than
     surfacing as a wrong skip cascade once _compute_static_skip_reasons
     walks the list assuming every dependency's reason is already decided.
     """
@@ -1228,7 +1168,8 @@ def collect_import_dirs(config_path, _seen=None):
         # an env dir need not have its own denver.toml if -f/-c supply the
         # whole config (see _load_cli_config) -- nothing to import from here.
         return []
-    imported = _imported_paths(load_config_file(config_path), config_path.parent)
+    raw = load_config_file(config_path)
+    imported = [resolve_import(entry, config_path.parent) for entry in (raw.get("import", []) or [])]
 
     dirs = [p.parent for p in imported]
     for imported_path in imported:
@@ -1250,11 +1191,6 @@ def _register_seen(config_path, _seen):
         die(f"circular import detected at {config_path}")
     _seen.add(config_path)
     return config_path, _seen
-
-
-def _imported_paths(raw, base_dir):
-    """Every whole-file 'import:' entry of ``raw``, resolved to the denver.toml it names."""
-    return [resolve_import(entry, base_dir) for entry in (raw.get("import", []) or [])]
 
 
 def collect_hook_entries(config_path, name, _seen=None):
@@ -1279,7 +1215,7 @@ def collect_hook_entries(config_path, name, _seen=None):
     base_dir = config_path.parent
 
     entries = []
-    for imported_path in _imported_paths(raw, base_dir):
+    for imported_path in (resolve_import(entry, base_dir) for entry in (raw.get("import", []) or [])):
         entries += collect_hook_entries(imported_path, name, _seen)
     return entries + _own_hook_entries(raw, base_dir, name)
 
@@ -1329,25 +1265,6 @@ PERFORMANCE_FILE_NAME = "performance.jsonl"
 LIST_SCRIPTS = object()
 
 
-def _append_trace_event(path, event):
-    """Append one JSON-encoded ``event`` to ``path`` as its own line, in a single atomic write.
-
-    A plain os.write() to an O_APPEND-opened fd (not a buffered file object,
-    where Python may split one .write() call into several syscalls) is what
-    makes this atomic: POSIX guarantees a single write() under PIPE_BUF
-    (4096 bytes on Linux; one trace event is nowhere near that) either lands
-    whole or not at all, even with several processes appending to the same
-    file at once -- e.g. a docker-wrapped run's host and container processes
-    both recording stage timings concurrently.
-    """
-    line = (json.dumps(event) + "\n").encode()
-    fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
-    try:
-        os.write(fd, line)
-    finally:
-        os.close(fd)
-
-
 def record_stage_performance(ctx, provider, start_time, duration_seconds):
     """Append this stage's timing to <env_workdir>/performance.jsonl, one JSON Lines record per event.
 
@@ -1356,8 +1273,7 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
     https://ui.perfetto.dev, e.g.:
     ``jq -s '{traceEvents: ., displayTimeUnit: "ms"}' performance.jsonl``.
     One line per event (rather than one read-modify-write of a single JSON
-    document) is what makes concurrent appends safe -- see
-    _append_trace_event.
+    document) is what makes concurrent appends safe.
 
     Skipped entirely under --dry-run: no stage actually did its work, so the
     durations measured here are of printing commands, not of running them --
@@ -1369,10 +1285,20 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
     path = ctx.env_workdir / PERFORMANCE_FILE_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    def append_trace_event(event):
+        # a plain os.write() to an O_APPEND fd -- not a buffered file object
+        # -- is what keeps a single write() atomic under PIPE_BUF, even with
+        # several processes appending concurrently (docker host+container)
+        line = (json.dumps(event) + "\n").encode()
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+        try:
+            os.write(fd, line)
+        finally:
+            os.close(fd)
+
     pid = os.getpid()
     if not getattr(ctx, "_perf_process_announced", False):
-        _append_trace_event(
-            path,
+        append_trace_event(
             {
                 "ph": "M",
                 "name": "process_name",
@@ -1382,8 +1308,7 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
             },
         )
         ctx._perf_process_announced = True
-    _append_trace_event(
-        path,
+    append_trace_event(
         {
             "name": provider.stage,
             "cat": "stage",
@@ -1395,20 +1320,6 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
             "args": {"provider": provider.name},
         },
     )
-
-
-def parse_section_import_ref(ref):
-    """Split a section-level import ``ref`` into (path, section).
-
-    A bare path (``../zephyr-docker``) stacks the current section's
-    same-named section from the referenced env. A ``path:section`` suffix
-    (``../zephyr-devshell/denver.toml:conan``) makes the source section
-    explicit -- pointing straight at a specific env's ``denver.toml`` and
-    picking a (possibly differently-named) section out of it -- instead of
-    always inferring both from the current key.
-    """
-    path, sep, section = ref.rpartition(":")
-    return (path, section) if sep else (ref, None)
 
 
 def expand_section_imports(config, env_dir):
@@ -1455,6 +1366,11 @@ def _merge_hook_entries(hook_entries, more_hook_entries):
         hook_entries.setdefault(name, []).extend(entries)
 
 
+def _without_import(mapping):
+    """A config layer's own keys, minus the 'import:' directive -- it isn't inheritable data."""
+    return {k: v for k, v in mapping.items() if k != "import"}
+
+
 def _stacked_section(value, key, env_dir):
     """Merge every section-level 'import:' entry of one section, base-first.
 
@@ -1467,15 +1383,15 @@ def _stacked_section(value, key, env_dir):
     extra_dirs = []
     hook_entries = {}
     for ref in value["import"]:
-        path, section = parse_section_import_ref(ref)
+        path, sep, section = ref.rpartition(":")
+        path, section = (path, section) if sep else (ref, None)
         src_path = resolve_import(path, env_dir)
         src_config = load_config(src_path)
         merged = deep_merge(merged, src_config.get(section or key) or {})
         extra_dirs.append(src_path.parent)
-        _merge_hook_entries(
-            hook_entries,
-            {name: _own_hook_entries(src_config, src_path.parent, name) for name in src_config.get("hooks") or {}},
-        )
+        for name in src_config.get("hooks") or {}:
+            entries = _own_hook_entries(src_config, src_path.parent, name)
+            hook_entries.setdefault(name, []).extend(entries)
     return merged, extra_dirs, hook_entries
 
 
@@ -1485,8 +1401,8 @@ def default_command(config, in_container=False):
     ``in_container`` -- true whenever this resolved command is about to run
     inside a docker container, whether that's because this denver process is
     already there (ctx.in_container), or because it's being resolved on the
-    host only to be relocated there next (a 'pure wrapper', see
-    _wrapper_target_cmd) -- wires up 'denver complete' into it first, via
+    host only to be relocated there next (a 'pure wrapper' relocation) --
+    wires up 'denver complete' into it first, via
     _completion_wrapped_shell: unlike the host, the container's image is
     never something the user already has their own shell completion set up
     in. False (the default) leaves ``cmd`` exactly as resolved, e.g. for a
@@ -1494,22 +1410,11 @@ def default_command(config, in_container=False):
     """
     if not sys.stdin.isatty():
         die("cannot determine command to run (non-interactive and no command given)")
-    cmd = _resolve_default_cmd(config)
-    return _completion_wrapped_shell(cmd) if in_container else cmd
-
-
-def _resolve_default_cmd(config):
-    """'command:'/'docker.compose.default-cmd:'/$SHELL/"bash", in that order, normalised to a list. See default_command.
-
-    'command:' is the generic top-level default; a wrapper provider
-    (currently only 'docker') may contribute its own fallback via
-    <provider>.compose.default-cmd, e.g. the command to land in once relocated
-    into a container. With neither set, fall back to the user's own shell
-    (not a specific one denver would otherwise be guessing).
-    """
+    # 'command:'/'docker.compose.default-cmd:'/$SHELL/"bash", in that order
     docker_compose = (config.get("docker") or {}).get("compose") or {}
-    cmd = config.get("command") or docker_compose.get("default-cmd") or os.environ.get("SHELL") or "bash"
-    return [cmd] if isinstance(cmd, str) else [str(c) for c in cmd]
+    raw_cmd = config.get("command") or docker_compose.get("default-cmd") or os.environ.get("SHELL") or "bash"
+    cmd = [raw_cmd] if isinstance(raw_cmd, str) else [str(c) for c in raw_cmd]
+    return _completion_wrapped_shell(cmd) if in_container else cmd
 
 
 def _completion_wrapped_shell(cmd):
@@ -1538,17 +1443,13 @@ def _completion_wrapped_shell(cmd):
     if shell not in _COMPLETION_SHELLS:
         return cmd
 
-    setup = _completion_setup_snippet(shell)
-    extra_args = "".join(f" {shlex.quote(a)}" for a in cmd[1:])
-    return [binary, "-c", f"{setup}; exec {shlex.quote(binary)} -i{extra_args}"]
-
-
-def _completion_setup_snippet(shell):
-    """The shell-specific line wiring 'denver complete' up before exec -- see _completion_wrapped_shell."""
     launcher = " ".join(shlex.quote(part) for part in _denver_launcher())
     if shell == "fish":
-        return f"{launcher} complete fish 2>/dev/null | source"
-    return f'eval "$({launcher} complete {shell} 2>/dev/null)"'
+        setup = f"{launcher} complete fish 2>/dev/null | source"
+    else:
+        setup = f'eval "$({launcher} complete {shell} 2>/dev/null)"'
+    extra_args = "".join(f" {shlex.quote(a)}" for a in cmd[1:])
+    return [binary, "-c", f"{setup}; exec {shlex.quote(binary)} -i{extra_args}"]
 
 
 def resolve_command(config, forwarded, in_container=False):
@@ -1783,7 +1684,10 @@ def _collect_stage_scripts(ctx, stage_ids, name):
     resolved = []
     for stage_id in stage_ids:
         for script in _stage_script_entries(ctx, stage_id, name):
-            resolved.append((stage_id, _resolved_script_path(ctx, stage_id, name, script)))
+            path = ctx.resolve_path(script)
+            if not path.is_file():
+                die(f"stage '{stage_id}': scripts.{name} script not found: {path}")
+            resolved.append((stage_id, path))
     return resolved
 
 
@@ -1795,14 +1699,6 @@ def _stage_script_entries(ctx, stage_id, name):
     if not isinstance(entry, list):
         die(f"stage '{stage_id}': 'scripts.{name}:' must be a list of strings, got {type(entry).__name__}")
     return entry
-
-
-def _resolved_script_path(ctx, stage_id, name, script):
-    """One ``scripts: <name>:`` entry resolved to a file that exists."""
-    path = ctx.resolve_path(script)
-    if not path.is_file():
-        die(f"stage '{stage_id}': scripts.{name} script not found: {path}")
-    return path
 
 
 def run_named_scripts(
@@ -1885,31 +1781,16 @@ def run_named_scripts(
     )
 
 
+def _wrappers_inactive(ctx):
+    """True when no wrapper stage may relocate from here: already relocated, or already inside a container."""
+    return bool(ctx.relocated) or ctx.in_container
+
+
 def _run_named_scripts_directly(ctx, setups, names):
     """Run every one of ``names`` for the given setup stages, in order -- the no-active-wrapper case."""
     for name in names:
         if not _run_stage_scripts(ctx, _stage_ids_of(setups), name):
-            _warn_no_scripts(ctx, name)
-
-
-def _run_wrapper_scripts_and_find_relocatable(ctx, active_wrappers, setups, names):
-    """Run each of ``names``' wrapper-stage entries on the host; return the subset that also needs relocating.
-
-    The wrapper's own entries (e.g. `docker login` to a private registry)
-    run here, on the host, before the wrapper is ever prepared -- one name
-    at a time, in order. A name with entries in neither the wrapper nor a
-    setup stage never makes it into the returned list (there's nothing left
-    to relocate it for), so it's flagged here, once, via _warn_no_scripts --
-    otherwise it would run nothing and say nothing.
-    """
-    setup_names = []
-    for name in names:
-        ran_on_host = _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
-        if _collect_stage_scripts(ctx, _stage_ids_of(setups), name):
-            setup_names.append(name)
-        elif not ran_on_host:
-            _warn_no_scripts(ctx, name)
-    return setup_names
+            info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
 
 
 def _relocate_named_scripts(
@@ -1932,7 +1813,15 @@ def _relocate_named_scripts(
     See run_named_scripts, whose own docstring covers the host/wrapper split
     this implements.
     """
-    setup_names = _run_wrapper_scripts_and_find_relocatable(ctx, active_wrappers, setups, names)
+    # a name with entries in neither the wrapper nor a setup stage never
+    # gets relocated -- flag it here, once, or it would run and say nothing
+    setup_names = []
+    for name in names:
+        ran_on_host = _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
+        if _collect_stage_scripts(ctx, _stage_ids_of(setups), name):
+            setup_names.append(name)
+        elif not ran_on_host:
+            info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
     if not setup_names:
         return  # nothing to relocate into the wrapper for, for any of ``names``
 
@@ -1942,8 +1831,12 @@ def _relocate_named_scripts(
     names_label = ", ".join(f"'{n}'" for n in setup_names)
     _note_not_previewed(ctx, f"{names_label} scripts of stages", setups, active_wrappers)
 
-    stage_index = _stage_positions(stages)
-    _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, len(stages), quiet=quiet)
+    stage_index = {s.stage: i for i, s in enumerate(stages, 1)}
+    stage_count = len(stages)
+    for w in active_wrappers:
+        _run_stage_setup(
+            ctx, config, config_path, w, quiet=quiet, stage_index=stage_index[w.stage], stage_count=stage_count
+        )
 
     cmd = _relocated_run_cmd(
         config_path,
@@ -1962,34 +1855,13 @@ def _run_stage_scripts(ctx, stage_ids, name):
     """Run every ``scripts: <name>:`` entry the given stages declare, in order.
 
     Returns whether any entry was found (and so ran) -- callers use this to
-    tell "ran nothing because there was nothing to run" apart from a normal
-    run, see _warn_no_scripts.
+    tell "ran nothing because there was nothing to run" apart from a normal run.
     """
     entries = _collect_stage_scripts(ctx, stage_ids, name)
     for stage_id, script in entries:
         info(f"{name}-script '{stage_id}': {script}")
         ctx.run([str(script)])
     return bool(entries)
-
-
-def _warn_no_scripts(ctx, name):
-    """Info-log that ``--scripts <name>`` found nothing to run for this env -- see the two run_named_scripts paths.
-
-    Without this, ``denver run <env> --scripts <name>`` for a name no stage
-    declares silently exits 0 with no output at all, which reads exactly
-    like a successful no-op run of something that *does* exist -- there is
-    nothing else here to distinguish "ran zero entries" from "ran and it
-    happened to have zero entries by design".
-    """
-    info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
-
-
-def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stage_count, *, quiet):
-    """Run each active wrapper stage's own setup(), so it is ready to be relocated into."""
-    for w in active_wrappers:
-        _run_stage_setup(
-            ctx, config, config_path, w, quiet=quiet, stage_index=stage_index[w.stage], stage_count=stage_count
-        )
 
 
 def _relocated_run_cmd(
@@ -2061,72 +1933,20 @@ def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()
     if not by_name:
         print(f"env '{env_dir.name}' defines no 'scripts:' entries -- nothing to --scripts", file=sys.stderr)
         return
-    _print_script_names(env_dir, by_name)
-
-
-def _stage_scripts_section(config, stage_id):
-    """One stage's raw 'scripts:' mapping (empty when that stage declares none)."""
-    return (config.get(stage_id) or {}).get("scripts") or {}
+    print(f"available --scripts names for env '{env_dir.name}':", file=sys.stderr)
+    for name in sorted(by_name):
+        stages = ", ".join(f"{stage} ({count} script{'s' if count != 1 else ''})" for stage, count in by_name[name])
+        print(f"  {name:<12} {stages}", file=sys.stderr)
 
 
 def _scripts_by_name(config, stage_ids):
     """``{script name: [(stage id, entry count)]}`` across the given stages, in 'stages:' order."""
     by_name = {}
     for stage_id in stage_ids:
-        for name, entries in _stage_scripts_section(config, stage_id).items():
+        section = (config.get(stage_id) or {}).get("scripts") or {}
+        for name, entries in section.items():
             by_name.setdefault(name, []).append((stage_id, len(entries or [])))
     return by_name
-
-
-def _script_count_label(stage, count):
-    """One stage's contribution to a --scripts name, e.g. ``uv (2 scripts)``."""
-    return f"{stage} ({count} script{'s' if count != 1 else ''})"
-
-
-def _print_script_names(env_dir, by_name):
-    """Print every --scripts name this env defines, with the stages contributing to it."""
-    print(f"available --scripts names for env '{env_dir.name}':", file=sys.stderr)
-    for name in sorted(by_name):
-        stages = ", ".join(_script_count_label(stage, count) for stage, count in by_name[name])
-        print(f"  {name:<12} {stages}", file=sys.stderr)
-
-
-def _stage_skip_reason(ctx, cfg):
-    """Why this stage's setup() should be a no-op this run, per its generic 'skip-on-*:' scripts -- None if it should run.
-
-    Checked fresh right before setup(), the same way 'disabled:' is checked
-    ahead of time in active_stage_ids -- but this can't be decided ahead of
-    time: it depends on running each script, a real side effect that must
-    happen exactly once, right when the stage would otherwise run (an
-    earlier stage may have changed what these scripts would report).
-    '--force' bypasses both checks, same as it bypasses every provider's own
-    checksum/skip-if logic.
-    """
-    if ctx.force:
-        return None
-    return _skip_kind_reason(ctx, cfg, "skip-on-success", 0, "skip-on-success scripts all exited 0") or (
-        _skip_kind_reason(ctx, cfg, "skip-on-failure", 1, "skip-on-failure scripts all exited 1")
-    )
-
-
-def _skip_kind_reason(ctx, cfg, key, expected_code, message):
-    """``message`` if ``cfg[key]``'s scripts all exit ``expected_code``, else None -- one 'skip-on-*:' kind (see _stage_skip_reason)."""
-    scripts = cfg.get(key) or []
-    if scripts and _skip_scripts_exit(ctx, key, scripts, expected_code):
-        return message
-    return None
-
-
-def _skip_scripts_exit(ctx, label, scripts, expected_code):
-    """True if every ``scripts`` entry exits with ``expected_code`` (see _stage_skip_reason)."""
-    for script in scripts:
-        path = Path(script)
-        if not path.is_file():
-            die(f"{label}: script not found: {path}")
-        result = ctx.run([path], check=False, capture=False, query=True, echo=False)
-        if result.returncode != expected_code:
-            return False
-    return True
 
 
 def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1, stage_count=1, skip_state=None):
@@ -2198,7 +2018,8 @@ def _skip_for_blocked_dependency(ctx, config, provider, skip_state):
     Split out of _run_stage_setup to keep that function's cognitive
     complexity low; see its docstring for what ``skip_state`` means.
     """
-    blocking_dep = _blocked_by_dependency(config, provider.stage, skip_state)
+    depends_on = (config.get(provider.stage) or {}).get("depends-on") or []
+    blocking_dep = next((dep for dep in depends_on if skip_state.reasons.get(dep)), None)
     if not blocking_dep:
         return False
     reason = f"skipped (depends-on '{blocking_dep}')"
@@ -2212,14 +2033,40 @@ def _skip_for_dynamic_reason(ctx, config, provider, skip_state):
 
     Covers 'skip-on-success:'/'skip-on-failure:', which -- unlike a
     'depends-on:' block (_skip_for_blocked_dependency) -- can only be
-    decided once the stage is actually reached; see _stage_skip_reason.
+    decided once the stage is actually reached, by actually running the
+    scripts below.
     """
-    skip_reason = _stage_skip_reason(ctx, config.get(provider.stage) or {})
+    cfg = config.get(provider.stage) or {}
+    skip_reason = None
+    if not ctx.force:
+        skip_reason = _skip_kind_reason(
+            ctx, cfg, "skip-on-success", 0, "skip-on-success scripts all exited 0"
+        ) or _skip_kind_reason(ctx, cfg, "skip-on-failure", 1, "skip-on-failure scripts all exited 1")
     if not skip_reason:
         return False
     info(f"{provider.name}[{provider.stage}]: {skip_reason}; skipping stage")
     if skip_state is not None:
         skip_state.reasons[provider.stage] = skip_reason
+    return True
+
+
+def _skip_kind_reason(ctx, cfg, key, expected_code, message):
+    """``message`` if ``cfg[key]``'s scripts all exit ``expected_code``, else None -- one 'skip-on-*:' kind."""
+    scripts = cfg.get(key) or []
+    if scripts and _skip_scripts_exit(ctx, key, scripts, expected_code):
+        return message
+    return None
+
+
+def _skip_scripts_exit(ctx, label, scripts, expected_code):
+    """True if every ``scripts`` entry exits with ``expected_code``."""
+    for script in scripts:
+        path = Path(script)
+        if not path.is_file():
+            die(f"{label}: script not found: {path}")
+        result = ctx.run([path], check=False, capture=False, query=True, echo=False)
+        if result.returncode != expected_code:
+            return False
     return True
 
 
@@ -2250,21 +2097,17 @@ def _apply_stage_env(ctx, stage_id):
     Called unconditionally right after provider.setup() (see
     _run_stage_setup) -- --fast/--dry-run included: this is activation, the
     same as every provider's own env-prepend:'/'source:'/'env-append:', not
-    a build step to skip. Never called at all for a stage
-    _stage_skip_reason skipped outright -- consistent with 'disabled:'/
+    a build step to skip. Never called at all for a stage the
+    skip-on-*: check above skipped outright -- consistent with 'disabled:'/
     skip-on-*: meaning "nothing about this stage runs this time", the same
     way a skipped custom stage's own 'source:' doesn't run either.
     """
     section = ctx.section(stage_id)
     ctx.apply_env_map(section.get("env"))
-    _extend_stage_env(ctx, section.get("env-prepend"), prepend=True)
-    _extend_stage_env(ctx, section.get("env-append"), prepend=False)
-
-
-def _extend_stage_env(ctx, mapping, *, prepend):
-    """Put every entry of one 'env-prepend:'/'env-append:' mapping in front of (or behind) its variable's current value."""
-    for key, value in (mapping or {}).items():
-        ctx.extend_env_var(key, ctx.resolve_env_value(value), prepend=prepend)
+    for key, value in (section.get("env-prepend") or {}).items():
+        ctx.extend_env_var(key, ctx.resolve_env_value(value), prepend=True)
+    for key, value in (section.get("env-append") or {}).items():
+        ctx.extend_env_var(key, ctx.resolve_env_value(value), prepend=False)
 
 
 def _print_stage_summary(ctx):
@@ -2362,16 +2205,12 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     # runnable ones) purely to learn each skipped stage's kind (wrapper vs.
     # setup) and declared position -- make_stage() itself does no I/O.
     all_stages = _make_stages(config, all_stage_ids)
-    static_reasons = _compute_static_skip_reasons(
-        config, all_stage_ids, stage_ids, _until_cutoff(all_stage_ids, options.until_stage)
-    )
-    wrappers, setups, skipped_wrappers, skipped_setups = _partition_stages(
-        all_stages, _runnable_stage_ids(stage_ids, static_reasons)
-    )
+    until_stage = options.until_stage
+    cutoff = all_stage_ids.index(until_stage) if until_stage in all_stage_ids else None
+    static_reasons = _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff)
+    runnable_stage_ids = {s for s in stage_ids if static_reasons[s] is None}
+    wrappers, setups, skipped_wrappers, skipped_setups = _partition_stages(all_stages, runnable_stage_ids)
 
-    # A wrapper (e.g. docker) is active only on the host: skip it yourself
-    # (e.g. `--skip docker`) to run on the host instead, or it's already
-    # excluded above by stage filtering; also inactive once already inside it.
     active_wrappers = [] if _wrappers_inactive(ctx) else wrappers
 
     # ``reasons`` starts as the static verdict (--until/--skip, 'disabled:',
@@ -2380,7 +2219,7 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     # 'skip-on-success:'/'skip-on-failure:' skip can only be decided at that
     # point, and a later stage's own 'depends-on:' needs to see it.
     skip_state = _StageSkipState(
-        stage_index=_stage_positions(all_stages),
+        stage_index={s.stage: i for i, s in enumerate(all_stages, 1)},
         total=len(all_stages),
         reasons=static_reasons,
         all_stages=all_stages,
@@ -2449,26 +2288,9 @@ def _make_stages(config, stage_ids):
     return [make_stage(stage_id, config) for stage_id in stage_ids]
 
 
-def _stage_positions(stages):
-    """``{stage id: 1-based position}``, feeding banner()'s '[i/n]'."""
-    return {s.stage: i for i, s in enumerate(stages, 1)}
-
-
 def _stage_ids_of(stages):
     """The stage ids of a list of provider instances, in order."""
     return [s.stage for s in stages]
-
-
-def _runnable_stage_ids(stage_ids, static_reasons):
-    """Which of the filtered stage ids actually run: all of them, minus any with a static skip reason.
-
-    See _compute_static_skip_reasons for what counts as static (disabled,
-    --until/--skip, and 'depends-on:' cascaded from either) -- unlike
-    --skip/--until, none of that drops a stage's section from
-    --show-config/filtered_stage_ids: it's about whether the stage's own
-    setup() runs, not whether it's part of the declared pipeline.
-    """
-    return {s for s in stage_ids if static_reasons[s] is None}
 
 
 def _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff):
@@ -2479,9 +2301,8 @@ def _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff):
     those (or from another stage's own cascade). Deliberately excludes
     'skip-on-success:'/'skip-on-failure:', which can only be decided once a
     stage is actually reached, right before its own setup() -- see
-    _stage_skip_reason and _blocked_by_dependency, which extends this same
-    cascade to that dynamic case once run_stages starts walking the
-    pipeline for real.
+    _run_stage_setup, which extends this same cascade to that dynamic case
+    once run_stages starts walking the pipeline for real.
 
     A single forward pass suffices: _validate_depends_on (run from
     resolve_provider_defaults before this is ever called) already
@@ -2500,9 +2321,7 @@ def _static_skip_reason(config, stage_id, index, still_declared, cutoff, reasons
     """One stage's static skip reason -- see _compute_static_skip_reasons, which this is split out of.
 
     ``reasons`` holds every earlier stage's already-decided reason, which is
-    all a 'depends-on:' cascade here ever needs to look at (see
-    _compute_static_skip_reasons's docstring for why one forward pass
-    suffices).
+    all a 'depends-on:' cascade here ever needs to look at.
     """
     if stage_id not in still_declared:
         return _cutoff_skip_reason(index, cutoff)
@@ -2549,32 +2368,6 @@ def _partition_stages(all_stages, runnable):
     )
 
 
-def _until_cutoff(all_stage_ids, until_stage):
-    """The declared index --until truncated at, or None when no --until named a declared stage."""
-    if until_stage in all_stage_ids:
-        return all_stage_ids.index(until_stage)
-    return None
-
-
-def _wrappers_inactive(ctx):
-    """True when no wrapper stage may relocate from here, whatever the env declares.
-
-    Two independent reasons, deliberately OR-ed:
-
-    * denver already relocated this process (``ctx.relocated``) -- its own
-      bookkeeping, stated by the outer run, and true for wrapper kinds no
-      filesystem marker could reveal (a ``custom`` stage's ``launcher:``);
-    * this is a container somebody else started (``ctx.in_container``), where
-      relocating again would mean starting a container inside a container.
-
-    The second is deliberately *unscoped*: an env launched from inside a
-    devshell builds right there rather than starting a second container, even
-    though nothing relocated *this* env. Scoping it per-env would turn that
-    into docker-in-docker.
-    """
-    return bool(ctx.relocated) or ctx.in_container
-
-
 def _mark_relocated(ctx, wrappers):
     """Record which wrapper stages are relocating this run, for the denver that lands inside.
 
@@ -2589,7 +2382,7 @@ def _mark_relocated(ctx, wrappers):
 
 
 class _StageSkipState:
-    """Everything ``_show_skipped``/``_run_stage_setup`` need to explain why a stage isn't running -- see run_stages.
+    """Everything ``_prepare_or_report``/``_run_stage_setup`` need to explain why a stage isn't running -- see run_stages.
 
     ``all_stages`` is every declared stage, in 'stages:' order: it is what
     lets both run paths walk the pipeline once, in order, rather than
@@ -2599,7 +2392,7 @@ class _StageSkipState:
     (_compute_static_skip_reasons) but is mutated live as the walk reaches
     each stage: a 'skip-on-success:'/'skip-on-failure:' skip, or a
     'depends-on:' cascade from one, is only known at that point -- see
-    _run_stage_setup/_blocked_by_dependency. It is a plain dict, shared (not
+    _run_stage_setup. It is a plain dict, shared (not
     copied) by every stage's lookup, precisely so a later stage's own
     'depends-on:' sees an earlier stage's just-decided runtime reason.
     """
@@ -2665,44 +2458,21 @@ class RunOptions:
         self.env_vars = dict(env_vars or {})
 
 
-def _show_skipped(ctx, skipped, skip_state):
-    """Print a "skipped by ..." banner for each stage in ``skipped`` (disabled: true, --until, --skip, or depends-on)."""
-    for s in skipped:
-        _announce_skip(ctx, s.stage, skip_state.reasons[s.stage], skip_state)
-
-
 def _announce_skip(ctx, stage_id, reason, skip_state):
     """Print one "[i/n] stage '<id>' <reason>" banner and record it in ``ctx.stage_timings``.
 
-    Shared by _show_skipped (every statically-skipped stage) and
-    _run_stage_setup (a runtime skip-on-*/depends-on skip, discovered only
-    once the pipeline walk actually reaches that stage) -- both are a whole
-    stage doing nothing this run, so both get the same one-line banner
-    rather than stage_banner()'s "entering a stage" line.
+    Shared by _prepare_or_report (every statically-skipped stage: disabled,
+    --until, --skip, or depends-on) and _run_stage_setup (a runtime
+    skip-on-*/depends-on skip, discovered only once the pipeline walk
+    actually reaches that stage) -- both are a whole stage doing nothing
+    this run, so both get the same one-line banner rather than
+    stage_banner()'s "entering a stage" line.
     """
     from denver_providers.context import skip_banner
 
     ctx.stage_index, ctx.stage_count = skip_state.stage_index[stage_id], skip_state.total
     ctx.stage_timings.append((stage_id, reason))
     skip_banner(ctx, stage_id, reason)
-
-
-def _blocked_by_dependency(config, stage_id, skip_state):
-    """The first 'depends-on:' target of ``stage_id`` already known skipped this run, or ``None``.
-
-    Static reasons (disabled/--until/--skip and their own depends-on
-    cascade) are already final in ``skip_state.reasons`` by construction --
-    see _compute_static_skip_reasons. What this adds is the dynamic case: a
-    dependency that looked runnable when that dict was built, but turned out
-    to be skip-on-success/skip-on-failure skipped once its own setup() was
-    actually reached, earlier in this same sequential walk over
-    'stages:' order (_validate_depends_on guarantees every dependency is
-    declared -- and so walked -- strictly before ``stage_id``).
-    """
-    for dep in (config.get(stage_id) or {}).get("depends-on") or []:
-        if skip_state.reasons.get(dep):
-            return dep
-    return None
 
 
 def _run_stages_via_wrapper(
@@ -2743,10 +2513,22 @@ def _run_stages_via_wrapper(
             quiet=options.quiet,
         )
 
-    cmd = _wrapper_target_cmd(
-        ctx, config, config_path, forwarded, active_wrappers=active_wrappers, setups=setups, options=options
-    )
-    _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, has_setups=bool(setups))
+    if not setups:
+        # pure wrapper: relocate the user's command (or default) directly.
+        # completion is only wired in when docker is genuinely among the
+        # wrappers relocating this cmd -- a custom launcher could prepend
+        # anything (ssh, nsenter, ...), so its image gets no such help.
+        cmd = resolve_command(config, forwarded, in_container=any(w.name == "docker" for w in active_wrappers))
+    else:
+        # setup providers run *inside* the wrapper: re-invoke denver there
+        _note_not_previewed(ctx, "stages", setups, active_wrappers)
+        cmd = reinvoke_command(config_path, forwarded, _stage_ids_of(active_wrappers), options=options)
+
+    cmd = _wrap_cmd(ctx, cmd, active_wrappers, skip_state.stage_index, skip_state.total)
+    # with no setup stages nothing re-invokes, so this is where the env is ready
+    if not setups and options.quiet == 0:
+        _print_env_started(ctx, options.start_time)
+    ctx.exec(cmd)
 
 
 def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, skip_state, quiet):
@@ -2767,25 +2549,7 @@ def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, 
             skip_state=skip_state,
         )
     elif stage.stage in report_ids:
-        _show_skipped(ctx, [stage], skip_state)
-
-
-def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers, setups, options):
-    """What the wrapper relocates: a denver reinvocation for the setup stages, else the command itself."""
-    if not setups:
-        # pure wrapper: relocate the user's command (or default) directly.
-        # skipped_setups were already shown in pipeline position by the walk
-        # above, since nothing will re-invoke to show them. Only 'docker'
-        # actually relocates into a container -- a 'custom' wrapper's own
-        # 'launcher:' could prepend anything at all (ssh, nsenter, a plain
-        # wrapper script, ...), so completion is only wired in (in_container)
-        # when docker is genuinely among the wrappers relocating this cmd.
-        return resolve_command(config, forwarded, in_container=any(w.name == "docker" for w in active_wrappers))
-    # setup providers run *inside* the wrapper: re-invoke denver there
-    # -- it recomputes skipped_setups identically (same denver.toml,
-    # same --until/--skip) and shows those banners itself.
-    _note_not_previewed(ctx, "stages", setups, active_wrappers)
-    return reinvoke_command(config_path, forwarded, _stage_ids_of(active_wrappers), options=options)
+        _announce_skip(ctx, stage.stage, skip_state.reasons[stage.stage], skip_state)
 
 
 def _note_not_previewed(ctx, what, setups, active_wrappers):
@@ -2809,15 +2573,6 @@ def _note_not_previewed(ctx, what, setups, active_wrappers):
         f"{what} {', '.join(_stage_ids_of(setups))} run inside {inside} and are not previewed -- "
         f"re-run with --skip {skips} to see them",
     )
-
-
-def _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, *, has_setups):
-    """Wrap ``cmd`` through the active wrapper(s) and exec it, announcing a ready env if nothing re-invokes."""
-    cmd = _wrap_cmd(ctx, cmd, active_wrappers, skip_state.stage_index, skip_state.total)
-    # with no setup stages nothing re-invokes, so this is where the env is ready
-    if not has_setups and options.quiet == 0:
-        _print_env_started(ctx, options.start_time)
-    ctx.exec(cmd)
 
 
 def _run_stages_directly(
@@ -2868,9 +2623,9 @@ def _run_stages_directly(
         print_logo()
     # ctx.in_container covers both ways this path is reached already inside
     # one: the reinvoked-denver-in-docker case, and a container someone else
-    # started denver in directly (see _wrappers_inactive) -- either way,
+    # started denver in directly -- either way,
     # completion is wired into the fallback/configured interactive shell the
-    # same as the pure-wrapper case in _wrapper_target_cmd. --skip docker
+    # same as the pure-wrapper case in _run_stages_via_wrapper. --skip docker
     # (ctx.in_container False here) is the one case genuinely running on the
     # host, so cmd is left alone.
     cmd = resolve_command(config, forwarded, in_container=ctx.in_container)
@@ -2893,27 +2648,6 @@ def hook_names_for_stages(stage_ids):
     return names
 
 
-def resolve_hooks(ctx, config_path, stage_ids):
-    """The effective 'hooks:' section for --show-config.
-
-    For every recognised hook name (see hook_names_for_stages), resolves the
-    script path(s) that would actually run: base-first across the whole
-    'import:' chain, from each layer's explicit 'hooks: <name>:' entry --
-    exactly what run_hook()/collect_hook_entries() use at real-run time. None
-    if nothing would run for that name. Computed here (rather than read
-    straight off the raw 'hooks:' key) because the effective list spans every
-    layer of the 'import:' chain, not just the env being launched. De-duplicated
-    the same way run_hook() de-duplicates before sourcing, so this reflects
-    what would actually run rather than a script counted twice.
-    """
-    resolved = {}
-    for name in hook_names_for_stages(stage_ids):
-        entries = collect_hook_entries(config_path, name) + ctx.extra_hook_entries.get(name, [])
-        scripts = list(dict.fromkeys(str(ctx.resolve_path(script, base=base_dir)) for base_dir, script in entries))
-        resolved[name] = scripts or None
-    return resolved
-
-
 def _sorted_nested(value):
     """Recursively sort every nested dict's keys alphabetically; lists/scalars pass through untouched.
 
@@ -2923,20 +2657,10 @@ def _sorted_nested(value):
     alphabetical, easy-to-scan ordering.
     """
     if isinstance(value, dict):
-        return _sorted_dict(value)
+        return {k: _sorted_nested(value[k]) for k in sorted(value)}
     if isinstance(value, list):
-        return _sorted_list(value)
+        return [_sorted_nested(v) for v in value]
     return value
-
-
-def _sorted_dict(value):
-    """A mapping's keys alphabetically, each value recursively sorted."""
-    return {k: _sorted_nested(value[k]) for k in sorted(value)}
-
-
-def _sorted_list(value):
-    """A list's entries recursively sorted (the list's own order is kept)."""
-    return [_sorted_nested(v) for v in value]
 
 
 def _ordered_stage_section(section):
@@ -2947,18 +2671,10 @@ def _ordered_stage_section(section):
     alphabetically. Each value is still recursively sorted via
     _sorted_nested -- only this section's own top level is special-cased.
     """
-    keys = _present_generic_keys(section) + _provider_keys(section)
+    present_generic = [key for key in GENERIC_STAGE_KEYS if key in section]
+    provider_specific = sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
+    keys = present_generic + provider_specific
     return {key: _sorted_nested(section[key]) for key in keys}
-
-
-def _present_generic_keys(section):
-    """The GENERIC_STAGE_KEYS this section actually has, in that fixed order."""
-    return [key for key in GENERIC_STAGE_KEYS if key in section]
-
-
-def _provider_keys(section):
-    """This section's provider-specific keys (everything GENERIC_STAGE_KEYS doesn't name), alphabetically."""
-    return sorted(k for k in section if k not in GENERIC_STAGE_KEYS)
 
 
 # --------------------------------------------------------------------------- #
@@ -3066,7 +2782,8 @@ def _dump_toml_table(table, path, lines):
     Only this top level hands out '[section]' headers to plain tables; everything below one is
     rendered inline -- see _dump_toml_section_body.
     """
-    plain, nested = _toml_partition_table(table)
+    plain = [(k, v) for k, v in table.items() if not _toml_is_table_like(v)]
+    nested = [(k, v) for k, v in table.items() if _toml_is_table_like(v)]
     for key, value in plain:
         _dump_toml_plain_key(key, value, lines)
     for key, value in nested:
@@ -3085,18 +2802,12 @@ def _dump_toml_section_body(table, path, lines):
 
     Two shapes are still given a header of their own at any depth -- see _toml_needs_header.
     """
-    plain, headed = _toml_partition_section(table)
+    plain = [(k, v) for k, v in table.items() if not _toml_needs_header(v)]
+    headed = [(k, v) for k, v in table.items() if _toml_needs_header(v)]
     for key, value in plain:
         _dump_toml_plain_key(key, value, lines)
     for key, value in headed:
         _dump_toml_nested_key(value, (*path, key), lines)
-
-
-def _toml_partition_section(table):
-    """``table``'s items split into (inline, still-needs-a-header) -- see _dump_toml_section_body."""
-    plain = [(k, v) for k, v in table.items() if not _toml_needs_header(v)]
-    headed = [(k, v) for k, v in table.items() if _toml_needs_header(v)]
-    return plain, headed
 
 
 def _toml_needs_header(value):
@@ -3110,7 +2821,7 @@ def _toml_needs_header(value):
     """
     if isinstance(value, dict):
         return bool(value) and not _toml_inlinable(value)
-    return _toml_is_array_of_tables(value)
+    return isinstance(value, list) and bool(value) and all(isinstance(v, dict) for v in value)
 
 
 def _toml_inlinable(value):
@@ -3131,13 +2842,6 @@ def _toml_nested_values(value):
     if isinstance(value, list):
         return value
     return []
-
-
-def _toml_partition_table(table):
-    """``table``'s items split into (plain, nested) -- see _dump_toml_table for why the split matters."""
-    plain = [(k, v) for k, v in table.items() if not _toml_is_table_like(v)]
-    nested = [(k, v) for k, v in table.items() if _toml_is_table_like(v)]
-    return plain, nested
 
 
 def _dump_toml_plain_key(key, value, lines):
@@ -3179,11 +2883,6 @@ def _toml_is_table_like(value):
     """
     if isinstance(value, dict):
         return bool(value)
-    return _toml_is_array_of_tables(value)
-
-
-def _toml_is_array_of_tables(value):
-    """Whether ``value`` is a non-empty list of dicts -- the one shape still given '[[section]]' headers at any depth."""
     return isinstance(value, list) and bool(value) and all(isinstance(v, dict) for v in value)
 
 
@@ -3345,12 +3044,11 @@ def show_config(
 
     ``minimal`` (plain --show-config; --show-config-full turns it off)
     additionally drops every stage-section key the env didn't actually
-    configure -- i.e. whatever a provider's resolve_defaults() filled in
-    itself, static or computed, fill_unset()'s ``None`` included (see
-    _drop_defaulted_stage_keys) -- and then, recursively, every remaining
-    key whose value is ``None`` or an empty dict/list (see
-    _drop_null_values), so only keys that actually carry an explicit value
-    remain. Other falsy scalars (``0``/``""``) are kept as-is.
+    configure -- whatever a provider's resolve_defaults() filled in itself
+    -- then, recursively, every remaining key whose value is ``None`` or an
+    empty dict/list (see _drop_null_values), so only keys that actually
+    carry an explicit value remain. Other falsy scalars (``0``/``""``) are
+    kept as-is.
     """
     resolved, ctx = resolve_full_config(env_dir, config, config_path, cli_args=cli_args, env_vars=env_vars)
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
@@ -3370,15 +3068,24 @@ def show_config(
         print(yaml.safe_dump(ordered, sort_keys=False, default_flow_style=False))
 
 
-def _drop_defaulted_stage_keys(section, raw_section):
-    """Keep only ``section``'s keys the env actually wrote, for the default --show-config (minimal).
+def resolve_hooks(ctx, config_path, stage_ids):
+    """The effective 'hooks:' section for --show-config.
 
-    Every key resolve_stage_section() added on its own -- a provider's
-    static/filesystem/PATH-derived default, or fill_unset()'s ``None`` for a
-    documented-but-unset one -- is a default, not something the env
-    configured, so it's left out here.
+    Resolved fresh (not read off the raw 'hooks:' key), since it spans the
+    whole 'import:' chain -- de-duplicated the same way run_hook()
+    de-duplicates before sourcing.
     """
-    return {key: value for key, value in section.items() if key in raw_section}
+    resolved = {}
+    for name in hook_names_for_stages(stage_ids):
+        entries = collect_hook_entries(config_path, name) + ctx.extra_hook_entries.get(name, [])
+        scripts = list(dict.fromkeys(str(ctx.resolve_path(script, base=base_dir)) for base_dir, script in entries))
+        resolved[name] = scripts or None
+    return resolved
+
+
+def _drop_defaulted_stage_keys(section, raw_section):
+    """Keep only ``section``'s keys the env actually wrote, for the default --show-config (minimal)."""
+    return {key: value for key, value in cast(dict, section).items() if key in raw_section}
 
 
 def _drop_null_values(value):
@@ -3405,15 +3112,11 @@ def _drop_null_values_dict(section):
         if sub is None:
             continue
         sub = _drop_null_values(sub)
-        if _is_empty_container(sub):
+        # drop a dict/list that's now empty (--show-config's minimal default)
+        if isinstance(sub, (dict, list)) and not sub:
             continue
         kept[key] = sub
     return kept
-
-
-def _is_empty_container(value):
-    """Whether ``value`` is a dict/list ``_drop_null_values`` emptied out, for the default --show-config (minimal)."""
-    return isinstance(value, (dict, list)) and not value
 
 
 def _drop_filtered_sections(resolved, stage_ids):
@@ -3697,7 +3400,10 @@ def _removal_chains(config_path, *, all_dirs):
     for path in [Path(config_path), *_import_chain(config_path)]:
         chains += _state_dir_chains_for(path)
     if all_dirs:
-        chains += _cache_dir_chain()
+        # shared cache dir: one more chain, if it exists.
+        cache_dir = _shared_cache_dir()
+        if cache_dir.exists():
+            chains += [[cache_dir]]
     return chains
 
 
@@ -3706,12 +3412,6 @@ def _state_dir_chains_for(config_path):
     env_dir = config_path.parent
     plans = (_state_dir_plan(state_dir, env_dir) for state_dir in _state_dirs_for(env_dir, config_path))
     return [chain for chain in plans if chain]
-
-
-def _cache_dir_chain():
-    """``[[<shared cache dir>]]`` if it exists, else ``[]`` -- denver's own contribution to '--all'."""
-    cache_dir = _shared_cache_dir()
-    return [[cache_dir]] if cache_dir.exists() else []
 
 
 def _remove_chains(chains, *, dry_run, assume_yes):
@@ -3800,8 +3500,10 @@ def _readable_imports(config_path):
 
     targets = []
     for entry in raw.get("import", []) or []:
-        target = _import_target(entry, config_path.parent)
-        if target is None:
+        target = (config_path.parent / entry).resolve()
+        if target.is_dir():
+            target = _config_file_in_dir(target)
+        if not target.is_file():
             logger.warning(f"clean: import '{entry}' in {config_path.parent} points nowhere -- left alone")
             continue
         targets.append(target)
@@ -3840,7 +3542,9 @@ def _state_dir_plan(state_dir, env_dir):
     # --dry-run (and 'denver clean''s own preview) answers it exactly as a
     # real run would.
     in_env_dir = parent == Path(env_dir) / STATE_DIRNAME
-    if in_env_dir and _only_denver_leftovers(parent, state_dir):
+    # only the .gitignore denver wrote is left besides state_dir itself
+    only_denver_leftovers = not {entry.name for entry in parent.iterdir()} - {state_dir.name, ".gitignore"}
+    if in_env_dir and only_denver_leftovers:
         return [state_dir, parent]
     return [state_dir]
 
@@ -3851,11 +3555,6 @@ def _remove_state_dir(state_dir, env_dir, *, dry_run):
     for path in plan:
         _remove_tree(path, dry_run=dry_run)
     return bool(plan)
-
-
-def _only_denver_leftovers(parent, state_dir):
-    """Whether ``parent`` holds nothing besides ``state_dir`` and the .gitignore denver wrote into it."""
-    return not {entry.name for entry in parent.iterdir()} - {state_dir.name, ".gitignore"}
 
 
 def _remove_tree(path, *, dry_run):
@@ -4537,11 +4236,7 @@ def _entry_flag_spellings(entry):
     """
     if not isinstance(entry, dict):
         return []
-    return _flags_value_as_list(entry.get("flags"))
-
-
-def _flags_value_as_list(raw):
-    """A 'flags:' value normalised to a list of strings -- a bare string becomes a one-item list."""
+    raw = entry.get("flags")
     if isinstance(raw, str):
         return [raw]
     if isinstance(raw, list):
@@ -4570,13 +4265,11 @@ def _action_help_by_flag(parser):
     hand-copied second string would.
     """
     return {
-        flag: action.help for action in parser._actions for flag in action.option_strings if _real_help(action.help)
+        flag: action.help
+        for action in parser._actions
+        for flag in action.option_strings
+        if action.help and action.help != argparse.SUPPRESS
     }
-
-
-def _real_help(text):
-    """Whether ``text`` (an argparse action's own .help) is real help, not None/'' /argparse.SUPPRESS."""
-    return bool(text) and text != argparse.SUPPRESS
 
 
 def _top_level_help():
@@ -4655,17 +4348,12 @@ def _completion_description_lookup(words):
         return _top_level_help()
     subcommand = prior[0]
     if subcommand == "complete":
-        return _complete_shell_names_help(prior)
+        return {} if len(prior) > 1 else _SHELL_HELP
     if subcommand == "clean":
         return _action_help_by_flag(build_arg_parser().subcommand_parsers["clean"])
     if subcommand == "run":
         return _run_description_lookup(prior[1:])
     return {}
-
-
-def _complete_shell_names_help(prior):
-    """{shell: blurb} for 'complete <TAB>' -- {} once a shell's already given. See _complete_shell_names."""
-    return {} if len(prior) > 1 else _SHELL_HELP
 
 
 def _run_description_lookup(rest):
@@ -4793,77 +4481,31 @@ def _completion_script(shell, names):
     """
     quoted = [shlex.quote(name) for name in names]
     if shell == "bash":
-        return _completion_script_bash(quoted)
+        # COMP_WORDS[0] may be a bash alias (`alias denver=...`), which
+        # `"$cmd" __complete` can't exec directly -- resolved via the
+        # 'alias' builtin ('alias -- "$cmd"'), not $BASH_ALIASES directly
+        # (an associative array, bash 4+ only; macOS's system bash is 3.2).
+        # 'args' is built before IFS is touched: bash 3.2 mis-splits a
+        # sliced array expansion once IFS no longer contains a space
+        # (verified against real bash 3.2 via Docker).
+        return (
+            "_denver_complete() {"
+            " local cmd=${COMP_WORDS[0]};"
+            ' local -a resolved=("$cmd");'
+            " local aliased raw;"
+            ' aliased=$(alias -- "$cmd" 2>/dev/null) && eval "raw=${aliased#*=}" && resolved=($raw);'
+            ' local -a args=("${COMP_WORDS[@]:1:COMP_CWORD}");'
+            " local out;"
+            ' out=$("${resolved[@]}" __complete "${args[@]}" 2>/dev/null);'
+            " local IFS=$'\\n';"
+            " COMPREPLY=($out);"
+            " };\n"
+            f"complete -F _denver_complete -o default -o bashdefault {' '.join(quoted)};\n"
+            '# denver bash completion -- wire up with: eval "$(denver complete)"\n'
+        )
     if shell == "zsh":
         return _completion_script_zsh(names)
     return _completion_script_fish(names, quoted)
-
-
-def _completion_script_bash(quoted):
-    """The bash branch of _completion_script -- see there for what ``quoted`` is."""
-    # COMP_WORDS[0] is the literal word typed at the prompt -- if that word is a
-    # bash alias (as with `alias denver=/path/to/denver.py`), it's not something
-    # `"$cmd" __complete ...` can exec directly: alias expansion happens at parse
-    # time, on the literal token, never on a variable's value.
-    #
-    # Resolved via the 'alias' *builtin* itself ('alias -- "$cmd"'), not by
-    # indexing $BASH_ALIASES directly the way an earlier version of this did:
-    # $BASH_ALIASES is an *associative* array, a bash-4.0+ feature, and macOS's
-    # own system /bin/bash is still 3.2.57 (frozen there pre-GPLv3) -- indexing
-    # it as if it always existed silently falls back to bash 3.2's only other
-    # interpretation of an array subscript, arithmetic evaluation of "$cmd"
-    # itself, which either crashes outright ("operand expected") for any 'cmd'
-    # containing a '/' (any path -- the normal way to run a checkout) or
-    # silently misresolves for one that doesn't. The 'alias' builtin, unlike
-    # associative-array indexing, has always existed and behaved identically
-    # since bash 3.2.
-    #
-    # 'alias -- "$cmd"' prints 'alias NAME=VALUE' with VALUE as one single
-    # quoted string (round-trippable as a whole, the same way declare -p prints
-    # any string) -- not as separately-quoted words the way real alias
-    # expansion's later re-parse would treat it. So this unwraps it in two
-    # eval'd steps: 'raw=${aliased#*=}' first (ordinary scalar assignment,
-    # eval'd once to strip that one quoting layer down to VALUE's own literal
-    # characters), then 'resolved=($raw)' -- unquoted, so bash's normal
-    # word-splitting on $raw does what real alias expansion's re-parse would
-    # have: split it into a command plus its own arguments.
-    #
-    # 'local -a args=("${COMP_WORDS[@]:1:COMP_CWORD}")' has to happen *before*
-    # IFS is ever touched below, not inlined into the same command substitution
-    # as the IFS=$'\n' change: bash 3.2 has a real bug where a double-quoted
-    # *sliced* array expansion ('${arr[@]:offset:length}', unlike a plain
-    # '${arr[@]}') stops treating each element as its own word once IFS no
-    # longer contains a space, silently IFS-joining the whole slice into ONE
-    # word instead ("run --show" instead of "run", "--show") -- verified
-    # against real bash 3.2 via Docker. __complete would then see one mangled
-    # argument and match nothing, exactly the empty-candidates failure this
-    # guards against. Building 'args' first, while IFS is still bash's own
-    # default, sidesteps the bug entirely; IFS is only ever changed afterward,
-    # for its real purpose -- splitting __complete's own output into COMPREPLY.
-    #
-    # Every statement below ends in ';', and the closing '}' is followed by one
-    # too, so the whole thing still parses if run as `eval $(denver complete)`
-    # (unquoted): unquoted command substitution word-splits on IFS, which turns
-    # every newline into a plain space before eval ever sees it. Without explicit
-    # ';'s that collapse would run separate statements together with nothing to
-    # separate them; the closing comment line is last for the same reason -- a
-    # '#' earlier in the (now single-line) script would silently comment out
-    # everything after it, since there'd be no real newline left to end it on.
-    return (
-        "_denver_complete() {"
-        " local cmd=${COMP_WORDS[0]};"
-        ' local -a resolved=("$cmd");'
-        " local aliased raw;"
-        ' aliased=$(alias -- "$cmd" 2>/dev/null) && eval "raw=${aliased#*=}" && resolved=($raw);'
-        ' local -a args=("${COMP_WORDS[@]:1:COMP_CWORD}");'
-        " local out;"
-        ' out=$("${resolved[@]}" __complete "${args[@]}" 2>/dev/null);'
-        " local IFS=$'\\n';"
-        " COMPREPLY=($out);"
-        " };\n"
-        f"complete -F _denver_complete -o default -o bashdefault {' '.join(quoted)};\n"
-        '# denver bash completion -- wire up with: eval "$(denver complete)"\n'
-    )
 
 
 def _completion_script_zsh(names):
@@ -4920,7 +4562,7 @@ def _completion_script_zsh(names):
     # A line with no tab at all (nothing known to describe it) keeps its
     # description empty for exactly that reason.
     # 'tab=$'"'"'\t'"'"'' -- not a literal tab byte in the script text itself --
-    # is the same trick '_completion_script_bash' uses for its own IFS=$'\n':
+    # is the same trick the bash branch above uses for its own IFS=$'\n':
     # written as the literal 4 characters $ ' \ t ', it's immune to the
     # unquoted-eval word-splitting problem discussed above (a literal tab
     # byte there would itself be an IFS character, and get split on same as
@@ -5046,16 +4688,12 @@ def _detect_shell():
     at all) -- never raises. An explicit `denver complete <shell>` bypasses
     this outright.
     """
-    name = _normalised_shell_name(_parent_process_name())
+    # login shells prefix their own name, e.g. "-zsh"
+    name = Path(_parent_process_name() or "").name.lstrip("-")
     if name in _COMPLETION_SHELLS:
         return name
-    name = _normalised_shell_name(os.environ.get("SHELL", ""))
+    name = Path(os.environ.get("SHELL", "") or "").name.lstrip("-")
     return name if name in _COMPLETION_SHELLS else "bash"
-
-
-def _normalised_shell_name(name):
-    """``name`` (a process name or $SHELL value, possibly None) as a bare shell name. See _detect_shell."""
-    return Path(name or "").name.lstrip("-")  # login shells prefix their name, e.g. "-zsh"
 
 
 def _own_process_names():
@@ -5222,16 +4860,11 @@ def _handle_dunder_complete(argv):
     their own completion pagers know how to show; bash never passes it, so
     it's unaffected.
     """
-    if not _is_dunder_complete(argv):
+    if not (argv and argv[0] == "__complete"):
         return False
     for candidate in _dunder_complete_candidates(argv[1:]):
         print(candidate)
     return True
-
-
-def _is_dunder_complete(argv):
-    """Whether ``argv`` is 'denver __complete ...' -- see _handle_dunder_complete, the only caller."""
-    return bool(argv) and argv[0] == "__complete"
 
 
 def _dunder_complete_candidates(words):
@@ -5302,7 +4935,22 @@ def _run_resolved_cli(argv):
         return
 
     _require_runnable(env_dir, config, config_path)
-    run_stages(env_dir, config, config_path, forwarded, options=_run_options(args, cli_args, env_vars))
+    options = RunOptions(
+        until_stage=args.until,
+        skip_stages=args.skip,
+        quiet=args.quiet,
+        verbose=args.verbose,
+        fast=args.fast,
+        force=args.force,
+        ci=args.ci,
+        dry_run=args.dry_run,
+        no_wait=args.no_wait,
+        start_time=args.start_time,
+        cli_args=cli_args,
+        env_vars=env_vars,
+        export_env=args.export_env,
+    )
+    run_stages(env_dir, config, config_path, forwarded, options=options)
 
 
 def _print_completion_script(preliminary):
@@ -5333,25 +4981,6 @@ def _preliminary_args(head):
     if preliminary.subcommand in ("run", "clean") and preliminary.env is None:
         preliminary.env = os.environ.get("DENVER_ENV_DIR") or None
     return preliminary, extra_argv
-
-
-def _run_options(args, cli_args, env_vars):
-    """Everything the parsed command line chose about *how* to run, as one RunOptions."""
-    return RunOptions(
-        until_stage=args.until,
-        skip_stages=args.skip,
-        quiet=args.quiet,
-        verbose=args.verbose,
-        fast=args.fast,
-        force=args.force,
-        ci=args.ci,
-        dry_run=args.dry_run,
-        no_wait=args.no_wait,
-        start_time=args.start_time,
-        cli_args=cli_args,
-        env_vars=env_vars,
-        export_env=args.export_env,
-    )
 
 
 def _handle_env_less_argv(preliminary, head):

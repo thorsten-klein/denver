@@ -21,6 +21,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from denver_errors import die
 
@@ -313,14 +314,6 @@ def find_outermost_in_parents(start, name):
 _VAR_RE = re.compile(r"\$\{([A-Za-z_]\w*)(?::-([^}]*))?\}")
 
 
-def _resolved_var(match, variables):
-    """One ``${VAR}`` / ``${VAR:-default}`` match's replacement text, unquoted."""
-    name, default = match.group(1), match.group(2)
-    if variables.get(name) is not None:
-        return str(variables[name])
-    return default if default is not None else ""
-
-
 def _expand_str(value, variables, *, quote=False):
     """Expand every ``${VAR}`` / ``${VAR:-default}`` occurrence in one string.
 
@@ -330,30 +323,30 @@ def _expand_str(value, variables, *, quote=False):
     """
 
     def repl(match):
-        resolved = _resolved_var(match, variables)
+        name, default = match.group(1), match.group(2)
+        found = variables.get(name)
+        if found is not None:
+            resolved = str(found)
+        elif default is not None:
+            resolved = default
+        else:
+            resolved = ""
         return shlex.quote(resolved) if quote else resolved
 
     return _VAR_RE.sub(repl, value)
 
 
-def _expand_list(value, variables):
-    """Expand every entry of a list."""
-    return [interpolate(v, variables) for v in value]
+def interpolate(value, variables) -> Any:
+    """Expand ``${VAR}`` / ``${VAR:-default}`` in strings, lists and dicts.
 
-
-def _expand_dict(value, variables):
-    """Expand every value of a mapping (its keys are left alone)."""
-    return {k: interpolate(v, variables) for k, v in value.items()}
-
-
-def interpolate(value, variables):
-    """Expand ``${VAR}`` / ``${VAR:-default}`` in strings, lists and dicts."""
+    Return type pinned to ``Any`` so pyright doesn't over-narrow it.
+    """
     if isinstance(value, str):
         return _expand_str(value, variables)
     if isinstance(value, list):
-        return _expand_list(value, variables)
+        return [interpolate(v, variables) for v in value]
     if isinstance(value, dict):
-        return _expand_dict(value, variables)
+        return {k: interpolate(v, variables) for k, v in value.items()}
     return value
 
 
@@ -407,11 +400,6 @@ def _printable(cmd):
     so the printed line is both accurate and a valid command on its own.
     """
     return shlex.join(str(c) for c in cmd)
-
-
-def _existing_scripts(scripts):
-    """The scripts that are actually on disk -- a missing one is skipped silently (see Context.source)."""
-    return [str(s) for s in scripts if s and Path(s).exists()]
 
 
 def _validate_exec_cmd(cmd):
@@ -1146,7 +1134,14 @@ class Context:
             return self._dry_run_command(cmd, printable, cwd=cwd, env=env, query=query, input=input)
         self._echo_command(printable, echo)
         try:
-            return self._spawn(cmd, cwd=cwd, env=env, check=check, capture=capture, input=input)
+            return subprocess.run(
+                _argv(cmd),
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                check=check,
+                text=True,
+                **self._run_kwargs(capture=capture, input=input),
+            )
         except OSError as exc:
             self._die_unstartable(printable, exc)
 
@@ -1179,17 +1174,6 @@ class Context:
             run_kwargs["input"] = input
         return run_kwargs
 
-    def _spawn(self, cmd, *, cwd, env, check, capture, input):
-        """The actual subprocess.run() of a real (non-dry) run -- OSError is the caller's to report."""
-        return subprocess.run(
-            _argv(cmd),
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            check=check,
-            text=True,
-            **self._run_kwargs(capture=capture, input=input),
-        )
-
     def _die_unstartable(self, printable, exc):
         """Report a command that could not be started at all.
 
@@ -1203,18 +1187,6 @@ class Context:
         stage = f"stage '{self.stage_id}': " if self.stage_id else ""
         die(f"{stage}cannot run {printable}: {exc.strerror or exc}")
 
-    def _dry_query(self, cmd, *, cwd, env, input):
-        """Really run a ``capture=True`` query under --dry-run (see Context.run) -- it never aborts on failure."""
-        return subprocess.run(
-            _argv(cmd),
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            check=False,  # a dry run reports, it never aborts on a query
-            text=True,
-            capture_output=True,
-            input=input,
-        )
-
     def _dry_run_command(self, cmd, printable, *, cwd, env, query, input):
         """Report ``cmd`` under --dry-run: print-and-skip it, or really run it if it's a query (see Context.run)."""
         if not query:
@@ -1222,7 +1194,16 @@ class Context:
             return subprocess.CompletedProcess(_argv(cmd), 0, "", "")
         self.dry_note("?", printable)
         try:
-            result = self._dry_query(cmd, cwd=cwd, env=env, input=input)
+            # a dry run reports a query, it never aborts on one
+            result = subprocess.run(
+                _argv(cmd),
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                check=False,
+                text=True,
+                capture_output=True,
+                input=input,
+            )
         except OSError as exc:
             # e.g. the tool an earlier stage would have installed isn't
             # there: report it and let the caller see an ordinary failure.
@@ -1321,7 +1302,7 @@ class Context:
         (a venv's activate, conan's conanbuildenv.sh) is skipped in a dry
         run exactly as it is in a real one, silently.
         """
-        scripts = _existing_scripts(scripts)
+        scripts = [str(s) for s in scripts if s and Path(s).exists()]
         if not scripts:
             return
         if self.dry_run:
