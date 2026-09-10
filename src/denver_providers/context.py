@@ -325,7 +325,12 @@ def _expand_str(value, variables, *, quote=False):
     def repl(match):
         name, default = match.group(1), match.group(2)
         found = variables.get(name)
-        resolved = str(found) if found is not None else (default if default is not None else "")
+        if found is not None:
+            resolved = str(found)
+        elif default is not None:
+            resolved = default
+        else:
+            resolved = ""
         return shlex.quote(resolved) if quote else resolved
 
     return _VAR_RE.sub(repl, value)
