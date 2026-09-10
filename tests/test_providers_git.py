@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from denver_errors import DenverError
 from denver_providers.git import GitProvider
 
 URL = "https://example.invalid/repo.git"
@@ -70,19 +71,19 @@ def test_missing_required_key_dies(make_context, missing):
     ctx = make_context()
     entry = {"url": URL, "path": "checkout", "revision": "1.0"}
     del entry[missing]
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved(ctx, entry)
 
 
 def test_submodules_must_be_bool(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved(ctx, {"url": URL, "path": "checkout", "revision": "1.0", "submodules": "true"})
 
 
 def test_remote_must_be_a_string(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved(ctx, {"url": URL, "path": "checkout", "revision": "1.0", "remote": 1})
 
 
@@ -154,7 +155,7 @@ def test_unresolvable_revision_dies(make_context, run_recorder):
     config = config_for({"url": URL, "path": "checkout", "revision": "nope"})
     ctx = make_context(config=config)
     make_checkout(ctx.env_dir / "checkout")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_git(config, ctx)
 
 
@@ -162,7 +163,7 @@ def test_unresolvable_revision_dies(make_context, run_recorder):
 def test_fast_dies_when_never_checked_out(make_context):
     config = config_for({"url": URL, "path": "checkout", "revision": "1.0"})
     ctx = make_context(config=config, fast=True)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_git(config, ctx)
 
 

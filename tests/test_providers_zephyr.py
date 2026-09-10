@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from denver_errors import DenverError
 from denver_providers.zephyr import ZephyrProvider, west_topdir
 
 
@@ -87,7 +88,7 @@ def test_fast_still_shows_progress_banner(make_context, run_recorder, which, cap
 def test_fast_dies_when_workspace_not_configured(make_context, which):
     config = {"zephyr": {}}
     ctx = make_ctx(make_context, config, fast=True)  # no .west/config yet
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_zephyr(config, ctx)
 
 
@@ -98,7 +99,7 @@ def test_no_west_topdir_dies(make_context, which):
     # WEST_TOPDIR guard.
     config = {"zephyr": {"west-yml": "test.yml"}}
     ctx = make_context(config=config)  # no .git/.west anywhere
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_zephyr(config, ctx)
 
 
@@ -145,7 +146,7 @@ def test_west_missing_dies(make_context, which):
     which["west"] = None
     config = {"zephyr": {}}
     ctx = make_ctx(make_context, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_zephyr(config, ctx)
 
 
@@ -167,7 +168,7 @@ def test_exe_missing_dies_with_its_own_name(make_context, which):
     which["myexe"] = None
     config = {"zephyr": {"exe": "myexe"}}
     ctx = make_ctx(make_context, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_zephyr(config, ctx)
 
 
@@ -192,7 +193,7 @@ def test_west_yml_default_from_outer_git(make_context, run_recorder, which, tmp_
 def test_west_yml_default_no_git_dies(make_context, which):
     config = {"zephyr": {}}
     ctx = make_ctx(make_context, config, marker=".west")  # topdir via .west only
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_zephyr(config, ctx)
 
 

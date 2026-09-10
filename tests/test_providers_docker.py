@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from denver_errors import DenverError
 from denver_providers.docker import DockerProvider
 
 
@@ -54,7 +55,7 @@ def write_compose(ctx, name="docker-compose.yml"):
 def test_already_in_container_dies(make_context):
     config = {"docker": docker_cfg()}
     ctx = make_context(config=config, in_container=True)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -62,7 +63,7 @@ def test_exe_missing_dies(make_context, which):
     which["docker"] = None
     config = {"docker": docker_cfg()}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -71,14 +72,14 @@ def test_compose_v2_plugin_missing_dies(make_context, run_recorder, which):
     ctx = make_context(config=config)
     write_compose(ctx)
     run_recorder.responses["compose version"] = lambda cmd: type("R", (), {"returncode": 1})()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
 def test_compose_file_missing_dies(make_context, run_recorder, which):
     config = {"docker": docker_cfg()}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -89,14 +90,14 @@ def test_compose_file_unconfigured_dies(make_context, which):
     config = {"docker": {}}
     ctx = make_context(config=config)
     write_compose(ctx)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
 def test_compose_unknown_key_dies(make_context, which):
     config = {"docker": docker_cfg(compose={"file": "docker-compose.yml", "bogus": True})}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -194,7 +195,7 @@ def test_compose_file_list_missing_file_dies(make_context, run_recorder, which):
     config = {"docker": {"compose": {"file": ["docker-compose.yml", "missing.yml"]}}}
     ctx = make_context(config=config)
     write_compose(ctx)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -216,7 +217,7 @@ def test_registries_entry_without_url_dies(make_context, run_recorder, which):
     config = {"docker": docker_cfg(image="myapp:dev", **{"registries": [{"username": "u", "password": "p"}]})}
     ctx = make_context(config=config)
     write_compose(ctx)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -225,7 +226,7 @@ def test_registries_entry_incomplete_credentials_dies(make_context, run_recorder
     config = {"docker": docker_cfg(image="myapp:dev", **{"registries": [{"url": "registry1.example.com", **creds}]})}
     ctx = make_context(config=config)
     write_compose(ctx)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -324,7 +325,7 @@ def test_all_registries_miss_and_build_false_dies(make_context, run_recorder, wh
     run_recorder.responses["image inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
     run_recorder.responses["manifest inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -374,7 +375,7 @@ def test_fast_still_dies_when_registries_configured_nothing_found_and_build_fals
     run_recorder.responses["image inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
     run_recorder.responses["manifest inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
 
@@ -434,7 +435,7 @@ def test_registry_login_failure_dies_without_checking_manifest(make_context, run
     run_recorder.responses["image inspect"] = lambda cmd: type("R", (), {"returncode": 1})()
     run_recorder.responses["login registry1.example.com"] = lambda cmd: type("R", (), {"returncode": 1})()
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_docker(config, ctx)
 
     assert not any("manifest inspect" in c for c in run_recorder.commands())
@@ -539,7 +540,7 @@ def test_denver_docker_image_empty_when_unset(make_context, run_recorder, which)
 def test_wrap_before_setup_dies(make_context):
     n = DockerProvider({})
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         n.wrap(ctx, ["fish"])
 
 

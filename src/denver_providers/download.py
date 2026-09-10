@@ -711,7 +711,7 @@ class DownloadProvider(Provider):
             staging.replace(dest)
         finally:
             # a no-op once the move succeeded; the cleanup that matters is
-            # the failure path, including die()'s SystemExit
+            # the failure path, including a die() call raising DenverError
             shutil.rmtree(staging, ignore_errors=True)
 
     def _extract(self, ctx, pkg, raw_pkg, archive, staging):

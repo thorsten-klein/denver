@@ -4,6 +4,7 @@ import subprocess
 
 import pytest
 
+from denver_errors import DenverError
 from denver_providers.custom import CustomProvider
 
 
@@ -18,49 +19,49 @@ def run_custom(config, ctx, stage="custom"):
 def test_cmd_missing_dies(make_context):
     config = {"custom": {}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
 def test_cmd_not_a_string_dies(make_context):
     config = {"custom": {"cmd": ["echo", "hi"]}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
 def test_cmd_blank_string_dies(make_context):
     config = {"custom": {"cmd": "   "}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
 def test_neither_cmd_nor_source_dies(make_context):
     config = {"custom": {}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
 def test_source_not_a_string_dies(make_context):
     config = {"custom": {"source": ["a.sh"]}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
 def test_source_blank_string_dies(make_context):
     config = {"custom": {"source": "   "}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
 def test_source_missing_file_dies(make_context):
     config = {"custom": {"source": "nope.sh"}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
@@ -115,7 +116,7 @@ def test_fast_banners_cmd_as_skipped(make_context, capsys):
 def test_fast_still_validates_cmd(make_context):
     config = {"custom": {}}
     ctx = make_context(config=config, fast=True)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
@@ -270,21 +271,21 @@ def test_launcher_alone_is_valid(make_context):
 def test_launcher_not_a_list_dies(make_context):
     config = {"custom": {"launcher": "myscript.sh --"}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
 def test_launcher_non_string_entry_dies(make_context):
     config = {"custom": {"launcher": [["myscript.sh"]]}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 
 def test_launcher_blank_entry_dies(make_context):
     config = {"custom": {"launcher": ["   "]}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_custom(config, ctx)
 
 

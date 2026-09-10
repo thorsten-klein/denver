@@ -5,6 +5,7 @@ import textwrap
 import pytest
 
 import denver
+from denver_errors import DenverError
 
 
 # ---- checkout_root ----------------------------------------------------------#
@@ -57,7 +58,7 @@ def test_resolve_env_dir_custom_named_toml_file(tmp_path):
 
 
 def test_resolve_env_dir_not_found_dies(tmp_path):
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.resolve_env_dir(str(tmp_path / "does-not-exist"))
 
 

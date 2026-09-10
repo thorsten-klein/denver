@@ -13,6 +13,7 @@ import pytest
 
 import denver
 import denver_providers as providers
+from denver_errors import DenverError
 from denver_providers.base import Provider
 
 
@@ -214,7 +215,7 @@ def test_parsed_env_vars_later_entry_wins():
 
 
 def test_parsed_env_vars_rejects_an_empty_name():
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver._parsed_env_vars(["=nope"])
 
 

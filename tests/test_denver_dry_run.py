@@ -18,6 +18,7 @@ import yaml
 
 import denver
 import denver_providers as providers
+from denver_errors import DenverError
 from denver_providers.conan import ConanProvider
 from denver_providers.context import _dry_tag
 from denver_providers.uv import UvProvider
@@ -142,7 +143,7 @@ def test_exec_prints_command_and_returns(make_context, exec_recorder, capsys):
 
 def test_exec_still_validates_the_command_under_dry_run(make_context):
     ctx = make_context(dry_run=True)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.exec([""])
 
 
