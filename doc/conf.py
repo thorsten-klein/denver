@@ -29,9 +29,11 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as distribution_version
 from pathlib import Path
 
+from docutils import nodes as docutils_nodes
+
 project = "denver"
-copyright = "denver contributors"
-author = "denver contributors"
+copyright = "Thorsten Klein"
+author = "Thorsten Klein"
 
 # Version shown in the sidebar (see _templates/layout.html), linked to the
 # tree it was built from. Same `git describe` call as denver's own
@@ -86,6 +88,7 @@ extensions = [
     "sphinx_copybutton",
     # provides the 'markdown' builder -- see this file's docstring.
     "sphinx_markdown_builder",
+    "sphinxcontrib.mermaid",
 ]
 
 # doc/*.md is CommonMark/GFM (as GitHub renders it) -- these extensions cover
@@ -98,6 +101,13 @@ myst_enable_extensions = [
 # several pages cross-link as "configuration.md#some-heading"; depth 3
 # covers every heading level those anchors target.
 myst_heading_anchors = 3
+
+# doc/arc42/ draws its diagrams as plain '```mermaid' fences rather than
+# '{mermaid}' directives, so GitHub renders the very same file (it has native
+# mermaid support in fenced blocks) while Sphinx still hands the fence to
+# sphinxcontrib.mermaid -- see this file's docstring on doc/*.md being the
+# files GitHub renders directly.
+myst_fence_as_directive = ["mermaid"]
 
 source_suffix = {
     ".md": "markdown",
@@ -174,3 +184,31 @@ html_context = {
     # read by doc/_templates/layout.html.
     "version_url": version_url,
 }
+
+
+def _mermaid_to_markdown(translator, node):
+    """Render a mermaid node as a '```mermaid' fence in the 'markdown' builder's output.
+
+    sphinxcontrib.mermaid ships visitors for html/latex/texinfo/man only, so
+    without this the markdown builder hits an unhandled node and warns
+    ("unknown node type: <mermaid: >") -- which the -W build treats as an
+    error. A fence is also the right output for that builder's audience: the
+    Markdown mirror is meant for AI tools/LLMs (see this file's docstring),
+    and the diagram source is more useful to them than a rendered image would
+    be. MarkdownTranslator.add() writes through unescaped (escaping happens in
+    visit_Text), so the diagram body survives verbatim.
+    """
+    translator.add("```mermaid", prefix_eol=1, suffix_eol=1)
+    translator.add(node["code"].strip(), suffix_eol=1)
+    translator.add("```", suffix_eol=2)
+    raise docutils_nodes.SkipNode
+
+
+def setup(app):
+    """Teach the 'markdown' builder about mermaid nodes -- see _mermaid_to_markdown."""
+    from sphinxcontrib.mermaid import mermaid
+
+    # override=True only silences "node class already registered" (mermaid's
+    # own setup registered it first); the html visitors it installed stay,
+    # this call just adds the markdown pair alongside them.
+    app.add_node(mermaid, override=True, markdown=(_mermaid_to_markdown, None))

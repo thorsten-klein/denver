@@ -12,3 +12,8 @@ sphinx-copybutton>=0.5.2
 # the 'markdown' builder -- see build-docs' cmd: in denver.toml. AI-friendly
 # mirror of the HTML site: one .md per page, published alongside it.
 sphinx-markdown-builder>=0.6.6
+# mermaid diagrams in doc/arc42/ -- pure JS, so nothing has to install java or
+# a plantuml.jar into this venv, and (with myst_fence_as_directive in
+# doc/conf.py) the same ```mermaid fence GitHub renders natively is what
+# Sphinx turns into a diagram.
+sphinxcontrib-mermaid>=0.9,<2.0
