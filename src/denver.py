@@ -648,7 +648,7 @@ def _combine_config_override(current, op, value, path):
     if _both_are(current, value, (int, float)) or _both_are(current, value, str):
         return current + value
     die(f"--config: cannot += onto '{path}' ({current!r} += {value!r}): not a list, string or number")
-    return None
+    return None  # pragma: no cover -- die() never returns; only here to satisfy RET503
 
 
 def _as_list(value):
@@ -2989,7 +2989,8 @@ def show_config(
     if minimal:
         for stage_id in stage_ids:
             raw_section = ctx.raw_sections.get(stage_id, {})
-            ordered[stage_id] = {key: value for key, value in ordered[stage_id].items() if key in raw_section}
+            section = cast(dict, ordered[stage_id])
+            ordered[stage_id] = {key: value for key, value in section.items() if key in raw_section}
         ordered = _drop_null_values(ordered)
 
     if format == "toml":
