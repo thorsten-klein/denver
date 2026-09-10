@@ -940,7 +940,7 @@ def validate_hooks_keys(config):
 # 'depends-on:' skips a stage whenever a stage it names is itself skipped,
 # for any reason (see _compute_static_skip_reasons/_blocked_by_dependency),
 # 'skip-on-success:'/'skip-on-failure:' skip a stage's setup() at run time
-# instead (see _stage_skip_reason), 'env:'/'env-prepend:'/'env-append:'
+# instead (see _run_stage_setup), 'env:'/'env-prepend:'/'env-append:'
 # adapt the environment once this stage's own setup() is done (see
 # _apply_stage_env) -- none of these are part of any one provider's own
 # KEYS, so every provider gets them for free, uv/conan/zephyr/docker/custom
@@ -977,8 +977,8 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     'scripts:'/'disabled:'/'skip-on-success:'/'skip-on-failure:' are filled
     in for every stage regardless of provider -- all generic,
     provider-agnostic keys any stage's section may declare (see
-    _run_stage_scripts_in_context, run_stages's 'disabled:' handling, and
-    _stage_skip_reason), not part of any one provider's own KEYS, so they
+    _run_stage_scripts_in_context and run_stages's 'disabled:' handling), not
+    part of any one provider's own KEYS, so they
     belong here, not in Provider.resolve_defaults's default.
     """
     from denver_providers.base import fill_unset
@@ -1358,22 +1358,11 @@ def default_command(config, in_container=False):
     """
     if not sys.stdin.isatty():
         die("cannot determine command to run (non-interactive and no command given)")
-    cmd = _resolve_default_cmd(config)
-    return _completion_wrapped_shell(cmd) if in_container else cmd
-
-
-def _resolve_default_cmd(config):
-    """'command:'/'docker.compose.default-cmd:'/$SHELL/"bash", in that order, normalised to a list. See default_command.
-
-    'command:' is the generic top-level default; a wrapper provider
-    (currently only 'docker') may contribute its own fallback via
-    <provider>.compose.default-cmd, e.g. the command to land in once relocated
-    into a container. With neither set, fall back to the user's own shell
-    (not a specific one denver would otherwise be guessing).
-    """
+    # 'command:'/'docker.compose.default-cmd:'/$SHELL/"bash", in that order
     docker_compose = (config.get("docker") or {}).get("compose") or {}
-    cmd = config.get("command") or docker_compose.get("default-cmd") or os.environ.get("SHELL") or "bash"
-    return [cmd] if isinstance(cmd, str) else [str(c) for c in cmd]
+    raw_cmd = config.get("command") or docker_compose.get("default-cmd") or os.environ.get("SHELL") or "bash"
+    cmd = [raw_cmd] if isinstance(raw_cmd, str) else [str(c) for c in raw_cmd]
+    return _completion_wrapped_shell(cmd) if in_container else cmd
 
 
 def _completion_wrapped_shell(cmd):
@@ -1643,7 +1632,10 @@ def _collect_stage_scripts(ctx, stage_ids, name):
     resolved = []
     for stage_id in stage_ids:
         for script in _stage_script_entries(ctx, stage_id, name):
-            resolved.append((stage_id, _resolved_script_path(ctx, stage_id, name, script)))
+            path = ctx.resolve_path(script)
+            if not path.is_file():
+                die(f"stage '{stage_id}': scripts.{name} script not found: {path}")
+            resolved.append((stage_id, path))
     return resolved
 
 
@@ -1655,14 +1647,6 @@ def _stage_script_entries(ctx, stage_id, name):
     if not isinstance(entry, list):
         die(f"stage '{stage_id}': 'scripts.{name}:' must be a list of strings, got {type(entry).__name__}")
     return entry
-
-
-def _resolved_script_path(ctx, stage_id, name, script):
-    """One ``scripts: <name>:`` entry resolved to a file that exists."""
-    path = ctx.resolve_path(script)
-    if not path.is_file():
-        die(f"stage '{stage_id}': scripts.{name} script not found: {path}")
-    return path
 
 
 def run_named_scripts(
@@ -1728,7 +1712,9 @@ def run_named_scripts(
     active_wrappers = [] if bool(ctx.relocated) or ctx.in_container else wrappers
 
     if not active_wrappers:
-        _run_named_scripts_directly(ctx, setups, names)
+        for name in names:
+            if not _run_stage_scripts(ctx, _stage_ids_of(setups), name):
+                info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
         return
 
     _relocate_named_scripts(
@@ -1745,33 +1731,6 @@ def run_named_scripts(
         cli_args=cli_args,
         env_vars=env_vars,
     )
-
-
-def _run_named_scripts_directly(ctx, setups, names):
-    """Run every one of ``names`` for the given setup stages, in order -- the no-active-wrapper case."""
-    for name in names:
-        if not _run_stage_scripts(ctx, _stage_ids_of(setups), name):
-            _warn_no_scripts(ctx, name)
-
-
-def _run_wrapper_scripts_and_find_relocatable(ctx, active_wrappers, setups, names):
-    """Run each of ``names``' wrapper-stage entries on the host; return the subset that also needs relocating.
-
-    The wrapper's own entries (e.g. `docker login` to a private registry)
-    run here, on the host, before the wrapper is ever prepared -- one name
-    at a time, in order. A name with entries in neither the wrapper nor a
-    setup stage never makes it into the returned list (there's nothing left
-    to relocate it for), so it's flagged here, once, via _warn_no_scripts --
-    otherwise it would run nothing and say nothing.
-    """
-    setup_names = []
-    for name in names:
-        ran_on_host = _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
-        if _collect_stage_scripts(ctx, _stage_ids_of(setups), name):
-            setup_names.append(name)
-        elif not ran_on_host:
-            _warn_no_scripts(ctx, name)
-    return setup_names
 
 
 def _relocate_named_scripts(
@@ -1794,7 +1753,15 @@ def _relocate_named_scripts(
     See run_named_scripts, whose own docstring covers the host/wrapper split
     this implements.
     """
-    setup_names = _run_wrapper_scripts_and_find_relocatable(ctx, active_wrappers, setups, names)
+    # a name with entries in neither the wrapper nor a setup stage never
+    # gets relocated -- flag it here, once, or it would run and say nothing
+    setup_names = []
+    for name in names:
+        ran_on_host = _run_stage_scripts(ctx, _stage_ids_of(active_wrappers), name)
+        if _collect_stage_scripts(ctx, _stage_ids_of(setups), name):
+            setup_names.append(name)
+        elif not ran_on_host:
+            info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
     if not setup_names:
         return  # nothing to relocate into the wrapper for, for any of ``names``
 
@@ -1805,7 +1772,11 @@ def _relocate_named_scripts(
     _note_not_previewed(ctx, f"{names_label} scripts of stages", setups, active_wrappers)
 
     stage_index = {s.stage: i for i, s in enumerate(stages, 1)}
-    _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, len(stages), quiet=quiet)
+    stage_count = len(stages)
+    for w in active_wrappers:
+        _run_stage_setup(
+            ctx, config, config_path, w, quiet=quiet, stage_index=stage_index[w.stage], stage_count=stage_count
+        )
 
     cmd = _relocated_run_cmd(
         config_path,
@@ -1824,34 +1795,13 @@ def _run_stage_scripts(ctx, stage_ids, name):
     """Run every ``scripts: <name>:`` entry the given stages declare, in order.
 
     Returns whether any entry was found (and so ran) -- callers use this to
-    tell "ran nothing because there was nothing to run" apart from a normal
-    run, see _warn_no_scripts.
+    tell "ran nothing because there was nothing to run" apart from a normal run.
     """
     entries = _collect_stage_scripts(ctx, stage_ids, name)
     for stage_id, script in entries:
         info(f"{name}-script '{stage_id}': {script}")
         ctx.run([str(script)])
     return bool(entries)
-
-
-def _warn_no_scripts(ctx, name):
-    """Info-log that ``--scripts <name>`` found nothing to run for this env -- see the two run_named_scripts paths.
-
-    Without this, ``denver run <env> --scripts <name>`` for a name no stage
-    declares silently exits 0 with no output at all, which reads exactly
-    like a successful no-op run of something that *does* exist -- there is
-    nothing else here to distinguish "ran zero entries" from "ran and it
-    happened to have zero entries by design".
-    """
-    info(f"no '{name}' scripts to run for env '{ctx.env_dir.name}'")
-
-
-def _setup_wrappers(ctx, config, config_path, active_wrappers, stage_index, stage_count, *, quiet):
-    """Run each active wrapper stage's own setup(), so it is ready to be relocated into."""
-    for w in active_wrappers:
-        _run_stage_setup(
-            ctx, config, config_path, w, quiet=quiet, stage_index=stage_index[w.stage], stage_count=stage_count
-        )
 
 
 def _relocated_run_cmd(
@@ -1923,7 +1873,10 @@ def list_named_scripts(env_dir, config_path, *, until_stage=None, skip_stages=()
     if not by_name:
         print(f"env '{env_dir.name}' defines no 'scripts:' entries -- nothing to --scripts", file=sys.stderr)
         return
-    _print_script_names(env_dir, by_name)
+    print(f"available --scripts names for env '{env_dir.name}':", file=sys.stderr)
+    for name in sorted(by_name):
+        stages = ", ".join(f"{stage} ({count} script{'s' if count != 1 else ''})" for stage, count in by_name[name])
+        print(f"  {name:<12} {stages}", file=sys.stderr)
 
 
 def _scripts_by_name(config, stage_ids):
@@ -1934,52 +1887,6 @@ def _scripts_by_name(config, stage_ids):
         for name, entries in section.items():
             by_name.setdefault(name, []).append((stage_id, len(entries or [])))
     return by_name
-
-
-def _print_script_names(env_dir, by_name):
-    """Print every --scripts name this env defines, with the stages contributing to it."""
-    print(f"available --scripts names for env '{env_dir.name}':", file=sys.stderr)
-    for name in sorted(by_name):
-        stages = ", ".join(f"{stage} ({count} script{'s' if count != 1 else ''})" for stage, count in by_name[name])
-        print(f"  {name:<12} {stages}", file=sys.stderr)
-
-
-def _stage_skip_reason(ctx, cfg):
-    """Why this stage's setup() should be a no-op this run, per its generic 'skip-on-*:' scripts -- None if it should run.
-
-    Checked fresh right before setup(), the same way 'disabled:' is checked
-    ahead of time in active_stage_ids -- but this can't be decided ahead of
-    time: it depends on running each script, a real side effect that must
-    happen exactly once, right when the stage would otherwise run (an
-    earlier stage may have changed what these scripts would report).
-    '--force' bypasses both checks, same as it bypasses every provider's own
-    checksum/skip-if logic.
-    """
-    if ctx.force:
-        return None
-    return _skip_kind_reason(ctx, cfg, "skip-on-success", 0, "skip-on-success scripts all exited 0") or (
-        _skip_kind_reason(ctx, cfg, "skip-on-failure", 1, "skip-on-failure scripts all exited 1")
-    )
-
-
-def _skip_kind_reason(ctx, cfg, key, expected_code, message):
-    """``message`` if ``cfg[key]``'s scripts all exit ``expected_code``, else None -- one 'skip-on-*:' kind (see _stage_skip_reason)."""
-    scripts = cfg.get(key) or []
-    if scripts and _skip_scripts_exit(ctx, key, scripts, expected_code):
-        return message
-    return None
-
-
-def _skip_scripts_exit(ctx, label, scripts, expected_code):
-    """True if every ``scripts`` entry exits with ``expected_code`` (see _stage_skip_reason)."""
-    for script in scripts:
-        path = Path(script)
-        if not path.is_file():
-            die(f"{label}: script not found: {path}")
-        result = ctx.run([path], check=False, capture=False, query=True, echo=False)
-        if result.returncode != expected_code:
-            return False
-    return True
 
 
 def _run_stage_setup(ctx, config, config_path, provider, *, quiet, stage_index=1, stage_count=1, skip_state=None):
@@ -2065,9 +1972,31 @@ def _skip_for_dynamic_reason(ctx, config, provider, skip_state):
 
     Covers 'skip-on-success:'/'skip-on-failure:', which -- unlike a
     'depends-on:' block (_skip_for_blocked_dependency) -- can only be
-    decided once the stage is actually reached; see _stage_skip_reason.
+    decided once the stage is actually reached, by actually running the
+    scripts below.
     """
-    skip_reason = _stage_skip_reason(ctx, config.get(provider.stage) or {})
+    cfg = config.get(provider.stage) or {}
+    skip_reason = None
+    if not ctx.force:
+        for key, expected_code, message in (
+            ("skip-on-success", 0, "skip-on-success scripts all exited 0"),
+            ("skip-on-failure", 1, "skip-on-failure scripts all exited 1"),
+        ):
+            scripts = cfg.get(key) or []
+            if not scripts:
+                continue
+            all_exited_as_expected = True
+            for script in scripts:
+                path = Path(script)
+                if not path.is_file():
+                    die(f"{key}: script not found: {path}")
+                result = ctx.run([path], check=False, capture=False, query=True, echo=False)
+                if result.returncode != expected_code:
+                    all_exited_as_expected = False
+                    break
+            if all_exited_as_expected:
+                skip_reason = message
+                break
     if not skip_reason:
         return False
     info(f"{provider.name}[{provider.stage}]: {skip_reason}; skipping stage")
@@ -2103,8 +2032,8 @@ def _apply_stage_env(ctx, stage_id):
     Called unconditionally right after provider.setup() (see
     _run_stage_setup) -- --fast/--dry-run included: this is activation, the
     same as every provider's own env-prepend:'/'source:'/'env-append:', not
-    a build step to skip. Never called at all for a stage
-    _stage_skip_reason skipped outright -- consistent with 'disabled:'/
+    a build step to skip. Never called at all for a stage the
+    skip-on-*: check above skipped outright -- consistent with 'disabled:'/
     skip-on-*: meaning "nothing about this stage runs this time", the same
     way a skipped custom stage's own 'source:' doesn't run either.
     """
@@ -2313,7 +2242,7 @@ def _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff):
     those (or from another stage's own cascade). Deliberately excludes
     'skip-on-success:'/'skip-on-failure:', which can only be decided once a
     stage is actually reached, right before its own setup() -- see
-    _stage_skip_reason and _blocked_by_dependency, which extends this same
+    _run_stage_setup and _blocked_by_dependency, which extends this same
     cascade to that dynamic case once run_stages starts walking the
     pipeline for real.
 
