@@ -938,7 +938,7 @@ def validate_hooks_keys(config):
 # --scripts <name> mechanism (see _run_stage_scripts_in_context), 'disabled:'
 # opts a stage out of the normal pipeline by default (see run_stages),
 # 'depends-on:' skips a stage whenever a stage it names is itself skipped,
-# for any reason (see _compute_static_skip_reasons/_blocked_by_dependency),
+# for any reason (see _compute_static_skip_reasons/_skip_for_blocked_dependency),
 # 'skip-on-success:'/'skip-on-failure:' skip a stage's setup() at run time
 # instead (see _run_stage_setup), 'env:'/'env-prepend:'/'env-append:'
 # adapt the environment once this stage's own setup() is done (see
@@ -1349,8 +1349,8 @@ def default_command(config, in_container=False):
     ``in_container`` -- true whenever this resolved command is about to run
     inside a docker container, whether that's because this denver process is
     already there (ctx.in_container), or because it's being resolved on the
-    host only to be relocated there next (a 'pure wrapper', see
-    _wrapper_target_cmd) -- wires up 'denver complete' into it first, via
+    host only to be relocated there next (a 'pure wrapper' relocation) --
+    wires up 'denver complete' into it first, via
     _completion_wrapped_shell: unlike the host, the container's image is
     never something the user already has their own shell completion set up
     in. False (the default) leaves ``cmd`` exactly as resolved, e.g. for a
@@ -1958,7 +1958,8 @@ def _skip_for_blocked_dependency(ctx, config, provider, skip_state):
     Split out of _run_stage_setup to keep that function's cognitive
     complexity low; see its docstring for what ``skip_state`` means.
     """
-    blocking_dep = _blocked_by_dependency(config, provider.stage, skip_state)
+    depends_on = (config.get(provider.stage) or {}).get("depends-on") or []
+    blocking_dep = next((dep for dep in depends_on if skip_state.reasons.get(dep)), None)
     if not blocking_dep:
         return False
     reason = f"skipped (depends-on '{blocking_dep}')"
@@ -2039,14 +2040,10 @@ def _apply_stage_env(ctx, stage_id):
     """
     section = ctx.section(stage_id)
     ctx.apply_env_map(section.get("env"))
-    _extend_stage_env(ctx, section.get("env-prepend"), prepend=True)
-    _extend_stage_env(ctx, section.get("env-append"), prepend=False)
-
-
-def _extend_stage_env(ctx, mapping, *, prepend):
-    """Put every entry of one 'env-prepend:'/'env-append:' mapping in front of (or behind) its variable's current value."""
-    for key, value in (mapping or {}).items():
-        ctx.extend_env_var(key, ctx.resolve_env_value(value), prepend=prepend)
+    for key, value in (section.get("env-prepend") or {}).items():
+        ctx.extend_env_var(key, ctx.resolve_env_value(value), prepend=True)
+    for key, value in (section.get("env-append") or {}).items():
+        ctx.extend_env_var(key, ctx.resolve_env_value(value), prepend=False)
 
 
 def _print_stage_summary(ctx):
@@ -2144,9 +2141,9 @@ def run_stages(env_dir, config, config_path, forwarded, *, options=None):
     # runnable ones) purely to learn each skipped stage's kind (wrapper vs.
     # setup) and declared position -- make_stage() itself does no I/O.
     all_stages = _make_stages(config, all_stage_ids)
-    static_reasons = _compute_static_skip_reasons(
-        config, all_stage_ids, stage_ids, _until_cutoff(all_stage_ids, options.until_stage)
-    )
+    until_stage = options.until_stage
+    cutoff = all_stage_ids.index(until_stage) if until_stage in all_stage_ids else None
+    static_reasons = _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff)
     runnable_stage_ids = {s for s in stage_ids if static_reasons[s] is None}
     wrappers, setups, skipped_wrappers, skipped_setups = _partition_stages(all_stages, runnable_stage_ids)
 
@@ -2242,9 +2239,8 @@ def _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff):
     those (or from another stage's own cascade). Deliberately excludes
     'skip-on-success:'/'skip-on-failure:', which can only be decided once a
     stage is actually reached, right before its own setup() -- see
-    _run_stage_setup and _blocked_by_dependency, which extends this same
-    cascade to that dynamic case once run_stages starts walking the
-    pipeline for real.
+    _run_stage_setup, which extends this same cascade to that dynamic case
+    once run_stages starts walking the pipeline for real.
 
     A single forward pass suffices: _validate_depends_on (run from
     resolve_provider_defaults before this is ever called) already
@@ -2255,38 +2251,19 @@ def _compute_static_skip_reasons(config, all_stage_ids, stage_ids, cutoff):
     reasons = {}
     still_declared = set(stage_ids)
     for index, stage_id in enumerate(all_stage_ids):
-        reasons[stage_id] = _static_skip_reason(config, stage_id, index, still_declared, cutoff, reasons)
+        if stage_id not in still_declared:
+            past_cutoff = cutoff is not None and index > cutoff
+            reason = "skipped by --until" if past_cutoff else "skipped by --skip"
+        elif (config.get(stage_id) or {}).get("disabled"):
+            reason = "skipped (disabled: true)"
+        else:
+            blocking_dep = next(
+                (dep for dep in (config.get(stage_id) or {}).get("depends-on") or [] if reasons.get(dep)),
+                None,
+            )
+            reason = f"skipped (depends-on '{blocking_dep}')" if blocking_dep else None
+        reasons[stage_id] = reason
     return reasons
-
-
-def _static_skip_reason(config, stage_id, index, still_declared, cutoff, reasons):
-    """One stage's static skip reason -- see _compute_static_skip_reasons, which this is split out of.
-
-    ``reasons`` holds every earlier stage's already-decided reason, which is
-    all a 'depends-on:' cascade here ever needs to look at (see
-    _compute_static_skip_reasons's docstring for why one forward pass
-    suffices).
-    """
-    if stage_id not in still_declared:
-        return _cutoff_skip_reason(index, cutoff)
-    if (config.get(stage_id) or {}).get("disabled"):
-        return "skipped (disabled: true)"
-    return _dependency_skip_reason(config, stage_id, reasons)
-
-
-def _cutoff_skip_reason(index, cutoff):
-    """'--until' vs '--skip' wording for a stage that --skip/--until already dropped from 'stage_ids'."""
-    past_cutoff = cutoff is not None and index > cutoff
-    return "skipped by --until" if past_cutoff else "skipped by --skip"
-
-
-def _dependency_skip_reason(config, stage_id, reasons):
-    """This stage's reason cascaded from a 'depends-on:' target already decided skipped, if any."""
-    blocking_dep = next(
-        (dep for dep in (config.get(stage_id) or {}).get("depends-on") or [] if reasons.get(dep)),
-        None,
-    )
-    return f"skipped (depends-on '{blocking_dep}')" if blocking_dep else None
 
 
 def _partition_stages(all_stages, runnable):
@@ -2310,13 +2287,6 @@ def _partition_stages(all_stages, runnable):
         buckets[("wrapper", False)],
         buckets[("setup", False)],
     )
-
-
-def _until_cutoff(all_stage_ids, until_stage):
-    """The declared index --until truncated at, or None when no --until named a declared stage."""
-    if until_stage in all_stage_ids:
-        return all_stage_ids.index(until_stage)
-    return None
 
 
 def _mark_relocated(ctx, wrappers):
@@ -2343,7 +2313,7 @@ class _StageSkipState:
     (_compute_static_skip_reasons) but is mutated live as the walk reaches
     each stage: a 'skip-on-success:'/'skip-on-failure:' skip, or a
     'depends-on:' cascade from one, is only known at that point -- see
-    _run_stage_setup/_blocked_by_dependency. It is a plain dict, shared (not
+    _run_stage_setup. It is a plain dict, shared (not
     copied) by every stage's lookup, precisely so a later stage's own
     'depends-on:' sees an earlier stage's just-decided runtime reason.
     """
@@ -2426,24 +2396,6 @@ def _announce_skip(ctx, stage_id, reason, skip_state):
     skip_banner(ctx, stage_id, reason)
 
 
-def _blocked_by_dependency(config, stage_id, skip_state):
-    """The first 'depends-on:' target of ``stage_id`` already known skipped this run, or ``None``.
-
-    Static reasons (disabled/--until/--skip and their own depends-on
-    cascade) are already final in ``skip_state.reasons`` by construction --
-    see _compute_static_skip_reasons. What this adds is the dynamic case: a
-    dependency that looked runnable when that dict was built, but turned out
-    to be skip-on-success/skip-on-failure skipped once its own setup() was
-    actually reached, earlier in this same sequential walk over
-    'stages:' order (_validate_depends_on guarantees every dependency is
-    declared -- and so walked -- strictly before ``stage_id``).
-    """
-    for dep in (config.get(stage_id) or {}).get("depends-on") or []:
-        if skip_state.reasons.get(dep):
-            return dep
-    return None
-
-
 def _run_stages_via_wrapper(
     ctx,
     config,
@@ -2482,10 +2434,22 @@ def _run_stages_via_wrapper(
             quiet=options.quiet,
         )
 
-    cmd = _wrapper_target_cmd(
-        ctx, config, config_path, forwarded, active_wrappers=active_wrappers, setups=setups, options=options
-    )
-    _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, has_setups=bool(setups))
+    if not setups:
+        # pure wrapper: relocate the user's command (or default) directly.
+        # completion is only wired in when docker is genuinely among the
+        # wrappers relocating this cmd -- a custom launcher could prepend
+        # anything (ssh, nsenter, ...), so its image gets no such help.
+        cmd = resolve_command(config, forwarded, in_container=any(w.name == "docker" for w in active_wrappers))
+    else:
+        # setup providers run *inside* the wrapper: re-invoke denver there
+        _note_not_previewed(ctx, "stages", setups, active_wrappers)
+        cmd = reinvoke_command(config_path, forwarded, _stage_ids_of(active_wrappers), options=options)
+
+    cmd = _wrap_cmd(ctx, cmd, active_wrappers, skip_state.stage_index, skip_state.total)
+    # with no setup stages nothing re-invokes, so this is where the env is ready
+    if not setups and options.quiet == 0:
+        _print_env_started(ctx, options.start_time)
+    ctx.exec(cmd)
 
 
 def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, skip_state, quiet):
@@ -2509,24 +2473,6 @@ def _prepare_or_report(ctx, config, config_path, stage, *, run_ids, report_ids, 
         _announce_skip(ctx, stage.stage, skip_state.reasons[stage.stage], skip_state)
 
 
-def _wrapper_target_cmd(ctx, config, config_path, forwarded, *, active_wrappers, setups, options):
-    """What the wrapper relocates: a denver reinvocation for the setup stages, else the command itself."""
-    if not setups:
-        # pure wrapper: relocate the user's command (or default) directly.
-        # skipped_setups were already shown in pipeline position by the walk
-        # above, since nothing will re-invoke to show them. Only 'docker'
-        # actually relocates into a container -- a 'custom' wrapper's own
-        # 'launcher:' could prepend anything at all (ssh, nsenter, a plain
-        # wrapper script, ...), so completion is only wired in (in_container)
-        # when docker is genuinely among the wrappers relocating this cmd.
-        return resolve_command(config, forwarded, in_container=any(w.name == "docker" for w in active_wrappers))
-    # setup providers run *inside* the wrapper: re-invoke denver there
-    # -- it recomputes skipped_setups identically (same denver.toml,
-    # same --until/--skip) and shows those banners itself.
-    _note_not_previewed(ctx, "stages", setups, active_wrappers)
-    return reinvoke_command(config_path, forwarded, _stage_ids_of(active_wrappers), options=options)
-
-
 def _note_not_previewed(ctx, what, setups, active_wrappers):
     """--dry-run: say that ``what`` runs inside the wrapper and cannot be previewed, and how to see it.
 
@@ -2548,15 +2494,6 @@ def _note_not_previewed(ctx, what, setups, active_wrappers):
         f"{what} {', '.join(_stage_ids_of(setups))} run inside {inside} and are not previewed -- "
         f"re-run with --skip {skips} to see them",
     )
-
-
-def _relocate_and_exec(ctx, cmd, active_wrappers, skip_state, options, *, has_setups):
-    """Wrap ``cmd`` through the active wrapper(s) and exec it, announcing a ready env if nothing re-invokes."""
-    cmd = _wrap_cmd(ctx, cmd, active_wrappers, skip_state.stage_index, skip_state.total)
-    # with no setup stages nothing re-invokes, so this is where the env is ready
-    if not has_setups and options.quiet == 0:
-        _print_env_started(ctx, options.start_time)
-    ctx.exec(cmd)
 
 
 def _run_stages_directly(
@@ -2609,7 +2546,7 @@ def _run_stages_directly(
     # one: the reinvoked-denver-in-docker case, and a container someone else
     # started denver in directly -- either way,
     # completion is wired into the fallback/configured interactive shell the
-    # same as the pure-wrapper case in _wrapper_target_cmd. --skip docker
+    # same as the pure-wrapper case in _run_stages_via_wrapper. --skip docker
     # (ctx.in_container False here) is the one case genuinely running on the
     # host, so cmd is left alone.
     cmd = resolve_command(config, forwarded, in_container=ctx.in_container)
@@ -2630,27 +2567,6 @@ def hook_names_for_stages(stage_ids):
         names += [f"pre-{stage_id}", f"post-{stage_id}"]
     names.append("pre-cmd")
     return names
-
-
-def resolve_hooks(ctx, config_path, stage_ids):
-    """The effective 'hooks:' section for --show-config.
-
-    For every recognised hook name (see hook_names_for_stages), resolves the
-    script path(s) that would actually run: base-first across the whole
-    'import:' chain, from each layer's explicit 'hooks: <name>:' entry --
-    exactly what run_hook()/collect_hook_entries() use at real-run time. None
-    if nothing would run for that name. Computed here (rather than read
-    straight off the raw 'hooks:' key) because the effective list spans every
-    layer of the 'import:' chain, not just the env being launched. De-duplicated
-    the same way run_hook() de-duplicates before sourcing, so this reflects
-    what would actually run rather than a script counted twice.
-    """
-    resolved = {}
-    for name in hook_names_for_stages(stage_ids):
-        entries = collect_hook_entries(config_path, name) + ctx.extra_hook_entries.get(name, [])
-        scripts = list(dict.fromkeys(str(ctx.resolve_path(script, base=base_dir)) for base_dir, script in entries))
-        resolved[name] = scripts or None
-    return resolved
 
 
 def _sorted_nested(value):
@@ -3059,7 +2975,15 @@ def show_config(
     stage_ids = filtered_stage_ids(config, env_dir, until_stage, skip_stages)
     _drop_filtered_sections(resolved, stage_ids)
     resolved["stages"] = stage_ids
-    resolved["hooks"] = resolve_hooks(ctx, config_path, stage_ids)
+    # the effective 'hooks:' section: resolved fresh (not read off the raw
+    # 'hooks:' key), since it spans the whole 'import:' chain, de-duplicated
+    # the same way run_hook() de-duplicates before sourcing
+    hooks = {}
+    for name in hook_names_for_stages(stage_ids):
+        entries = collect_hook_entries(config_path, name) + ctx.extra_hook_entries.get(name, [])
+        scripts = list(dict.fromkeys(str(ctx.resolve_path(script, base=base_dir)) for base_dir, script in entries))
+        hooks[name] = scripts or None
+    resolved["hooks"] = hooks
 
     ordered = _ordered_config(resolved, stage_ids)
     if minimal:
