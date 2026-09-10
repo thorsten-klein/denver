@@ -498,7 +498,14 @@ def deep_merge(base, override, _path=""):
     if coercible_to_list:
         return _merge_lists(_as_list(base), _as_list(override))
 
-    return _merge_scalar(base, override, _path)
+    if isinstance(override, str) and override.startswith("!") and base is not _UNSET:
+        return override[1:]
+    if isinstance(base, str) and isinstance(override, str) and base != override:
+        die(
+            f"conflicting values for '{_path}' across stacked layers: {base!r} vs {override!r}. "
+            f"Prefix the new value with '!' to override deliberately, e.g. \"!{override}\"."
+        )
+    return override
 
 
 OVERWRITE_MARKER = "<overwrite>"
@@ -521,19 +528,6 @@ def _merge_lists(base, override):
     return [_strip_reset_marker(entry) for entry in override if entry != OVERWRITE_MARKER]
 
 
-def _merge_scalar(base, override, path):
-    """``deep_merge``'s scalar case: ``override`` wins, but a conflicting string needs an explicit ``!``."""
-    if isinstance(override, str) and override.startswith("!") and base is not _UNSET:
-        return override[1:]
-
-    if isinstance(base, str) and isinstance(override, str) and base != override:
-        die(
-            f"conflicting values for '{path}' across stacked layers: {base!r} vs {override!r}. "
-            f"Prefix the new value with '!' to override deliberately, e.g. \"!{override}\"."
-        )
-    return override
-
-
 def _config_file_in_dir(dir_path):
     """The config file ``dir_path`` holds: ``denver.yml``, else ``denver.yaml``, else ``denver.toml``.
 
@@ -547,14 +541,6 @@ def _config_file_in_dir(dir_path):
     return dir_path / CONFIG_NAME_YAML[0]
 
 
-def _import_target(entry, base_dir):
-    """Where an ``import:`` entry points -- a directory means its ``denver.yml``/``denver.toml`` -- or None if no file is there."""
-    target = (base_dir / entry).resolve()
-    if target.is_dir():
-        target = _config_file_in_dir(target)
-    return target if target.is_file() else None
-
-
 def resolve_import(entry, base_dir):
     """Resolve an ``import:`` entry to the denver.yml/denver.yaml/denver.toml path it refers to.
 
@@ -562,8 +548,10 @@ def resolve_import(entry, base_dir):
     if there's neither, is used -- see _config_file_in_dir) or directly at a config
     file, relative to the importing config's directory.
     """
-    target = _import_target(entry, base_dir)
-    if target is None:
+    target = (base_dir / entry).resolve()
+    if target.is_dir():
+        target = _config_file_in_dir(target)
+    if not target.is_file():
         die(f"import '{entry}' in {base_dir} does not resolve to a {_config_names_text()} file")
     return target
 
@@ -587,7 +575,9 @@ def load_config(config_path, _seen=None) -> dict:
     # for a layer only reached through a whole-file 'import:' chain.
     base_dir = config_path.parent
     raw = {key: _rebased_section_value(value, base_dir) for key, value in load_config_file(config_path).items()}
-    merged = _merged_imports(raw, base_dir, _seen)
+    merged: dict = {}
+    for entry in raw.get("import", []) or []:
+        merged = cast(dict, deep_merge(merged, load_config(resolve_import(entry, base_dir), _seen)))
 
     # 'runnable' marks one specific denver.toml (e.g. a shared base meant only
     # to be imported, never started directly) -- it must never leak from an
@@ -617,18 +607,11 @@ def _rebased_import_entry(entry, base_dir):
     if entry == OVERWRITE_MARKER:
         return entry
     marker = "!" if isinstance(entry, str) and entry.startswith("!") else ""
-    path, section = parse_section_import_ref(entry[len(marker) :])
+    ref = entry[len(marker) :]
+    path, sep, section = ref.rpartition(":")
+    path, section = (path, section) if sep else (ref, None)
     abs_path = str((base_dir / path).resolve())
     return f"{marker}{abs_path}:{section}" if section else f"{marker}{abs_path}"
-
-
-def _merged_imports(raw, base_dir, _seen) -> dict:
-    """Every 'import:' entry of ``raw``, loaded and merged in order -- the base its own keys overlay."""
-    merged: dict = {}
-    for entry in raw.get("import", []) or []:
-        imported_path = resolve_import(entry, base_dir)
-        merged = cast(dict, deep_merge(merged, load_config(imported_path, _seen)))
-    return merged
 
 
 def parse_config_override_spec(spec):
@@ -660,10 +643,12 @@ def _combine_config_override(current, op, value, path):
     """
     if op == "=" or current is _UNSET or current is None:
         return value
-    combined = _appended_config_value(current, value)
-    if combined is None:
-        die(f"--config: cannot += onto '{path}' ({current!r} += {value!r}): not a list, string or number")
-    return combined
+    if isinstance(current, list):
+        return current + _as_list(value)
+    if _both_are(current, value, (int, float)) or _both_are(current, value, str):
+        return current + value
+    die(f"--config: cannot += onto '{path}' ({current!r} += {value!r}): not a list, string or number")
+    return None
 
 
 def _as_list(value):
@@ -676,15 +661,6 @@ def _both_are(current, value, types):
     if isinstance(current, bool) or isinstance(value, bool):
         return False
     return isinstance(current, types) and isinstance(value, types)
-
-
-def _appended_config_value(current, value):
-    """``+=``'s result for a path that already has a value, or None if the two cannot be combined at all."""
-    if isinstance(current, list):
-        return current + _as_list(value)
-    if _both_are(current, value, (int, float)) or _both_are(current, value, str):
-        return current + value
-    return None
 
 
 def _coerce_cli_value(raw_value):
@@ -987,22 +963,6 @@ GENERIC_STAGE_KEYS = (
 )
 
 
-def validate_stage_section_keys(stage, section):
-    """Die on a key in ``section`` that isn't in the provider's own KEYS or a generic stage key.
-
-    Without this, a typo'd key (or one left behind after being renamed/
-    removed) is just silently ignored -- resolve_defaults() never reads it,
-    and nothing says so. Mirrors validate_top_level_keys, one level down.
-    """
-    allowed = set(type(stage).KEYS) | set(GENERIC_STAGE_KEYS)
-    unknown = sorted(set(section) - allowed)
-    if unknown:
-        die(
-            f"stage '{stage.stage}': unknown key(s) {_list_with_hints(unknown, allowed)} for provider "
-            f"'{stage.name}' -- known: {', '.join(sorted(type(stage).KEYS)) or '(none)'}."
-        )
-
-
 def resolve_stage_section(stage, raw_section, config, ctx):
     """Resolve one stage's *raw* section into its complete effective one.
 
@@ -1023,15 +983,32 @@ def resolve_stage_section(stage, raw_section, config, ctx):
     """
     from denver_providers.base import fill_unset
 
-    validate_stage_section_keys(stage, raw_section)
+    allowed_keys = set(type(stage).KEYS) | set(GENERIC_STAGE_KEYS)
+    unknown_keys = sorted(set(raw_section) - allowed_keys)
+    if unknown_keys:
+        die(
+            f"stage '{stage.stage}': unknown key(s) {_list_with_hints(unknown_keys, allowed_keys)} for provider "
+            f"'{stage.name}' -- known: {', '.join(sorted(type(stage).KEYS)) or '(none)'}."
+        )
     section = type(stage).resolve_defaults(ctx, raw_section, config)
     disabled = raw_section.get("disabled", False)
     if not isinstance(disabled, bool):
         die(f"stage '{stage.stage}': 'disabled:' must be true or false, got {disabled!r}")
     section["disabled"] = disabled
-    section["depends-on"] = _validated_depends_on(raw_section.get("depends-on"), stage.stage)
-    section["skip-on-success"] = _resolved_skip_scripts(ctx, stage.stage, raw_section, "skip-on-success")
-    section["skip-on-failure"] = _resolved_skip_scripts(ctx, stage.stage, raw_section, "skip-on-failure")
+
+    depends_on = raw_section.get("depends-on")
+    if depends_on is None:
+        depends_on = []
+    elif not isinstance(depends_on, list) or not all(isinstance(v, str) for v in depends_on):
+        die(f"stage '{stage.stage}': 'depends-on:' must be a list of stage ids, got {depends_on!r}")
+    section["depends-on"] = depends_on
+
+    for skip_key in ("skip-on-success", "skip-on-failure"):
+        scripts = raw_section.get(skip_key) or []
+        if not isinstance(scripts, list) or not all(isinstance(s, str) for s in scripts):
+            die(f"stage '{stage.stage}': '{skip_key}:' must be a list of script paths, got {scripts!r}")
+        section[skip_key] = [str(ctx.resolve_path(s)) for s in scripts]
+
     description = raw_section.get("description")
     if description is not None and (
         not isinstance(description, list) or not all(isinstance(line, str) for line in description)
@@ -1058,34 +1035,6 @@ def _validated_stage_env_map(mapping, stage_id, key):
     return dict(mapping)
 
 
-def _validated_depends_on(value, stage_id):
-    """One generic 'depends-on:' stage key, as a list of stage ids (``[]`` when unset).
-
-    Only shape-checked here; cross-stage validity -- every id declared, and
-    declared strictly *before* this stage in 'stages:' -- is checked once,
-    globally, right after this resolves (see _validate_depends_on, called
-    from resolve_provider_defaults).
-    """
-    if value is None:
-        return []
-    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
-        die(f"stage '{stage_id}': 'depends-on:' must be a list of stage ids, got {value!r}")
-    return value
-
-
-def _resolved_skip_scripts(ctx, stage_id, raw_section, key):
-    """One generic 'skip-on-success:'/'skip-on-failure:' list, resolved to absolute paths (empty when unset).
-
-    Resolved centrally like every other path (see Context.resolve_path) so
-    --show-config shows the real script; whether it actually exists is
-    checked at run time, right before it would run (_stage_skip_reason).
-    """
-    scripts = raw_section.get(key) or []
-    if not isinstance(scripts, list) or not all(isinstance(s, str) for s in scripts):
-        die(f"stage '{stage_id}': '{key}:' must be a list of script paths, got {scripts!r}")
-    return [str(ctx.resolve_path(s)) for s in scripts]
-
-
 def resolve_provider_defaults(config, ctx):
     """Bake every stage's provider defaults into ``config``, once, in 'stages:' order.
 
@@ -1107,32 +1056,20 @@ def resolve_provider_defaults(config, ctx):
         raw_section = config.get(stage_id) or {}
         ctx.raw_sections[stage_id] = copy.deepcopy(raw_section)
         config[stage_id] = resolve_stage_section(stage, raw_section, config, ctx)
-        _validate_depends_on(stage_id, config[stage_id]["depends-on"], seen, all_stage_ids)
+        for dep in config[stage_id]["depends-on"]:
+            if dep in seen:
+                continue
+            if dep not in all_stage_ids:
+                die(
+                    f"stage '{stage_id}': 'depends-on:' names unknown stage id {_with_hint(dep, all_stage_ids)} -- "
+                    f"not declared in 'stages:'."
+                )
+            die(
+                f"stage '{stage_id}': 'depends-on:' names '{dep}', declared at or after '{stage_id}' in 'stages:' -- "
+                "a stage may only depend on one declared earlier."
+            )
         seen.append(stage_id)
     return config
-
-
-def _validate_depends_on(stage_id, depends_on, seen, all_stage_ids):
-    """Die if 'depends-on:' names an id that isn't declared, or isn't declared strictly *before* ``stage_id``.
-
-    Checked eagerly here, in 'stages:' order (``seen`` is every id already
-    walked), the same as validate_stage_filters checks --until/--skip ids --
-    a typo or a forward/self-reference fails at startup rather than
-    surfacing as a wrong skip cascade once _compute_static_skip_reasons
-    walks the list assuming every dependency's reason is already decided.
-    """
-    for dep in depends_on:
-        if dep in seen:
-            continue
-        if dep not in all_stage_ids:
-            die(
-                f"stage '{stage_id}': 'depends-on:' names unknown stage id {_with_hint(dep, all_stage_ids)} -- "
-                f"not declared in 'stages:'."
-            )
-        die(
-            f"stage '{stage_id}': 'depends-on:' names '{dep}', declared at or after '{stage_id}' in 'stages:' -- "
-            "a stage may only depend on one declared earlier."
-        )
 
 
 # --------------------------------------------------------------------------- #
@@ -1286,25 +1223,6 @@ PERFORMANCE_FILE_NAME = "performance.jsonl"
 LIST_SCRIPTS = object()
 
 
-def _append_trace_event(path, event):
-    """Append one JSON-encoded ``event`` to ``path`` as its own line, in a single atomic write.
-
-    A plain os.write() to an O_APPEND-opened fd (not a buffered file object,
-    where Python may split one .write() call into several syscalls) is what
-    makes this atomic: POSIX guarantees a single write() under PIPE_BUF
-    (4096 bytes on Linux; one trace event is nowhere near that) either lands
-    whole or not at all, even with several processes appending to the same
-    file at once -- e.g. a docker-wrapped run's host and container processes
-    both recording stage timings concurrently.
-    """
-    line = (json.dumps(event) + "\n").encode()
-    fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
-    try:
-        os.write(fd, line)
-    finally:
-        os.close(fd)
-
-
 def record_stage_performance(ctx, provider, start_time, duration_seconds):
     """Append this stage's timing to <env_workdir>/performance.jsonl, one JSON Lines record per event.
 
@@ -1313,8 +1231,7 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
     https://ui.perfetto.dev, e.g.:
     ``jq -s '{traceEvents: ., displayTimeUnit: "ms"}' performance.jsonl``.
     One line per event (rather than one read-modify-write of a single JSON
-    document) is what makes concurrent appends safe -- see
-    _append_trace_event.
+    document) is what makes concurrent appends safe.
 
     Skipped entirely under --dry-run: no stage actually did its work, so the
     durations measured here are of printing commands, not of running them --
@@ -1326,10 +1243,20 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
     path = ctx.env_workdir / PERFORMANCE_FILE_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
 
+    def append_trace_event(event):
+        # a plain os.write() to an O_APPEND fd -- not a buffered file object
+        # -- is what keeps a single write() atomic under PIPE_BUF, even with
+        # several processes appending concurrently (docker host+container)
+        line = (json.dumps(event) + "\n").encode()
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o644)
+        try:
+            os.write(fd, line)
+        finally:
+            os.close(fd)
+
     pid = os.getpid()
     if not getattr(ctx, "_perf_process_announced", False):
-        _append_trace_event(
-            path,
+        append_trace_event(
             {
                 "ph": "M",
                 "name": "process_name",
@@ -1339,8 +1266,7 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
             },
         )
         ctx._perf_process_announced = True
-    _append_trace_event(
-        path,
+    append_trace_event(
         {
             "name": provider.stage,
             "cat": "stage",
@@ -1352,20 +1278,6 @@ def record_stage_performance(ctx, provider, start_time, duration_seconds):
             "args": {"provider": provider.name},
         },
     )
-
-
-def parse_section_import_ref(ref):
-    """Split a section-level import ``ref`` into (path, section).
-
-    A bare path (``../zephyr-docker``) stacks the current section's
-    same-named section from the referenced env. A ``path:section`` suffix
-    (``../zephyr-devshell/denver.toml:conan``) makes the source section
-    explicit -- pointing straight at a specific env's ``denver.toml`` and
-    picking a (possibly differently-named) section out of it -- instead of
-    always inferring both from the current key.
-    """
-    path, sep, section = ref.rpartition(":")
-    return (path, section) if sep else (ref, None)
 
 
 def expand_section_imports(config, env_dir):
@@ -1401,15 +1313,10 @@ def expand_section_imports(config, env_dir):
             continue
         merged, dirs, hooks = _stacked_section(value, key, env_dir)
         extra_dirs += dirs
-        _merge_hook_entries(extra_hook_entries, hooks)
+        for name, entries in hooks.items():
+            extra_hook_entries.setdefault(name, []).extend(entries)
         result[key] = deep_merge(merged, {k: v for k, v in value.items() if k != "import"})
     return result, extra_dirs, extra_hook_entries
-
-
-def _merge_hook_entries(hook_entries, more_hook_entries):
-    """Merge ``more_hook_entries`` (name -> [(base_dir, script), ...]) into ``hook_entries`` in place."""
-    for name, entries in more_hook_entries.items():
-        hook_entries.setdefault(name, []).extend(entries)
 
 
 def _stacked_section(value, key, env_dir):
@@ -1424,15 +1331,15 @@ def _stacked_section(value, key, env_dir):
     extra_dirs = []
     hook_entries = {}
     for ref in value["import"]:
-        path, section = parse_section_import_ref(ref)
+        path, sep, section = ref.rpartition(":")
+        path, section = (path, section) if sep else (ref, None)
         src_path = resolve_import(path, env_dir)
         src_config = load_config(src_path)
         merged = deep_merge(merged, src_config.get(section or key) or {})
         extra_dirs.append(src_path.parent)
-        _merge_hook_entries(
-            hook_entries,
-            {name: _own_hook_entries(src_config, src_path.parent, name) for name in src_config.get("hooks") or {}},
-        )
+        for name in src_config.get("hooks") or {}:
+            entries = _own_hook_entries(src_config, src_path.parent, name)
+            hook_entries.setdefault(name, []).extend(entries)
     return merged, extra_dirs, hook_entries
 
 
@@ -1495,17 +1402,13 @@ def _completion_wrapped_shell(cmd):
     if shell not in _COMPLETION_SHELLS:
         return cmd
 
-    setup = _completion_setup_snippet(shell)
-    extra_args = "".join(f" {shlex.quote(a)}" for a in cmd[1:])
-    return [binary, "-c", f"{setup}; exec {shlex.quote(binary)} -i{extra_args}"]
-
-
-def _completion_setup_snippet(shell):
-    """The shell-specific line wiring 'denver complete' up before exec -- see _completion_wrapped_shell."""
     launcher = " ".join(shlex.quote(part) for part in _denver_launcher())
     if shell == "fish":
-        return f"{launcher} complete fish 2>/dev/null | source"
-    return f'eval "$({launcher} complete {shell} 2>/dev/null)"'
+        setup = f"{launcher} complete fish 2>/dev/null | source"
+    else:
+        setup = f'eval "$({launcher} complete {shell} 2>/dev/null)"'
+    extra_args = "".join(f" {shlex.quote(a)}" for a in cmd[1:])
+    return [binary, "-c", f"{setup}; exec {shlex.quote(binary)} -i{extra_args}"]
 
 
 def resolve_command(config, forwarded, in_container=False):
@@ -3654,8 +3557,10 @@ def _readable_imports(config_path):
 
     targets = []
     for entry in raw.get("import", []) or []:
-        target = _import_target(entry, config_path.parent)
-        if target is None:
+        target = (config_path.parent / entry).resolve()
+        if target.is_dir():
+            target = _config_file_in_dir(target)
+        if not target.is_file():
             logger.warning(f"clean: import '{entry}' in {config_path.parent} points nowhere -- left alone")
             continue
         targets.append(target)
