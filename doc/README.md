@@ -41,6 +41,12 @@ This tree is denver's full reference
 
 - **[`providers/`](providers/)** — Details about all bundled providers
 
+## Architecture (arc42)
+
+- **[`arc42/`](arc42/index.md)** — why denver is built the way it is: goals,
+  constraints, building blocks, runtime view, decision records, risks.
+  Twelve chapters, [arc42](https://arc42.org)-structured.
+
 ## Contributing
 
 - **[`contributing/development.md`](contributing/development.md)** — the

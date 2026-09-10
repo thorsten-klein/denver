@@ -138,6 +138,34 @@ providers/git
 providers/custom
 ```
 
+## Architecture (arc42)
+
+Why denver is built the way it is: the problem, the constraints, the
+decisions, and what is known to be weak. Structured after
+[arc42](https://arc42.org).
+
+- [Overview and reading order](arc42/index.md)
+- [1. Introduction and Goals](arc42/01_introduction_and_goals/index.md)
+- [2. Architecture Constraints](arc42/02_architecture_constraints/index.md)
+- [3. Context and Scope](arc42/03_context_and_scope/index.md)
+- [4. Solution Strategy](arc42/04_solution_strategy/index.md)
+- [5. Building Block View](arc42/05_building_block_view/index.md)
+- [6. Runtime View](arc42/06_runtime_view/index.md)
+- [7. Deployment View](arc42/07_deployment_view/index.md)
+- [8. Cross-cutting Concepts](arc42/08_cross_cutting_concepts/index.md)
+- [9. Architecture Decisions](arc42/09_design_decisions/index.md)
+- [10. Quality Scenarios](arc42/10_quality_scenarios/index.md)
+- [11. Technical Risks](arc42/11_technical_risks/index.md)
+- [12. Glossary](arc42/12_glossary/index.md)
+
+```{toctree}
+:maxdepth: 1
+:caption: Architecture (arc42)
+:hidden:
+
+arc42/index
+```
+
 ## Contributing
 
 - [Development](contributing/development.md)
