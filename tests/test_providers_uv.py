@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from denver_errors import DenverError
 from denver_providers.uv import UvProvider
 
 
@@ -80,7 +81,7 @@ def test_fast_still_shows_progress_banner(make_context, run_recorder, which, cap
 def test_fast_dies_when_venv_missing(make_context, which):
     config = {"uv": {"requirements": ["requirements.txt"]}}
     ctx = make_context(config=config, fast=True)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx)
 
 
@@ -112,7 +113,7 @@ def test_setup_uv_missing_dies(make_context, which):
     which["uv"] = None
     config = {"uv": {}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx)
 
 
@@ -148,7 +149,7 @@ def test_ensure_python_in_container_mismatch_dies(make_context, run_recorder, wh
     )()
     config = {"uv": {"python": "3.12.3"}}
     ctx = make_context(config=config, in_container=True)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx)
 
 
@@ -207,7 +208,7 @@ def test_existing_venv_with_a_different_python_dies(make_context, run_recorder, 
     ctx = make_context(config=config)
     _write_pyvenv_cfg(ctx.venv_dir, "3.12.3")
     (ctx.venv_dir / "uv-checksums.txt").write_text("")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx)
     assert "is Python 3.12.3, but 'python: 3.11.14' is configured" in caplog.text
     assert "--force" in caplog.text
@@ -219,7 +220,7 @@ def test_a_patch_version_is_not_satisfied_by_another(make_context, run_recorder,
     ctx = make_context(config=config)
     _write_pyvenv_cfg(ctx.venv_dir, "3.12.4")
     (ctx.venv_dir / "uv-checksums.txt").write_text("")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx)
 
 
@@ -275,7 +276,7 @@ def test_two_stages_sharing_a_venv_must_agree_on_python(make_context, run_record
     }
     ctx = make_context(config=config)
     run_uv(config, ctx, stage="uv-a")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx, stage="uv-b")
     assert "'python: 3.11.14' is configured" in caplog.text
 
@@ -662,7 +663,7 @@ def test_lockfile_without_pyproject_dies(make_context, run_recorder, which):
     ctx = make_context(config=config)
     (ctx.env_dir / "py").mkdir()
     (ctx.env_dir / "py" / "uv.lock").write_text("version = 1\n")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx)
 
 
@@ -670,7 +671,7 @@ def test_lockfile_missing_dies(make_context, run_recorder, which):
     config = {"uv": {"lockfile": "py/uv.lock"}}
     ctx = make_context(config=config)
     make_project(ctx, lockfile=False)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx)
 
 
@@ -680,7 +681,7 @@ def test_lockfile_path_must_name_a_uv_lock_file(make_context, run_recorder, whic
     config = {"uv": {"lockfile": "py/frozen.lock"}}
     ctx = make_context(config=config)
     make_project(ctx)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_uv(config, ctx)
 
 

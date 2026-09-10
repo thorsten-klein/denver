@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 import denver_providers.context as ctxmod
+from denver_errors import DenverError
 from denver_providers.context import (
     banner,
     die,
@@ -102,7 +103,7 @@ def test_run_reports_an_unstartable_command_instead_of_raising(make_context, cap
     caplog.set_level("INFO")
     ctx = make_context()
     ctx.stage_id = "native-tools"
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.run(["/nonexistent/conan", "config", "home"])
     assert "stage 'native-tools': cannot run /nonexistent/conan config home" in caplog.text
 
@@ -112,7 +113,7 @@ def test_run_reports_an_unstartable_command_without_a_stage(make_context, caplog
     # tests) still reports the command rather than raising.
     caplog.set_level("INFO")
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.run(["/nonexistent/tool"])
     assert "cannot run /nonexistent/tool" in caplog.text
 
@@ -127,9 +128,9 @@ def test_skip_banner_hidden_at_quiet_level_2(make_context, capsys):
 
 def test_die(caplog):
     caplog.set_level("INFO")
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(DenverError) as exc:
         die("boom")
-    assert exc.value.code == 1
+    assert str(exc.value) == "boom"
     assert "boom" in caplog.text
 
 
@@ -248,7 +249,7 @@ def test_lock_no_wait_fails_instead_of_waiting(make_context, monkeypatch):
         raise OSError(errno.EAGAIN, "held")
 
     monkeypatch.setattr(ctxmod.fcntl, "flock", fake_flock)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.acquire_lock(wait=False)
 
 
@@ -313,7 +314,7 @@ def test_state_dir_dies_when_the_env_dir_is_read_only_and_not_overridden(tmp_pat
     env_dir.mkdir()
     env_dir.chmod(0o500)
     try:
-        with pytest.raises(SystemExit):
+        with pytest.raises(DenverError):
             ctxmod.state_dir_for(env_dir, env_dir / "denver.toml", env={})
     finally:
         env_dir.chmod(0o700)
@@ -586,7 +587,7 @@ def test_resolve_path_non_path_value_dies(make_context, caplog):
     # a wrong YAML type (a list where one path is expected) must give
     # denver's own message, not a raw pathlib TypeError
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.resolve_path(["conan/base_classes"])
     assert "expected a path in denver.toml" in caplog.text
 
@@ -834,7 +835,7 @@ def test_source_failure_dies(make_context):
     ctx = make_context()
     script = ctx.env_dir / "bad.sh"
     script.write_text("exit 3\n")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.source(script)
 
 
@@ -848,19 +849,19 @@ def test_exec_calls_execvpe(make_context, exec_recorder):
 
 def test_exec_empty_command_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.exec([])
 
 
 def test_exec_nul_byte_in_command_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.exec(["fish", "-c", "echo\0hi"])
 
 
 def test_exec_option_like_command_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.exec(["-c", "echo hi"])
 
 
@@ -869,7 +870,7 @@ def test_exec_unresolvable_command_dies(make_context, monkeypatch, exec_recorder
     import denver_providers.context as ctxmod
 
     monkeypatch.setattr(ctxmod.shutil, "which", lambda name, path=None: None)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.exec(["nosuchtool"])
     assert exec_recorder == {}
 
@@ -902,7 +903,7 @@ def test_exec_oserror_dies(make_context, monkeypatch):
     # resolvable, so exec() gets past the PATH lookup and as far as execvpe
     monkeypatch.setattr(ctxmod.shutil, "which", lambda name, path=None: f"/usr/bin/{name}")
     monkeypatch.setattr(ctxmod.os, "execvpe", boom)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         ctx.exec(["missing-binary"])
 
 

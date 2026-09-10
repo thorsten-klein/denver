@@ -3,6 +3,7 @@
 import pytest
 
 import denver_providers as providers
+from denver_errors import DenverError
 from denver_providers.base import Provider
 
 
@@ -41,7 +42,7 @@ def test_make_stage_explicit_provider_key():
 
 
 def test_make_stage_type_key_alone_dies():
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         providers.make_stage("uv", {"uv": {"type": "uv", "python": "3.9"}})
 
 
@@ -55,7 +56,7 @@ def test_make_stage_custom_id_with_provider():
 def test_make_stage_missing_provider_dies():
     # a bare id matching a registered provider name is NOT enough -- it must
     # be declared explicitly.
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         providers.make_stage("uv", {"uv": {"python": "3.9"}})
 
 
@@ -66,5 +67,5 @@ def test_make_stage_custom_provider():
 
 
 def test_make_stage_unknown_dies():
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         providers.make_stage("mystery", {"stages": ["mystery"], "mystery": {"provider": "mystery"}})

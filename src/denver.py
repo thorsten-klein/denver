@@ -60,9 +60,11 @@ import sys
 import time
 import types
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import cast
 
 import yaml
+
+from denver_errors import DenverError, die
 
 # denver.toml support is optional: tomllib is stdlib only from Python 3.11,
 # so on an older interpreter it just isn't there. denver.yml/denver.yaml is
@@ -129,23 +131,23 @@ def checkout_root():
     return None
 
 
-# Not imported from denver_providers.context: denver_providers is only imported lazily
-# (inside run_stages()) so --help/--version/etc. stay light. Same logger name,
-# so both feed the same "denver" logger regardless of which side configures
-# it first.
+# Same logger name as denver_errors.py's own die()/logger, and
+# denver_providers/context.py's own info()/warn(): getLogger("denver") always
+# returns the same underlying logger regardless of which side asks for it
+# first, so one basicConfig() here formats output for all three.
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger("denver")
 
 
 # --------------------------------------------------------------------------- #
 # Logging
+#
+# die()/DenverError themselves live in denver_errors.py, not here: denver.py
+# and denver_providers/ both need the exact same die() (so a failure anywhere
+# is caught the same way) and the exact same DenverError (so main() can catch
+# it regardless of which side raised it), without either module importing
+# the other -- see denver_errors.py's own module docstring.
 # --------------------------------------------------------------------------- #
-def die(message) -> NoReturn:
-    """Log ``message`` as an error and exit the process with status 1."""
-    logger.error(message)
-    sys.exit(1)
-
-
 def info(message):
     """Log ``message`` at info level (suppressed under --quiet)."""
     logger.info(message)
@@ -4272,13 +4274,25 @@ def main(argv=None):
     say something *more specific* about its own failing command should
     still catch it and ``die()`` with that (see
     ConanProvider._ensure_profile), and everything else lands here.
+
+    ``die()`` (144 call sites across denver.py and every provider) logs and
+    raises ``DenverError`` rather than exiting directly -- this is the one
+    place that's caught, so every one of those call sites, wherever it
+    actually fires, ends the CLI the exact same way: exit 1. The nested
+    try/except is what makes that catch also cover the two ``die()`` calls
+    right below -- an exception raised *inside* an ``except`` block is never
+    offered to a later ``except`` of the same ``try``, only to one further
+    out.
     """
     try:
-        _run_cli(argv)
-    except subprocess.CalledProcessError as exc:
-        die(_command_failure_message(exc))
-    except ConfigReadError as exc:
-        die(str(exc))
+        try:
+            _run_cli(argv)
+        except subprocess.CalledProcessError as exc:
+            die(_command_failure_message(exc))
+        except ConfigReadError as exc:
+            die(str(exc))
+    except DenverError:
+        sys.exit(1)
     return 0
 
 
@@ -4289,10 +4303,11 @@ def _complete_candidates(words):
     the word currently being completed (see _completion_script's shell
     functions -- bash's forwards ``${COMP_WORDS[@]:1:COMP_CWORD}``,
     zsh's and fish's the equivalent slice in their own words). Bare-except
-    on purpose (even SystemExit, hence not just ``Exception``): a completion
-    request must never dump a traceback or die() message into the user's
-    terminal mid-keystroke, and returning fewer candidates than ideal is a
-    fine failure mode here.
+    on purpose, broader than ``Exception`` (a die() failure alone would
+    already be caught by that -- die() raises ``DenverError``, an ordinary
+    Exception): a completion request must never dump a traceback into the
+    user's terminal mid-keystroke, whatever raises it, and returning fewer
+    candidates than ideal is a fine failure mode here.
     """
     try:
         return _complete_candidates_unsafe(words)

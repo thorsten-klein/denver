@@ -12,6 +12,7 @@ import yaml
 
 import denver
 import denver_providers as providers
+from denver_errors import DenverError
 from denver_providers.base import Provider
 
 
@@ -103,7 +104,7 @@ def test_collect_import_dirs_circular_dies(tmp_path):
         """)
     )
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.collect_import_dirs(a / "denver.yml")
 
 
@@ -140,7 +141,7 @@ def test_run_hook_list_of_scripts(make_context):
 def test_run_hook_missing_script_dies(make_context):
     ctx = make_context()
     cfg_path = _write_denver_yml(ctx.env_dir, 'hooks:\n  pre-uv: nope.sh\n')
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_hook(ctx, cfg_path, "pre-uv")
 
 
@@ -288,7 +289,7 @@ def test_collect_hook_entries_circular_import_dies(tmp_path):
         - ../a
         """)
     )
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.collect_hook_entries(a_dir / "denver.yml", "env")
 
 
@@ -367,7 +368,7 @@ def test_expand_section_imports_no_imports_passthrough(tmp_path):
 # ---- default_command --------------------------------------------------------#
 def test_default_command_non_tty_dies(monkeypatch):
     monkeypatch.setattr(denver.sys.stdin, "isatty", lambda: False)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.default_command({})
 
 
@@ -698,7 +699,7 @@ def _env(tmp_path, config):
 
 def test_run_stages_no_stages_dies(tmp_path):
     env_dir, cfg_path = _env(tmp_path, {})
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, {}, cfg_path, [])
 
 
@@ -822,14 +823,14 @@ def test_run_stages_disabled_stage_env_never_applies(tmp_path, fake_providers, e
 def test_stage_env_must_be_a_string_mapping(tmp_path, fake_providers):
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "env": ["FOO=bar"]}}
     env_dir, cfg_path = _env(tmp_path, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
 
 def test_unknown_stage_key_typo_hints_at_the_close_key(tmp_path, fake_providers, caplog):
     config = {"stages": ["fakewrap"], "fakewrap": {"provider": "fakewrap", "marer": "x"}}  # 'marker' misspelled
     env_dir, cfg_path = _env(tmp_path, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
     assert "did you mean 'marker'?" in caplog.text
 
@@ -1023,7 +1024,7 @@ def test_run_stages_shows_earlier_skips_before_a_stage_that_dies(tmp_path, exec_
             "boomer": {"provider": "fakedies"},
         }
         options = denver.RunOptions(skip_stages=["skipped-one"])
-        with pytest.raises(SystemExit):
+        with pytest.raises(DenverError):
             denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"], options=options)
     finally:
         del providers_module.PROVIDERS["fakedies"]
@@ -1215,7 +1216,7 @@ def test_run_stages_skip_on_success_missing_script_dies(tmp_path, fake_providers
         "stages": ["fakesetup"],
         "fakesetup": {"provider": "fakesetup", "skip-on-success": ["nope.sh"]},
     }
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
 
@@ -1225,7 +1226,7 @@ def test_run_stages_skip_on_success_not_a_list_of_strings_dies(tmp_path, fake_pr
         "stages": ["fakesetup"],
         "fakesetup": {"provider": "fakesetup", "skip-on-success": "not-a-list"},
     }
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
 
@@ -1378,7 +1379,7 @@ def test_run_stages_until_and_skip_filters_out_everything_dies(tmp_path, fake_pr
     env_dir, cfg_path = _env(tmp_path, _multi_stage_config())
     config = _multi_stage_config()
     options = denver.RunOptions(until_stage="fakewrap", skip_stages=["fakewrap"])
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, [], options=options)
 
 
@@ -1747,7 +1748,7 @@ def test_run_named_scripts_wrapper_relocation_warns_when_neither_side_has_entrie
 def test_run_named_scripts_missing_file_dies(tmp_path, fake_providers, run_recorder, name):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "scripts": {name: ["nope.sh"]}}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_named_scripts(env_dir, config, cfg_path, [name])
 
 
@@ -1755,7 +1756,7 @@ def test_run_named_scripts_missing_file_dies(tmp_path, fake_providers, run_recor
 def test_run_named_scripts_non_list_dies(tmp_path, fake_providers, run_recorder, name):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "scripts": {name: "a.sh"}}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_named_scripts(env_dir, config, cfg_path, [name])
 
 
@@ -1962,14 +1963,14 @@ def test_run_named_scripts_relocation_skipped_when_no_name_needs_it(tmp_path, fa
 def test_depends_on_not_a_list_of_strings_dies(tmp_path, fake_providers, exec_recorder):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "depends-on": "nope"}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
 
 def test_depends_on_unknown_stage_id_dies(tmp_path, fake_providers, exec_recorder):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["fakesetup"], "fakesetup": {"provider": "fakesetup", "depends-on": ["nope"]}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
 
@@ -1980,7 +1981,7 @@ def test_depends_on_unknown_stage_id_typo_hints_at_the_close_stage_id(tmp_path, 
         "setuop": {"provider": "fakesetup"},
         "fakesetup": {"provider": "fakesetup", "depends-on": ["setup"]},
     }
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
     assert "did you mean 'setuop'?" in caplog.text
 
@@ -1993,14 +1994,14 @@ def test_depends_on_forward_reference_dies(tmp_path, fake_providers, exec_record
         "a": {"provider": "fakesetup", "depends-on": ["b"]},
         "b": {"provider": "fakesetup"},
     }
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
 
 def test_depends_on_self_reference_dies(tmp_path, fake_providers, exec_recorder):
     env_dir, cfg_path = _env(tmp_path, {})
     config = {"stages": ["a"], "a": {"provider": "fakesetup", "depends-on": ["a"]}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.run_stages(env_dir, config, cfg_path, ["echo", "hi"])
 
 

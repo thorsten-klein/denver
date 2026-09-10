@@ -13,6 +13,7 @@ from urllib.request import Request
 import pytest
 
 import denver_providers.download as download_provider
+from denver_errors import DenverError
 from denver_providers.download import DownloadProvider
 
 URL = "https://example.invalid/tools/tool-1.0.zip"
@@ -168,62 +169,62 @@ def test_url_is_interpolated_before_the_file_name_is_derived(make_context):
 # ---- config validation ------------------------------------------------------#
 def test_packages_not_a_list_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         DownloadProvider.resolve_defaults(ctx, {"packages": "tool"}, {})
 
 
 def test_package_entry_not_a_mapping_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, "tool")
 
 
 def test_unknown_package_key_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, {"name": "tool", "url": URL, "unpackdir": "x"})
 
 
 @pytest.mark.parametrize("entry", [{"url": URL}, {"name": "  ", "url": URL}, {"name": "tool"}, {"name": 7, "url": URL}])
 def test_missing_or_blank_required_key_dies(make_context, entry):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, entry)
 
 
 def test_optional_key_of_the_wrong_type_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, {"name": "tool", "url": URL, "unpack-cmd": ["tar", "-xf"]})
 
 
 def test_unknown_method_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, {"name": "tool", "url": URL, "method": "PUT"})
 
 
 def test_data_without_method_post_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, {"name": "tool", "url": URL, "data": "accept=yes"})
 
 
 def test_env_map_not_a_mapping_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, {"name": "tool", "url": URL, "env-prepend": ["PATH=."]})
 
 
 def test_env_map_value_not_a_string_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, {"name": "tool", "url": URL, "env-append": {"PATH": 1}})
 
 
 def test_duplicate_package_names_die(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         DownloadProvider.resolve_defaults(
             ctx, {"packages": [{"name": "tool", "url": URL}, {"name": "tool", "url": URL}]}, {}
         )
@@ -231,14 +232,14 @@ def test_duplicate_package_names_die(make_context):
 
 def test_url_without_a_file_name_dies(make_context):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         resolved_package(ctx, {"name": "tool", "url": "https://example.invalid/"})
 
 
 def test_stage_without_packages_dies(make_context):
     config = config_for([])
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
 
@@ -400,7 +401,7 @@ def test_a_download_failing_its_checksum_dies_and_leaves_nothing(make_context, f
     config = config_for([{"name": "tool", "url": URL, "sha256sum": "0" * 64}])
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert not (ctx.env_workdir / "downloads" / "tool-1.0.zip").exists()
@@ -423,7 +424,7 @@ def test_a_failed_transfer_dies_and_leaves_no_part_file(make_context, fake_urlop
     config = config_for([{"name": "tool", "url": URL}])
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert not (ctx.env_workdir / "downloads" / "tool-1.0.zip.part").exists()
@@ -433,7 +434,7 @@ def test_a_non_http_url_dies(make_context, fake_urlopen):
     config = config_for([{"name": "tool", "url": "file:///etc/passwd.zip"}])
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert fake_urlopen.calls == []
@@ -487,7 +488,7 @@ def test_every_source_failing_dies_and_names_each_one(make_context, fake_urlopen
     config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR]}])
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert fake_urlopen.calls == [URL, MIRROR]
@@ -516,7 +517,7 @@ def test_every_source_failing_its_checksum_dies_and_names_each_one(make_context,
     config = config_for([{"name": "tool", "url": URL, "mirrors": [MIRROR], "sha256sum": "0" * 64}])
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert fake_urlopen.calls == [URL, MIRROR]
@@ -543,7 +544,7 @@ def test_a_non_http_mirror_dies_before_any_network_call(make_context, fake_urlop
     config = config_for([{"name": "tool", "url": URL, "mirrors": ["file:///etc/passwd.zip"]}])
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert fake_urlopen.calls == []
@@ -572,7 +573,7 @@ def test_dry_run_reports_only_the_primary_url(make_context, fake_urlopen, capsys
 )
 def test_a_broken_mirrors_entry_dies_while_the_config_resolves(make_context, mirrors):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         DownloadProvider.resolve_defaults(ctx, {"packages": [{"name": "tool", "url": URL, "mirrors": mirrors}]}, {})
 
 
@@ -710,7 +711,7 @@ def test_fast_without_an_unpacked_package_dies(make_context, fake_urlopen):
     config = config_for([{"name": "tool", "url": URL}])
     ctx = make_context(config=config, fast=True)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert fake_urlopen.calls == []
@@ -880,7 +881,7 @@ def test_an_unset_credential_variable_dies(make_context, fake_opener):
     )
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
 
@@ -889,7 +890,7 @@ def test_a_401_names_the_auth_section(make_context, fake_urlopen, caplog):
     config = config_for([{"name": "tool", "url": URL}])
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert "download-auth" in caplog.text
@@ -903,7 +904,7 @@ def test_a_401_on_a_configured_host_says_it_was_rejected(make_context, fake_open
     )
     ctx = make_context(config=config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_download(config, ctx)
 
     assert "was sent and rejected" in caplog.text
@@ -928,7 +929,7 @@ def test_a_401_on_a_configured_host_says_it_was_rejected(make_context, fake_open
 )
 def test_a_broken_auth_entry_dies_while_the_config_resolves(make_context, auth):
     ctx = make_context()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         DownloadProvider.resolve_defaults(ctx, {"packages": [{"name": "tool", "url": URL}]}, {"download-auth": auth})
 
 

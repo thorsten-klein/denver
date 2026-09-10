@@ -4,6 +4,7 @@ import hashlib
 
 import pytest
 
+from denver_errors import DenverError
 from denver_providers.conan import ConanProvider
 
 
@@ -107,7 +108,7 @@ def test_fast_dies_when_buildenv_missing(make_context, which):
     config = {"conan": {}}
     ctx = make_context(config=config, fast=True)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -117,7 +118,7 @@ def test_conan_missing_dies(make_context, which):
     config = {"conan": {}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -174,7 +175,7 @@ def test_config_home_failure_dies_with_conans_own_message(make_context, run_reco
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
     assert "unknown conf 'tools.bogus'" in caplog.text
@@ -190,7 +191,7 @@ def test_config_home_failure_names_a_configured_conan_home(make_context, run_rec
     ctx.env["CONAN_HOME"] = str(tmp_path / "conanhome")
     _ensure_default_conanfile(ctx, config)
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
     assert f"CONAN_HOME={tmp_path / 'conanhome'}" in caplog.text
@@ -245,7 +246,7 @@ def test_base_classes_string_dies(make_context, which):
     ctx = make_context(config=config)
     (ctx.env_dir / "conan" / "base_classes").mkdir(parents=True)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -255,7 +256,7 @@ def test_base_classes_missing_dir_dies(make_context, which, tmp_path):
     config = {"conan": {"base-classes": [str(tmp_path / "does-not-exist")]}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -344,7 +345,7 @@ def test_catalog_without_recipe_dirs_dies(make_context, which):
     config = {"conan": {}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config, {"catalog": "conan/catalog.yml"})
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -355,7 +356,7 @@ def test_catalog_list_dies(make_context, which):
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
     _ensure_default_conanfile(ctx, config, {"dirs": ["conanA"], "catalog": ["conan/catalog.yml"]})
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -364,7 +365,7 @@ def test_unit_recipes_exporter_missing_dies(make_context, which):
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
     _ensure_default_conanfile(ctx, config, {"dirs": ["conanA"], "export-tool": "no-such-exporter.py"})
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -429,7 +430,7 @@ def test_recipe_dir_missing_dies(make_context, run_recorder, which, tmp_path):
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config, {"dirs": [str(tmp_path / "does-not-exist")]})
 
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -464,7 +465,7 @@ def test_conanfile_list_dies(make_context, which):
     ctx = make_context(config=config)
     (ctx.env_dir / "conan").mkdir(parents=True)
     (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -475,7 +476,7 @@ def test_conanfile_not_a_string_dies(make_context, which):
     ctx = make_context(config=config)
     (ctx.env_dir / "conan").mkdir(parents=True)
     (ctx.env_dir / "conan" / "conanfile.py").write_text("x\n")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -485,7 +486,7 @@ def test_recipes_entry_with_unknown_key_dies(make_context, which):
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -496,7 +497,7 @@ def test_recipes_entry_not_a_mapping_dies(make_context, which):
     ctx = make_context(config=config)
     (ctx.env_dir / "conanA").mkdir(parents=True)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -528,7 +529,7 @@ def test_conanfile_missing_dies(make_context, run_recorder, which):
     default_profile_ok(run_recorder)
     config = {"conan": {"conanfile": "conan/conanfile.py"}}
     ctx = make_context(config=config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -592,7 +593,7 @@ def test_deployers_bare_string_dies(make_context, which):
     config = {"conan": {"deployers": "deploy.py"}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -600,7 +601,7 @@ def test_deployers_missing_script_dies(make_context, which):
     config = {"conan": {"deployers": ["no-such-deployer.py"]}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -841,7 +842,7 @@ def test_config_dir_missing_dies(make_context, which):
     config = {"conan": {"config": ["nope"]}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 
@@ -849,7 +850,7 @@ def test_config_entry_not_a_directory_dies(make_context, which):
     config = {"conan": {"config": ["conan/conanfile.py"]}}
     ctx = make_context(config=config)
     _ensure_default_conanfile(ctx, config)
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         run_conan(config, ctx)
 
 

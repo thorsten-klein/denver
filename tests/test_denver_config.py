@@ -5,6 +5,7 @@ import textwrap
 import pytest
 
 import denver
+from denver_errors import DenverError
 
 requires_tomllib = pytest.mark.skipif(denver.tomllib is None, reason="tomllib is stdlib only from Python 3.11")
 
@@ -151,7 +152,7 @@ def test_deep_merge_same_string_value_no_conflict():
 
 
 def test_deep_merge_conflicting_strings_dies():
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.deep_merge("x", "y")
 
 
@@ -216,7 +217,7 @@ def test_resolve_import_direct_file(tmp_path):
 def test_resolve_import_missing_dies(tmp_path):
     base_dir = tmp_path / "env"
     base_dir.mkdir()
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.resolve_import("../nope", base_dir)
 
 
@@ -437,7 +438,7 @@ def test_load_config_conflicting_string_dies(tmp_path):
         command: bash
         """)
     )
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.load_config(env_dir / "denver.yml")
 
 
@@ -481,7 +482,7 @@ def test_load_config_circular_import_dies(tmp_path):
         - ../a
         """)
     )
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.load_config(a_dir / "denver.yml")
 
 
@@ -506,7 +507,7 @@ def test_validate_top_level_keys_known_keys_ok():
 
 def test_validate_top_level_keys_unknown_section_dies():
     config = {"stages": ["uv"], "uv": {}, "typo-section": {}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_top_level_keys(config)
 
 
@@ -523,7 +524,7 @@ def test_validate_top_level_keys_extensions_ok():
 def test_validate_top_level_keys_typo_hints_at_the_close_key(caplog):
     # 'stages' itself misspelled
     config = {"stagse": ["uv"], "uv": {}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_top_level_keys(config)
     assert "did you mean 'stages'?" in caplog.text
 
@@ -532,7 +533,7 @@ def test_validate_top_level_keys_typo_hints_at_the_close_stage_id(caplog):
     # 'uv' declared correctly in 'stages:', but its own section is misspelled
     # as 'vu' -- a stray top-level key with nowhere else to belong.
     config = {"stages": ["uv"], "vu": {}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_top_level_keys(config)
     assert "did you mean 'uv'?" in caplog.text
 
@@ -585,7 +586,7 @@ def test_parse_version_spec_multiple_specifiers():
 
 @pytest.mark.parametrize("spec", ["", "~=1.0.3", ">=abc", ">=1.0.3, ", ">= 1.0.3 extra"])
 def test_parse_version_spec_invalid_dies(spec):
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.parse_version_spec(spec)
 
 
@@ -603,13 +604,13 @@ def test_validate_denver_version_satisfied(monkeypatch, spec):
 @pytest.mark.parametrize("spec", [">=1.0.4", "1.0.4", ">=1.0.3, <1.0.3", "==1.0.2", "!=1.0.3"])
 def test_validate_denver_version_unsatisfied_dies(monkeypatch, spec):
     monkeypatch.setattr(denver, "package_version", lambda: "1.0.3")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_denver_version({"denver-version": spec})
 
 
 def test_validate_denver_version_message_names_both_versions(monkeypatch, caplog):
     monkeypatch.setattr(denver, "package_version", lambda: "1.0.3")
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_denver_version({"denver-version": ">=1.0.4"})
     assert ">=1.0.4" in caplog.text
     assert "1.0.3" in caplog.text
@@ -642,12 +643,12 @@ def test_parse_config_override_spec_append():
 
 
 def test_parse_config_override_spec_no_operator_dies():
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.parse_config_override_spec("uv.python")
 
 
 def test_parse_config_override_spec_empty_path_dies():
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.parse_config_override_spec("=3.12.3")
 
 
@@ -706,12 +707,12 @@ def test_apply_config_override_plus_equals_adds_numbers():
 
 
 def test_apply_config_override_plus_equals_incompatible_types_dies():
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.apply_config_override({"uv": {"python": "3.9"}}, "uv.python+=1")
 
 
 def test_apply_config_override_plus_equals_onto_bool_dies():
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.apply_config_override({"flag": True}, "flag+=1")
 
 
@@ -733,13 +734,13 @@ def test_validate_stage_filters_no_filters_ok():
 
 def test_validate_stage_filters_unknown_until_dies():
     config = {"stages": ["uv"]}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_stage_filters(config, "typo", [])
 
 
 def test_validate_stage_filters_unknown_skip_dies():
     config = {"stages": ["uv"]}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_stage_filters(config, None, ["typo"])
 
 
@@ -747,14 +748,14 @@ def test_validate_stage_filters_unknown_lists_available_as_ordered_bullets(caplo
     # deliberately not alphabetical -- the message must preserve 'stages:'
     # declaration order, not sort it
     config = {"stages": ["zephyr", "conan", "uv"]}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_stage_filters(config, None, ["typo"])
     assert "  - zephyr\n  - conan\n  - uv" in caplog.text
 
 
 def test_validate_stage_filters_unknown_typo_hints_at_the_close_stage_id(caplog):
     config = {"stages": ["uv", "conan"]}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_stage_filters(config, "conna", [])  # 'conan' misspelled
     assert "did you mean 'conan'?" in caplog.text
 
@@ -771,13 +772,13 @@ def test_validate_hooks_keys_unset_ok():
 
 def test_validate_hooks_keys_not_a_mapping_dies():
     config = {"stages": ["uv"], "hooks": ["pre-uv"]}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_hooks_keys(config)
 
 
 def test_validate_hooks_keys_unknown_name_dies():
     config = {"stages": ["uv"], "hooks": {"typo": "a.sh"}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_hooks_keys(config)
 
 
@@ -785,7 +786,7 @@ def test_validate_hooks_keys_typo_hints_at_the_close_name(caplog):
     # 'pre-uv' misspelled -- this is exactly what run_hook() silently
     # skipped before validate_hooks_keys existed.
     config = {"stages": ["uv"], "hooks": {"per-uv": "a.sh"}}
-    with pytest.raises(SystemExit):
+    with pytest.raises(DenverError):
         denver.validate_hooks_keys(config)
     assert "did you mean 'pre-uv'?" in caplog.text
 

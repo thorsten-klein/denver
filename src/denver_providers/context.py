@@ -21,7 +21,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import NoReturn
+
+from denver_errors import die
 
 # Every line a --dry-run emits starts with '[dry-run ', so the whole preview
 # can be grepped/filtered out of a terminal session in one go (e.g. `grep
@@ -247,12 +248,6 @@ def dry_run_legend():
         f"{_dry_tag('!')}  note about what this preview cannot show",
         file=sys.stderr,
     )
-
-
-def die(message) -> NoReturn:
-    """Log ``message`` as an error and exit the process with status 1."""
-    logger.error(message)
-    sys.exit(1)
 
 
 # --------------------------------------------------------------------------- #
