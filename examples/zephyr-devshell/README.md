@@ -123,5 +123,5 @@ installs has to be importable by the interpreter stage 3 set up.
 
 - [`../zephyr-devshell-4.3.1`](../zephyr-devshell-4.3.1) — what a version env
   built on this actually has to say
-- [`doc/configuration/denver-toml.md`](../../doc/configuration/denver-toml.md) — the `import:` chain,
+- [`doc/configuration/config-file.md`](../../doc/configuration/config-file.md) — the `import:` chain,
   merge rules, and conflicting-value resolution with `!`

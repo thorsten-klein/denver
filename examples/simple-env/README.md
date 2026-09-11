@@ -78,5 +78,5 @@ the `Examples` workflow.
 
 - [`doc/providers/custom.md`](../../doc/providers/custom.md) — the full
   `custom` key reference (`cmd`, `source`, `launcher`)
-- [`doc/configuration/denver-toml.md`](../../doc/configuration/denver-toml.md) — `hooks:`, the global
+- [`doc/configuration/config-file.md`](../../doc/configuration/config-file.md) — `hooks:`, the global
   counterpart to a stage's own `source:`
