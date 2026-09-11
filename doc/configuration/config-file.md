@@ -35,7 +35,7 @@ the schema is the same either way — only the syntax differs.
 
 An *environment* is a `denver.toml`; it declares an ordered list of *stages*
 under `stages:`; each stage names a `provider:` type (`uv`, `conan`,
-`zephyr`, `docker`, `download`, `git`, `custom`) plus some provider-specific keys in a
+`zephyr`, `docker`, `download`, `git`, `nix`, `custom`) plus some provider-specific keys in a
 top-level section of the stage's own name.
 
 A provider is a generic, reusable engine — all project specifics come from
@@ -96,7 +96,7 @@ see "Fail loud" in [`philosophy.md`](../concepts/philosophy.md)).
   below.
 - **`extensions`** — own, project-local `Provider` subclasses to register
   alongside the built-ins (`uv`, `conan`, `zephyr`, `docker`, `download`, `git`,
-  `custom`), no
+  `nix`, `custom`), no
   denver fork required. See "Extension providers" below.
 - **`denver-custom-args`** — command-line flags of this environment's own, each one
   forwarded to argparse's `add_argument`. See "Environment-specific CLI
@@ -157,7 +157,7 @@ same conclusion: that denver is too old for this `denver.toml`.
 These keys may appear in *any* stage's section, whatever its provider:
 
 - **`provider`** (**required**) — which provider engine runs this stage:
-  `uv`, `conan`, `zephyr`, `docker`, `download`, `git` or `custom`.
+  `uv`, `conan`, `zephyr`, `docker`, `download`, `git`, `nix` or `custom`.
 - **`description`** — free text (a list of strings) with whatever notes are
   useful to whoever reads the config: what this stage is for, why it's
   configured this way. denver never reads it; it is only surfaced in
@@ -433,7 +433,7 @@ that must not run on every start.
 ## Extension providers
 
 The built-in providers (`uv`, `conan`, `zephyr`, `docker`, `download`, `git`,
-`custom`) cover
+`nix`, `custom`) cover
 the common cases, but a project may need its own — driving an internal
 build tool or deploy step with the same `resolve_defaults`/`setup`/`wrap`
 lifecycle a built-in provider gets, rather than squeezing it into a single
