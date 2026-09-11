@@ -4089,10 +4089,17 @@ def _complete_clean_candidates(rest, cur):
 
     No flag of 'clean' takes a value, so no token in ``rest`` can have been
     consumed as one and the first non-flag token is the <env> positional.
+
+    Like _complete_env_or_flag, offers nothing once <env> is resolved but ``cur``
+    is still empty -- _CLEAN_FLAGS mixes single- and double-dash spellings ('-y'
+    alongside '--yes'), so a real shell would otherwise insert their only shared
+    prefix, a lone '-', on the very first <TAB>.
     """
     env_value = _first_positional(rest, [False] * len(rest))
     if env_value is None and not cur.startswith("-"):
         return _completion_path_candidates(cur)
+    if env_value is not None and cur == "":
+        return []
     return _matching(_CLEAN_FLAGS, cur)
 
 
@@ -4118,12 +4125,17 @@ def _complete_run_candidates(rest, cur):
 def _complete_env_or_flag(env_value, cur):
     """<env> path completions, or denver's own (and this env's declared) run flags, depending on ``cur``.
 
-    Once <env> is resolved, a flag is the only thing that can come next -- so flags
-    are offered there even before ``cur`` starts with '-' (an empty ``cur`` then
-    matches all of them), rather than only once the user's typed the dash themselves.
+    Once <env> is resolved, a flag is the only thing that can come next -- but with
+    ``cur`` still empty (nothing typed after <env> yet), that's *every* flag, and
+    _RUN_FLAGS mixes single- and double-dash spellings ('-h' alongside '--help'):
+    their only shared prefix is '-', so a real shell inserts that lone '-' on a
+    single <TAB> instead of showing the list. Better to offer nothing until the
+    user's typed the dash themselves -- '-' or '--' still gets the full list.
     """
     if env_value is None and not cur.startswith("-"):
         return _completion_path_candidates(cur)
+    if env_value is not None and cur == "":
+        return []
     return _matching(_RUN_FLAGS + _completion_declared_flags(env_value), cur)
 
 

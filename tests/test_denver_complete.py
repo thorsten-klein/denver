@@ -868,15 +868,43 @@ def test_dunder_complete_describe_swallows_a_lookup_exception_and_still_returns_
     assert out == "--dry-run\n"  # bare -- no tab, since the lookup itself blew up
 
 
-# ---- 'denver __complete run <env> ' -- flags offered before typing '-' ----- #
-def test_dunder_complete_offers_flags_right_after_env_even_before_a_dash(tmp_path, capsys):
+# ---- 'denver __complete run <env> ' -- nothing offered before typing '-' --- #
+def test_dunder_complete_offers_nothing_right_after_env_before_a_dash(tmp_path, capsys):
+    # Regression test: offering every run flag here used to be deliberate (see git
+    # history), but since _RUN_FLAGS mixes single- and double-dash spellings
+    # ('-h' alongside '--help'), their only shared prefix is '-' -- so bash, on a
+    # single <TAB> with the word-so-far empty, silently inserts that lone '-'
+    # instead of showing the list. That's "denver run <env> <TAB>" typing a stray
+    # '-' for the user. Nothing should be offered until they type the dash
+    # themselves.
     env_dir = tmp_path / "e"
     env_dir.mkdir()
     (env_dir / "denver.yml").write_text('stages: []\n')
 
     assert denver.main(["__complete", "run", str(env_dir), ""]) == 0
+    assert capsys.readouterr().out == ""
+
+    # typing the dash still gets the full list, unaffected.
+    assert denver.main(["__complete", "run", str(env_dir), "-"]) == 0
     out = set(capsys.readouterr().out.splitlines())
     assert {"--scripts", "--show-config", "-c", "--config"} <= out
+
+
+# ---- 'denver __complete clean <env> ' -- nothing offered before typing '-' - #
+def test_dunder_complete_clean_offers_nothing_right_after_env_before_a_dash(tmp_path, capsys):
+    # Same bug/fix as run's equivalent test above: _CLEAN_FLAGS also mixes
+    # single- and double-dash spellings ('-y' alongside '--yes'), so an empty
+    # ``cur`` here must not dump the whole list either.
+    env_dir = tmp_path / "e"
+    env_dir.mkdir()
+    (env_dir / "denver.yml").write_text('stages: []\n')
+
+    assert denver.main(["__complete", "clean", str(env_dir), ""]) == 0
+    assert capsys.readouterr().out == ""
+
+    assert denver.main(["__complete", "clean", str(env_dir), "-"]) == 0
+    out = set(capsys.readouterr().out.splitlines())
+    assert {"--dry-run", "-y", "--yes", "--all"} <= out
 
 
 # ---- 'denver __complete run <env> <extra positional>' -- nothing to offer -- #
