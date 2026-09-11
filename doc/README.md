@@ -33,7 +33,7 @@ This tree is denver's full reference
 
 ## Configuration
 
-- **[`configuration/denver-toml.md`](configuration/denver-toml.md)** —
+- **[`configuration/config-file.md`](configuration/config-file.md)** —
   Explains the complete config schema (`denver.yml`, denver's default, or
   `denver.toml`). This is the page to read before writing your own.
 

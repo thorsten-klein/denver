@@ -86,14 +86,14 @@ The complete config schema reference (`denver.yml`, denver's default, or
 chains merge, and the mechanisms behind layering, hooks, overrides and
 fingerprinting.
 
-- [denver.toml](configuration/denver-toml.md)
+- [Configuration](configuration/config-file.md)
 
 ```{toctree}
 :maxdepth: 1
 :caption: Configuration
 :hidden:
 
-configuration/denver-toml
+configuration/config-file
 ```
 
 ## Providers
@@ -114,7 +114,7 @@ notes on the patterns it supports and how it behaves under
 | [`custom`](providers/custom.md) | Escape hatch: an arbitrary command, sourced script or launcher |
 
 A project can also register its own provider, without a denver fork — see
-"Extension providers" in [Configuration](configuration/denver-toml.md).
+"Extension providers" in [Configuration](configuration/config-file.md).
 
 - [uv](providers/uv.md)
 - [conan](providers/conan.md)

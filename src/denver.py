@@ -748,7 +748,7 @@ def validate_top_level_keys(config):
 
 
 # the denver.toml schema version this denver understands; bump together with
-# an actual breaking change to the schema (doc/configuration/denver-toml.md
+# an actual breaking change to the schema (doc/configuration/config-file.md
 # and each provider's doc/providers/*.md page are the schema's documentation).
 SUPPORTED_CONFIG_VERSION = "1.0"
 
@@ -2270,7 +2270,7 @@ def _prepare_context(env_dir, config, config_path, *, no_wait, env_vars=None, **
     even read, so without this second application 'env:' would silently win
     over an explicit -e of the same name. -e is meant to always have the
     final word, the same way '-c' always wins over 'import:'/'-cf' (see
-    doc/configuration/denver-toml.md).
+    doc/configuration/config-file.md).
     """
     config, ctx = resolve_full_config(env_dir, config, config_path, env_vars=env_vars, **resolve_kwargs)
     ctx.acquire_lock(wait=not no_wait)

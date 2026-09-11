@@ -28,7 +28,7 @@ one-line description.
   container.
 - **`--scripts <name>`** runs every (filtered) stage's own `scripts:
   <name>:` list, then exits without running the rest of the pipeline — see
-  ["`scripts:`"](../configuration/denver-toml.md#hooks-and-scripts) in
+  ["`scripts:`"](../configuration/config-file.md#hooks-and-scripts) in
   Configuration for an example (one-time host setup, e.g. installing Docker
   itself, is the usual use). `<name>` is open-ended, not a fixed set of flags: a project can
   declare `scripts: migrate:` and run `denver run <env> --scripts migrate`
@@ -66,7 +66,7 @@ one-line description.
   every `-cf` file.
 
 Both follow the same merge rules as `import:`, explained in
-[Configuration](../configuration/denver-toml.md).
+[Configuration](../configuration/config-file.md).
 
 ## An env's own flags: `denver-custom-args:`
 
@@ -136,11 +136,11 @@ A few more properties worth knowing:
   of `ci`) is a hard error, not a silent override.
 - `denver-custom-args:` is a list, so it follows the normal list-merge rule: an env
   inherits every flag its `import:` chain declares and adds its own (see
-  "Layering" in [Configuration](../configuration/denver-toml.md)).
+  "Layering" in [Configuration](../configuration/config-file.md)).
 - They survive a wrapper relocation: the tokens are re-passed to the denver
   re-invoked inside the container, which would otherwise only see each
   flag's `default:` (see "Wrapper / relocation" in
-  [Configuration](../configuration/denver-toml.md)).
+  [Configuration](../configuration/config-file.md)).
 
 ## Control the speed: Trading speed against freshness
 
@@ -345,7 +345,7 @@ every command it runs) is off unless asked for with `-v`/`--verbose`.
   release it is heading for (`1.1.0-17-gabc1234`). A `denver.yml` can
   require a minimum with `denver-version: ">=1.1.0"`, and is rejected up
   front by a denver older than that (see
-  [Configuration](../configuration/denver-toml.md)).
+  [Configuration](../configuration/config-file.md)).
 
 Each stage's runtime is also appended to
 `$DENVER_ENV_WORKDIR/performance.jsonl` as JSON Lines of Chrome Trace

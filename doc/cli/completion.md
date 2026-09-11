@@ -69,7 +69,7 @@ logic itself never has to be regenerated:
   define
 - an env's own `denver-custom-args:` — whatever extra flags its `denver.yml` declares (see
   "Environment-specific arguments" in
-  [Configuration](../configuration/denver-toml.md)), completed the same way
+  [Configuration](../configuration/config-file.md)), completed the same way
   denver's own flags are
 
 That last point is why there's nothing to regenerate: add a stage, rename a

@@ -19,7 +19,7 @@ env-prepend = { PICO_SDK_PATH = "${DENVER_ENV_WORKDIR}/pico-sdk/2.3.0" }
 ```
 
 (`provider:`/`description:`/`disabled:`/`scripts:`/`env:`/`env-prepend:`/`env-append:`/`env-sep:` are generic
-keys every stage has — see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything
+keys every stage has — see "Generic stage keys" in [Configuration](../configuration/config-file.md). Everything
 below is specific to `git`; `env-prepend:` above is that generic mechanism, not something this provider
 implements itself — see "Where things go" below for why its value is the checkout's own `path:`, spelled out,
 rather than `download`'s package-relative `"."`.)
@@ -47,7 +47,7 @@ rather than `download`'s package-relative `"."`.)
 This provider has no `env-prepend:`/`env-append:` keys of its own: a
 checkout's own location is already known in full wherever `path:` is
 written, so the generic per-stage `env:`/`env-prepend:`/`env-append:` keys
-(see "Generic stage keys" in [Configuration](../configuration/denver-toml.md))
+(see "Generic stage keys" in [Configuration](../configuration/config-file.md))
 already cover exporting it — spell out `path:`'s own value again (as the
 worked example above does for `PICO_SDK_PATH`), rather than the
 package-relative `"."` a [`download`](download.md) package's own
@@ -76,7 +76,7 @@ Per stage, in order:
 
 The generic per-stage `env:`/`env-prepend:`/`env-append:` keys run after
 this, for every stage regardless of provider — see "Generic stage keys" in
-[Configuration](../configuration/denver-toml.md).
+[Configuration](../configuration/config-file.md).
 
 ## Unreachable commits
 
@@ -128,7 +128,7 @@ unchanged fetch cheap. `path:` is the whole of it:
   a clear message if `path:` was never checked out — run once without
   `--fast` first. The generic `env:`/`env-prepend:`/`env-append:` keys still
   apply regardless (see "Generic stage keys" in
-  [Configuration](../configuration/denver-toml.md)) — that's the activation
+  [Configuration](../configuration/config-file.md)) — that's the activation
   half, not a build step to skip.
 - **`--force`** runs `git reset --hard` and `git clean -fdx` before
   checking out, discarding whatever local state (a hand-edited file, an
