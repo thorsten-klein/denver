@@ -12,7 +12,7 @@ bundled as
 if you want to compare, or skip ahead. (The bundled copy is a `denver.yml` –
 denver’s default format – while this walkthrough builds a `denver.toml`;
 same schema either way, see
-[denver.yml vs. denver.toml](../configuration/denver-toml.md#denver-yml-vs-denver-toml).)
+[denver.yml vs. denver.toml](../configuration/config-file.md#denver-yml-vs-denver-toml).)
 
 Terms used here (*environment*, *stage*, *provider*, *wrapper*, …) were
 introduced in
@@ -382,7 +382,7 @@ Note also `${DENVER_ENV_DIR}` in `cmd:`. A `cmd:` inherits denver’s working
 directory — wherever the user happened to be — so a relative path would be a
 coin flip; `${DENVER_ENV_DIR}` is a built-in denver expands to the directory
 holding this `denver.toml` (see
-[Configuration](../configuration/denver-toml.md#variable-interpolation)). `source:` needs
+[Configuration](../configuration/config-file.md#variable-interpolation)). `source:` needs
 none of that: it is resolved relative to the `denver.toml` already.
 
 ### The files the nvim stage needs
@@ -617,7 +617,7 @@ CONAN_HOME = "${DENVER_ENV_DIR}/.conan2"
 ```
 
 `${DENVER_ENV_DIR}` — one of denver’s own built-ins, see
-[Configuration](../configuration/denver-toml.md#variable-interpolation) —
+[Configuration](../configuration/config-file.md#variable-interpolation) —
 keeps the cache inside this env’s own directory rather than somewhere
 shared. Since that directory is already bind-mounted into the container
 (Step 2), the conan cache persists too, with no extra mount needed.
@@ -739,5 +739,5 @@ denver clean envs/firmware-env                          # remove every directory
 
 > From here on the documentation is reference rather than narrative: the
 > [`denver` command](../cli/arguments.md), the full
-> [`denver.toml` schema](../configuration/denver-toml.md), and one page
+> [`denver.toml` schema](../configuration/config-file.md), and one page
 > [per provider](../providers/uv.md).

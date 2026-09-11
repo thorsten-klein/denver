@@ -12,14 +12,14 @@ requirements = ["requirements.txt"]
 
 (`provider:`/`description:`/`disabled:`/`depends-on:`/`skip-on-success:`/`skip-on-failure:`/`scripts:`/
 `env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
-see “Generic stage keys” in [Configuration](../configuration/denver-toml.md). Everything below is specific to `uv`.)
+see “Generic stage keys” in [Configuration](../configuration/config-file.md). Everything below is specific to `uv`.)
 
 ## Requires
 
 **`uv` must already be installed** wherever this stage runs — denver never
 installs it. That’s the host for a plain run, or the container when a
 `docker` stage relocated the pipeline first (see “Wrapper / relocation” in
-[Configuration](../configuration/denver-toml.md)), in which case the image needs
+[Configuration](../configuration/config-file.md)), in which case the image needs
 it. Install it per [uv’s own instructions](https://docs.astral.sh/uv/getting-started/installation/);
 a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
 
@@ -42,7 +42,7 @@ a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
   requirements file for them. This is also where to pass a uv-specific flag
   denver has no dedicated key for, e.g. `--link-mode=copy`. A `$(...)`
   entry’s own `${VAR}`/`${VAR:-fallback}` interpolation (see “Variable
-  interpolation” in [Configuration](../configuration/denver-toml.md)) is
+  interpolation” in [Configuration](../configuration/config-file.md)) is
   shell-quoted before it reaches bash, the same rule `custom`’s `cmd:`
   follows — see its shell-injection note in [`custom.md`](custom.md). A
   plain (non-`$(...)`) entry’s own interpolation stays unquoted, since it
@@ -108,7 +108,7 @@ a stage with no `uv` on `PATH` fails with `uv[<stage>]: needs 'exe' on PATH`.
 “Explicit over implicit” in [`../concepts/philosophy.md`](../concepts/philosophy.md)) —
 it only runs when it’s set to a command explicitly. The same is true of the
 generic `skip-on-success:`/`skip-on-failure:` keys (see “Generic stage keys” in
-[Configuration](../configuration/denver-toml.md)): with neither given there
+[Configuration](../configuration/config-file.md)): with neither given there
 is simply no skip check for this stage.
 
 ## One venv, one interpreter
@@ -158,7 +158,7 @@ A venv holds exactly one interpreter, and the one it already has wins:
   without `--fast` first.
 - **`--force`** recreates the venv from scratch unconditionally and
   bypasses every generic `skip-on-success:`/`skip-on-failure:` script (see
-  “Generic stage keys” in [Configuration](../configuration/denver-toml.md)).
+  “Generic stage keys” in [Configuration](../configuration/config-file.md)).
 - **`--dry-run`** prints the `uv` commands (and the checksum/`freeze-to:`
   writes) instead of performing them; an existing venv is never removed. Two
   things still really happen, because the preview depends on them: each

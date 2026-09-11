@@ -109,7 +109,7 @@ This is for contributing a provider *into denver itself* — one generic
 enough that other projects would want it too. A provider specific to your
 own project (an internal build tool, a deploy step) doesn’t need any of
 this or a fork: see “Extension providers” in
-[Configuration](../configuration/denver-toml.md) instead.
+[Configuration](../configuration/config-file.md) instead.
 
 1. Subclass `Provider` (`src/denver_providers/base.py`): set `name`, `KEYS` (every
    `denver.yml` key your section understands), and `kind` if it’s a wrapper
@@ -180,7 +180,7 @@ schema — it must be bumped together with any breaking schema change, so an
 older denver rejects a newer file instead of misreading it.
 
 A `denver.yml` states which denver *tool* version it needs with
-`denver-version:` (see [Configuration](../configuration/denver-toml.md)), so a file
+`denver-version:` (see [Configuration](../configuration/config-file.md)), so a file
 using a brand-new feature names the release that first shipped it. When an
 example under `examples/` is changed to rely on something unreleased, its
 `denver-version:` names the version about to be tagged — a pin for a release
@@ -218,7 +218,7 @@ and the reason the floor can be as low as `requires-python = ">=3.9"`.
 `denver.toml` is supported too, but only where `tomllib` is importable
 (stdlib only from Python 3.11): on an older interpreter it just isn’t there,
 and `load_config_file()` says so with a clear error instead of guessing (see
-[Configuration](../configuration/denver-toml.md)).
+[Configuration](../configuration/config-file.md)).
 
 Both formats need to work inside a wrapper’s re-invoked process too
 (`reinvoke_command()` in `src/denver.py` builds `["python3", <this file>, ...]`, a bare command resolved against the container’s `PATH` for a

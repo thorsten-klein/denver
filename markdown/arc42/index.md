@@ -31,7 +31,7 @@ These chapters describe the design; they do not restate the schema or the
 CLI. Where a chapter names a key or a flag, it links to the page that owns
 its full reference:
 
-- [Configuration](../configuration/denver-toml.md) — every `denver.yml` key,
+- [Configuration](../configuration/config-file.md) — every `denver.yml` key,
   the complete merge and resolution rules.
 - [Arguments](../cli/arguments.md) — every CLI flag.
 - [Providers](../providers/uv.md) — one page per provider, its keys, and what

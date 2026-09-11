@@ -84,7 +84,7 @@ read the file and you know what the environment does. (`<env>` can also point
 straight at a config file, so one directory can hold several variants side by
 side, e.g. `denver.debug.yml` and `denver.release.yml`. `denver.toml` works
 too — see "denver.yml vs. denver.toml" in
-[Configuration](../configuration/denver-toml.md#denveryml-vs-denvertoml).)
+[Configuration](../configuration/config-file.md#denveryml-vs-denvertoml).)
 
 `denver.yml` is the recipe; denver is the cook that follows it.
 
@@ -131,7 +131,7 @@ If none of the built-in providers suits you, describing your whole environment w
 
 Should you ever reach the point where you want to create a new provider on your own,
 you can register one out-of-tree, without forking denver. See "Extension providers" in
-[Configuration](../configuration/denver-toml.md).
+[Configuration](../configuration/config-file.md).
 
 > [!NOTE]
 > **Next:** [Install denver](install.md), then

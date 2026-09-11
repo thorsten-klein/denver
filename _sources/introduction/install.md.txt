@@ -80,7 +80,7 @@ bundles `denver`, its providers and a Python interpreter into one
 executable. (Stuck between `3.9` and `3.11`, specifically? A regular install
 still works fine as long as your configs are `denver.yml`/`denver.yaml` --
 only `denver.toml` needs `3.11`, see
-[Configuration](../configuration/denver-toml.md).)
+[Configuration](../configuration/config-file.md).)
 
 Find the download link for the latest release
 [in your browser](https://github.com/thorsten-klein/denver/releases)

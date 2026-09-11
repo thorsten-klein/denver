@@ -131,7 +131,7 @@ setup script section in the config, so you can install with:
 denver run <env> --setup
 ```
 
-See [`scripts:`](../configuration/denver-toml.md#hooks-and-scripts) in
+See [`scripts:`](../configuration/config-file.md#hooks-and-scripts) in
 Configuration for how that mechanism works.
 
 ## The handful of flags you’ll use daily

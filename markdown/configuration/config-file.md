@@ -1,4 +1,4 @@
-# denver.toml
+# Configuration
 
 ## Overview
 

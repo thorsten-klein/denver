@@ -10,7 +10,7 @@ cmd = "echo hello"
 ```
 
 (`provider:`/`description:`/`disabled:`/`depends-on:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
-see “Generic stage keys” in [Configuration](../configuration/denver-toml.md). Everything below is specific to `custom`.)
+see “Generic stage keys” in [Configuration](../configuration/config-file.md). Everything below is specific to `custom`.)
 
 ## Key reference
 
@@ -19,7 +19,7 @@ see “Generic stage keys” in [Configuration](../configuration/denver-toml.md)
   environment) works the same way it would on a command line — but
   anything it exports dies with that subprocess, denver never sees it.
   Denver’s own `${VAR}`/`${VAR:-fallback}` interpolation (see “Variable
-  interpolation” in [Configuration](../configuration/denver-toml.md)) is
+  interpolation” in [Configuration](../configuration/config-file.md)) is
   shell-quoted here before `cmd:` ever reaches bash — a substituted
   value lands as one literal argument/word, whatever characters it
   contains, rather than being re-parsed as shell syntax. This is what
@@ -38,7 +38,7 @@ see “Generic stage keys” in [Configuration](../configuration/denver-toml.md)
   every later stage and the final command. This is the way to make a
   `custom` stage hand environment variables forward, scoped to this one
   stage’s section rather than the global `hooks:` mechanism (see
-  [Configuration](../configuration/denver-toml.md)).
+  [Configuration](../configuration/config-file.md)).
 - **`launcher`** — makes this stage a *wrapper*, the same way `docker` is
   one: instead of (only) doing its own work, it prepends its own script(s)
   ahead of whatever command would otherwise run. Each entry is a string,

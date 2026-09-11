@@ -1,7 +1,7 @@
 # Philosophy
 
 These are the principles that shape every provider and every design
-decision in denver — the *why* behind what [Configuration](../configuration/denver-toml.md)
+decision in denver — the *why* behind what [Configuration](../configuration/config-file.md)
 describes as *what*. None of them are abstract for their own sake; each one
 exists because its absence caused a real, specific kind of pain somewhere
 else.

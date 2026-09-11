@@ -14,7 +14,7 @@ catalog = "catalog.yml"  # optional
 ```
 
 (`provider:`/`description:`/`disabled:`/`depends-on:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
-see "Generic stage keys" in [Configuration](../configuration/denver-toml.md). Everything else is specific to `conan`.)
+see "Generic stage keys" in [Configuration](../configuration/config-file.md). Everything else is specific to `conan`.)
 
 ## Requires
 
@@ -40,7 +40,7 @@ needs 'conan' on PATH`.
   may itself live in a base env, resolved the normal way (falling back to an
   imported base env's own directory). A listed dir must exist (it's an error
   if it doesn't). Appends across `import:` layers like any other list (see
-  [Configuration](../configuration/denver-toml.md)'s "Merge rules"), so a derived
+  [Configuration](../configuration/config-file.md)'s "Merge rules"), so a derived
   env only needs to list the base-classes dirs it adds itself.
 - **`conanfile`** — optional; the single conanfile to install via `conan
   install` (a project only ever has one dependency graph, so this is a

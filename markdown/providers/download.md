@@ -19,7 +19,7 @@ env-prepend = { PATH = "${DENVER_UNPACK_DIR}:" }
 ```
 
 (`provider:`/`description:`/`disabled:`/`depends-on:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
-see “Generic stage keys” in [Configuration](../configuration/denver-toml.md). Everything below is specific to `download`.)
+see “Generic stage keys” in [Configuration](../configuration/config-file.md). Everything below is specific to `download`.)
 
 ## Key reference
 
@@ -88,7 +88,7 @@ The stage has exactly one key of its own:
   contributes to the environment, as `{ VAR = "value" }`. A value is used
   exactly as written, once `${...}`-interpolated — the same rule the
   generic per-stage `env-prepend:`/`env-append:` keys follow (see “Generic
-  stage keys” in [Configuration](../configuration/denver-toml.md)) — plus
+  stage keys” in [Configuration](../configuration/config-file.md)) — plus
   one interpolation variable these don’t have: `${DENVER_UNPACK_DIR}`, this
   package’s own `unpack-dir:` (above). `env-prepend:` glues the result
   directly in front of whatever the variable already holds, `env-append:`
@@ -234,7 +234,7 @@ into `unpack-dir:`. Three variables name what it is working on:
 | `DENVER_DOWNLOAD_DIR`     | absolute path of the staging dir (= the cwd) |
 
 Denver’s own `${VAR}`/`${VAR:-fallback}` interpolation (see “Variable
-interpolation” in [Configuration](../configuration/denver-toml.md)) is
+interpolation” in [Configuration](../configuration/config-file.md)) is
 shell-quoted here before `unpack-cmd:` ever reaches bash — a substituted
 value lands as one literal argument/word, whatever characters it contains,
 rather than being re-parsed as shell syntax (the same rule `custom`’s

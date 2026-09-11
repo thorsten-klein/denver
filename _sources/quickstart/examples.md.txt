@@ -37,6 +37,6 @@ env.
 > [!NOTE]
 > **Next:** the reference half of this documentation — the
 > [`denver` command](../cli/arguments.md) for every flag, the full
-> [`denver.toml` schema](../configuration/denver-toml.md) for every key, and one
+> [`denver.toml` schema](../configuration/config-file.md) for every key, and one
 > page [per provider](../providers/uv.md) for the keys a given stage type
 > accepts.

@@ -1,7 +1,7 @@
 # docker provider
 
 A `docker` stage is a *wrapper*, not a builder — see “Wrapper / relocation”
-in [Configuration](../configuration/denver-toml.md). Instead of building anything itself, it relocates the
+in [Configuration](../configuration/config-file.md). Instead of building anything itself, it relocates the
 rest of the pipeline into a docker compose service.
 
 ```toml
@@ -14,7 +14,7 @@ file = "docker-compose.yml"
 
 (`provider:`/`description:`/`disabled:`/`depends-on:`/`skip-on-success:`/`skip-on-failure:`/`scripts:`/
 `env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
-see “Generic stage keys” in [Configuration](../configuration/denver-toml.md). Everything below is specific to `docker`.)
+see “Generic stage keys” in [Configuration](../configuration/config-file.md). Everything below is specific to `docker`.)
 
 ## Requires
 
@@ -54,7 +54,7 @@ Anything beyond that — a private registry login, an `udev` rule for a USB
 device the container needs — is project-specific, not part of getting
 Docker itself working. That kind of one-time setup usually belongs in an
 env’s own `scripts: setup:` (see
-[`scripts:`](../configuration/denver-toml.md#hooks-and-scripts) in
+[`scripts:`](../configuration/config-file.md#hooks-and-scripts) in
 Configuration) rather than something a reader has to remember to do by hand
 before their first run.
 
@@ -111,7 +111,7 @@ before their first run.
 
 Need something computed at runtime before build/run — a compose `.env` file,
 a login, anything a static compose file can’t express? Use a `hooks: pre-<stage>:` script (see “Hooks and scripts” in
-[Configuration](../configuration/denver-toml.md)) rather than a `docker:`-specific key — it runs on the
+[Configuration](../configuration/config-file.md)) rather than a `docker:`-specific key — it runs on the
 host right before this stage’s `setup()`, same timing, without denver
 needing a per-provider mechanism for it.
 
@@ -169,6 +169,6 @@ needing a per-provider mechanism for it.
 - **Automated per-registry login, inline.** Each `registries:` entry can
   carry its own `username:`/`password:` right alongside its `url:`, so a
   private registry in the search list doesn’t need a separate manual
-  login step (e.g. a `scripts: login:` entry run via `denver run <env> --scripts login`, [Configuration](../configuration/denver-toml.md)’s generic one-shot mechanism) — denver logs in
+  login step (e.g. a `scripts: login:` entry run via `denver run <env> --scripts login`, [Configuration](../configuration/config-file.md)’s generic one-shot mechanism) — denver logs in
   for you, right before it’s actually needed, only for entries that carry
   credentials.

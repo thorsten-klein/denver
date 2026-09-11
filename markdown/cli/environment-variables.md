@@ -18,7 +18,7 @@ Going the other way, denver also *sets* a handful of built-in variables in the
 environment it builds, so your scripts, compose files and the final command
 can read them as ordinary variables. They are also what `${...}`
 interpolation inside a `denver.yml` resolves against — see “Variable
-interpolation” in [Configuration](../configuration/denver-toml.md).
+interpolation” in [Configuration](../configuration/config-file.md).
 
 Denver-owned identifiers always reflect the current run, even if a stale
 variable of the same name was already exported in the calling shell:
@@ -30,7 +30,7 @@ variable of the same name was already exported in the calling shell:
 | `DENVER_ENV_WORKDIR`  | `<env dir>/.denver/<config file stem>/` | denver’s own working area for this environment (e.g. venv, install trees, fingerprints, logs, …). Can be overridden by `DENVER_ENV_WORKDIR`.                                                                      |
 | `DENVER_CACHE_DIR`    | `~/.cache/denver`                       | Directory where tools can persistently store files, e.g. caches. Can be overwritten by `DENVER_CACHE_DIR`.                                                                                                        |
 | `DENVER_SRC_DIR`      | wherever denver’s own code is installed | Rarely needed directly — mostly for a `custom` stage that has to reach into denver’s own package.                                                                                                                 |
-| `SHELL_PROMPT_PREFIX` | `(<env name>) `                         | The marker text a shell’s prompt uses to show when it is running inside this environment, e.g. `(firmware-env) ` — see “The prompt marker” in [Configuration](../configuration/denver-toml.md#the-prompt-marker). |
+| `SHELL_PROMPT_PREFIX` | `(<env name>) `                         | The marker text a shell’s prompt uses to show when it is running inside this environment, e.g. `(firmware-env) ` — see “The prompt marker” in [Configuration](../configuration/config-file.md#the-prompt-marker). |
 
 ## Where an environment’s state lives
 
@@ -59,6 +59,6 @@ Wherever it ended up, `denver run <env> --clean` or `denver clean <env>`
 removes it — see [Remove an environment’s state](arguments.md#remove-an-environment-s-state).
 
 > [!NOTE]
-> **Next:** [Configuration](../configuration/denver-toml.md) — the complete
+> **Next:** [Configuration](../configuration/config-file.md) — the complete
 > config schema: every key, how imports merge, and the mechanisms behind
 > everything you have used so far.

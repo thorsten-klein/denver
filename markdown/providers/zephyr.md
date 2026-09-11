@@ -9,7 +9,7 @@ provider = "zephyr"
 ```
 
 (`provider:`/`description:`/`disabled:`/`depends-on:`/`scripts:`/`env:`/`env-prepend:`/`env-append:` are generic keys every stage has —
-see “Generic stage keys” in [Configuration](../configuration/denver-toml.md). Everything below is specific to `zephyr`.)
+see “Generic stage keys” in [Configuration](../configuration/config-file.md). Everything below is specific to `zephyr`.)
 
 ## Requires
 
