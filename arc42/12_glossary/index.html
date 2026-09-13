@@ -17,7 +17,7 @@
     <link rel="shortcut icon" href="../../_static/favicon.svg"/>
       <script src="../../_static/jquery.js?v=5d32c60e"></script>
       <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../../_static/documentation_options.js?v=b566928f"></script>
+      <script src="../../_static/documentation_options.js?v=9d0de8d4"></script>
       <script src="../../_static/doctools.js?v=9a2dae69"></script>
       <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -50,7 +50,7 @@
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
-<div class="version"><a href="https://github.com/thorsten-klein/denver/tree/8d2ff8583d65326723372b8197570402bc58308b">1.6.4-1-g8d2ff85</a>
+<div class="version"><a href="https://github.com/thorsten-klein/denver/tree/ee27748bcad5a7220a97e22946707a6592224bf1">1.6.4-2-gee27748</a>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
@@ -247,6 +247,14 @@
 <li class="toctree-l2"><a class="reference internal" href="../../providers/git.html#design-notes">Design notes</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../../providers/nix.html">nix provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../providers/nix.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../providers/nix.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../providers/nix.html#the-cache">The cache</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../providers/nix.html#shellhook">shellHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../providers/nix.html#design-notes">Design notes</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../../providers/custom.html">custom provider</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../providers/custom.html#key-reference">Key reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../providers/custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
@@ -420,7 +428,7 @@ in <a class="reference internal" href="../../concepts/glossary.html"><span class
 <td><p>A label, nothing more. Never used to guess a type (<a class="reference internal" href="../09_design_decisions/index.html#adr-0005-provider-is-mandatory-never-guessed-from-the-stage-id"><span class="std std-ref">ADR-0005</span></a>).</p></td>
 </tr>
 <tr class="row-odd"><td><p><strong>provider</strong></p></td>
-<td><p>The generic engine a stage uses: <code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>. Named by the mandatory <code class="docutils literal notranslate"><span class="pre">provider:</span></code> key.</p></td>
+<td><p>The generic engine a stage uses: <code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">nix</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>. Named by the mandatory <code class="docutils literal notranslate"><span class="pre">provider:</span></code> key.</p></td>
 </tr>
 <tr class="row-even"><td><p><strong>setup provider</strong></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">kind</span> <span class="pre">=</span> <span class="pre">&quot;setup&quot;</span></code>. Builds part of the environment in place.</p></td>

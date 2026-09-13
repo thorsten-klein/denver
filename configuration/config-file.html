@@ -17,7 +17,7 @@
     <link rel="shortcut icon" href="../_static/favicon.svg"/>
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=b566928f"></script>
+      <script src="../_static/documentation_options.js?v=9d0de8d4"></script>
       <script src="../_static/doctools.js?v=9a2dae69"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -50,7 +50,7 @@
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
-<div class="version"><a href="https://github.com/thorsten-klein/denver/tree/8d2ff8583d65326723372b8197570402bc58308b">1.6.4-1-g8d2ff85</a>
+<div class="version"><a href="https://github.com/thorsten-klein/denver/tree/ee27748bcad5a7220a97e22946707a6592224bf1">1.6.4-2-gee27748</a>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
@@ -247,6 +247,14 @@
 <li class="toctree-l2"><a class="reference internal" href="../providers/git.html#design-notes">Design notes</a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="../providers/nix.html">nix provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#the-cache">The cache</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#shellhook">shellHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#design-notes">Design notes</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../providers/custom.html">custom provider</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#key-reference">Key reference</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
@@ -433,7 +441,7 @@ the schema is the same either way — only the syntax differs.</p>
 <h2>Core model<a class="headerlink" href="#core-model" title="Link to this heading"></a></h2>
 <p>An <em>environment</em> is a <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code>; it declares an ordered list of <em>stages</em>
 under <code class="docutils literal notranslate"><span class="pre">stages:</span></code>; each stage names a <code class="docutils literal notranslate"><span class="pre">provider:</span></code> type (<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>,
-<code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>) plus some provider-specific keys in a
+<code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">nix</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>) plus some provider-specific keys in a
 top-level section of the stage’s own name.</p>
 <p>A provider is a generic, reusable engine — all project specifics come from
 the <code class="docutils literal notranslate"><span class="pre">denver.toml</span></code> itself, never from the provider’s own code. Most
@@ -493,7 +501,7 @@ earlier one from the same map:</p>
 below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">extensions</span></code></strong> — own, project-local <code class="docutils literal notranslate"><span class="pre">Provider</span></code> subclasses to register
 alongside the built-ins (<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>,
-<code class="docutils literal notranslate"><span class="pre">custom</span></code>), no
+<code class="docutils literal notranslate"><span class="pre">nix</span></code>, <code class="docutils literal notranslate"><span class="pre">custom</span></code>), no
 denver fork required. See “Extension providers” below.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">denver-custom-args</span></code></strong> — command-line flags of this environment’s own, each one
 forwarded to argparse’s <code class="docutils literal notranslate"><span class="pre">add_argument</span></code>. See “Environment-specific CLI
@@ -554,7 +562,7 @@ same conclusion: that denver is too old for this <code class="docutils literal n
 <p>These keys may appear in <em>any</em> stage’s section, whatever its provider:</p>
 <ul class="simple">
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">provider</span></code></strong> (<strong>required</strong>) — which provider engine runs this stage:
-<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code> or <code class="docutils literal notranslate"><span class="pre">custom</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">uv</span></code>, <code class="docutils literal notranslate"><span class="pre">conan</span></code>, <code class="docutils literal notranslate"><span class="pre">zephyr</span></code>, <code class="docutils literal notranslate"><span class="pre">docker</span></code>, <code class="docutils literal notranslate"><span class="pre">download</span></code>, <code class="docutils literal notranslate"><span class="pre">git</span></code>, <code class="docutils literal notranslate"><span class="pre">nix</span></code> or <code class="docutils literal notranslate"><span class="pre">custom</span></code>.</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">description</span></code></strong> — free text (a list of strings) with whatever notes are
 useful to whoever reads the config: what this stage is for, why it’s
 configured this way. denver never reads it; it is only surfaced in
@@ -837,7 +845,7 @@ that must not run on every start.
 ## Extension providers
 
 The built-in providers (`uv`, `conan`, `zephyr`, `docker`, `download`, `git`,
-`custom`) cover
+`nix`, `custom`) cover
 the common cases, but a project may need its own — driving an internal
 build tool or deploy step with the same `resolve_defaults`/`setup`/`wrap`
 lifecycle a built-in provider gets, rather than squeezing it into a single

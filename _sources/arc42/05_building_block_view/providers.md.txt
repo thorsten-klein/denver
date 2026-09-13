@@ -14,6 +14,7 @@ PROVIDERS = {
     "custom": CustomProvider,
     "download": DownloadProvider,
     "git": GitProvider,
+    "nix": NixProvider,
 }
 ```
 
@@ -109,6 +110,7 @@ clear message. A provider with no such state (`custom`) skips itself.
 | `zephyr` | setup | Init/update a West workspace, apply patches, fetch blobs, set `ZEPHYR_BASE` | `west`, `git` |
 | `download` | setup | Fetch release archives, verify checksums, unpack, extend `PATH` | HTTP(S) |
 | `git` | setup | Clone or fetch a checkout, pinned to one revision (detached) | `git` |
+| `nix` | setup | Evaluate a flake's devShell once, cache it, source it into the environment | `nix`, `git` |
 | `docker` | wrapper | Build/enter a compose service, re-invoke denver inside it | `docker compose` |
 | `custom` | setup, or wrapper with `launcher:` | Run one command, source a script, or relocate the final command | whatever the command is |
 
@@ -119,6 +121,12 @@ reference. These chapters only cover the design.
 rewritten per project: download, checksum, unpack, PATH — or clone, fetch,
 checkout a pinned tag. Both are idempotent and `--fast`-aware once they are
 providers.
+
+`nix` is the same argument for a project that already has a flake: it
+sources `nix print-dev-env`'s output rather than relocating into `nix
+develop --command`, so it stays a *setup* provider — stages after it still
+extend the environment it built, and its cached evaluation is what makes it
+cheap enough to sit in front of every command.
 
 ## Extension providers
 

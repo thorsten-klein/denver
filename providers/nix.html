@@ -7,7 +7,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Environment variables &mdash; denver</title>
+  <title>nix provider &mdash; denver</title>
       <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
       <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
       <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
@@ -26,8 +26,8 @@
     <script src="../_static/js/theme.js"></script>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Configuration" href="../configuration/config-file.html" />
-    <link rel="prev" title="Shell completion" href="completion.html" /> 
+    <link rel="next" title="custom provider" href="custom.html" />
+    <link rel="prev" title="git provider" href="git.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -136,31 +136,31 @@
 </li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">denver command</span></p>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="arguments.html">Arguments</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="arguments.html#control-the-stages-choosing-what-runs">Control the stages: Choosing what runs</a></li>
-<li class="toctree-l2"><a class="reference internal" href="arguments.html#control-the-config-change-values-for-one-run">Control the config: Change values for one run</a></li>
-<li class="toctree-l2"><a class="reference internal" href="arguments.html#an-env-s-own-flags-denver-custom-args">An env’s own flags: <code class="docutils literal notranslate"><span class="pre">denver-custom-args:</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="arguments.html#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
-<li class="toctree-l2"><a class="reference internal" href="arguments.html#inspect-an-environment">Inspect an environment</a></li>
-<li class="toctree-l2"><a class="reference internal" href="arguments.html#hand-the-built-env-to-something-else">Hand the built env to something else</a></li>
-<li class="toctree-l2"><a class="reference internal" href="arguments.html#remove-an-environment-s-state">Remove an environment’s state</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="arguments.html#denver-clean-env"><code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span> <span class="pre">&lt;env&gt;</span></code></a></li>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../cli/arguments.html">Arguments</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#control-the-stages-choosing-what-runs">Control the stages: Choosing what runs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#control-the-config-change-values-for-one-run">Control the config: Change values for one run</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#an-env-s-own-flags-denver-custom-args">An env’s own flags: <code class="docutils literal notranslate"><span class="pre">denver-custom-args:</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#control-the-speed-trading-speed-against-freshness">Control the speed: Trading speed against freshness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#inspect-an-environment">Inspect an environment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#hand-the-built-env-to-something-else">Hand the built env to something else</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#remove-an-environment-s-state">Remove an environment’s state</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="../cli/arguments.html#denver-clean-env"><code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span> <span class="pre">&lt;env&gt;</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="arguments.html#output-and-version">Output and version</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/arguments.html#output-and-version">Output and version</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="completion.html">Shell completion</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="completion.html#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
-<li class="toctree-l2"><a class="reference internal" href="completion.html#what-gets-completed">What gets completed</a></li>
-<li class="toctree-l2"><a class="reference internal" href="completion.html#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/completion.html">Shell completion</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#works-no-matter-how-you-invoke-it">Works no matter how you invoke it</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#what-gets-completed">What gets completed</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/completion.html#inside-a-docker-relocated-shell-automatically">Inside a docker-relocated shell, automatically</a></li>
 </ul>
 </li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Environment variables</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#what-denver-reads">What denver reads</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#what-denver-exports">What denver exports</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#where-an-environment-s-state-lives">Where an environment’s state lives</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../cli/environment-variables.html">Environment variables</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-reads">What denver reads</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#what-denver-exports">What denver exports</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../cli/environment-variables.html#where-an-environment-s-state-lives">Where an environment’s state lives</a></li>
 </ul>
 </li>
 </ul>
@@ -200,65 +200,65 @@
 </li>
 </ul>
 <p class="caption" role="heading"><span class="caption-text">Providers</span></p>
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="../providers/uv.html">uv provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../providers/uv.html#requires">Requires</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/uv.html#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/uv.html#one-venv-one-interpreter">One venv, one interpreter</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/uv.html#design-notes">Design notes</a></li>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="uv.html">uv provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="uv.html#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="uv.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="uv.html#one-venv-one-interpreter">One venv, one interpreter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="uv.html#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../providers/conan.html">conan provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../providers/conan.html#requires">Requires</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/conan.html#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/conan.html#design-notes">Design notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="conan.html">conan provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="conan.html#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conan.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="conan.html#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../providers/docker.html">docker provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../providers/docker.html#requires">Requires</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/docker.html#setting-up-docker">Setting up Docker</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/docker.html#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/docker.html#design-notes">Design notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">docker provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="docker.html#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="docker.html#setting-up-docker">Setting up Docker</a></li>
+<li class="toctree-l2"><a class="reference internal" href="docker.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="docker.html#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../providers/zephyr.html">zephyr provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../providers/zephyr.html#requires">Requires</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/zephyr.html#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/zephyr.html#design-notes">Design notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="zephyr.html">zephyr provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#requires">Requires</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="zephyr.html#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../providers/download.html">download provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#key-reference">Key reference</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="../providers/download.html#package-keys">Package keys</a></li>
+<li class="toctree-l1"><a class="reference internal" href="download.html">download provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="download.html#key-reference">Key reference</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="download.html#package-keys">Package keys</a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#authenticated-downloads">Authenticated downloads</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#where-things-go">Where things go</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#unpacking">Unpacking</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/download.html#design-notes">Design notes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="download.html#authenticated-downloads">Authenticated downloads</a></li>
+<li class="toctree-l2"><a class="reference internal" href="download.html#where-things-go">Where things go</a></li>
+<li class="toctree-l2"><a class="reference internal" href="download.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="download.html#unpacking">Unpacking</a></li>
+<li class="toctree-l2"><a class="reference internal" href="download.html#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../providers/git.html">git provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#unreachable-commits">Unreachable commits</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#where-things-go">Where things go</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/git.html#design-notes">Design notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="git.html">git provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="git.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="git.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="git.html#unreachable-commits">Unreachable commits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="git.html#where-things-go">Where things go</a></li>
+<li class="toctree-l2"><a class="reference internal" href="git.html#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../providers/nix.html">nix provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#the-cache">The cache</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#shellhook">shellHook</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/nix.html#design-notes">Design notes</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">nix provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#what-runs-and-what-is-skipped">What runs, and what is skipped</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#the-cache">The cache</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#shellhook">shellHook</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#design-notes">Design notes</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="../providers/custom.html">custom provider</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#key-reference">Key reference</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../providers/custom.html#design-notes">Design notes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="custom.html">custom provider</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#key-reference">Key reference</a></li>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#worked-example-bringing-a-prebuilt-binary-in-by-hand">Worked example: bringing a prebuilt binary in by hand</a></li>
+<li class="toctree-l2"><a class="reference internal" href="custom.html#design-notes">Design notes</a></li>
 </ul>
 </li>
 </ul>
@@ -396,9 +396,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Environment variables</li>
+      <li class="breadcrumb-item active">nix provider</li>
       <li class="wy-breadcrumbs-aside">
-              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/cli/environment-variables.md" class="fa fa-github"> Edit on GitHub</a>
+              <a href="https://github.com/thorsten-klein/denver/blob/develop/doc/providers/nix.md" class="fa fa-github"> Edit on GitHub</a>
       </li>
   </ul>
   <hr/>
@@ -406,103 +406,163 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="environment-variables">
-<h1>Environment variables<a class="headerlink" href="#environment-variables" title="Link to this heading"></a></h1>
-<p>Flags are not the only way denver takes input. A handful of environment
-variables change where it puts things — and unlike the flags on the previous page,
-these are read from your shell rather than passed per run.</p>
-<section id="what-denver-reads">
-<h2>What denver reads<a class="headerlink" href="#what-denver-reads" title="Link to this heading"></a></h2>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Variable</p></th>
-<th class="head"><p>What it does</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_DIR</span></code></p></td>
-<td><p>Fallback for <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span></code> argument, so you can run <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span></code> instead. Handy in a shell/CI that always runs same env. An <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> given on the command line always wins over it. Unset by default — <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> must then be given explicitly.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code></p></td>
-<td><p>Working directory for this environment’s files.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code></p></td>
-<td><p>Directory where tools can persistently store files, e.g. caches.. Defaults to <code class="docutils literal notranslate"><span class="pre">~/.cache/denver</span></code>.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="what-denver-exports">
-<h2>What denver exports<a class="headerlink" href="#what-denver-exports" title="Link to this heading"></a></h2>
-<p>Going the other way, denver also <em>sets</em> a handful of built-in variables in the
-environment it builds, so your scripts, compose files and the final command
-can read them as ordinary variables. They are also what <code class="docutils literal notranslate"><span class="pre">${...}</span></code>
-interpolation inside a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> resolves against — see “Variable
-interpolation” in <a class="reference internal" href="../configuration/config-file.html"><span class="std std-doc">Configuration</span></a>.</p>
-<p>Denver-owned identifiers always reflect the current run, even if a stale
-variable of the same name was already exported in the calling shell:</p>
-<table class="docutils align-default">
-<thead>
-<tr class="row-odd"><th class="head"><p>Variable</p></th>
-<th class="head"><p>Default</p></th>
-<th class="head"><p>What it holds</p></th>
-</tr>
-</thead>
-<tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_DIR</span></code></p></td>
-<td><p>the resolved <code class="docutils literal notranslate"><span class="pre">&lt;env&gt;</span></code> directory</p></td>
-<td><p>This environment’s own directory — the one holding its <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_NAME</span></code></p></td>
-<td><p>that directory’s name</p></td>
-<td><p>e.g. <code class="docutils literal notranslate"><span class="pre">raspberry-pico</span></code> for an env at <code class="docutils literal notranslate"><span class="pre">.../envs/raspberry-pico/</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&lt;env</span> <span class="pre">dir&gt;/.denver/&lt;config</span> <span class="pre">file</span> <span class="pre">stem&gt;/</span></code></p></td>
-<td><p>denver’s own working area for this environment (e.g. venv, install trees, fingerprints, logs, …). Can be overridden by <code class="docutils literal notranslate"><span class="pre">DENVER_ENV_WORKDIR</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">~/.cache/denver</span></code></p></td>
-<td><p>Directory where tools can persistently store files, e.g. caches. Can be overwritten by <code class="docutils literal notranslate"><span class="pre">DENVER_CACHE_DIR</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">DENVER_SRC_DIR</span></code></p></td>
-<td><p>wherever denver’s own code is installed</p></td>
-<td><p>Rarely needed directly — mostly for a <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage that has to reach into denver’s own package.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">SHELL_PROMPT_PREFIX</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">(&lt;env</span> <span class="pre">name&gt;)</span> </code></p></td>
-<td><p>The marker text a shell’s prompt uses to show when it is running inside this environment, e.g. <code class="docutils literal notranslate"><span class="pre">(firmware-env)</span> </code> — see “The prompt marker” in <a class="reference internal" href="../configuration/config-file.html#the-prompt-marker"><span class="std std-ref">Configuration</span></a>.</p></td>
-</tr>
-</tbody>
-</table>
-</section>
-<section id="where-an-environment-s-state-lives">
-<h2>Where an environment’s state lives<a class="headerlink" href="#where-an-environment-s-state-lives" title="Link to this heading"></a></h2>
-<p>By default, <strong>inside the environment’s own directory</strong>:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>my-project/env/
-├── denver.yml
-└── .denver/            # denver's state, ignores itself via its own .gitignore
-    └── denver/         # one subdirectory per denver.*.&lt;ext&gt; config in this folder
-        ├── .venv.host
-        ├── .conan/
-        └── performance.jsonl
+  <section id="nix-provider">
+<h1>nix provider<a class="headerlink" href="#nix-provider" title="Link to this heading"></a></h1>
+<p>A <code class="docutils literal notranslate"><span class="pre">nix</span></code> stage brings a <a class="reference external" href="https://nixos.wiki/wiki/Flakes">nix flake</a>’s
+<code class="docutils literal notranslate"><span class="pre">devShell</span></code> into the environment: the shell’s PATH, compilers, SDKs and
+variables become <em>this</em> process’s environment, and every later stage — and
+the final command — simply runs inside it.</p>
+<p>Nothing is wrapped. denver does not launch <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">develop</span> <span class="pre">--command</span> <span class="pre">&lt;your</span> <span class="pre">command&gt;</span></code>, and there is no second “post-nix” script: the environment is
+fetched once with <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">print-dev-env</span></code>, cached, and sourced into <code class="docutils literal notranslate"><span class="pre">ctx.env</span></code>
+like any other stage’s contribution. One process throughout, so a <code class="docutils literal notranslate"><span class="pre">uv</span></code> stage
+before it and a <code class="docutils literal notranslate"><span class="pre">conan</span></code> stage after it compose with it the ordinary way.</p>
+<div class="highlight-yaml notranslate"><div class="highlight"><pre><span></span><span class="nt">stages</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">devshell</span>
+
+<span class="nt">devshell</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">provider</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nix</span>
+<span class="w">  </span><span class="nt">flake</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">nix-env</span><span class="w">          </span><span class="c1"># the directory holding flake.nix</span>
+<span class="w">  </span><span class="nt">root</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">.</span><span class="w">                 </span><span class="c1"># what nix copies into the store (see 'root:')</span>
+<span class="w">  </span><span class="nt">shell</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">default</span><span class="w">          </span><span class="c1"># devShells.&lt;system&gt;.default</span>
+<span class="w">  </span><span class="nt">expected-version</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.35.2</span>
 </pre></div>
 </div>
-<p>State belongs with the environment that owns it: deleting a checkout deletes
-exactly its own state, two checkouts of one project can never share (or
-destroy) each other’s, and a <code class="docutils literal notranslate"><span class="pre">docker</span></code> stage carries it into the container
-for free, since the workspace is already bind-mounted there.</p>
-<p>The <code class="docutils literal notranslate"><span class="pre">&lt;config</span> <span class="pre">file</span> <span class="pre">stem&gt;</span></code> level exists because one folder may hold several
-variants (<code class="docutils literal notranslate"><span class="pre">denver.debug.yml</span></code>, <code class="docutils literal notranslate"><span class="pre">denver.release.yml</span></code>) — those are <em>different</em>
-environments sharing a folder, and must not share a venv.</p>
-<p>Wherever it ended up, <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">run</span> <span class="pre">&lt;env&gt;</span> <span class="pre">--clean</span></code> or <code class="docutils literal notranslate"><span class="pre">denver</span> <span class="pre">clean</span> <span class="pre">&lt;env&gt;</span></code>
-removes it — see <a class="reference internal" href="arguments.html#remove-an-environment-s-state"><span class="std std-ref">Remove an environment’s state</span></a>.</p>
-<blockquote>
-<div><p>[!NOTE]
-<strong>Next:</strong> <a class="reference internal" href="../configuration/config-file.html"><span class="std std-doc">Configuration</span></a> — the complete
-config schema: every key, how imports merge, and the mechanisms behind
-everything you have used so far.</p>
-</div></blockquote>
+<p>(<code class="docutils literal notranslate"><span class="pre">provider:</span></code>/<code class="docutils literal notranslate"><span class="pre">description:</span></code>/<code class="docutils literal notranslate"><span class="pre">disabled:</span></code>/<code class="docutils literal notranslate"><span class="pre">scripts:</span></code>/<code class="docutils literal notranslate"><span class="pre">env:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-prepend:</span></code>/<code class="docutils literal notranslate"><span class="pre">env-append:</span></code> are generic keys every
+stage has — see “Generic stage keys” in <a class="reference internal" href="../configuration/config-file.html"><span class="std std-doc">Configuration</span></a>. Everything below is
+specific to <code class="docutils literal notranslate"><span class="pre">nix</span></code>.)</p>
+<section id="key-reference">
+<h2>Key reference<a class="headerlink" href="#key-reference" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">flake</span></code></strong> — the flake to enter, as a <strong>directory</strong> (resolved like every
+other denver path: against the env dir, then imported base envs) or as a
+<strong>flake reference</strong> with a scheme (<code class="docutils literal notranslate"><span class="pre">github:owner/repo</span></code>, <code class="docutils literal notranslate"><span class="pre">git+https://…</span></code>,
+<code class="docutils literal notranslate"><span class="pre">path:/abs/dir</span></code>). Default: <code class="docutils literal notranslate"><span class="pre">&quot;.&quot;</span></code>, the env dir itself.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">root</span></code></strong> — the directory nix copies into the store, when it has to be a
+<em>parent</em> of <code class="docutils literal notranslate"><span class="pre">flake:</span></code>. The reference becomes <code class="docutils literal notranslate"><span class="pre">path:&lt;root&gt;?dir=&lt;rel&gt;</span></code>.
+Needed whenever the flake declares a relative input pointing outside its
+own directory (a sibling flake stacked on top of it) — nix copies only the
+reference’s own root, and an input below that root fails evaluation with
+<em>“access to absolute path … forbidden in pure evaluation mode”</em>. Unset:
+the flake’s own directory is the root. Requires a nix new enough to accept
+<code class="docutils literal notranslate"><span class="pre">?dir=</span></code> on a <code class="docutils literal notranslate"><span class="pre">path:</span></code> URL — an older one (2.6, say) rejects it outright
+with <em>“path URL … has unsupported parameter ‘dir’”</em>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">shell</span></code></strong> — the devShell attribute to enter, appended as <code class="docutils literal notranslate"><span class="pre">#&lt;shell&gt;</span></code>
+(e.g. <code class="docutils literal notranslate"><span class="pre">default</span></code>, or a full <code class="docutils literal notranslate"><span class="pre">devShells.aarch64-linux.ci</span></code>). Unset: nix picks
+the default installable for this system itself — which older releases
+resolve as <code class="docutils literal notranslate"><span class="pre">devShell.&lt;system&gt;</span></code>, <em>not</em> <code class="docutils literal notranslate"><span class="pre">devShells.&lt;system&gt;.default</span></code>, so
+spell <code class="docutils literal notranslate"><span class="pre">shell:</span> <span class="pre">default</span></code> out when an env has to work across nix versions.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">exe</span></code></strong> — the nix executable (default: <code class="docutils literal notranslate"><span class="pre">nix</span></code>, found on PATH).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">args</span></code></strong> — extra arguments passed to <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">print-dev-env</span></code>, verbatim (e.g.
+<code class="docutils literal notranslate"><span class="pre">[&quot;--option&quot;,</span> <span class="pre">&quot;sandbox&quot;,</span> <span class="pre">&quot;false&quot;]</span></code>). Default: none.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">impure</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">true</span></code> adds <code class="docutils literal notranslate"><span class="pre">--impure</span></code>, letting the flake read the
+environment and absolute paths (default: <code class="docutils literal notranslate"><span class="pre">false</span></code>).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">experimental-features</span></code></strong> — passed as
+<code class="docutils literal notranslate"><span class="pre">--extra-experimental-features</span></code> (default: <code class="docutils literal notranslate"><span class="pre">&quot;nix-command</span> <span class="pre">flakes&quot;</span></code>, which is
+what <code class="docutils literal notranslate"><span class="pre">print-dev-env</span></code> and flake refs still need on a stock nix). An empty
+string drops the flag, for a nix.conf that already enables them.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">expected-version</span></code></strong> — the nix version this env was tested against. A
+different one only <strong>warns</strong> (with install instructions) — a missing nix
+is the fatal case. Unset: no version check at all.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">cache</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">false</span></code> re-runs <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">print-dev-env</span></code> on every single denver
+run (default: <code class="docutils literal notranslate"><span class="pre">true</span></code>; see “The cache” below).</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">keep-path</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">true</span></code> (default) re-appends PATH entries the devShell’s
+own PATH replaced, so a venv or toolchain an <em>earlier</em> stage put there is
+still reachable — behind the devShell’s own tools, never in front of them.
+<code class="docutils literal notranslate"><span class="pre">false</span></code> leaves PATH exactly as the devShell exported it.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">shell-hook</span></code></strong> — <code class="docutils literal notranslate"><span class="pre">false</span></code> drops the devShell’s own <code class="docutils literal notranslate"><span class="pre">shellHook</span></code> instead of
+running it (default: <code class="docutils literal notranslate"><span class="pre">true</span></code>; see “shellHook” below).</p></li>
+</ul>
+</section>
+<section id="what-runs-and-what-is-skipped">
+<h2>What runs, and what is skipped<a class="headerlink" href="#what-runs-and-what-is-skipped" title="Link to this heading"></a></h2>
+<p>Per stage, in order:</p>
+<ol class="arabic simple">
+<li><p><strong>nix check</strong> — <code class="docutils literal notranslate"><span class="pre">nix</span></code> missing from PATH is fatal, with the two install
+commands spelled out. With <code class="docutils literal notranslate"><span class="pre">expected-version:</span></code> set, a mismatch warns.</p></li>
+<li><p><strong>devshell</strong> — <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">print-dev-env</span> <span class="pre">&lt;flake-ref&gt;[#&lt;shell&gt;]</span></code>, its stdout
+written to this stage’s cache file. <strong>Skipped</strong> whenever a cache file for
+exactly these inputs already exists (and <code class="docutils literal notranslate"><span class="pre">--force</span></code> wasn’t given, and
+<code class="docutils literal notranslate"><span class="pre">cache:</span></code> isn’t <code class="docutils literal notranslate"><span class="pre">false</span></code>). This is the slow step: a cold evaluation builds
+every input the devShell needs.</p></li>
+<li><p><strong>activate</strong> — the cached script is sourced into <code class="docutils literal notranslate"><span class="pre">ctx.env</span></code>, <code class="docutils literal notranslate"><span class="pre">shellHook</span></code>
+and all. Then <code class="docutils literal notranslate"><span class="pre">keep-path:</span></code> re-appends whatever PATH entries the devShell
+dropped.</p></li>
+</ol>
+<p>Under <code class="docutils literal notranslate"><span class="pre">--fast</span></code> steps 1 and 2 are skipped entirely and the cached environment
+is sourced verbatim — nix is never invoked, not even to check its version.
+With no cache yet, <code class="docutils literal notranslate"><span class="pre">--fast</span></code> fails saying to run once without it.</p>
+<p>Under <code class="docutils literal notranslate"><span class="pre">--dry-run</span></code> nothing is evaluated: the <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">print-dev-env</span></code> command is
+printed, and a <code class="docutils literal notranslate"><span class="pre">[dry-run</span> <span class="pre">!]</span></code> line says the preview’s remaining commands are
+rendered <em>without</em> the devShell’s PATH and variables — unless a cache file
+is already there, which is sourced for real (that is how denver computes an
+environment at all).</p>
+</section>
+<section id="the-cache">
+<h2>The cache<a class="headerlink" href="#the-cache" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">print-dev-env</span></code>’s output is cached under
+<code class="docutils literal notranslate"><span class="pre">${DENVER_ENV_WORKDIR}/nix-devshell/&lt;stage&gt;-&lt;digest&gt;.sh</span></code>, where the digest
+covers everything that decides what nix would print:</p>
+<ul class="simple">
+<li><p>the installable (flake ref + <code class="docutils literal notranslate"><span class="pre">shell:</span></code>), <code class="docutils literal notranslate"><span class="pre">args:</span></code>, <code class="docutils literal notranslate"><span class="pre">impure:</span></code> and
+<code class="docutils literal notranslate"><span class="pre">shell-hook:</span></code>,</p></li>
+<li><p>the machine’s architecture — a cached <code class="docutils literal notranslate"><span class="pre">x86_64</span></code> environment is meaningless
+on <code class="docutils literal notranslate"><span class="pre">aarch64</span></code>, and the two legitimately share one checkout over a network
+mount,</p></li>
+<li><p>the <strong>content</strong> of every <strong>git-tracked</strong> file under the copy root
+(<code class="docutils literal notranslate"><span class="pre">root:</span></code>, else the flake’s directory).</p></li>
+</ul>
+<p>Git-tracked, because that is exactly the set a <code class="docutils literal notranslate"><span class="pre">path:</span></code> flake can see: nix
+copies a working tree’s tracked files into the store and ignores the rest,
+so hashing more would invalidate the cache on a build artifact nix never
+looked at — and hashing less would miss a change it does see. <strong>A new file
+has to be <code class="docutils literal notranslate"><span class="pre">git</span> <span class="pre">add</span></code>ed before nix (or this cache) notices it at all.</strong> When
+the copy root is not a git checkout, <code class="docutils literal notranslate"><span class="pre">flake.nix</span></code> and <code class="docutils literal notranslate"><span class="pre">flake.lock</span></code> are hashed
+instead.</p>
+<p>Because the key is a digest of the inputs and not a “latest” pointer,
+switching a flake back and forth (a branch with a different <code class="docutils literal notranslate"><span class="pre">flake.lock</span></code>,
+say) re-uses both cached environments instead of re-evaluating each time.</p>
+<p>A <strong>remote</strong> reference has no local files to hash: a pinned one
+(<code class="docutils literal notranslate"><span class="pre">github:owner/repo/&lt;rev&gt;</span></code>) never changes, and a moving one
+(<code class="docutils literal notranslate"><span class="pre">github:owner/repo</span></code>) is refreshed with <code class="docutils literal notranslate"><span class="pre">--force</span></code> or <code class="docutils literal notranslate"><span class="pre">cache:</span> <span class="pre">false</span></code>.</p>
+</section>
+<section id="shellhook">
+<h2>shellHook<a class="headerlink" href="#shellhook" title="Link to this heading"></a></h2>
+<p>A current <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">print-dev-env</span></code> ends its output with <code class="docutils literal notranslate"><span class="pre">eval</span> <span class="pre">&quot;${shellHook:-}&quot;</span></code> —
+so simply sourcing it runs the devShell’s <code class="docutils literal notranslate"><span class="pre">shellHook</span></code> exactly as <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">develop</span></code> would, and denver does nothing extra to make that happen. That is
+the default, and it is what a flake doing real work there (generating a
+config, seeding a directory) needs.</p>
+<p><code class="docutils literal notranslate"><span class="pre">shell-hook:</span> <span class="pre">false</span></code> is for the other kind of hook — one written for an
+interactive <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">develop</span></code>, which prints a banner or expects a tty. nix has
+no flag to leave it out, so denver drops that trailing <code class="docutils literal notranslate"><span class="pre">eval</span></code> line from the
+<strong>cached script</strong> when it is written. It cannot be undone afterwards: by the
+time the environment is in <code class="docutils literal notranslate"><span class="pre">ctx.env</span></code> the hook has already run.</p>
+<p>An older nix that does not emit the <code class="docutils literal notranslate"><span class="pre">eval</span></code> line at all never runs the hook
+either way, and <code class="docutils literal notranslate"><span class="pre">shell-hook:</span> <span class="pre">false</span></code> then has nothing to strip.</p>
+</section>
+<section id="design-notes">
+<h2>Design notes<a class="headerlink" href="#design-notes" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Why not <code class="docutils literal notranslate"><span class="pre">nix</span> <span class="pre">develop</span> <span class="pre">--command</span></code>.</strong> Wrapping puts a second shell between
+denver and the command, and nothing after it can contribute to the
+environment any more: a later <code class="docutils literal notranslate"><span class="pre">conan</span></code> or <code class="docutils literal notranslate"><span class="pre">custom</span></code> stage would run
+<em>outside</em> what it was supposed to extend. Sourcing <code class="docutils literal notranslate"><span class="pre">print-dev-env</span></code>’s
+output instead keeps denver’s whole model — stages assembling one
+environment, in order — intact, and makes the devShell just another
+contributor to it.</p></li>
+<li><p><strong>Why cache at all.</strong> Even a fully-cached devShell costs a nix evaluation
+(a second or two at best) on every single run, and denver is meant to be
+in the path of every build command. Keying on file <em>content</em> is what
+makes the skip safe: the cache is stale exactly when nix’s own answer
+would have changed.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">keep-path:</span></code> is on by default.</strong> The devShell exports an absolute PATH,
+which would otherwise discard what earlier stages put there. Appending the
+dropped entries (never prepending them) keeps <code class="docutils literal notranslate"><span class="pre">denver</span></code> composable without
+ever letting a host tool shadow one the devShell provides.</p></li>
+<li><p><strong>A version mismatch warns, it doesn’t fail.</strong> <code class="docutils literal notranslate"><span class="pre">expected-version:</span></code> records
+which nix an env was tested against. Refusing to run on a different one
+would make every env unusable the day a machine upgrades, for a
+difference that is usually invisible.</p></li>
+</ul>
 </section>
 </section>
 
@@ -510,8 +570,8 @@ everything you have used so far.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="completion.html" class="btn btn-neutral float-left" title="Shell completion" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="../configuration/config-file.html" class="btn btn-neutral float-right" title="Configuration" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="git.html" class="btn btn-neutral float-left" title="git provider" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="custom.html" class="btn btn-neutral float-right" title="custom provider" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

@@ -19,7 +19,7 @@ The problem:
 denver splits that in two:
 
 - **`denver.yml`** says *what* an env is: which stages, which files, which versions. No logic.
-- **Providers** know *how*: `uv`, `conan`, `zephyr`, `docker`, `download`, `git`, `custom`. Generic — every project detail comes from config.
+- **Providers** know *how*: `uv`, `conan`, `zephyr`, `docker`, `download`, `git`, `nix`, `custom`. Generic — every project detail comes from config.
 
 Functional requirements:
 

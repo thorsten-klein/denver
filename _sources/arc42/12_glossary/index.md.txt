@@ -8,7 +8,7 @@ in [Glossary](../../concepts/glossary.md).
 | **env** | A directory holding a `denver.yml` (or `denver.toml`). The unit denver starts. |
 | **stage** | One entry in `stages:`, identified by a **stage id**. One provider instance. |
 | **stage id** | A label, nothing more. Never used to guess a type ([ADR-0005](../09_design_decisions/index.md#adr-0005-provider-is-mandatory-never-guessed-from-the-stage-id)). |
-| **provider** | The generic engine a stage uses: `uv`, `conan`, `zephyr`, `docker`, `download`, `git`, `custom`. Named by the mandatory `provider:` key. |
+| **provider** | The generic engine a stage uses: `uv`, `conan`, `zephyr`, `docker`, `download`, `git`, `nix`, `custom`. Named by the mandatory `provider:` key. |
 | **setup provider** | `kind = "setup"`. Builds part of the environment in place. |
 | **wrapper provider** | `kind = "wrapper"`. Builds nothing; relocates the run (`docker`, or `custom` with `launcher:`). |
 | **relocation** | Re-invoking denver elsewhere — usually in a container — with the wrapper stage skipped ([ADR-0004](../09_design_decisions/adr-0004-wrapper-relocation.md)). |
