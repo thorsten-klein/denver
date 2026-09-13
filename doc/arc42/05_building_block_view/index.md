@@ -58,7 +58,7 @@ Details: [config resolution](config_resolution.md).
 | `__init__.py` | `PROVIDERS` registry, `make_stage()`, `load_extension_providers()` |
 | `base.py` | `Provider` base class: `name`, `kind`, `KEYS`, `resolve_defaults()`, `setup()`, `wrap()` |
 | `context.py` | `Context` — the one object every provider is handed — plus interpolation, logging, banners, validation helpers |
-| `uv.py`, `conan.py`, `zephyr.py`, `docker.py`, `download.py`, `git.py`, `custom.py` | One provider each |
+| `uv.py`, `conan.py`, `zephyr.py`, `docker.py`, `download.py`, `git.py`, `nix.py`, `custom.py` | One provider each |
 
 Details: [the provider layer](providers.md).
 

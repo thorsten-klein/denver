@@ -14,6 +14,7 @@ so an example that drifted out of sync with the code fails the build.
 |---|---|---|
 | [`simple-env`](simple-env/) | 3 × `custom` | The whole model at minimum size. Also the `cmd:` vs `source:` demo |
 | [`zephyr-uv`](zephyr-uv/) | `uv` | A virtualenv and nothing else — proof that no container or toolchain is required |
+| [`nix-devshell`](nix-devshell/) | `nix` → `custom` | A nix flake's `devShell` as the environment — sourced into denver, not wrapped, so the stage after it runs inside it |
 | [`raspberry-pico`](raspberry-pico/) | `uv` → `conan` | A cross-compilation toolchain **without Docker**. Why stage order matters |
 | [`zephyr-docker`](zephyr-docker/) | `docker` | The container layer on its own — a wrapper stage, and a `hooks: pre-docker:` script |
 | [`firmware-env`](firmware-env/) | `docker` → `uv` → `custom` → `conan` → `custom` | Four providers in one small env, built step by step in [`doc/quickstart/creating-environments.md`](../doc/quickstart/creating-environments.md). Also: a prebuilt binary installed by hand, right next to the same job done by conan |

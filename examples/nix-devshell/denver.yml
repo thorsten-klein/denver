@@ -1,0 +1,41 @@
+version: "1.0"
+# minimum denver (the tool) this env needs -- see doc/configuration/config-file.md
+denver-version: ">=1.6.0"
+
+# A nix flake's devShell as the environment itself.
+#
+# The 'nix' provider runs 'nix print-dev-env' once, caches the result and
+# *sources* it into denver's own environment -- it never wraps the final
+# command in 'nix develop --command'. That is what makes the stage after it
+# ('check' below) see the devShell's PATH and variables: there is one
+# process throughout, so a nix stage composes with uv/conan/download stages
+# the same way any other stage does.
+#
+# Needs nix on PATH (flakes enabled is not required -- the provider passes
+# '--extra-experimental-features' itself). The first run evaluates the flake
+# and may take a while; every run after that reuses the cached environment
+# until flake.nix/flake.lock change.
+stages:
+- devshell
+- check
+
+# drop into a shell inside the devShell when no command is given
+command: bash
+
+devshell:
+  provider: nix
+  description:
+  - Enter this directory's flake.nix devShell (hello + jq + two variables).
+  - Re-evaluated only when a git-tracked file of the flake changes.
+  # the directory holding flake.nix -- '.' (this env dir) is also the default
+  flake: .
+  # spelled out on purpose: left unset, nix picks the default installable
+  # itself, and older releases resolve that as 'devShell.<system>' rather
+  # than 'devShells.<system>.default'.
+  shell: default
+
+check:
+  provider: custom
+  description:
+  - Proof that the devShell reached the stages after it, not just the flake.
+  cmd: 'hello --version >/dev/null && echo "check: $DENVER_NIX_EXAMPLE, $DENVER_NIX_EXAMPLE_HOOK, jq=$(command -v jq)"'

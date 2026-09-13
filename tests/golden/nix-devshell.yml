@@ -1,0 +1,54 @@
+version: '1.0'
+denver-version: '>=1.6.0'
+command: bash
+hooks:
+  env: null
+  post-check: null
+  post-devshell: null
+  pre-check: null
+  pre-cmd: null
+  pre-devshell: null
+stages:
+- devshell
+- check
+devshell:
+  provider: nix
+  description:
+  - Enter this directory's flake.nix devShell (hello + jq + two variables).
+  - Re-evaluated only when a git-tracked file of the flake changes.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  args: []
+  cache: true
+  exe: nix
+  expected-version: null
+  experimental-features: nix-command flakes
+  flake: <REPO>/examples/nix-devshell
+  impure: false
+  keep-path: true
+  root: null
+  shell: default
+  shell-hook: true
+check:
+  provider: custom
+  description:
+  - Proof that the devShell reached the stages after it, not just the flake.
+  disabled: false
+  depends-on: []
+  skip-on-success: []
+  skip-on-failure: []
+  env: {}
+  env-prepend: {}
+  env-append: {}
+  scripts: null
+  cmd: 'hello --version >/dev/null && echo "check: $DENVER_NIX_EXAMPLE, $DENVER_NIX_EXAMPLE_HOOK,
+    jq=$(command -v jq)"'
+  launcher: null
+  source: null
+

@@ -16,6 +16,7 @@ from .custom import CustomProvider
 from .docker import DockerProvider
 from .download import DownloadProvider
 from .git import GitProvider
+from .nix import NixProvider
 from .uv import UvProvider
 from .zephyr import ZephyrProvider
 
@@ -31,6 +32,7 @@ PROVIDERS = {
     "custom": CustomProvider,
     "download": DownloadProvider,
     "git": GitProvider,
+    "nix": NixProvider,
 }
 
 # the 'extensions:' sub-schema, validated the same way denver.py validates

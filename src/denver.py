@@ -3,7 +3,7 @@
 
 Launch a reproducible development environment described by a ``denver.yml``
 file: denver resolves it (following ``import:`` inheritance), then runs the
-generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker,
+generic *providers* its ``stages:`` list names (uv, conan, zephyr, docker, nix,
 ...) to build/enter the environment purely from config.
 
 denver's own CLI is subcommand-based:
