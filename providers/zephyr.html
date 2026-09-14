@@ -17,7 +17,7 @@
     <link rel="shortcut icon" href="../_static/favicon.svg"/>
       <script src="../_static/jquery.js?v=5d32c60e"></script>
       <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-      <script src="../_static/documentation_options.js?v=9d0de8d4"></script>
+      <script src="../_static/documentation_options.js?v=5e6b2ee7"></script>
       <script src="../_static/doctools.js?v=9a2dae69"></script>
       <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
       <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -50,7 +50,7 @@
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
-<div class="version"><a href="https://github.com/thorsten-klein/denver/tree/ee27748bcad5a7220a97e22946707a6592224bf1">1.6.4-2-gee27748</a>
+<div class="version"><a href="https://github.com/thorsten-klein/denver/tree/9293bcbed5718f807ac130875de661ea431dc8ab">1.6.4-3-g9293bcb</a>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p class="caption" role="heading"><span class="caption-text">Introduction</span></p>
@@ -458,7 +458,12 @@ applying the same patches twice never produces a different commit).</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-update</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">false</span></code>) — skip <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">update</span></code> entirely (patch
 application, <code class="docutils literal notranslate"><span class="pre">zephyr.base</span></code>, and blobs fetch/cache still run).</p></li>
 <li><p><strong><code class="docutils literal notranslate"><span class="pre">skip-patch-apply</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">false</span></code>) — skip applying projects’
-<code class="docutils literal notranslate"><span class="pre">zephyr/patches.yml</span></code> via <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">patches</span></code>.</p></li>
+<code class="docutils literal notranslate"><span class="pre">patches.yml</span></code> (see <code class="docutils literal notranslate"><span class="pre">patches-yml-path:</span></code>) via <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">patches</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">patches-yml-path</span></code></strong> (default <code class="docutils literal notranslate"><span class="pre">[&quot;zephyr/patches.yml&quot;]</span></code>) — a list of
+paths, each relative to a west project’s own directory, checked for a
+<code class="docutils literal notranslate"><span class="pre">patches.yml</span></code> to apply via <code class="docutils literal notranslate"><span class="pre">west</span> <span class="pre">patch</span> <span class="pre">--patch-yml</span></code>. Every listed path
+that exists in a given project is applied (all of them, not just the
+first match), in the order listed.</p></li>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">WEST_CONFIG_SYSTEM</span></code> (west’s own base-config env var, e.g. the
 remotes/defaults denver ships) is <em>not</em> a <code class="docutils literal notranslate"><span class="pre">denver.yml</span></code> key — set it

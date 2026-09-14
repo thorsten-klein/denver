@@ -55,7 +55,12 @@ installs it. In practice an earlier `uv` stage provides it, by listing
 - **`skip-update`** (default `false`) — skip `west update` entirely (patch
   application, `zephyr.base`, and blobs fetch/cache still run).
 - **`skip-patch-apply`** (default `false`) — skip applying projects'
-  `zephyr/patches.yml` via `west patches`.
+  `patches.yml` (see `patches-yml-path:`) via `west patches`.
+- **`patches-yml-path`** (default `["zephyr/patches.yml"]`) — a list of
+  paths, each relative to a west project's own directory, checked for a
+  `patches.yml` to apply via `west patch --patch-yml`. Every listed path
+  that exists in a given project is applied (all of them, not just the
+  first match), in the order listed.
 
 `WEST_CONFIG_SYSTEM` (west's own base-config env var, e.g. the
 remotes/defaults denver ships) is *not* a `denver.yml` key — set it
