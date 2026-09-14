@@ -292,10 +292,11 @@ def test_update_when_info_unchanged(make_context, run_recorder, which, force):
     # pre-populate the info file with exactly what _west_info would compute
     n = ZephyrProvider(config)
     n.stage = "zephyr"
+    cfg = ZephyrProvider.resolve_defaults(ctx, zephyr_cfg, config)
     west = ctx.which("west")
     west_yml = Path(ctx.resolve_path(zephyr_cfg["west-yml"]))
     zephyr_base = ctx.resolve_path("${WEST_TOPDIR}/zephyr-rtos")
-    info_text = n._west_info(ctx, west, west_topdir(ctx.env_dir), west_yml, zephyr_base)
+    info_text = n._west_info(ctx, cfg, west, west_topdir(ctx.env_dir), west_yml, zephyr_base)
     info_file = ctx.logs_dir / "west-update.info"
     info_file.parent.mkdir(parents=True, exist_ok=True)
     info_file.write_text(info_text)
@@ -321,12 +322,13 @@ def test_update_reruns_when_patches_yml_changes(make_context, run_recorder, whic
 
     n = ZephyrProvider(config)
     n.stage = "zephyr"
+    cfg = ZephyrProvider.resolve_defaults(ctx, zephyr_cfg, config)
     west = ctx.which("west")
     west_yml = Path(ctx.resolve_path(zephyr_cfg["west-yml"]))
     zephyr_base = ctx.resolve_path("${WEST_TOPDIR}/zephyr-rtos")
     info_file = ctx.logs_dir / "west-update.info"
     info_file.parent.mkdir(parents=True, exist_ok=True)
-    info_file.write_text(n._west_info(ctx, west, west_topdir(ctx.env_dir), west_yml, zephyr_base))
+    info_file.write_text(n._west_info(ctx, cfg, west, west_topdir(ctx.env_dir), west_yml, zephyr_base))
 
     (proj / "zephyr" / "patches.yml").write_text("v2\n")
     run_recorder.calls.clear()
@@ -441,6 +443,54 @@ def test_apply_project_patches_committer_override(make_context, run_recorder, wh
     patch_call = next(c for c in run_recorder.calls if "--src-module" in " ".join(str(x) for x in c.cmd))
     # extra_env is merged into the actual subprocess env by Context.run()
     assert patch_call.kwargs["env"]["GIT_COMMITTER_NAME"] == "custom"
+
+
+# ---- patches-yml-path ---------------------------------------------------------#
+def test_patches_yml_path_defaults_to_zephyr_patches_yml(make_context, run_recorder, which, tmp_path):
+    config = {"zephyr": {"west-yml": "west.yml"}}
+    ctx = make_ctx(make_context, config)
+    cfg = ZephyrProvider.resolve_defaults(ctx, config["zephyr"], config)
+    assert cfg["patches-yml-path"] == ["zephyr/patches.yml"]
+
+
+def test_patches_yml_path_custom_location(make_context, run_recorder, which, tmp_path):
+    config = {"zephyr": {"west-yml": "west.yml", "patches-yml-path": ["custom/patches.yml"]}}
+    ctx = make_ctx(make_context, config)
+    proj = tmp_path / "proj"
+    (proj / "custom").mkdir(parents=True)
+    (proj / "custom" / "patches.yml").write_text("x\n")
+    # the default location also exists, but isn't in the configured list --
+    # it must not be picked up.
+    (proj / "zephyr").mkdir(parents=True)
+    (proj / "zephyr" / "patches.yml").write_text("x\n")
+    run_recorder.responses["list -f {abspath}"] = resp(stdout=f"{proj}\n")
+
+    run_zephyr(config, ctx)
+    patch_argvs = [a for a in run_recorder.argvs() if "--src-module" in a]
+    assert len(patch_argvs) == 1
+    argv = patch_argvs[0]
+    assert argv[argv.index("--patch-yml") + 1] == "custom/patches.yml"
+
+
+def test_patches_yml_path_applies_every_listed_file(make_context, run_recorder, which, tmp_path):
+    config = {
+        "zephyr": {
+            "west-yml": "west.yml",
+            "patches-yml-path": ["zephyr/patches.yml", "custom/patches.yml"],
+        }
+    }
+    ctx = make_ctx(make_context, config)
+    proj = tmp_path / "proj"
+    (proj / "zephyr").mkdir(parents=True)
+    (proj / "zephyr" / "patches.yml").write_text("x\n")
+    (proj / "custom").mkdir(parents=True)
+    (proj / "custom" / "patches.yml").write_text("x\n")
+    run_recorder.responses["list -f {abspath}"] = resp(stdout=f"{proj}\n")
+
+    run_zephyr(config, ctx)
+    patch_argvs = [a for a in run_recorder.argvs() if "--src-module" in a]
+    patched = {a[a.index("--patch-yml") + 1] for a in patch_argvs}
+    assert patched == {"zephyr/patches.yml", "custom/patches.yml"}
 
 
 # ---- _update_blobs_cache -----------------------------------------------------------#

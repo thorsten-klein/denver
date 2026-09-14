@@ -57,6 +57,7 @@ class ZephyrProvider(Provider):
         "update-args",
         "skip-update",
         "skip-patch-apply",
+        "patches-yml-path",
     )
 
     @staticmethod
@@ -127,6 +128,7 @@ class ZephyrProvider(Provider):
         resolved["blobs-fetch-allow-failure"] = cfg.get("blobs-fetch-allow-failure", False)
         resolved["skip-update"] = cfg.get("skip-update", False)
         resolved["skip-patch-apply"] = cfg.get("skip-patch-apply", False)
+        resolved["patches-yml-path"] = cfg.get("patches-yml-path") or ["zephyr/patches.yml"]
         resolved.update(cls._resolved_patch_committer(cfg))
 
         return fill_unset(resolved, cls.KEYS)
@@ -246,7 +248,7 @@ class ZephyrProvider(Provider):
         current = ctx.run([west, "config", "-l"], cwd=top, capture=True, echo=False, check=False).stdout
         self._ensure_config(ctx, west, top, current, "zephyr.base", path)
 
-    def _west_info(self, ctx, west, top, west_yml, zephyr_base):
+    def _west_info(self, ctx, cfg, west, top, west_yml, zephyr_base):
         """Build a fingerprint string (west-yml content, zephyr commit, resolved manifest, patches.yml) to detect drift.
 
         The manifest is named relative to the env dir: a fingerprint must
@@ -257,10 +259,10 @@ class ZephyrProvider(Provider):
         west-yml is hashed by content, not just named: 'west manifest
         --resolve' doesn't reflect every possible edit (e.g. changes an
         import pulls in indirectly), so a content checksum catches drift
-        it would otherwise miss. Each project's own zephyr/patches.yml is
-        hashed too -- it isn't part of the manifest at all, so editing it
-        alone wouldn't otherwise trigger a rerun of `west update` (and thus
-        of _apply_project_patches).
+        it would otherwise miss. Each project's own patches.yml (see
+        'patches-yml-path:') is hashed too -- it isn't part of the manifest
+        at all, so editing it alone wouldn't otherwise trigger a rerun of
+        `west update` (and thus of _apply_project_patches).
         """
         lines = [f"west-yml: {fingerprint_label(west_yml, ctx.env_dir)}"]
         lines.append(sha256_of_files([west_yml], base=ctx.env_dir))
@@ -279,7 +281,11 @@ class ZephyrProvider(Provider):
             check=False,
         ).stdout
         lines.append(resolved)
-        patches_files = [p / "zephyr" / "patches.yml" for p in self._west_projects(ctx, west, top)]
+        patches_files = [
+            project / patch_path
+            for project in self._west_projects(ctx, west, top)
+            for patch_path in cfg["patches-yml-path"]
+        ]
         patches_files = [p for p in patches_files if p.is_file()]
         lines.append("patches.yml:")
         lines.append(sha256_of_files(patches_files, base=ctx.env_dir))
@@ -291,7 +297,7 @@ class ZephyrProvider(Provider):
         info_file = ctx.logs_dir / "west-update.info"
         ctx.mkdir(info_file.parent)
         previous = info_file.read_text() if info_file.is_file() else ""
-        current = self._west_info(ctx, west, top, west_yml, zephyr_base)
+        current = self._west_info(ctx, cfg, west, top, west_yml, zephyr_base)
 
         if not ctx.force and previous and previous == current:
             info("zephyr: no need to rerun west update (enforce with --force)")
@@ -303,7 +309,7 @@ class ZephyrProvider(Provider):
         self._run_blobs_fetch(ctx, cfg, west, top)
         self._update_blobs_cache(ctx, cfg, west, top)
 
-        ctx.write_text(info_file, self._west_info(ctx, west, top, west_yml, zephyr_base))
+        ctx.write_text(info_file, self._west_info(ctx, cfg, west, top, west_yml, zephyr_base))
 
     def _run_update(self, ctx, cfg, west, top):
         """Run `west update`, unless 'skip-update:' is set."""
@@ -346,19 +352,20 @@ class ZephyrProvider(Provider):
         return [Path(p) for p in listing]
 
     def _apply_project_patches(self, ctx, cfg, west, top):
-        """Apply each west project's own zephyr/patches.yml (if any), reversed so dependents patch before their deps."""
+        """Apply each west project's own patches.yml (see 'patches-yml-path:'), reversed so dependents patch before their deps."""
         committer = {
             "GIT_COMMITTER_NAME": cfg["patch-committer-name"],
             "GIT_COMMITTER_EMAIL": cfg["patch-committer-email"],
             "GIT_COMMITTER_DATE": cfg["patch-committer-date"],
         }
         for project in reversed(self._west_projects(ctx, west, top)):
-            if (project / "zephyr" / "patches.yml").is_file():
-                ctx.run(
-                    [west, "-v", "patch", "--src-module", str(project), "apply"],
-                    cwd=top,
-                    extra_env=committer,
-                )
+            for patch_path in cfg["patches-yml-path"]:
+                if (project / patch_path).is_file():
+                    ctx.run(
+                        [west, "-v", "patch", "--src-module", str(project), "--patch-yml", patch_path, "apply"],
+                        cwd=top,
+                        extra_env=committer,
+                    )
 
     def _update_blobs_cache(self, ctx, cfg, west, top):
         """Regenerate 'blobs-cache:' (a path:url listing of every west blob), if configured."""
